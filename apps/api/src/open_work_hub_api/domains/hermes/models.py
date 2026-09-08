@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
-    Boolean,
     JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -21,7 +21,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
-
 
 HERMES_PROFILE_STATUSES = ("provisioning", "active", "error", "disabled")
 HERMES_SESSION_STATUSES = ("active", "archived", "deleted")
@@ -123,9 +122,8 @@ class HermesProfileBinding(Base):
     __tablename__ = "hermes_profile_bindings"
     __table_args__ = (
         UniqueConstraint(
-            "workspace_id",
             "user_id",
-            name="uq_hermes_profile_bindings_workspace_user",
+            name="uq_hermes_profile_bindings_user",
         ),
         CheckConstraint(
             _sql_in_clause("status", HERMES_PROFILE_STATUSES),
@@ -143,11 +141,6 @@ class HermesProfileBinding(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
     user_id: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
@@ -198,7 +191,6 @@ class HermesSessionBinding(Base):
         ),
         Index(
             "ix_hermes_session_bindings_owner_updated",
-            "workspace_id",
             "user_id",
             "updated_at",
         ),
@@ -207,11 +199,6 @@ class HermesSessionBinding(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     profile_binding_id: Mapped[str] = mapped_column(
         ForeignKey("hermes_profile_bindings.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -264,7 +251,6 @@ class HermesRunProjection(Base):
         ),
         Index(
             "ix_hermes_run_projections_owner_created",
-            "workspace_id",
             "user_id",
             "created_at",
         ),
@@ -297,11 +283,6 @@ class HermesRunProjection(Base):
     session_binding_id: Mapped[str | None] = mapped_column(
         ForeignKey("hermes_session_bindings.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
-        nullable=False,
         index=True,
     )
     user_id: Mapped[str] = mapped_column(
@@ -589,7 +570,6 @@ class HermesJobBinding(Base):
         ),
         Index(
             "ix_hermes_job_bindings_owner_updated",
-            "workspace_id",
             "user_id",
             "updated_at",
         ),
@@ -598,11 +578,6 @@ class HermesJobBinding(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     profile_binding_id: Mapped[str] = mapped_column(
         ForeignKey("hermes_profile_bindings.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )

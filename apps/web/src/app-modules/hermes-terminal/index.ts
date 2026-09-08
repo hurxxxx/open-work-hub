@@ -1,10 +1,10 @@
 import { hermesTerminalManifest } from './manifest';
-import { hermesTerminalWorkspaceRoutes } from './routes';
+import { hermesTerminalAppRoutes } from './routes';
 
 export { hermesTerminalManifest } from './manifest';
-export { hermesTerminalWorkspaceRoutes } from './routes';
+export { hermesTerminalAppRoutes } from './routes';
 
 export const hermesTerminalModule = {
   manifest: hermesTerminalManifest,
-  workspaceRoutes: hermesTerminalWorkspaceRoutes,
+  appRoutes: hermesTerminalAppRoutes,
 } as const;

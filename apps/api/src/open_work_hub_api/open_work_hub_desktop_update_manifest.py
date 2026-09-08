@@ -59,10 +59,7 @@ class DesktopUpdateManifestProjection:
 
     @property
     def metadata_files(self) -> dict[str, str]:
-        return {
-            platform: self.platform_config(platform).update_file
-            for platform in self.platforms
-        }
+        return {platform: self.platform_config(platform).update_file for platform in self.platforms}
 
     @property
     def artifact_suffixes(self) -> dict[str, frozenset[str]]:
@@ -93,7 +90,9 @@ def open_work_hub_desktop_update_manifest_projection() -> DesktopUpdateManifestP
 
 def validate_open_work_hub_desktop_update_manifest(value: object) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise OpenWorkHubDesktopUpdateManifestError("Open Work Hub desktop update manifest must be an object.")
+        raise OpenWorkHubDesktopUpdateManifestError(
+            "Open Work Hub desktop update manifest must be an object."
+        )
 
     platform_order = value.get("platformOrder")
     platforms = value.get("platforms")
@@ -105,14 +104,20 @@ def validate_open_work_hub_desktop_update_manifest(value: object) -> dict[str, A
         "servedArtifactContentTypes",
     )
     if not isinstance(platform_order, list) or not platform_order:
-        raise OpenWorkHubDesktopUpdateManifestError("Open Work Hub desktop update manifest platformOrder is invalid.")
+        raise OpenWorkHubDesktopUpdateManifestError(
+            "Open Work Hub desktop update manifest platformOrder is invalid."
+        )
     if not isinstance(platforms, dict):
-        raise OpenWorkHubDesktopUpdateManifestError("Open Work Hub desktop update manifest platforms is invalid.")
+        raise OpenWorkHubDesktopUpdateManifestError(
+            "Open Work Hub desktop update manifest platforms is invalid."
+        )
 
     seen: set[str] = set()
     for platform in platform_order:
         if not isinstance(platform, str) or not platform:
-            raise OpenWorkHubDesktopUpdateManifestError("Open Work Hub desktop update platform name is invalid.")
+            raise OpenWorkHubDesktopUpdateManifestError(
+                "Open Work Hub desktop update platform name is invalid."
+            )
         if platform in seen:
             raise OpenWorkHubDesktopUpdateManifestError(
                 f"Open Work Hub desktop update platform is duplicated: {platform}."
@@ -210,8 +215,7 @@ def _validate_platform_config(
     stable_copies = config.get("stableCopies")
     installer_stable_copy = config.get("installerStableCopy")
     if not isinstance(stable_copies, list) or not any(
-        isinstance(rule, dict) and rule.get("to") == installer_stable_copy
-        for rule in stable_copies
+        isinstance(rule, dict) and rule.get("to") == installer_stable_copy for rule in stable_copies
     ):
         raise OpenWorkHubDesktopUpdateManifestError(
             f"Open Work Hub desktop installerStableCopy must reference a stable copy target for {platform}."
@@ -353,7 +357,9 @@ def _manifest_suffix_list(value: object, field: str, platform: str) -> tuple[str
 
 def _manifest_content_type_map(value: object, field: str) -> dict[str, str]:
     if not isinstance(value, dict):
-        raise OpenWorkHubDesktopUpdateManifestError(f"Open Work Hub desktop {field} must be an object.")
+        raise OpenWorkHubDesktopUpdateManifestError(
+            f"Open Work Hub desktop {field} must be an object."
+        )
     content_types: dict[str, str] = {}
     for suffix, content_type in value.items():
         if (
@@ -364,15 +370,12 @@ def _manifest_content_type_map(value: object, field: str) -> dict[str, str]:
             raise OpenWorkHubDesktopUpdateManifestError(
                 f"Open Work Hub desktop {field} suffix is invalid: {suffix}."
             )
-        if (
-            not isinstance(content_type, str)
-            or not re.fullmatch(
-                (
-                    r"[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*/"
-                    r"[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*"
-                ),
-                content_type,
-            )
+        if not isinstance(content_type, str) or not re.fullmatch(
+            (
+                r"[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*/"
+                r"[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]*"
+            ),
+            content_type,
         ):
             raise OpenWorkHubDesktopUpdateManifestError(
                 f"Open Work Hub desktop {field} content type is invalid for {suffix}."
@@ -466,7 +469,9 @@ def open_work_hub_desktop_update_dir_env_name(platform: str) -> str:
     return open_work_hub_desktop_update_platform_config(platform).update_dir_env
 
 
-def open_work_hub_desktop_update_dir_values(env: Mapping[str, str | None] | None = None) -> dict[str, str]:
+def open_work_hub_desktop_update_dir_values(
+    env: Mapping[str, str | None] | None = None,
+) -> dict[str, str]:
     env_values = env or {}
     return {
         platform: _open_work_hub_desktop_update_dir_value(platform, env_values)
@@ -490,7 +495,9 @@ def _workspace_update_dir(value: str, env_name: str) -> str:
     if not normalized:
         raise OpenWorkHubDesktopUpdateManifestError(f"{env_name} must not be empty.")
     if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
-        raise OpenWorkHubDesktopUpdateManifestError(f"{env_name} contains an unsafe path character.")
+        raise OpenWorkHubDesktopUpdateManifestError(
+            f"{env_name} contains an unsafe path character."
+        )
 
     path = Path(normalized).expanduser()
     if path.is_absolute():

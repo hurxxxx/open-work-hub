@@ -1,5 +1,16 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import {
+  REALTIME_TOPIC_EVENT_TYPES,
+  createDocsPagesRealtimeSubscriptionMessage,
+} from '@open-work-hub/contracts/realtime';
+import {
+  Button,
+  Dialog,
+  blockContentToMarkdown,
+  markdownToBlockContent,
+  useConfirm,
+  type BlockContent,
+} from '@open-work-hub/ui';
 import {
   AlertCircle,
   ChevronDown,
@@ -10,18 +21,14 @@ import {
   X,
 } from 'lucide-react';
 import {
-  Button,
-  Dialog,
-  blockContentToMarkdown,
-  markdownToBlockContent,
-  useConfirm,
-  type BlockContent,
-} from '@open-work-hub/ui';
-import {
-  REALTIME_TOPIC_EVENT_TYPES,
-  createDocsPagesRealtimeSubscriptionMessage,
-} from '@open-work-hub/contracts/realtime';
-import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -33,6 +40,7 @@ import {
   type RealtimeEvent,
 } from '@/src/platform/realtime/realtime-provider';
 import {
+  DocsApiError,
   getDocsItem,
   listDocPages,
   mediaResourceTypeForDocsPage,
@@ -42,8 +50,8 @@ import {
   updateDocPage,
   type DocsContentFormat,
   type DocsHubContentFormat,
-  type DocsPagesEventPayload,
   type DocsPageItem,
+  type DocsPagesEventPayload,
 } from '../api/docs-api';
 import { flattenVisibleTree } from '../api/docs-page-reorder';
 import { DocsBlockContentSurface } from './DocsBlockContentSurface';
@@ -78,7 +86,7 @@ function DocsContentFormatBadge({
 export interface DocsViewerModalProps {
   open: boolean;
   itemId: string | null | undefined;
-  workspaceSlug?: string | null;
+
   shareToken?: string | null;
   fallbackTitle?: string;
   allowEdit?: boolean;
@@ -87,7 +95,7 @@ export interface DocsViewerModalProps {
 
 export interface DocsEmbeddedViewerProps {
   itemId: string | null | undefined;
-  workspaceSlug?: string | null;
+
   shareToken?: string | null;
   fallbackTitle?: string;
   allowEdit?: boolean;
@@ -122,19 +130,37 @@ export function DocsViewerModal({
 }
 
 export function DocsEmbeddedViewer(props: DocsEmbeddedViewerProps) {
-  return useDocsEmbeddedViewerContent(props);
+  const { token } = useAuth();
+  const [accessRevision, setAccessRevision] = useState(0);
+  const invalidateAccess = useCallback(
+    () => setAccessRevision((revision) => revision + 1),
+    [],
+  );
+  return (
+    <DocsEmbeddedViewerContent
+      key={JSON.stringify([
+        token,
+        props.itemId,
+        props.shareToken,
+        props.active,
+        accessRevision,
+      ])}
+      {...props}
+      invalidateAccess={invalidateAccess}
+    />
+  );
 }
 
-function useDocsEmbeddedViewerContent({
+function DocsEmbeddedViewerContent({
+  invalidateAccess,
   active = true,
   itemId,
-  workspaceSlug,
   shareToken = null,
   fallbackTitle,
   allowEdit = true,
   className,
   onClose,
-}: DocsEmbeddedViewerProps) {
+}: DocsEmbeddedViewerProps & { invalidateAccess: () => void }) {
   const { t } = useTranslation(['apps', 'common']);
   const { token } = useAuth();
   const { reconnectSeq } = useRealtime();
@@ -155,6 +181,9 @@ function useDocsEmbeddedViewerContent({
     loading,
     error,
   } = viewerState;
+  const loadedDocumentId = doc?.id ?? null;
+  const loadedDocumentIdRef = useRef(loadedDocumentId);
+  loadedDocumentIdRef.current = loadedDocumentId;
   const docPagesRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -167,7 +196,6 @@ function useDocsEmbeddedViewerContent({
   } = useDocsPageContentSaveController({
     token,
     shareToken,
-    workspaceSlug,
     flushOnUnmount: true,
     savePage: updateDocPage,
     onSavedPage: (updated) => {
@@ -190,8 +218,8 @@ function useDocsEmbeddedViewerContent({
     dispatchViewer({ type: 'loadStart' });
 
     void Promise.all([
-      getDocsItem(token, itemId, shareToken, workspaceSlug),
-      listDocPages(token, itemId, shareToken, workspaceSlug),
+      getDocsItem(token, itemId, shareToken),
+      listDocPages(token, itemId, shareToken),
     ])
       .then(([nextDoc, pageList]) => {
         if (cancelled) return;
@@ -219,35 +247,35 @@ function useDocsEmbeddedViewerContent({
     shareToken,
     t,
     token,
-    workspaceSlug,
   ]);
 
   const refreshPages = useCallback(
     async (expandedParentId?: string | null) => {
       if (!active || !itemId || !token) return;
       try {
-        const pageList = await listDocPages(
-          token,
-          itemId,
-          shareToken,
-          workspaceSlug,
-        );
+        const pageList = await listDocPages(token, itemId, shareToken);
         const nextPages = pageList.items;
         dispatchViewer({
           type: 'refreshPages',
           pages: nextPages,
           expandedParentId,
         });
-      } catch {
-        // The stream is advisory; keep the existing page tree if a refresh fails.
+      } catch (error) {
+        if (
+          error instanceof DocsApiError &&
+          [401, 403, 404].includes(error.status)
+        ) {
+          cancelQueuedSave();
+          invalidateAccess();
+        }
       }
     },
-    [active, itemId, shareToken, token, workspaceSlug],
+    [active, cancelQueuedSave, invalidateAccess, itemId, shareToken, token],
   );
 
   const schedulePagesRefresh = useCallback(
     (expandedParentId?: string | null) => {
-      if (!active || !itemId) {
+      if (!active || !itemId || loadedDocumentIdRef.current !== itemId) {
         return;
       }
       if (expandedParentId) {
@@ -267,10 +295,9 @@ function useDocsEmbeddedViewerContent({
   );
 
   useRealtimeSubscription(
-    active && itemId && token
+    active && itemId && loadedDocumentId === itemId && token
       ? createDocsPagesRealtimeSubscriptionMessage({
           key: itemId,
-          workspaceSlug: workspaceSlug ?? null,
           shareToken: shareToken ?? null,
         })
       : null,
@@ -294,12 +321,33 @@ function useDocsEmbeddedViewerContent({
     ),
   );
 
+  useRealtimeEvent(
+    REALTIME_TOPIC_EVENT_TYPES.docsAccessChanged,
+    useCallback(
+      (event: RealtimeEvent) => {
+        const payload = event.data as { doc_id?: unknown } | undefined;
+        if (active && itemId && payload?.doc_id === itemId) {
+          cancelQueuedSave();
+          invalidateAccess();
+        }
+      },
+      [active, cancelQueuedSave, invalidateAccess, itemId],
+    ),
+  );
+
   useEffect(() => {
-    if (!active || !itemId || !token) {
+    if (!active || !itemId || !token || loadedDocumentId !== itemId) {
       return;
     }
     schedulePagesRefresh(null);
-  }, [active, itemId, reconnectSeq, schedulePagesRefresh, token]);
+  }, [
+    active,
+    itemId,
+    loadedDocumentId,
+    reconnectSeq,
+    schedulePagesRefresh,
+    token,
+  ]);
 
   useEffect(
     () => () => {
@@ -341,8 +389,8 @@ function useDocsEmbeddedViewerContent({
 
   useEffect(() => {
     if (!active || !token || !itemId || !activePage) return;
-    void recordDocView(token, itemId, activePage.id, shareToken, workspaceSlug);
-  }, [active, activePage, itemId, shareToken, token, workspaceSlug]);
+    void recordDocView(token, itemId, activePage.id, shareToken);
+  }, [active, activePage, itemId, shareToken, token]);
 
   function toggleExpand(pageId: string) {
     dispatchViewer({ type: 'toggleExpanded', pageId });
@@ -426,7 +474,6 @@ function useDocsEmbeddedViewerContent({
           page.id,
           { content_text: text },
           shareToken,
-          workspaceSlug,
         );
         dispatchViewer({ type: 'updatePage', page: updated });
       } catch {
@@ -441,7 +488,6 @@ function useDocsEmbeddedViewerContent({
       t,
       token,
       updatePageContentTextLocally,
-      workspaceSlug,
     ],
   );
 
@@ -478,7 +524,6 @@ function useDocsEmbeddedViewerContent({
           page.id,
           { content_blocks: blocks },
           shareToken,
-          workspaceSlug,
         );
         dispatchViewer({ type: 'updatePage', page: updated });
         bumpContentEditorVersion(page.id);
@@ -494,7 +539,6 @@ function useDocsEmbeddedViewerContent({
       shareToken,
       t,
       token,
-      workspaceSlug,
     ],
   );
 
@@ -512,12 +556,11 @@ function useDocsEmbeddedViewerContent({
       );
       return;
     }
-    if (!workspaceSlug) return;
+
     await flushPendingContentTextSave();
     window.open(
       buildAppHref({
         routeId: 'docs.document-html',
-        workspaceSlug,
         pathParams: { docId: doc.id, pageId: page.id },
       }),
       '_blank',
@@ -537,7 +580,6 @@ function useDocsEmbeddedViewerContent({
         pageId,
         { title: trimmed },
         shareToken,
-        workspaceSlug,
       );
       dispatchViewer({ type: 'updatePage', page: updated });
     } catch {
@@ -763,7 +805,6 @@ function useDocsEmbeddedViewerContent({
                           page={activePage}
                           canEdit={canEditActivePage}
                           token={token}
-                          workspaceSlug={workspaceSlug}
                           shareToken={shareToken}
                           contentEditorVersion={
                             contentEditorVersions[activePage.id] ?? 0

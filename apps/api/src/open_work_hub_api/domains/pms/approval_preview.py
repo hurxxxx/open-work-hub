@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from open_work_hub_api.domains.ai.registry import ApprovalPreview, PreviewField, WorkspaceContext
+from open_work_hub_api.domains.ai.registry import ApprovalPreview, PreviewField
 
 if TYPE_CHECKING:
     from open_work_hub_api.core.principal import CallerPrincipal
@@ -42,7 +42,6 @@ def _preview_field_list(values: list[str] | None, *, empty_value: str = "-") -> 
 
 def build_create_task_preview(
     principal: CallerPrincipal,
-    workspace: WorkspaceContext,
     parsed_args: BaseModel | Mapping[str, Any],
 ) -> ApprovalPreview:
     values = _preview_values(parsed_args)
@@ -59,7 +58,7 @@ def build_create_task_preview(
     if values.get("due_date") is not None:
         fields.append(PreviewField(label="Due", value=str(values["due_date"])))
     return ApprovalPreview(
-        title=f"[{workspace.display_name}] Create PMS task",
+        title="Create PMS task",
         summary=_preview_summary(values.get("body"), fallback="Create a PMS task from AI."),
         fields=tuple(fields),
     )
@@ -67,7 +66,6 @@ def build_create_task_preview(
 
 def build_update_task_preview(
     principal: CallerPrincipal,
-    workspace: WorkspaceContext,
     parsed_args: BaseModel | Mapping[str, Any],
 ) -> ApprovalPreview:
     values = _preview_values(parsed_args)
@@ -84,7 +82,7 @@ def build_update_task_preview(
     if values.get("due_date") is not None:
         fields.append(PreviewField(label="Due", value=str(values["due_date"])))
     return ApprovalPreview(
-        title=f"[{workspace.display_name}] Update PMS task",
+        title="Update PMS task",
         summary=_preview_summary(values.get("body"), fallback="Update a PMS task from AI."),
         fields=tuple(fields),
     )
@@ -92,31 +90,25 @@ def build_update_task_preview(
 
 def build_add_comment_preview(
     principal: CallerPrincipal,
-    workspace: WorkspaceContext,
     parsed_args: BaseModel | Mapping[str, Any],
 ) -> ApprovalPreview:
     values = _preview_values(parsed_args)
     return ApprovalPreview(
-        title=f"[{workspace.display_name}] Add PMS comment",
+        title="Add PMS comment",
         summary=_preview_summary(values.get("body"), fallback="Add a comment to a PMS task."),
-        fields=(
-            PreviewField(label="Task", value=str(values.get("task_id", "-"))),
-        ),
+        fields=(PreviewField(label="Task", value=str(values.get("task_id", "-"))),),
     )
 
 
 def build_delete_task_preview(
     principal: CallerPrincipal,
-    workspace: WorkspaceContext,
     parsed_args: BaseModel | Mapping[str, Any],
 ) -> ApprovalPreview:
     values = _preview_values(parsed_args)
     return ApprovalPreview(
-        title=f"[{workspace.display_name}] Delete PMS task",
+        title="Delete PMS task",
         summary="Delete one PMS task from AI.",
-        fields=(
-            PreviewField(label="Task", value=str(values.get("task_id", "-"))),
-        ),
+        fields=(PreviewField(label="Task", value=str(values.get("task_id", "-"))),),
     )
 
 

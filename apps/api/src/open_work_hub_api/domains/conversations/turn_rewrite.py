@@ -4,7 +4,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-
 TITLE_AUTO_PREVIEW_LEN = 30
 
 

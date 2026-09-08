@@ -6,9 +6,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
-
 GraphRunStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
-GraphRunVisibility = Literal["private", "workspace"]
+GraphRunVisibility = Literal["private", "company"]
 GraphDispatchStatus = Literal[
     "pending",
     "claimed",
@@ -71,11 +70,11 @@ class AiGraphSpec(BaseModel):
         for node in self.nodes:
             unknown = set(node.depends_on) - known
             if unknown:
-                raise ValueError(
-                    f"node {node.node_id} has unknown dependencies: {sorted(unknown)}"
-                )
+                raise ValueError(f"node {node.node_id} has unknown dependencies: {sorted(unknown)}")
             unknown_targets = {
-                target for target in node.routes.values() if target is not None and target not in known
+                target
+                for target in node.routes.values()
+                if target is not None and target not in known
             }
             if unknown_targets:
                 raise ValueError(
@@ -136,8 +135,6 @@ class AiGraphRunRequest(BaseModel):
     """Server-authenticated input for one durable graph execution."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-    workspace_id: str = Field(min_length=1, max_length=36)
     requested_by_user_id: str = Field(min_length=1, max_length=36)
     app_id: str = Field(min_length=1, max_length=64)
     graph: AiGraphSpec
@@ -166,7 +163,6 @@ class AiGraphRunResult(BaseModel):
 
 class AiGraphRunResponse(_CamelModel):
     id: str
-    workspace_id: str
     requested_by_user_id: str
     conversation_id: str | None
     app_id: str
@@ -201,7 +197,6 @@ class AiGraphLlmRequest(BaseModel):
 
     workload_id: str = Field(min_length=1, max_length=128)
     app_id: str = Field(min_length=1, max_length=64)
-    workspace_id: str = Field(min_length=1, max_length=36)
     source: str = Field(min_length=1, max_length=128)
     messages: list[dict[str, Any]] = Field(min_length=1)
     actor_user_id: str | None = Field(default=None, max_length=36)

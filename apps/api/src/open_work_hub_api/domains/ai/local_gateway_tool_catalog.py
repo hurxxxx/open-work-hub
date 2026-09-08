@@ -8,7 +8,6 @@ from typing import Any
 from open_work_hub_api.domains.ai.internal_agent_contracts import LocalAgentTask
 from open_work_hub_api.domains.rag.source_registry import OFFICIAL_NATIVE_DOC_SOURCE_KINDS
 
-
 GatewayArgumentBuilder = Callable[[LocalAgentTask], dict[str, Any]]
 _read_gateway_tool_builders: dict[str, GatewayArgumentBuilder] = {}
 _default_tools_by_agent: dict[str, tuple[str, ...]] = {}

@@ -1,5 +1,5 @@
-import { useEffect, useReducer } from 'react';
 import type { FormEvent } from 'react';
+import { useEffect, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { syncLocale } from '@/src/platform/i18n';

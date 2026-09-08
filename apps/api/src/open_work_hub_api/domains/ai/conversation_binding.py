@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 import logging
+from collections.abc import Sequence
 from typing import Protocol
 
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.domains.ai import approvals as ai_approvals
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.conversations import service as conversations_service
 from open_work_hub_api.domains.conversations.models import Conversation
-
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,6 @@ class ConversationTurnMessage(Protocol):
 def start_live_conversation_run(
     *,
     db: Session,
-    workspace: Workspace,
     user: User,
     conversation: Conversation | None,
 ) -> ai_approvals.ConversationRunLock | None:
@@ -33,7 +31,6 @@ def start_live_conversation_run(
         return None
     return ai_approvals.acquire_conversation_run_lock(
         db,
-        workspace=workspace,
         conversation=conversation,
         requested_by_user=user,
     )
@@ -60,7 +57,6 @@ def complete_live_conversation_run(
 def resolve_requested_conversation(
     *,
     db: Session,
-    workspace: Workspace,
     user: User,
     conversation_id: str | None,
 ) -> Conversation | None:
@@ -68,7 +64,6 @@ def resolve_requested_conversation(
         return None
     return conversations_service.get_conversation(
         db,
-        workspace=workspace,
         user=user,
         conversation_id=conversation_id,
     )

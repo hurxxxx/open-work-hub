@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
-from collections.abc import Sequence
 from typing import Any, Literal
 from uuid import NAMESPACE_URL, uuid5
 
@@ -14,76 +14,74 @@ from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.storage import get_minio_client
-from open_work_hub_api.domains.auth.access import (
-    bind_current_workspace,
-    get_or_create_default_pms_space,
-    has_system_role,
-    resolve_workspace_enabled_app_ids,
-    resolve_workspaces,
-    slugify,
-)
-from open_work_hub_api.domains.auth.models import Team, TeamMember, User, Workspace
-from open_work_hub_api.domains.auth.roles import team_role_allows_predicate
+from open_work_hub_api.domains.auth.access import has_system_role, slugify
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
 from open_work_hub_api.domains.media.service import cleanup_media_for_resource, sync_embedded_media
-from open_work_hub_api.domains.pms.attachments import (
-    serialize_task_attachment,
-    serialize_task_attachment_metadata,
-)
-from open_work_hub_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
 from open_work_hub_api.domains.pms.access import (
-    _active_accessible_task_lists_query,
     _accessible_task_lists_query,
+    _active_accessible_task_lists_query,
+    _ensure_list_editor,
+    _ensure_list_member,
     _ensure_space_access,
     _ensure_space_admin_change_allowed,
     _ensure_space_editor,
     _ensure_space_manager,
     _ensure_space_owner_survives,
-    _ensure_list_editor,
-    _ensure_list_member,
     _ensure_task_readable,
     _get_space_membership,
     _load_active_space,
     _load_space_members,
-    resolve_pms_space_role,
     _space_member_ids,
     _space_query_for_user,
     _validate_space_member_user,
+    resolve_pms_space_role,
 )
-from open_work_hub_api.domains.pms.rag_sync import (
-    enqueue_task_list_task_recompute,
-    enqueue_task_rag_sync,
+from open_work_hub_api.domains.pms.attachments import (
+    serialize_task_attachment,
+    serialize_task_attachment_metadata,
 )
 from open_work_hub_api.domains.pms.links import pms_task_path
 from open_work_hub_api.domains.pms.models import (
     Attachment,
     Folder,
     Label,
+    Notification,
+    SpaceStatus,
     Task,
     TaskActivityLog,
     TaskAssignee,
     TaskComment,
+    TaskDocLink,
     TaskFollower,
     TaskLabel,
-    TaskDocLink,
-    Notification,
-    SpaceStatus,
     TaskList,
     TaskListStatus,
 )
 from open_work_hub_api.domains.pms.projections import (
     serialize_task_summary as _serialize_task_summary,
+)
+from open_work_hub_api.domains.pms.projections import (
     task_assignee_ids as _task_assignee_ids,
+)
+from open_work_hub_api.domains.pms.projections import (
     task_follower_ids as _task_follower_ids,
+)
+from open_work_hub_api.domains.pms.projections import (
     task_reference as _task_reference,
 )
+from open_work_hub_api.domains.pms.rag_sync import (
+    enqueue_task_list_task_recompute,
+    enqueue_task_rag_sync,
+)
+from open_work_hub_api.domains.pms.space_models import Team, TeamMember
 from open_work_hub_api.domains.pms.status_lifecycle import (
     create_default_space_statuses as _create_default_space_statuses,
+)
+from open_work_hub_api.domains.pms.status_lifecycle import (
     ensure_space_statuses as _ensure_space_statuses,
 )
-from open_work_hub_api.domains.rag.contracts import RagSyncOperation
-from open_work_hub_api.domains.retrieval.partitioning import assign_default_partition
 from open_work_hub_api.domains.pms.task_update_plan import (
     effective_task_update_fields,
     plan_task_scalar_updates,
@@ -100,6 +98,8 @@ from open_work_hub_api.domains.pms.workflow import (
     status_definitions,
     status_label,
 )
+from open_work_hub_api.domains.rag.contracts import RagSyncOperation
+from open_work_hub_api.domains.retrieval.partitioning import assign_default_partition
 
 
 def _normalize_task_status(status_value: str) -> str:
@@ -122,24 +122,15 @@ def _status_category(status_value: str, task_list: TaskList | None = None) -> st
     return status_category(status_value, task_list)
 
 
-def _bind_workspace_context(
-    db: Session,
-    *,
-    workspace: Workspace,
-    principal: CallerPrincipal,
-    user: User,
-) -> None:
-    bind_current_workspace(db, workspace)
-    if principal.workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="pms.principal_workspace_mismatch",
-        )
-    if principal.kind == "user" and principal.user_id not in {None, user.id}:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="pms.principal_user_mismatch",
-        )
+def _require_actor(db: Session, *, principal: CallerPrincipal, user: User) -> None:
+    from open_work_hub_api.domains.auth.app_access import can_use_app
+
+    if (
+        principal.kind != "user"
+        or principal.user_id != user.id
+        or not can_use_app(db, user_id=user.id, app_id="pms")
+    ):
+        raise localized_http_exception(status_code=403, code="auth.required")
 
 
 def _require_user_write_principal(principal: CallerPrincipal) -> None:
@@ -225,8 +216,6 @@ def _count_task_statement(db: Session, statement: Any) -> int:
 def _serialize_space(team: Team, current_user_role: str | None) -> dict[str, Any]:
     return {
         "id": team.id,
-        "workspace_id": team.workspace_id,
-        "workspace_key": team.workspace.key,
         "key": team.key,
         "name": team.name,
         "description": team.description,
@@ -248,13 +237,12 @@ def _serialize_space_member(db: Session, member: TeamMember) -> dict[str, Any]:
     }
 
 
-def _unique_space_key(db: Session, workspace_id: str, name: str) -> str:
+def _unique_space_key(db: Session, name: str) -> str:
     base = slugify(name) or "space"
     candidate = base
     counter = 1
     while db.scalar(
         select(Team.id).where(
-            Team.workspace_id == workspace_id,
             Team.key == candidate,
         )
     ):
@@ -474,7 +462,6 @@ def _create_notification(
     *,
     source_type: str = "pms_task",
     source_id: str | None = None,
-    origin_workspace_id: str,
     action_url: str | None = None,
     stable_key: str | None = None,
 ) -> None:
@@ -490,7 +477,6 @@ def _create_notification(
             source_type=source_type,
             source_id=source_id,
             origin_app_id="pms",
-            origin_workspace_id=origin_workspace_id,
             action_url=action_url,
         )
     )
@@ -527,8 +513,8 @@ def _extract_mentions_from_blocks(blocks: list[dict], out: set[str]) -> None:
                 _extract_mentions_from_blocks([child], out)
 
 
-def _task_action_url(workspace: Workspace, task: Task) -> str:
-    return pms_task_path(workspace, task)
+def _task_action_url(task: Task) -> str:
+    return pms_task_path(task)
 
 
 def _task_notification_label(task: Task) -> str:
@@ -815,11 +801,10 @@ def _get_task_for_user(
 def list_spaces(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
 ) -> list[dict[str, Any]]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
     spaces = list(db.scalars(_space_query_for_user(db, user).order_by(Team.name.asc())))
     return [_serialize_space(space, resolve_pms_space_role(db, user, space)) for space in spaces]
 
@@ -827,18 +812,16 @@ def list_spaces(
 def create_space(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     name: str,
     description: str,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
     _require_user_write_principal(principal)
     team = Team(
         id=new_id(),
-        workspace_id=workspace.id,
-        key=_unique_space_key(db, workspace.id, name),
+        key=_unique_space_key(db, name),
         name=name.strip(),
         description=description.strip(),
         active=True,
@@ -863,14 +846,13 @@ def create_space(
 def update_space(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     space_id: str,
     name: str | None = None,
     description: str | None = None,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
     _require_user_write_principal(principal)
     team, role = _ensure_space_manager(db, user, space_id)
     if name is not None:
@@ -887,12 +869,11 @@ def update_space(
 def delete_space(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     space_id: str,
 ) -> None:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
     _require_user_write_principal(principal)
     team, _role = _ensure_space_manager(db, user, space_id)
     team.trashed_at = _utcnow()
@@ -905,14 +886,13 @@ def delete_space(
 def list_space_members(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     space_id: str,
     page: int = 1,
     page_size: int = 20,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
     _ensure_space_access(db, user, space_id)
     members = [
         _serialize_space_member(db, member)
@@ -933,15 +913,15 @@ def list_space_members(
 def add_space_member(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     space_id: str,
     target_user_id: str,
     role: str,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
     _require_user_write_principal(principal)
+    db.execute(select(Team.id).where(Team.id == space_id).with_for_update()).scalar_one_or_none()
     _ensure_space_admin_change_allowed(
         db,
         user,
@@ -966,15 +946,15 @@ def add_space_member(
 def update_space_member(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     space_id: str,
     target_user_id: str,
     role: str,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
     _require_user_write_principal(principal)
+    db.execute(select(Team.id).where(Team.id == space_id).with_for_update()).scalar_one_or_none()
     membership = _get_space_membership(db, space_id, target_user_id)
     if membership is None:
         raise localized_http_exception(
@@ -1000,14 +980,14 @@ def update_space_member(
 def remove_space_member(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     space_id: str,
     target_user_id: str,
 ) -> None:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
     _require_user_write_principal(principal)
+    db.execute(select(Team.id).where(Team.id == space_id).with_for_update()).scalar_one_or_none()
     membership = _get_space_membership(db, space_id, target_user_id)
     if membership is None:
         raise localized_http_exception(
@@ -1029,7 +1009,6 @@ def remove_space_member(
 def list_task_lists(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     page: int = 1,
@@ -1040,7 +1019,7 @@ def list_task_lists(
     archived: bool | None = None,
     team_id: str | None = None,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
 
     if team_id is not None:
         _ensure_space_access(db, user, team_id)
@@ -1105,7 +1084,7 @@ def list_task_lists(
                     Team.id.in_(team_ids),
                     Team.trashed_at.is_(None),
                 )
-                .options(joinedload(Team.workspace), selectinload(Team.members))
+                .options(selectinload(Team.members))
             )
         )
         team_names = {team.id: team.name for team in teams}
@@ -1133,7 +1112,6 @@ def list_task_lists(
 def create_task_list(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     name: str,
@@ -1142,16 +1120,14 @@ def create_task_list(
     team_id: str | None = None,
     folder_id: str | None = None,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
     _require_user_write_principal(principal)
     resolved_key = key.upper() if key else _unique_key(db, name)
 
+    if not team_id:
+        raise localized_http_exception(status_code=400, code="pms.task_list_space_missing")
     resolved_team_id = team_id
-    if resolved_team_id:
-        team, _role = _ensure_space_editor(db, user, resolved_team_id)
-    else:
-        team = get_or_create_default_pms_space(db, workspace=workspace)
-        resolved_team_id = team.id
+    team, _role = _ensure_space_editor(db, user, resolved_team_id)
     resolved_team_name = team.name
 
     _validate_folder_membership(db, resolved_team_id, folder_id)
@@ -1205,7 +1181,6 @@ def create_task_list(
 def list_tasks(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     list_id: str,
@@ -1225,7 +1200,7 @@ def list_tasks(
     start_date_from: date | None = None,
     start_date_to: date | None = None,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
 
     _ensure_list_member(db, user, list_id)
     statement = select(Task).options(*_task_summary_load_options()).where(Task.list_id == list_id)
@@ -1312,7 +1287,6 @@ def list_tasks(
 def search_tasks(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     q: str = "",
@@ -1322,7 +1296,7 @@ def search_tasks(
     archived: bool | None = False,
     limit: int = 20,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
 
     if list_id is not None:
         _ensure_list_member(db, user, list_id)
@@ -1370,14 +1344,13 @@ def search_tasks(
 def list_assigned_tasks(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     limit: int | None = 10,
     page: int | None = None,
     page_size: int = 50,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
 
     accessible_list_ids_subquery = _active_accessible_task_lists_query(db, user).with_only_columns(
         TaskList.id
@@ -1422,109 +1395,39 @@ def list_assigned_tasks(
 
 
 def list_personal_widget_assigned_tasks(
-    db: Session,
-    *,
-    user: User,
-    page: int = 1,
-    page_size: int = 50,
+    db: Session, *, user: User, page: int = 1, page_size: int = 50
 ) -> dict[str, Any]:
-    """Return open assigned tasks across every PMS-enabled workspace for ``user``."""
-
-    workspaces = resolve_workspaces(db, user)
-    eligible_workspaces = [
-        workspace
-        for workspace in workspaces
-        if PMS_WORKSPACE_APP.app_id in resolve_workspace_enabled_app_ids(db, str(workspace["id"]))
-    ]
-    if not eligible_workspaces:
-        return {
-            "items": [],
-            "total": 0,
-            "page": page,
-            "page_size": page_size,
-            "workspaces": [],
-        }
-
-    workspace_by_id = {str(item["id"]): item for item in eligible_workspaces}
-    accessible_list_ids_subquery = (
-        select(TaskList.id)
-        .join(Team, Team.id == TaskList.team_id)
-        .join(TeamMember, TeamMember.team_id == Team.id)
-        .where(
-            TeamMember.user_id == user.id,
-            team_role_allows_predicate(TeamMember.role),
-            TaskList.archived.is_(False),
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
-            Team.workspace.has(Workspace.active.is_(True)),
-            Team.workspace_id.in_(tuple(workspace_by_id)),
-        )
-    )
-    rows = db.execute(
-        select(Task, Team.workspace_id)
-        .join(TaskList, TaskList.id == Task.list_id)
-        .join(Team, Team.id == TaskList.team_id)
+    """Return the caller's open assigned tasks from currently accessible PMS spaces."""
+    accessible_lists = _active_accessible_task_lists_query(db, user).with_only_columns(TaskList.id)
+    tasks = db.scalars(
+        select(Task)
         .options(*_task_summary_load_options())
         .where(
             Task.archived.is_(False),
-            Task.list_id.in_(accessible_list_ids_subquery),
-            Team.workspace_id.in_(tuple(workspace_by_id)),
+            Task.list_id.in_(accessible_lists),
             _task_assignee_filter(user.id),
         )
         .order_by(Task.due_date.asc(), Task.updated_at.desc())
-    ).all()
-
-    items: list[dict[str, Any]] = []
-    for task, workspace_id in rows:
-        if _is_overdue_exempt_status(task.status, task.task_list):
-            continue
-        workspace = workspace_by_id[str(workspace_id)]
-        items.append(
-            {
-                **_serialize_task(task),
-                "workspace": {
-                    "id": str(workspace["id"]),
-                    "slug": str(workspace["slug"]),
-                    "name": str(workspace["name"]),
-                },
-            }
-        )
-
-    items.sort(
-        key=lambda item: (
-            item["due_date"] or date.max,
-            -item["updated_at"].timestamp(),
-        )
     )
+    items = [
+        _serialize_task(task)
+        for task in tasks
+        if not _is_overdue_exempt_status(task.status, task.task_list)
+    ]
     page_items, total = _paginate(items, page, page_size)
-    return {
-        "items": page_items,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "workspaces": [
-            {
-                "id": str(workspace["id"]),
-                "slug": str(workspace["slug"]),
-                "name": str(workspace["name"]),
-                "role": str(workspace["role"]),
-            }
-            for workspace in eligible_workspaces
-        ],
-    }
+    return {"items": page_items, "total": total, "page": page, "page_size": page_size}
 
 
 def list_today_overdue_tasks(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     today: date,
     page: int = 1,
     page_size: int = 50,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
 
     accessible_list_ids_subquery = _active_accessible_task_lists_query(db, user).with_only_columns(
         TaskList.id
@@ -1564,13 +1467,12 @@ def list_today_overdue_tasks(
 def get_task_detail(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     task_id: str,
     content_grant_issuer: ContentGrantIssuer,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
 
     task, _task_list = _get_task_for_user(db, user, task_id)
     attachments = [
@@ -1590,12 +1492,11 @@ def get_task_detail(
 def get_task_detail_for_ai(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     task_id: str,
 ) -> dict[str, Any]:
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
     task, _task_list = _get_task_for_user(db, user, task_id)
     attachments = [
         asdict(serialize_task_attachment_metadata(attachment))
@@ -1659,7 +1560,6 @@ def _reload_comment(db: Session, *, comment_id: str) -> Any:
 def create_task(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     list_id: str,
@@ -1680,7 +1580,7 @@ def create_task(
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
     _require_user_write_principal(principal)
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
 
     if approved_call_id is not None:
         try:
@@ -1737,16 +1637,12 @@ def create_task(
         board_position=next_position,
     )
     if task_list.team_id is None:
-        raise ValueError("PMS task list must belong to a workspace team")
-    task_workspace_id = db.scalar(select(Team.workspace_id).where(Team.id == task_list.team_id))
-    if task_workspace_id is None:
-        raise ValueError("PMS task list team must belong to a workspace")
+        raise ValueError("PMS task list must belong to an active PMS space")
     assign_default_partition(
         db,
         target=task,
         source_namespace="pms",
-        candidate_scope_kind="workspace",
-        workspace_id=task_workspace_id,
+        candidate_scope_kind="company",
     )
     db.add(task)
     db.flush()
@@ -1780,7 +1676,6 @@ def create_task(
 def update_task(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     task_id: str,
@@ -1804,7 +1699,7 @@ def update_task(
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
     _require_user_write_principal(principal)
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
 
     effective_provided_fields = effective_task_update_fields(provided_fields)
     if {"board_position", "parent_id"} & effective_provided_fields:
@@ -1981,7 +1876,7 @@ def update_task(
 
     task_label = _task_notification_label(task)
     task_label_with_reference = _task_notification_label_with_reference(task)
-    action_url = _task_action_url(workspace, task)
+    action_url = _task_action_url(task)
     if "assignee_id" in effective_provided_fields:
         for notified_assignee_id in _task_assignee_ids(task):
             if notified_assignee_id == user.id:
@@ -1993,7 +1888,6 @@ def update_task(
                 f"{task_label} assigned to you",
                 f"{user.full_name} assigned {task_label_with_reference} to you.",
                 source_id=task.id,
-                origin_workspace_id=workspace.id,
                 action_url=action_url,
                 stable_key=(
                     _stable_replay_id(
@@ -2014,7 +1908,6 @@ def update_task(
                 f"{task_label} status → {TASK_STATUS_LABELS.get(status, status)}",
                 f"{user.full_name} changed status of {task_label_with_reference} to {TASK_STATUS_LABELS.get(status, status)}.",
                 source_id=task.id,
-                origin_workspace_id=workspace.id,
                 action_url=action_url,
                 stable_key=(
                     _stable_replay_id(approved_call_id, f"notification.status_changed.{uid}")
@@ -2037,7 +1930,6 @@ def update_task(
 def add_task_comment(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     task_id: str,
@@ -2046,7 +1938,7 @@ def add_task_comment(
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
     _require_user_write_principal(principal)
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
 
     if approved_call_id is not None:
         existing_comment = db.scalar(
@@ -2085,7 +1977,7 @@ def add_task_comment(
         ),
     )
     ref = _task_reference(task)
-    action_url = _task_action_url(workspace, task)
+    action_url = _task_action_url(task)
     notify_ids = _task_notification_user_ids(task)
     notify_ids.discard(user.id)
     for uid in notify_ids:
@@ -2096,7 +1988,6 @@ def add_task_comment(
             f"New comment on {task.title}",
             f"{user.full_name} commented on {task.title} ({ref}).",
             source_id=task.id,
-            origin_workspace_id=workspace.id,
             action_url=action_url,
             stable_key=(
                 _stable_replay_id(approved_call_id, f"notification.commented.{uid}")
@@ -2124,7 +2015,6 @@ def add_task_comment(
                 f"Mentioned in {task.title}",
                 f"{user.full_name} mentioned you in a comment on {task.title} ({ref}).",
                 source_id=task.id,
-                origin_workspace_id=workspace.id,
                 action_url=action_url,
                 stable_key=(
                     _stable_replay_id(approved_call_id, f"notification.mentioned.{uid}")
@@ -2141,7 +2031,6 @@ def add_task_comment(
 def delete_task(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     task_id: str,
@@ -2149,7 +2038,7 @@ def delete_task(
 ) -> dict[str, Any]:
     del approved_call_id
     _require_user_write_principal(principal)
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
 
     task, _task_list = _get_task_for_user(db, user, task_id, require_editor=True)
     deleted_task_id = task.id
@@ -2186,14 +2075,13 @@ def delete_loaded_tasks(db: Session, tasks: Sequence[Task]) -> list[str]:
 def reorder_task_list_tasks(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     list_id: str,
     updates: Sequence[TaskReorderUpdate],
 ) -> list[dict[str, Any]]:
     _require_user_write_principal(principal)
-    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    _require_actor(db, principal=principal, user=user)
 
     task_list, _role = _ensure_list_editor(db, user, list_id)
     if task_list.team_id is None:
@@ -2202,7 +2090,7 @@ def reorder_task_list_tasks(
             code="pms.task_list_space_missing",
         )
     team = db.scalar(select(Team).where(Team.id == task_list.team_id))
-    if team is None or team.workspace_id != workspace.id:
+    if team is None or not team.active or team.trashed_at is not None:
         raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
             code="pms.task_list_not_found",

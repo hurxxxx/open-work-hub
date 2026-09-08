@@ -31,7 +31,6 @@ function session(
 ): RecordingSessionState {
   return {
     stagingId: 'staging-1',
-    workspaceSlug: 'hq',
     scopeKey: 'hq:recording:unlinked',
     idempotencyKey: 'idem-1',
     mimeType: 'audio/webm',

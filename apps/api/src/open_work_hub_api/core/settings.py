@@ -1,10 +1,11 @@
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 
+from dotenv import dotenv_values
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from dotenv import dotenv_values
 
 from open_work_hub_api.open_work_hub_desktop_update_manifest import (
     open_work_hub_desktop_update_dir_values,
@@ -22,7 +23,7 @@ def _workspace_root() -> Path:
 WORKSPACE_ROOT = _workspace_root()
 ENV_FILE = WORKSPACE_ROOT / ".env"
 DEFAULT_FRONTEND_DIST_DIR = str(WORKSPACE_ROOT / "dist" / "apps" / "web")
-DEFAULT_DM_ATTACHMENT_SIGNING_KEY = "dev-dm-attachment-signing-key"
+DEFAULT_CONTENT_GRANT_SIGNING_KEY = "dev-content-grant-signing-key"
 DEFAULT_OPF_CHECKPOINT = "openai/privacy-filter"
 HERMES_RELEASE = "v2026.8.31"
 HERMES_PROVIDER = "openrouter"
@@ -111,9 +112,9 @@ class Settings(BaseSettings):
         default="",
         validation_alias="OPEN_WORK_HUB_DRAWIO_SERVER_URL",
     )
-    dm_attachment_signing_key: str = Field(
-        default=DEFAULT_DM_ATTACHMENT_SIGNING_KEY,
-        validation_alias="OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY",
+    content_grant_signing_key: str = Field(
+        default=DEFAULT_CONTENT_GRANT_SIGNING_KEY,
+        validation_alias="OPEN_WORK_HUB_CONTENT_GRANT_SIGNING_KEY",
     )
     worker_broker_url: str = Field(
         default="redis://127.0.0.1:6379/0",
@@ -546,16 +547,8 @@ class Settings(BaseSettings):
         default=str(WORKSPACE_ROOT / ".runtime" / "hermes-terminal-mcp.sock"),
         validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_MCP_SOCKET_PATH",
     )
-    hermes_terminal_max_sessions_per_workspace_user: int = Field(
-        default=1,
-        ge=1,
-        le=4,
-        validation_alias=(
-            "OPEN_WORK_HUB_HERMES_TERMINAL_MAX_SESSIONS_PER_WORKSPACE_USER"
-        ),
-    )
     hermes_terminal_max_sessions_per_user: int = Field(
-        default=2,
+        default=1,
         ge=1,
         le=8,
         validation_alias="OPEN_WORK_HUB_HERMES_TERMINAL_MAX_SESSIONS_PER_USER",
@@ -961,8 +954,8 @@ class Settings(BaseSettings):
                 "OPEN_WORK_HUB_API_AGENT_TERMINAL_MAX_SESSIONS_TOTAL must be "
                 "greater than or equal to the per-user limit."
             )
-        self.dm_attachment_signing_key = _normalize_dm_attachment_signing_key(
-            self.dm_attachment_signing_key,
+        self.content_grant_signing_key = _normalize_content_grant_signing_key(
+            self.content_grant_signing_key,
             environment=self.environment,
         )
         self.llm_external_allowed_providers = _normalize_external_provider_list_text(
@@ -977,15 +970,11 @@ class Settings(BaseSettings):
         self.hermes_runtime_base_url = self.hermes_runtime_base_url.strip().rstrip("/")
         self.hermes_management_base_url = self.hermes_management_base_url.strip().rstrip("/")
         self.hermes_mcp_server_url = self.hermes_mcp_server_url.strip()
-        self.hermes_profile_clone_source = (
-            self.hermes_profile_clone_source.strip() or "default"
+        self.hermes_profile_clone_source = self.hermes_profile_clone_source.strip() or "default"
+        self.hermes_terminal_broker_base_url = self.hermes_terminal_broker_base_url.strip().rstrip(
+            "/"
         )
-        self.hermes_terminal_broker_base_url = (
-            self.hermes_terminal_broker_base_url.strip().rstrip("/")
-        )
-        self.hermes_terminal_mcp_relay_url = (
-            self.hermes_terminal_mcp_relay_url.strip().rstrip("/")
-        )
+        self.hermes_terminal_mcp_relay_url = self.hermes_terminal_mcp_relay_url.strip().rstrip("/")
         terminal_mcp_socket = Path(
             self.hermes_terminal_mcp_socket_path.strip()
             or WORKSPACE_ROOT / ".runtime" / "hermes-terminal-mcp.sock"
@@ -993,18 +982,7 @@ class Settings(BaseSettings):
         if not terminal_mcp_socket.is_absolute():
             terminal_mcp_socket = WORKSPACE_ROOT / terminal_mcp_socket
         self.hermes_terminal_mcp_socket_path = str(terminal_mcp_socket.resolve())
-        if (
-            self.hermes_terminal_max_sessions_per_user
-            < self.hermes_terminal_max_sessions_per_workspace_user
-        ):
-            raise ValueError(
-                "OPEN_WORK_HUB_HERMES_TERMINAL_MAX_SESSIONS_PER_USER must be "
-                "greater than or equal to the per-workspace-user limit."
-            )
-        if (
-            self.hermes_terminal_max_sessions_total
-            < self.hermes_terminal_max_sessions_per_user
-        ):
+        if self.hermes_terminal_max_sessions_total < self.hermes_terminal_max_sessions_per_user:
             raise ValueError(
                 "OPEN_WORK_HUB_HERMES_TERMINAL_MAX_SESSIONS_TOTAL must be "
                 "greater than or equal to the per-user limit."
@@ -1026,13 +1004,9 @@ class Settings(BaseSettings):
                 if not value
             ]
             if missing:
-                raise ValueError(
-                    "Hermes integration is enabled but missing: " + ", ".join(missing)
-                )
+                raise ValueError("Hermes integration is enabled but missing: " + ", ".join(missing))
             if len(self.hermes_api_key.get_secret_value()) < 16:
-                raise ValueError(
-                    "OPEN_WORK_HUB_HERMES_API_KEY must be at least 16 characters."
-                )
+                raise ValueError("OPEN_WORK_HUB_HERMES_API_KEY must be at least 16 characters.")
             if len(self.hermes_management_token.get_secret_value()) < 16:
                 raise ValueError(
                     "OPEN_WORK_HUB_HERMES_MANAGEMENT_TOKEN must be at least 16 characters."
@@ -1041,10 +1015,7 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET must be at least 32 characters."
                 )
-        if (
-            self.hermes_mcp_server_url
-            and not self.hermes_mcp_shared_secret.get_secret_value()
-        ):
+        if self.hermes_mcp_server_url and not self.hermes_mcp_shared_secret.get_secret_value():
             raise ValueError(
                 "OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET is required when the Hermes MCP URL is set."
             )
@@ -1065,17 +1036,20 @@ def get_settings() -> Settings:
     return Settings()
 
 
-def _normalize_dm_attachment_signing_key(value: str, *, environment: str) -> str:
+def _normalize_content_grant_signing_key(value: str, *, environment: str) -> str:
     normalized = (value or "").strip()
     if not normalized:
-        normalized = DEFAULT_DM_ATTACHMENT_SIGNING_KEY
-    if (
-        is_production_like_environment(environment)
-        and normalized == DEFAULT_DM_ATTACHMENT_SIGNING_KEY
-    ):
-        raise ValueError(
-            "OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY must be set for preview/production."
-        )
+        normalized = DEFAULT_CONTENT_GRANT_SIGNING_KEY
+    if is_production_like_environment(environment):
+        if len(normalized) < 32 or re.match(
+            r"^(dev|development|example|placeholder|change[-_]?me)",
+            normalized,
+            re.IGNORECASE,
+        ):
+            raise ValueError(
+                "OPEN_WORK_HUB_CONTENT_GRANT_SIGNING_KEY must use a non-placeholder "
+                "secret of at least 32 characters for preview/production."
+            )
     return normalized
 
 

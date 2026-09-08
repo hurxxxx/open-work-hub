@@ -1,5 +1,5 @@
-import { createElement } from 'react';
 import { FileText } from 'lucide-react';
+import { createElement } from 'react';
 
 import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
 import { DocsSidebarExtras } from './sidebar';
@@ -16,6 +16,5 @@ export const docsSidebarConfig: AppSidebarConfig = {
       },
     },
   ],
-  afterCategories: ({ currentWorkspaceSlug }) =>
-    createElement(DocsSidebarExtras, { currentWorkspaceSlug }),
+  afterCategories: (_context) => createElement(DocsSidebarExtras, {}),
 };

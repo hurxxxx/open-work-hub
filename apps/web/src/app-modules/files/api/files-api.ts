@@ -3,9 +3,8 @@ import {
   jsonBodyHeaders,
   jsonHeaders,
 } from '@/src/platform/api/client';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export type FileVisibility = 'private' | 'workspace';
+export type FileVisibility = 'private' | 'company';
 export type FileRagStatus =
   | 'disabled'
   | 'pending'
@@ -111,12 +110,11 @@ export interface FileBulkPayload {
   folderIds: string[];
 }
 
-export type FileCorpusAccessScope = 'workspace' | 'company';
+export type FileCorpusAccessScope = 'company';
 
 export interface FileCorpusItem {
   id: string;
   name: string;
-  managed_workspace_id: string;
   access_scope_kind: FileCorpusAccessScope;
   retrieval_partition_id: string;
   metadata_version: number;
@@ -142,11 +140,10 @@ export class FilesApiError extends Error {
 async function request<T>(
   path: string,
   token: string,
-  workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
   return apiFetchJsonWithMappedError<T>(
-    rewriteWorkspaceApiPath(path, workspaceSlug),
+    path,
     token,
     init,
     (error) => new FilesApiError(error.status, error.message),
@@ -155,7 +152,6 @@ async function request<T>(
 
 export function browseFiles(
   token: string,
-  workspaceSlug: string,
   folderId?: string | null,
   options: { signal?: AbortSignal } = {},
 ): Promise<FileBrowseResponse> {
@@ -167,103 +163,54 @@ export function browseFiles(
   return request<FileBrowseResponse>(
     `/api/v1/files${query ? `?${query}` : ''}`,
     token,
-    workspaceSlug,
     { signal: options.signal },
   );
 }
 
 export function searchFiles(
   token: string,
-  workspaceSlug: string,
   payload: FileSearchPayload,
   options: { signal?: AbortSignal } = {},
 ): Promise<FileSearchResponse> {
-  return request<FileSearchResponse>(
-    '/api/v1/files/search',
-    token,
-    workspaceSlug,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      signal: options.signal,
-    },
-  );
+  return request<FileSearchResponse>('/api/v1/files/search', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal: options.signal,
+  });
 }
 
 export function createFileFolder(
   token: string,
-  workspaceSlug: string,
   payload: {
     name: string;
     parent_id?: string | null;
+    company_admin_read_acknowledged?: boolean;
     visibility: FileVisibility;
     corpus_id?: string | null;
   },
 ): Promise<FileFolderItem> {
-  return request<FileFolderItem>(
-    '/api/v1/files/folders',
-    token,
-    workspaceSlug,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+  return request<FileFolderItem>('/api/v1/files/folders', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
-export function listFileCorpora(
-  token: string,
-  workspaceSlug: string,
-): Promise<FileCorpusItem[]> {
-  return request<FileCorpusItem[]>(
-    '/api/v1/files/corpora',
-    token,
-    workspaceSlug,
-  );
+export function listFileCorpora(token: string): Promise<FileCorpusItem[]> {
+  return request<FileCorpusItem[]>('/api/v1/files/corpora', token);
 }
 
 export function createFileCorpus(
   token: string,
-  workspaceSlug: string,
   name: string,
 ): Promise<FileCorpusItem> {
-  return request<FileCorpusItem>(
-    '/api/v1/files/corpora',
-    token,
-    workspaceSlug,
-    {
-      method: 'POST',
-      body: JSON.stringify({ name }),
-    },
-  );
-}
-
-export function transitionFileCorpus(
-  token: string,
-  workspaceSlug: string,
-  corpusId: string,
-  payload: {
-    expected_metadata_version: number;
-    access_scope_kind: FileCorpusAccessScope;
-    reason: string;
-    target_workspace_id?: string | null;
-    request_id?: string | null;
-  },
-): Promise<FileCorpusItem> {
-  return request<FileCorpusItem>(
-    `/api/v1/files/corpora/${encodeURIComponent(corpusId)}/transition`,
-    token,
-    workspaceSlug,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
+  return request<FileCorpusItem>('/api/v1/files/corpora', token, {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
 }
 
 export function updateFileFolder(
   token: string,
-  workspaceSlug: string,
   folderId: string,
   payload: {
     name?: string;
@@ -273,7 +220,6 @@ export function updateFileFolder(
   return request<FileFolderItem>(
     `/api/v1/files/folders/${encodeURIComponent(folderId)}`,
     token,
-    workspaceSlug,
     {
       method: 'PATCH',
       body: JSON.stringify(payload),
@@ -283,23 +229,20 @@ export function updateFileFolder(
 
 export function deleteFileFolder(
   token: string,
-  workspaceSlug: string,
   folderId: string,
 ): Promise<void> {
   return request<void>(
     `/api/v1/files/folders/${encodeURIComponent(folderId)}`,
     token,
-    workspaceSlug,
     { method: 'DELETE' },
   );
 }
 
 export function bulkDeleteFileItems(
   token: string,
-  workspaceSlug: string,
   payload: FileBulkPayload,
 ): Promise<void> {
-  return request<void>('/api/v1/files/bulk-delete', token, workspaceSlug, {
+  return request<void>('/api/v1/files/bulk-delete', token, {
     method: 'POST',
     body: JSON.stringify(toBulkRequest(payload)),
   });
@@ -307,18 +250,14 @@ export function bulkDeleteFileItems(
 
 export async function downloadFileArchive(
   token: string,
-  workspaceSlug: string,
   payload: FileBulkPayload,
 ): Promise<FileArchiveDownload> {
-  const response = await fetch(
-    rewriteWorkspaceApiPath('/api/v1/files/archive', workspaceSlug),
-    {
-      method: 'POST',
-      headers: jsonBodyHeaders(token),
-      body: JSON.stringify(toBulkRequest(payload)),
-      cache: 'no-store',
-    },
-  );
+  const response = await fetch('/api/v1/files/archive', {
+    method: 'POST',
+    headers: jsonBodyHeaders(token),
+    body: JSON.stringify(toBulkRequest(payload)),
+    cache: 'no-store',
+  });
   if (!response.ok) {
     const errorPayload = await response.json().catch(() => null);
     throw new FilesApiError(
@@ -336,13 +275,13 @@ export async function downloadFileArchive(
 
 export function uploadDriveFile(
   token: string,
-  workspaceSlug: string,
   file: File,
   options: {
     corpusId?: string | null;
     folderId?: string | null;
     onProgress?: (progress: FileUploadProgress) => void;
     signal?: AbortSignal;
+    company_admin_read_acknowledged?: boolean;
     visibility: FileVisibility;
   },
 ): Promise<FileItem> {
@@ -355,9 +294,13 @@ export function uploadDriveFile(
     formData.append('corpus_id', options.corpusId);
   }
   formData.append('visibility', options.visibility);
+  formData.append(
+    'company_admin_read_acknowledged',
+    String(options.company_admin_read_acknowledged ?? false),
+  );
 
   return uploadWithProgress<FileItem>(
-    rewriteWorkspaceApiPath('/api/v1/files/upload', workspaceSlug),
+    '/api/v1/files/upload',
     token,
     formData,
     options.onProgress,
@@ -473,37 +416,26 @@ function getUploadErrorMessage(payload: unknown, status: number): string {
 
 export function getFileDownloadUrl(
   token: string,
-  workspaceSlug: string,
   fileId: string,
 ): Promise<FileDownloadResponse> {
   return request<FileDownloadResponse>(
     `/api/v1/files/${encodeURIComponent(fileId)}/download`,
     token,
-    workspaceSlug,
   );
 }
 
 export function getFilePreviewUrl(
   token: string,
-  workspaceSlug: string,
   fileId: string,
 ): Promise<FileDownloadResponse> {
   return request<FileDownloadResponse>(
     `/api/v1/files/${encodeURIComponent(fileId)}/preview`,
     token,
-    workspaceSlug,
   );
 }
 
-export function deleteDriveFile(
-  token: string,
-  workspaceSlug: string,
-  fileId: string,
-): Promise<void> {
-  return request<void>(
-    `/api/v1/files/${encodeURIComponent(fileId)}`,
-    token,
-    workspaceSlug,
-    { method: 'DELETE' },
-  );
+export function deleteDriveFile(token: string, fileId: string): Promise<void> {
+  return request<void>(`/api/v1/files/${encodeURIComponent(fileId)}`, token, {
+    method: 'DELETE',
+  });
 }

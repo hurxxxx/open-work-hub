@@ -1,7 +1,6 @@
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { i18n } from '@/src/platform/i18n';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type PmsTaskList = Omit<
   ApiSchema<'TaskListItem'>,
@@ -59,24 +58,8 @@ export type PmsTasksResponse = Omit<ApiSchema<'TaskItemsResponse'>, 'items'> & {
   items: PmsTask[];
 };
 
-export type PmsWorkspaceRef = {
-  id: string;
-  slug: string;
-  name: string;
-  role?: string | null;
-};
-
-export type PersonalPmsTask = PmsTask & {
-  workspace: PmsWorkspaceRef;
-};
-
-export type PersonalPmsAssignedTasksResponse = {
-  items: PersonalPmsTask[];
-  total: number;
-  page: number;
-  page_size: number;
-  workspaces: PmsWorkspaceRef[];
-};
+export type PersonalPmsTask = PmsTask;
+export type PersonalPmsAssignedTasksResponse = PmsTasksResponse;
 
 export type PmsTaskDocLink = ApiSchema<'TaskDocLinkItem'>;
 
@@ -264,24 +247,22 @@ async function request<T>(
   path: string,
   token: string,
   init: RequestInit = {},
-  workspaceSlug?: string | null,
 ): Promise<T> {
   return apiFetchJsonWithMappedError<T>(
-    resolvePmsPath(path, workspaceSlug),
+    resolvePmsPath(path),
     token,
     init,
     (error) => new PmsApiError(error.status, error.message),
   );
 }
 
-function resolvePmsPath(path: string, workspaceSlug?: string | null): string {
-  return rewriteWorkspaceApiPath(path, workspaceSlug);
+function resolvePmsPath(path: string): string {
+  return path;
 }
 
 export function listPmsTaskLists(
   token: string,
   teamId?: string,
-  workspaceSlug?: string | null,
   options: PmsTaskListQueryOptions = {},
 ): Promise<PmsTaskListsResponse> {
   const params = new URLSearchParams({
@@ -294,21 +275,19 @@ export function listPmsTaskLists(
     `/api/v1/pms/lists?${params}`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
 export async function listAllPmsTaskLists(
   token: string,
   teamId?: string,
-  workspaceSlug?: string | null,
   options: Pick<PmsTaskListQueryOptions, 'archived'> = {},
 ): Promise<PmsTaskListsResponse> {
   const items: PmsTaskList[] = [];
   let page = 1;
   let lastResponse: PmsTaskListsResponse | null = null;
   do {
-    lastResponse = await listPmsTaskLists(token, teamId, workspaceSlug, {
+    lastResponse = await listPmsTaskLists(token, teamId, {
       archived: options.archived,
       page,
       pageSize: PMS_MAX_PAGE_SIZE,
@@ -328,67 +307,38 @@ export async function listAllPmsTaskLists(
   };
 }
 
-export function listSpaces(
-  token: string,
-  workspaceSlug?: string | null,
-): Promise<PmsSpace[]> {
-  return request<PmsSpace[]>('/api/v1/pms/spaces', token, {}, workspaceSlug);
+export function listSpaces(token: string): Promise<PmsSpace[]> {
+  return request<PmsSpace[]>('/api/v1/pms/spaces', token, {});
 }
 
-export function listPmsUsers(
-  token: string,
-  workspaceSlug?: string | null,
-): Promise<PmsUserSummary[]> {
-  return request<PmsUserSummary[]>(
-    '/api/v1/pms/users',
-    token,
-    {},
-    workspaceSlug,
-  );
+export function listPmsUsers(token: string): Promise<PmsUserSummary[]> {
+  return request<PmsUserSummary[]>('/api/v1/pms/users', token, {});
 }
 
 export function getPmsViewPreferences(
   token: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsViewPreferences> {
-  return request<PmsViewPreferences>(
-    '/api/v1/pms/view-preferences',
-    token,
-    {},
-    workspaceSlug,
-  );
+  return request<PmsViewPreferences>('/api/v1/pms/view-preferences', token, {});
 }
 
 export function updatePmsViewPreferences(
   token: string,
   payload: PmsViewPreferences,
-  workspaceSlug?: string | null,
 ): Promise<PmsViewPreferences> {
-  return request<PmsViewPreferences>(
-    '/api/v1/pms/view-preferences',
-    token,
-    {
-      body: JSON.stringify(payload),
-      method: 'PATCH',
-    },
-    workspaceSlug,
-  );
+  return request<PmsViewPreferences>('/api/v1/pms/view-preferences', token, {
+    body: JSON.stringify(payload),
+    method: 'PATCH',
+  });
 }
 
 export function createSpace(
   token: string,
   payload: { name: string; description?: string },
-  workspaceSlug?: string | null,
 ): Promise<PmsSpace> {
-  return request<PmsSpace>(
-    '/api/v1/pms/spaces',
-    token,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-    workspaceSlug,
-  );
+  return request<PmsSpace>('/api/v1/pms/spaces', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function updateSpace(
@@ -411,13 +361,11 @@ export function deleteSpace(token: string, spaceId: string): Promise<void> {
 export function listSpaceMembers(
   token: string,
   spaceId: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsSpaceMembersResponse> {
   return request<PmsSpaceMembersResponse>(
     `/api/v1/pms/spaces/${spaceId}/members?page=1&page_size=50`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -425,7 +373,6 @@ export function addSpaceMember(
   token: string,
   spaceId: string,
   payload: { user_id: string; role: string },
-  workspaceSlug?: string | null,
 ): Promise<PmsSpaceMember> {
   return request<PmsSpaceMember>(
     `/api/v1/pms/spaces/${spaceId}/members`,
@@ -434,7 +381,6 @@ export function addSpaceMember(
       method: 'POST',
       body: JSON.stringify(payload),
     },
-    workspaceSlug,
   );
 }
 
@@ -443,7 +389,6 @@ export function updateSpaceMemberRole(
   spaceId: string,
   userId: string,
   role: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsSpaceMember> {
   return request<PmsSpaceMember>(
     `/api/v1/pms/spaces/${spaceId}/members/${userId}`,
@@ -452,7 +397,6 @@ export function updateSpaceMemberRole(
       method: 'PATCH',
       body: JSON.stringify({ role }),
     },
-    workspaceSlug,
   );
 }
 
@@ -460,13 +404,11 @@ export function removeSpaceMember(
   token: string,
   spaceId: string,
   userId: string,
-  workspaceSlug?: string | null,
 ): Promise<void> {
   return request<void>(
     `/api/v1/pms/spaces/${spaceId}/members/${userId}`,
     token,
     { method: 'DELETE' },
-    workspaceSlug,
   );
 }
 
@@ -596,7 +538,6 @@ export function listTaskListTasks(
   token: string,
   taskListId: string,
   params: TaskFilterParams = {},
-  workspaceSlug?: string | null,
   options: PmsTaskListPageOptions = {},
 ): Promise<PmsTasksResponse> {
   const sort = options.sort ?? DEFAULT_PMS_TASK_SORT;
@@ -625,7 +566,6 @@ export function listTaskListTasks(
     `/api/v1/pms/lists/${taskListId}/tasks?${search.toString()}`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -633,7 +573,6 @@ export async function listAllTaskListTasks(
   token: string,
   taskListId: string,
   params: TaskFilterParams = {},
-  workspaceSlug?: string | null,
   options: Pick<PmsTaskListPageOptions, 'sort'> = {},
 ): Promise<PmsTasksResponse> {
   if (params.status && params.status.length === 0) {
@@ -643,17 +582,11 @@ export async function listAllTaskListTasks(
   let page = 1;
   let lastResponse: PmsTasksResponse | null = null;
   do {
-    lastResponse = await listTaskListTasks(
-      token,
-      taskListId,
-      params,
-      workspaceSlug,
-      {
-        page,
-        pageSize: PMS_MAX_PAGE_SIZE,
-        sort: options.sort,
-      },
-    );
+    lastResponse = await listTaskListTasks(token, taskListId, params, {
+      page,
+      pageSize: PMS_MAX_PAGE_SIZE,
+      sort: options.sort,
+    });
     items.push(...lastResponse.items);
     if (items.length >= lastResponse.total || lastResponse.items.length === 0) {
       break;
@@ -673,7 +606,6 @@ export function listAssignedTasks(
   token: string,
   options: {
     limit?: number;
-    workspaceSlug?: string | null;
   } & PmsPageOptions = {},
 ): Promise<PmsTasksResponse> {
   const search = new URLSearchParams();
@@ -688,13 +620,11 @@ export function listAssignedTasks(
     `/api/v1/pms/tasks/assigned${query ? `?${query}` : ''}`,
     token,
     {},
-    options.workspaceSlug,
   );
 }
 
 export async function listAllAssignedTasks(
   token: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsTasksResponse> {
   const items: PmsTask[] = [];
   let page = 1;
@@ -703,7 +633,6 @@ export async function listAllAssignedTasks(
     lastResponse = await listAssignedTasks(token, {
       page,
       pageSize: PMS_ASSIGNED_PAGE_SIZE,
-      workspaceSlug,
     });
     items.push(...lastResponse.items);
     if (items.length >= lastResponse.total || lastResponse.items.length === 0) {
@@ -743,14 +672,13 @@ export async function listPersonalPmsAssignedTasks(
     total: lastResponse?.total ?? 0,
     page: 1,
     page_size: PMS_ASSIGNED_PAGE_SIZE,
-    workspaces: lastResponse?.workspaces ?? [],
   };
 }
 
 export function listTodayOverdueTasks(
   token: string,
   today: string,
-  options: { workspaceSlug?: string | null } & PmsPageOptions = {},
+  options: PmsPageOptions = {},
 ): Promise<PmsTasksResponse> {
   const search = new URLSearchParams({
     today,
@@ -761,14 +689,12 @@ export function listTodayOverdueTasks(
     `/api/v1/pms/tasks/today-overdue?${search.toString()}`,
     token,
     {},
-    options.workspaceSlug,
   );
 }
 
 export async function listAllTodayOverdueTasks(
   token: string,
   today: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsTasksResponse> {
   const items: PmsTask[] = [];
   let page = 1;
@@ -777,7 +703,6 @@ export async function listAllTodayOverdueTasks(
     lastResponse = await listTodayOverdueTasks(token, today, {
       page,
       pageSize: PMS_ASSIGNED_PAGE_SIZE,
-      workspaceSlug,
     });
     items.push(...lastResponse.items);
     if (items.length >= lastResponse.total || lastResponse.items.length === 0) {
@@ -809,47 +734,29 @@ export function createTaskListTask(
     due_date: string | null;
     parent_id?: string | null;
   },
-  workspaceSlug?: string | null,
 ): Promise<PmsTask> {
-  return request<PmsTask>(
-    `/api/v1/pms/lists/${taskListId}/tasks`,
-    token,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-    workspaceSlug,
-  );
+  return request<PmsTask>(`/api/v1/pms/lists/${taskListId}/tasks`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getTaskDetail(
   token: string,
   taskId: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsTaskDetail> {
-  return request<PmsTaskDetail>(
-    `/api/v1/pms/tasks/${taskId}`,
-    token,
-    {},
-    workspaceSlug,
-  );
+  return request<PmsTaskDetail>(`/api/v1/pms/tasks/${taskId}`, token, {});
 }
 
 export function updateTask(
   token: string,
   taskId: string,
   payload: Record<string, unknown>,
-  workspaceSlug?: string | null,
 ): Promise<PmsTask> {
-  return request<PmsTask>(
-    `/api/v1/pms/tasks/${taskId}`,
-    token,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    },
-    workspaceSlug,
-  );
+  return request<PmsTask>(`/api/v1/pms/tasks/${taskId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function createTaskComment(
@@ -857,17 +764,11 @@ export function createTaskComment(
   taskId: string,
   body: string,
   bodyBlocks?: Record<string, unknown>[] | null,
-  workspaceSlug?: string | null,
 ): Promise<PmsComment> {
-  return request<PmsComment>(
-    `/api/v1/pms/tasks/${taskId}/comments`,
-    token,
-    {
-      method: 'POST',
-      body: JSON.stringify({ body, body_blocks: bodyBlocks ?? null }),
-    },
-    workspaceSlug,
-  );
+  return request<PmsComment>(`/api/v1/pms/tasks/${taskId}/comments`, token, {
+    method: 'POST',
+    body: JSON.stringify({ body, body_blocks: bodyBlocks ?? null }),
+  });
 }
 
 export function listTaskListLabels(
@@ -908,29 +809,20 @@ export function deleteLabel(token: string, labelId: string): Promise<void> {
   });
 }
 
-export function deleteTask(
-  token: string,
-  taskId: string,
-  workspaceSlug?: string | null,
-): Promise<void> {
-  return request<void>(
-    `/api/v1/pms/tasks/${taskId}`,
-    token,
-    { method: 'DELETE' },
-    workspaceSlug,
-  );
+export function deleteTask(token: string, taskId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/tasks/${taskId}`, token, {
+    method: 'DELETE',
+  });
 }
 
 export function listTaskActivityLogs(
   token: string,
   taskId: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsActivityLogsResponse> {
   return request<PmsActivityLogsResponse>(
     `/api/v1/pms/tasks/${taskId}/activity-logs?page=1&page_size=50`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -938,12 +830,11 @@ export async function uploadAttachment(
   token: string,
   taskId: string,
   file: File,
-  workspaceSlug?: string | null,
 ): Promise<PmsAttachment> {
   const formData = new FormData();
   formData.append('file', file);
   return apiFetchJsonWithMappedError<PmsAttachment>(
-    resolvePmsPath(`/api/v1/pms/tasks/${taskId}/attachments`, workspaceSlug),
+    resolvePmsPath(`/api/v1/pms/tasks/${taskId}/attachments`),
     token,
     {
       method: 'POST',
@@ -956,14 +847,10 @@ export async function uploadAttachment(
 export function deleteAttachment(
   token: string,
   attachmentId: string,
-  workspaceSlug?: string | null,
 ): Promise<void> {
-  return request<void>(
-    `/api/v1/pms/attachments/${attachmentId}`,
-    token,
-    { method: 'DELETE' },
-    workspaceSlug,
-  );
+  return request<void>(`/api/v1/pms/attachments/${attachmentId}`, token, {
+    method: 'DELETE',
+  });
 }
 
 // ── Linked Docs ─────────────────────────────────────────────────────
@@ -971,13 +858,11 @@ export function deleteAttachment(
 export function listTaskDocs(
   token: string,
   taskId: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsTaskDocLinksResponse> {
   return request<PmsTaskDocLinksResponse>(
     `/api/v1/pms/tasks/${taskId}/docs`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -985,7 +870,6 @@ export function attachTaskDoc(
   token: string,
   taskId: string,
   docId: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsTaskDocLinksResponse> {
   return request<PmsTaskDocLinksResponse>(
     `/api/v1/pms/tasks/${taskId}/docs`,
@@ -994,7 +878,6 @@ export function attachTaskDoc(
       method: 'POST',
       body: JSON.stringify({ doc_id: docId }),
     },
-    workspaceSlug,
   );
 }
 
@@ -1002,13 +885,11 @@ export function detachTaskDoc(
   token: string,
   taskId: string,
   docId: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsTaskDocLinksResponse> {
   return request<PmsTaskDocLinksResponse>(
     `/api/v1/pms/tasks/${taskId}/docs/${docId}`,
     token,
     { method: 'DELETE' },
-    workspaceSlug,
   );
 }
 
@@ -1058,7 +939,6 @@ export function reorderTaskListTasks(
   token: string,
   taskListId: string,
   payload: TaskReorderPayload,
-  workspaceSlug?: string | null,
 ): Promise<TaskReorderResult> {
   return request<TaskReorderResult>(
     `/api/v1/pms/lists/${taskListId}/tasks/reorder`,
@@ -1067,7 +947,6 @@ export function reorderTaskListTasks(
       method: 'PATCH',
       body: JSON.stringify(payload),
     },
-    workspaceSlug,
   );
 }
 
@@ -1077,7 +956,6 @@ export function createChecklistItem(
   token: string,
   taskId: string,
   payload: { text: string; sort_order?: number },
-  workspaceSlug?: string | null,
 ): Promise<PmsChecklistItem> {
   return request<PmsChecklistItem>(
     `/api/v1/pms/tasks/${taskId}/checklist`,
@@ -1086,7 +964,6 @@ export function createChecklistItem(
       method: 'POST',
       body: JSON.stringify(payload),
     },
-    workspaceSlug,
   );
 }
 
@@ -1094,30 +971,20 @@ export function updateChecklistItem(
   token: string,
   itemId: string,
   payload: { text?: string; completed?: boolean; sort_order?: number },
-  workspaceSlug?: string | null,
 ): Promise<PmsChecklistItem> {
-  return request<PmsChecklistItem>(
-    `/api/v1/pms/checklist/${itemId}`,
-    token,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    },
-    workspaceSlug,
-  );
+  return request<PmsChecklistItem>(`/api/v1/pms/checklist/${itemId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function deleteChecklistItem(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<void> {
-  return request<void>(
-    `/api/v1/pms/checklist/${itemId}`,
-    token,
-    { method: 'DELETE' },
-    workspaceSlug,
-  );
+  return request<void>(`/api/v1/pms/checklist/${itemId}`, token, {
+    method: 'DELETE',
+  });
 }
 
 // ── Task List Statuses (Custom Workflow) ───────────────────────────
@@ -1125,13 +992,11 @@ export function deleteChecklistItem(
 export function listTaskListStatuses(
   token: string,
   taskListId: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsTaskListStatusesResponse> {
   return request<PmsTaskListStatusesResponse>(
     `/api/v1/pms/lists/${taskListId}/statuses`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -1291,13 +1156,11 @@ export async function exportTaskListCsv(
 export function listTaskTemplates(
   token: string,
   taskListId: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsTaskTemplatesResponse> {
   return request<PmsTaskTemplatesResponse>(
     `/api/v1/pms/lists/${taskListId}/templates`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -1405,7 +1268,6 @@ export function setTaskAssignees(
   token: string,
   taskId: string,
   userIds: string[],
-  workspaceSlug?: string | null,
 ): Promise<PmsTaskAssignee[]> {
   return request<PmsTaskAssignee[]>(
     `/api/v1/pms/tasks/${taskId}/assignees`,
@@ -1414,7 +1276,6 @@ export function setTaskAssignees(
       method: 'PUT',
       body: JSON.stringify({ user_ids: userIds }),
     },
-    workspaceSlug,
   );
 }
 
@@ -1424,7 +1285,6 @@ export function setTaskFollowers(
   token: string,
   taskId: string,
   userIds: string[],
-  workspaceSlug?: string | null,
 ): Promise<PmsTaskFollower[]> {
   return request<PmsTaskFollower[]>(
     `/api/v1/pms/tasks/${taskId}/followers`,
@@ -1433,7 +1293,6 @@ export function setTaskFollowers(
       method: 'PUT',
       body: JSON.stringify({ user_ids: userIds }),
     },
-    workspaceSlug,
   );
 }
 
@@ -1442,15 +1301,9 @@ export function setTaskFollowers(
 export function listFolders(
   token: string,
   teamId?: string,
-  workspaceSlug?: string | null,
 ): Promise<PmsFoldersResponse> {
   const params = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
-  return request<PmsFoldersResponse>(
-    `/api/v1/pms/folders${params}`,
-    token,
-    {},
-    workspaceSlug,
-  );
+  return request<PmsFoldersResponse>(`/api/v1/pms/folders${params}`, token, {});
 }
 
 export function createFolder(

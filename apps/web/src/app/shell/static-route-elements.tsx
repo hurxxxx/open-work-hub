@@ -1,10 +1,9 @@
-import { Route } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Route } from 'react-router-dom';
 
 import { pmsHelpGuideRegistration } from '@/src/app-modules/pms';
 
-import { AdminGate } from './gates';
 import {
   getDefaultAdminPath as getPlatformDefaultAdminPath,
   hasConfiguredAdminSectionAccess,
@@ -12,17 +11,18 @@ import {
   type DefaultAdminPathResolver,
 } from '@/src/platform/admin/admin-permissions';
 import { AccessDeniedView } from '@/src/platform/auth/settings-pages';
-import type { StaticRouteDefinition } from './navigation-types';
+import {
+  EMPTY_FEATURE_GUIDE_TOOL_IDS,
+  type FeatureGuideToolIds,
+} from './ai-feature-guides';
+import { AdminGate } from './gates';
 import {
   HelpAiGuidePage,
   HelpCenterPage,
   HelpPmsGuidePage,
 } from './HelpCenterPage';
+import type { StaticRouteDefinition } from './navigation-types';
 import { AdminLandingRedirect } from './redirects';
-import {
-  EMPTY_FEATURE_GUIDE_TOOL_IDS,
-  type FeatureGuideToolIds,
-} from './ai-feature-guides';
 
 export type ShellStaticRouteDefinition = Omit<
   StaticRouteDefinition,
@@ -127,7 +127,7 @@ function GlobalAppGate({
   }
   if (state === 'loading') {
     return (
-      <div className="p-8 text-app-ink/55">{t('gates.workspaceLoading')}</div>
+      <div className="p-8 text-app-ink/55">{t('appBootstrap.loading')}</div>
     );
   }
   return <AccessDeniedView description={t('gates.appDisabled')} />;
@@ -145,7 +145,6 @@ export function StaticRouteElements({
   hasAdminSectionAccess = hasConfiguredAdminSectionAccess,
   helpRoutes,
   enabledAppIds,
-  workspaceSettingsRoute = null,
 }: {
   adminLandingRoute?: ShellStaticRouteDefinition;
   adminRedirectRoutes?: readonly ShellStaticRouteDefinition[];
@@ -158,7 +157,6 @@ export function StaticRouteElements({
   hasAdminSectionAccess?: AdminSectionAccessResolver;
   helpRoutes?: readonly ShellStaticRouteDefinition[];
   enabledAppIds: readonly string[] | null;
-  workspaceSettingsRoute?: ShellStaticRouteDefinition | null;
 }) {
   const resolvedHelpRoutes =
     helpRoutes ?? createDefaultHelpRoutes(featureGuideToolIds);
@@ -184,12 +182,7 @@ export function StaticRouteElements({
           />
         );
       })}
-      {workspaceSettingsRoute ? (
-        <Route
-          path={workspaceSettingsRoute.path}
-          element={workspaceSettingsRoute.element}
-        />
-      ) : null}
+
       {resolvedHelpRoutes.map((route) => (
         <Route key={route.path} path={route.path} element={route.element} />
       ))}

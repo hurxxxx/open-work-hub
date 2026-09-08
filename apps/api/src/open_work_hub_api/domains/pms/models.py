@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Date,
@@ -10,7 +11,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -37,7 +37,9 @@ class Folder(Base):
     __tablename__ = "pms_folders"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True, index=True)
+    team_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pms_spaces.id"), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(140))
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
@@ -49,7 +51,7 @@ class Folder(Base):
 
 
 class PmsViewPreference(Base):
-    """Workspace-scoped PMS presentation preferences for one user."""
+    """Personal PMS presentation preferences for one user."""
 
     __tablename__ = "pms_view_preferences"
     __table_args__ = (
@@ -57,11 +59,6 @@ class PmsViewPreference(Base):
             "task_list_group_by IN ('none', 'status', 'assignee')",
             name="ck_pms_view_preferences_task_list_group_by",
         ),
-    )
-
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
-        primary_key=True,
     )
     user_id: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -93,7 +90,7 @@ class SpaceStatus(Base):
     __table_args__ = (UniqueConstraint("team_id", "slug", name="uq_pms_space_status_slug"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), index=True)
+    team_id: Mapped[str] = mapped_column(ForeignKey("pms_spaces.id"), index=True)
     slug: Mapped[str] = mapped_column(String(40), index=True)
     name: Mapped[str] = mapped_column(String(60))
     color: Mapped[str] = mapped_column(String(24), default="#6b7280")
@@ -118,7 +115,9 @@ class TaskList(Base):
     status: Mapped[str] = mapped_column(String(24), default="active", index=True)
     status_mode: Mapped[str] = mapped_column(String(16), default="custom", nullable=False)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
-    team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), nullable=True, index=True)
+    team_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pms_spaces.id"), nullable=True, index=True
+    )
     folder_id: Mapped[str | None] = mapped_column(
         ForeignKey("pms_folders.id"), nullable=True, index=True
     )
@@ -470,11 +469,6 @@ class Notification(Base):
     source_type: Mapped[str] = mapped_column(String(40), default="task")
     source_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     origin_app_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-    origin_workspace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workspaces.id"),
-        nullable=True,
-        index=True,
-    )
     action_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(

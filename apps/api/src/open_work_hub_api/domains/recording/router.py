@@ -7,18 +7,18 @@ from fastapi import APIRouter, Depends, Form, Header, Query, Request, Response, 
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
-from open_work_hub_api.domains.auth.dependencies import require_current_user, require_current_workspace
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from open_work_hub_api.domains.auth.app_gate import require_app_access
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.recording import service as recording_service
 from open_work_hub_api.domains.recording import tus_protocol
-from open_work_hub_api.domains.recording.app_catalog import RECORDING_WORKSPACE_APP
+from open_work_hub_api.domains.recording.app_catalog import RECORDING_APP
 from open_work_hub_api.domains.recording.schemas import (
-    RecordingTargetCreateRequest,
     RecordingDetailOut,
     RecordingListResponse,
-    RecordingPublicationOut,
     RecordingPlaybackResponse,
+    RecordingPublicationOut,
+    RecordingTargetCreateRequest,
     RecordingUpdateRequest,
     RecordingUploadChunkAck,
     RecordingUploadCompleteRequest,
@@ -26,10 +26,9 @@ from open_work_hub_api.domains.recording.schemas import (
     RecordingUploadOut,
 )
 
-
-require_recording_app_enabled = require_workspace_app_enabled(
-    RECORDING_WORKSPACE_APP.app_id,
-    error_code="workspace.app_disabled",
+require_recording_app_enabled = require_app_access(
+    RECORDING_APP.app_id,
+    error_code="app.access_required",
 )
 
 router = APIRouter(
@@ -63,11 +62,9 @@ def list_recordings(
     target_id: str | None = Query(default=None, min_length=1, max_length=128),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingListResponse:
     return recording_service.list_recordings(
         db,
-        workspace=workspace,
         user=current_user,
         view=view,
         from_=from_,
@@ -87,11 +84,9 @@ def init_recording_staging(
     payload: RecordingUploadInitRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingUploadOut:
     return recording_service.init_staging(
         db,
-        workspace=workspace,
         user=current_user,
         payload=payload,
     )
@@ -105,12 +100,10 @@ def create_recording_tus_upload(
     upload_length: int | None = Header(default=None, alias="Upload-Length"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     tus_protocol.require_version(tus_resumable)
     staging = recording_service.init_tus_staging(
         db,
-        workspace=workspace,
         user=current_user,
         upload_metadata=upload_metadata,
         upload_length=upload_length,
@@ -135,12 +128,10 @@ def head_recording_tus_upload(
     tus_resumable: str | None = Header(default=None, alias="Tus-Resumable"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     tus_protocol.require_version(tus_resumable)
     staging = recording_service.read_tus_upload(
         db,
-        workspace=workspace,
         user=current_user,
         staging_id=staging_id,
     )
@@ -163,12 +154,10 @@ async def patch_recording_tus_upload(
     upload_length: int | None = Header(default=None, alias="Upload-Length"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     tus_protocol.require_version(tus_resumable)
     staging = recording_service.upload_tus_chunk(
         db,
-        workspace=workspace,
         user=current_user,
         staging_id=staging_id,
         upload_offset=upload_offset,
@@ -196,11 +185,9 @@ async def upload_recording_chunk(
     x_chunk_sha256: str | None = Header(default=None, alias="X-Chunk-Sha256"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingUploadChunkAck:
     return await recording_service.upload_chunk(
         db,
-        workspace=workspace,
         user=current_user,
         staging_id=staging_id,
         seq=seq,
@@ -215,11 +202,9 @@ def complete_recording_staging(
     payload: RecordingUploadCompleteRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingDetailOut:
     return recording_service.complete_staging(
         db,
-        workspace=workspace,
         user=current_user,
         staging_id=staging_id,
         payload=payload,
@@ -233,11 +218,9 @@ def list_recording_staging(
     initial_target_id: str | None = Query(default=None, min_length=1, max_length=128),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> list[RecordingUploadOut]:
     return recording_service.list_my_staging(
         db,
-        workspace=workspace,
         user=current_user,
         initial_target_app=initial_target_app,
         initial_target_type=initial_target_type,
@@ -250,18 +233,18 @@ def discard_recording_staging(
     staging_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     recording_service.discard_staging(
         db,
-        workspace=workspace,
         user=current_user,
         staging_id=staging_id,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/recordings/import", response_model=RecordingDetailOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/recordings/import", response_model=RecordingDetailOut, status_code=status.HTTP_201_CREATED
+)
 def import_recording(
     file: UploadFile,
     title: str | None = Form(default=None, max_length=200),
@@ -275,11 +258,9 @@ def import_recording(
     linked_task_id: str | None = Form(default=None, max_length=36),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingDetailOut:
     return recording_service.import_recording(
         db,
-        workspace=workspace,
         user=current_user,
         upload=file,
         title=title,
@@ -299,11 +280,9 @@ def get_recording(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingDetailOut:
     return recording_service.get_recording(
         db,
-        workspace=workspace,
         user=current_user,
         recording_id=recording_id,
     )
@@ -318,11 +297,9 @@ def publish_recording_to_docs(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingPublicationOut:
     return recording_service.publish_recording_to_docs(
         db,
-        workspace=workspace,
         user=current_user,
         recording_id=recording_id,
     )
@@ -334,11 +311,9 @@ def update_recording(
     payload: RecordingUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingDetailOut:
     return recording_service.update_recording(
         db,
-        workspace=workspace,
         user=current_user,
         recording_id=recording_id,
         payload=payload,
@@ -350,11 +325,9 @@ def delete_recording(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ):
     return recording_service.delete_recording(
         db,
-        workspace=workspace,
         user=current_user,
         recording_id=recording_id,
     )
@@ -365,11 +338,9 @@ def retry_recording(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingDetailOut:
     return recording_service.retry_recording(
         db,
-        workspace=workspace,
         user=current_user,
         recording_id=recording_id,
     )
@@ -380,11 +351,9 @@ def get_recording_playback(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingPlaybackResponse:
     return recording_service.get_recording_playback(
         db,
-        workspace=workspace,
         user=current_user,
         recording_id=recording_id,
     )
@@ -395,11 +364,9 @@ def stream_recording_media(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ):
     return recording_service.stream_recording_media(
         db,
-        workspace=workspace,
         user=current_user,
         recording_id=recording_id,
     )
@@ -411,11 +378,9 @@ def create_target(
     payload: RecordingTargetCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingDetailOut:
     return recording_service.create_target(
         db,
-        workspace=workspace,
         user=current_user,
         recording_id=recording_id,
         payload=payload,
@@ -428,11 +393,9 @@ def delete_target(
     target_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingDetailOut:
     return recording_service.delete_target(
         db,
-        workspace=workspace,
         user=current_user,
         recording_id=recording_id,
         target_id=target_id,

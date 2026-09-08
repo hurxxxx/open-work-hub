@@ -30,9 +30,9 @@ import {
   startUnreadDetailReadMark,
   updateMailAccountCommand,
   type MailAdapter,
-} from './mail-workspace-workflow';
+} from './mail-view-workflow';
 
-export type { MailAdapter } from './mail-workspace-workflow';
+export type { MailAdapter } from './mail-view-workflow';
 
 export interface MailViewControllerMessages {
   loadFailed: string;

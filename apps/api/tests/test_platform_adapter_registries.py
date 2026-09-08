@@ -12,10 +12,7 @@ from open_work_hub_api.domains.ai.registry import (
     reset_ai_capability_registry,
 )
 from open_work_hub_api.core import llm as llm_core
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppCatalogItem,
-    WorkspaceAppRegistration,
-)
+from open_work_hub_api.core.app_registry import AppCatalogItem, AppRegistration
 from open_work_hub_api.core.asr_backend_registry import reset_asr_backends
 from open_work_hub_api.core.settings import Settings, get_settings
 from open_work_hub_api.core.llm_provider_registry import (
@@ -58,12 +55,8 @@ from open_work_hub_api.domains.ai.runtime.external_adapters import (
     supported_external_planner_execution_adapters,
     supported_external_search_execution_adapters,
 )
-from open_work_hub_api.domains.ai.runtime.external_planner import (
-    ExternalPlannerExecutionResult,
-)
-from open_work_hub_api.domains.ai.runtime.external_search import (
-    ExternalSearchExecutionResult,
-)
+from open_work_hub_api.domains.ai.runtime.external_planner import ExternalPlannerExecutionResult
+from open_work_hub_api.domains.ai.runtime.external_search import ExternalSearchExecutionResult
 from open_work_hub_api.domains.conversations.default_scope_adapters import (
     ensure_conversation_scope_adapters_registered,
 )
@@ -71,19 +64,17 @@ from open_work_hub_api.domains.conversations.scope_registry import (
     get_conversation_scope_adapter,
     reset_conversation_scope_adapters,
 )
-from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
+from open_work_hub_api.domains.docs.app_catalog import DOCS_APP
 from open_work_hub_api.domains.docs import search_projection as docs_search_projection
-from open_work_hub_api.domains.docs.search_projection import (
-    DOCS_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
-)
+from open_work_hub_api.domains.docs.search_projection import DOCS_KEYWORD_SEARCH_ADAPTER
 from open_work_hub_api.domains.docs.source_access import NativeDocSourceAccessAdapter
 from open_work_hub_api.domains.files import search_projection as file_search_projection
 from open_work_hub_api.domains.files.retrieval_contract import (
     files_retrieval_active_for_environment,
 )
-from open_work_hub_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
-from open_work_hub_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
-from open_work_hub_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
+from open_work_hub_api.domains.meeting.app_catalog import MEETING_APP
+from open_work_hub_api.domains.planner.app_catalog import PLANNER_APP
+from open_work_hub_api.domains.pms.app_catalog import PMS_APP
 from open_work_hub_api.domains.rag.default_source_adapters import (
     ensure_rag_source_adapters_registered,
     resolve_rag_resource_types_for_source_kinds,
@@ -122,7 +113,7 @@ from open_work_hub_api.domains.search.entity_adapter_registry import (
     get_search_entity_adapter,
     register_search_entity_adapter,
     reset_search_entity_adapters,
-    resolve_workspace_keyword_search_scope,
+    resolve_keyword_search_scope,
     search_date_filter_fields,
     search_people_roles,
     search_sort_fields,
@@ -220,7 +211,8 @@ def test_platform_extension_bootstrap_registers_core_adapters_after_reset() -> N
         assert "whisper" in snapshot.asr_backend_names
         assert "mock" in snapshot.ai_external_planner_execution_adapter_names
         assert "mock" in snapshot.ai_external_search_execution_adapter_names
-        assert "docs" in snapshot.target_access_app_ids
+        assert "pms" in snapshot.target_access_app_ids
+        assert "docs" not in snapshot.target_access_app_ids
         assert "pms" in snapshot.target_access_app_ids
         assert "files" in snapshot.conversation_scope_refs
         assert "meeting" in snapshot.conversation_scope_refs
@@ -304,8 +296,8 @@ def test_platform_extension_validation_rejects_non_normalized_partition_policy_m
             adapter_id=docs_adapter.adapter_id,
             source_namespace=docs_adapter.source_namespace,
             resource_types=docs_adapter.resource_types,
-            allowed_candidate_scopes=(" workspace",),
-            allowed_transitions=("move_workspace ",),
+            allowed_candidate_scopes=(" company",),
+            allowed_transitions=("publish_company ",),
             transition_mode=docs_adapter.transition_mode,
             bind_resource_partition=docs_adapter.bind_resource_partition,
         )
@@ -335,9 +327,9 @@ def test_platform_extension_validation_rejects_search_partition_resource_drift(
     try:
         monkeypatch.setattr(
             docs_search_projection,
-            "DOCS_WORKSPACE_KEYWORD_SEARCH_ADAPTER",
+            "DOCS_KEYWORD_SEARCH_ADAPTER",
             replace(
-                DOCS_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
+                DOCS_KEYWORD_SEARCH_ADAPTER,
                 partition_adapter_id=FILES_RETRIEVAL_PARTITION_ADAPTER_ID,
             ),
         )
@@ -432,7 +424,7 @@ def test_platform_extension_validation_rejects_half_registered_search_entity() -
         register_search_projection_adapter(
             FunctionSearchProjectionAdapter(
                 entity_types=("plugin_record",),
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
             )
         )
@@ -765,8 +757,8 @@ def test_platform_extension_validation_rejects_reindex_app_id_mismatch() -> None
                 resource_type="plugin_resource",
                 app_id="other_plugin",
                 load_projection=lambda db, resource_id, rag_service: None,
-                workspace_resource_ids=lambda db, workspace: [],
-                include_in_workspace_reindex=True,
+                company_resource_ids=lambda db,: [],
+                include_in_reindex=True,
             )
         )
 
@@ -836,7 +828,7 @@ def test_platform_extension_validation_rejects_search_entity_without_manifest() 
         register_search_projection_adapter(
             FunctionSearchProjectionAdapter(
                 entity_types=("plugin_record",),
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
             )
         )
@@ -856,12 +848,12 @@ def test_platform_extension_validation_rejects_search_entity_without_keyword_acl
         initialize_platform_extensions(settings=_test_settings())
         register_search_entity_adapter(
             SearchEntityAdapter(
-                owner_app=DOCS_WORKSPACE_APP,
+                owner_app=DOCS_APP,
                 entity_type="plugin_record",
                 resource_type=NATIVE_DOC_RESOURCE_TYPE,
                 label="Plugin Record",
                 label_key="ai.search.entityPluginRecord",
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
             )
         )
@@ -881,12 +873,12 @@ def test_platform_extension_validation_rejects_search_entity_without_index_hooks
         initialize_platform_extensions(settings=_test_settings())
         register_search_entity_adapter(
             SearchEntityAdapter(
-                owner_app=DOCS_WORKSPACE_APP,
+                owner_app=DOCS_APP,
                 entity_type="plugin_record",
                 resource_type=NATIVE_DOC_RESOURCE_TYPE,
                 label="Plugin Record",
                 label_key="ai.search.entityPluginRecord",
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
             )
         )
@@ -911,7 +903,7 @@ def test_platform_extension_validation_requires_each_search_index_lifecycle_hook
         register_search_index_hook(
             hook_name,
             lambda: None,
-            owner_app=DOCS_WORKSPACE_APP,
+            owner_app=DOCS_APP,
             entity_type="plugin_record",
             operations=("create", "update", "delete"),
         )
@@ -921,12 +913,12 @@ def test_platform_extension_validation_requires_each_search_index_lifecycle_hook
         }
         register_search_entity_adapter(
             SearchEntityAdapter(
-                owner_app=DOCS_WORKSPACE_APP,
+                owner_app=DOCS_APP,
                 entity_type="plugin_record",
                 resource_type=NATIVE_DOC_RESOURCE_TYPE,
                 label="Plugin Record",
                 label_key="ai.search.entityPluginRecord",
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
                 index_hooks=SearchIndexLifecycleHooks(**hooks_by_operation),
             )
@@ -949,32 +941,32 @@ def test_platform_extension_validation_cross_checks_search_index_hook_metadata()
         register_search_index_hook(
             "plugin.create_record",
             lambda: None,
-            owner_app=MEETING_WORKSPACE_APP,
+            owner_app=MEETING_APP,
             entity_type="plugin_record",
             operations=("create",),
         )
         register_search_index_hook(
             "plugin.update_record",
             lambda: None,
-            owner_app=DOCS_WORKSPACE_APP,
+            owner_app=DOCS_APP,
             entity_type="other_record",
             operations=("update",),
         )
         register_search_index_hook(
             "plugin.delete_record",
             lambda: None,
-            owner_app=DOCS_WORKSPACE_APP,
+            owner_app=DOCS_APP,
             entity_type="plugin_record",
             operations=("update",),
         )
         register_search_entity_adapter(
             SearchEntityAdapter(
-                owner_app=DOCS_WORKSPACE_APP,
+                owner_app=DOCS_APP,
                 entity_type="plugin_record",
                 resource_type=NATIVE_DOC_RESOURCE_TYPE,
                 label="Plugin Record",
                 label_key="ai.search.entityPluginRecord",
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
                 index_hooks=SearchIndexLifecycleHooks(
                     create=("plugin.create_record",),
@@ -1000,8 +992,10 @@ def test_platform_extension_validation_rejects_search_contract_owned_by_another_
     try:
         initialize_platform_extensions(settings=_test_settings())
 
-        def secret_workspace_loader(db, *, workspace):
-            del db, workspace
+        def secret_company_loader(
+            db,
+        ):
+            del db
             return []
 
         def secret_document_loader(db, *, entity_type, entity_id):
@@ -1011,7 +1005,7 @@ def test_platform_extension_validation_rejects_search_contract_owned_by_another_
         def secret_index_hook():
             return None
 
-        secret_workspace_loader.__module__ = "open_work_hub_api.domains.secret.search_projection"
+        secret_company_loader.__module__ = "open_work_hub_api.domains.secret.search_projection"
         secret_document_loader.__module__ = "open_work_hub_api.domains.secret.search_projection"
         secret_index_hook.__module__ = "open_work_hub_api.domains.secret.search_hooks"
 
@@ -1019,18 +1013,18 @@ def test_platform_extension_validation_rejects_search_contract_owned_by_another_
         register_search_index_hook(
             hook_name,
             secret_index_hook,
-            owner_app=DOCS_WORKSPACE_APP,
+            owner_app=DOCS_APP,
             entity_type="secret_record",
             operations=("create", "update", "delete"),
         )
         register_search_entity_adapter(
             SearchEntityAdapter(
-                owner_app=DOCS_WORKSPACE_APP,
+                owner_app=DOCS_APP,
                 entity_type="secret_record",
                 resource_type=NATIVE_DOC_RESOURCE_TYPE,
                 label="Secret Record",
                 label_key="ai.search.entitySecretRecord",
-                workspace_loader=secret_workspace_loader,
+                company_loader=secret_company_loader,
                 document_loader=secret_document_loader,
                 index_hooks=SearchIndexLifecycleHooks(
                     create=(hook_name,),
@@ -1056,22 +1050,24 @@ def test_platform_extension_validation_accepts_explicit_backend_domain_different
     _reset_platform_registries()
     try:
         initialize_platform_extensions(settings=_test_settings())
-        owner_app = WorkspaceAppRegistration(
+        owner_app = AppRegistration(
             app_id="quality-search",
             title="Quality Search",
             route_base="/apps/quality-search",
             icon_key="search",
             backend_domain="quality_records",
         )
-        owner_catalog = WorkspaceAppCatalogItem(
+        owner_catalog = AppCatalogItem(
             app_id=owner_app.app_id,
             title=owner_app.title,
             route_base=owner_app.route_base,
             icon_key=owner_app.icon_key,
         )
 
-        def workspace_loader(db, *, workspace):
-            del db, workspace
+        def company_loader(
+            db,
+        ):
+            del db
             return []
 
         def document_loader(db, *, entity_type, entity_id):
@@ -1081,7 +1077,7 @@ def test_platform_extension_validation_accepts_explicit_backend_domain_different
         def index_hook():
             return None
 
-        workspace_loader.__module__ = "open_work_hub_api.domains.quality_records.search_projection"
+        company_loader.__module__ = "open_work_hub_api.domains.quality_records.search_projection"
         document_loader.__module__ = "open_work_hub_api.domains.quality_records.search_projection"
         index_hook.__module__ = "open_work_hub_api.domains.quality_records.search_hooks"
 
@@ -1090,7 +1086,7 @@ def test_platform_extension_validation_accepts_explicit_backend_domain_different
             partition_adapter_id = adapter_id
             source_namespace = "quality_records"
             resource_types = ("quality_record",)
-            allowed_candidate_scopes = ("workspace",)
+            allowed_candidate_scopes = ("company",)
             allowed_transitions: tuple[str, ...] = ()
             transition_mode = "generic"
             keyword_acl_entity_types = ("quality_record",)
@@ -1150,7 +1146,7 @@ def test_platform_extension_validation_accepts_explicit_backend_domain_different
                 resource_type="quality_record",
                 label="Quality Record",
                 label_key="ai.search.entityQualityRecord",
-                workspace_loader=workspace_loader,
+                company_loader=company_loader,
                 document_loader=document_loader,
                 partition_adapter_id=source_access_adapter.partition_adapter_id,
                 index_hooks=SearchIndexLifecycleHooks(
@@ -1161,16 +1157,16 @@ def test_platform_extension_validation_accepts_explicit_backend_domain_different
             )
         )
 
-        catalog_lookup = platform_extensions.get_workspace_app_catalog_item
-        registration_lookup = platform_extensions.get_workspace_app_registration
+        catalog_lookup = platform_extensions.get_app_catalog_item
+        registration_lookup = platform_extensions.get_app_registration
         monkeypatch.setattr(
             platform_extensions,
-            "get_workspace_app_catalog_item",
+            "get_app_catalog_item",
             lambda app_id: owner_catalog if app_id == owner_app.app_id else catalog_lookup(app_id),
         )
         monkeypatch.setattr(
             platform_extensions,
-            "get_workspace_app_registration",
+            "get_app_registration",
             lambda app_id: owner_app if app_id == owner_app.app_id else registration_lookup(app_id),
         )
 
@@ -1187,13 +1183,13 @@ def test_platform_extension_validation_requires_explicit_search_backend_domain(
     _reset_platform_registries()
     try:
         initialize_platform_extensions(settings=_test_settings())
-        owner_app = WorkspaceAppRegistration(
+        owner_app = AppRegistration(
             app_id="quality-search",
             title="Quality Search",
             route_base="/apps/quality-search",
             icon_key="search",
         )
-        owner_catalog = WorkspaceAppCatalogItem(
+        owner_catalog = AppCatalogItem(
             app_id=owner_app.app_id,
             title=owner_app.title,
             route_base=owner_app.route_base,
@@ -1206,21 +1202,21 @@ def test_platform_extension_validation_requires_explicit_search_backend_domain(
                 resource_type=NATIVE_DOC_RESOURCE_TYPE,
                 label="Quality Record",
                 label_key="ai.search.entityQualityRecord",
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
             )
         )
 
-        catalog_lookup = platform_extensions.get_workspace_app_catalog_item
-        registration_lookup = platform_extensions.get_workspace_app_registration
+        catalog_lookup = platform_extensions.get_app_catalog_item
+        registration_lookup = platform_extensions.get_app_registration
         monkeypatch.setattr(
             platform_extensions,
-            "get_workspace_app_catalog_item",
+            "get_app_catalog_item",
             lambda app_id: owner_catalog if app_id == owner_app.app_id else catalog_lookup(app_id),
         )
         monkeypatch.setattr(
             platform_extensions,
-            "get_workspace_app_registration",
+            "get_app_registration",
             lambda app_id: owner_app if app_id == owner_app.app_id else registration_lookup(app_id),
         )
 
@@ -1272,12 +1268,12 @@ def test_platform_extension_validation_rejects_keyword_acl_branch_entity_drift()
         register_source_access_adapter(PluginSourceAccessAdapter())
         register_search_entity_adapter(
             SearchEntityAdapter(
-                owner_app=DOCS_WORKSPACE_APP,
+                owner_app=DOCS_APP,
                 entity_type="plugin_record",
                 resource_type="plugin_resource",
                 label="Plugin Record",
                 label_key="ai.search.entityPluginRecord",
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
             )
         )
@@ -1329,12 +1325,12 @@ def test_platform_extension_validation_rejects_unmapped_keyword_acl_field() -> N
         register_source_access_adapter(PluginSourceAccessAdapter())
         register_search_entity_adapter(
             SearchEntityAdapter(
-                owner_app=DOCS_WORKSPACE_APP,
+                owner_app=DOCS_APP,
                 entity_type="plugin_record",
                 resource_type="plugin_resource",
                 label="Plugin Record",
                 label_key="ai.search.entityPluginRecord",
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
             )
         )
@@ -1351,7 +1347,7 @@ def test_platform_extension_validation_rejects_unmapped_keyword_acl_field() -> N
         _reset_platform_registries()
 
 
-def test_platform_extension_validation_checks_acl_fields_for_every_workspace_role() -> None:
+def test_platform_extension_validation_checks_acl_fields_for_company_admin_and_member() -> None:
     _reset_platform_registries()
     try:
         initialize_platform_extensions(settings=_test_settings())
@@ -1379,10 +1375,7 @@ def test_platform_extension_validation_checks_acl_fields_for_every_workspace_rol
                 return False
 
             def keyword_acl_branches(self, policy):
-                field = {
-                    None: "nonmember_project_ids",
-                    "admin": "admin_project_ids",
-                }.get(policy.workspace_role, "owner_user_id")
+                field = "admin_project_ids" if policy.is_platform_admin else "member_project_ids"
                 return [
                     policy._keyword_entity_branch(
                         "role_sensitive_record",
@@ -1393,12 +1386,12 @@ def test_platform_extension_validation_checks_acl_fields_for_every_workspace_rol
         register_source_access_adapter(RoleSensitiveSourceAccessAdapter())
         register_search_entity_adapter(
             SearchEntityAdapter(
-                owner_app=DOCS_WORKSPACE_APP,
+                owner_app=DOCS_APP,
                 entity_type="role_sensitive_record",
                 resource_type="role_sensitive_resource",
                 label="Role Sensitive Record",
                 label_key="ai.search.entityRoleSensitiveRecord",
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
             )
         )
@@ -1408,7 +1401,7 @@ def test_platform_extension_validation_checks_acl_fields_for_every_workspace_rol
 
         message = str(exc_info.value)
         assert "role_sensitive_record.admin_project_ids" in message
-        assert "role_sensitive_record.nonmember_project_ids" in message
+        assert "role_sensitive_record.member_project_ids" in message
     finally:
         _reset_platform_registries()
 
@@ -1425,10 +1418,10 @@ def test_default_search_projection_adapters_reregister_after_reset() -> None:
     assert get_search_projection_adapter(SearchEntityType.PLANNER_EVENT) is None
 
 
-def test_workspace_keyword_search_scope_projects_only_enabled_owner_entities() -> None:
+def test_company_keyword_search_scope_projects_only_enabled_owner_entities() -> None:
     _reset_platform_registries()
     try:
-        scope = resolve_workspace_keyword_search_scope({"docs", "pms"})
+        scope = resolve_keyword_search_scope({"docs", "pms"})
 
         assert scope.entity_types == ("doc", "pms_task")
         assert scope.constrain_entity_types([]) == ("doc", "pms_task")
@@ -1451,9 +1444,9 @@ def test_files_keyword_search_adapter_can_activate_after_partition_generation(
         )
         monkeypatch.setattr(
             file_search_projection,
-            "FILES_WORKSPACE_KEYWORD_SEARCH_ADAPTER",
+            "FILES_KEYWORD_SEARCH_ADAPTER",
             replace(
-                file_search_projection.FILES_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
+                file_search_projection.FILES_KEYWORD_SEARCH_ADAPTER,
                 active=True,
             ),
         )
@@ -1462,7 +1455,7 @@ def test_files_keyword_search_adapter_can_activate_after_partition_generation(
 
         assert adapter is not None
         assert adapter.active is True
-        assert resolve_workspace_keyword_search_scope({"files"}).entity_types == ("file",)
+        assert resolve_keyword_search_scope({"files"}).entity_types == ("file",)
     finally:
         _reset_platform_registries()
 
@@ -1471,7 +1464,7 @@ def test_files_keyword_search_adapter_can_activate_after_partition_generation(
     ("owner_app", "message"),
     [
         (
-            WorkspaceAppRegistration(
+            AppRegistration(
                 app_id="missing-app",
                 title="Missing App",
                 route_base="/apps/missing-app",
@@ -1480,13 +1473,13 @@ def test_files_keyword_search_adapter_can_activate_after_partition_generation(
             "references unknown owner app: missing-app",
         ),
         (
-            PLANNER_WORKSPACE_APP,
-            "owner app must be workspace-available: planner",
+            PLANNER_APP,
+            "owner app must declare backend_domain: planner",
         ),
     ],
 )
 def test_platform_extension_validation_rejects_invalid_search_entity_owner(
-    owner_app: WorkspaceAppRegistration,
+    owner_app: AppRegistration,
     message: str,
 ) -> None:
     _reset_platform_registries()
@@ -1499,7 +1492,7 @@ def test_platform_extension_validation_rejects_invalid_search_entity_owner(
                 resource_type=NATIVE_DOC_RESOURCE_TYPE,
                 label="Plugin Record",
                 label_key="ai.search.entityPluginRecord",
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
             )
         )
@@ -1516,12 +1509,12 @@ def test_platform_extension_validation_rejects_copied_owner_app_registration() -
         initialize_platform_extensions(settings=_test_settings())
         register_search_entity_adapter(
             SearchEntityAdapter(
-                owner_app=replace(DOCS_WORKSPACE_APP),
+                owner_app=replace(DOCS_APP),
                 entity_type="plugin_record",
                 resource_type=NATIVE_DOC_RESOURCE_TYPE,
                 label="Plugin Record",
                 label_key="ai.search.entityPluginRecord",
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
             )
         )
@@ -1539,12 +1532,12 @@ def test_search_entity_adapter_registers_descriptor_and_projection_atomically() 
     _reset_platform_registries()
     try:
         adapter = SearchEntityAdapter(
-            owner_app=DOCS_WORKSPACE_APP,
+            owner_app=DOCS_APP,
             entity_type="plugin_record",
             resource_type=NATIVE_DOC_RESOURCE_TYPE,
             label="Plugin Record",
             label_key="ai.search.entityPluginRecord",
-            workspace_loader=lambda db, *, workspace: [{"entity_id": "workspace"}],
+            company_loader=lambda db,: [{"entity_id": "company-doc"}],
             document_loader=lambda db, *, entity_type, entity_id: {
                 "entity_type": entity_type,
                 "entity_id": entity_id,
@@ -1576,12 +1569,12 @@ def test_search_entity_adapter_requires_localized_label_key() -> None:
         ):
             register_search_entity_adapter(
                 SearchEntityAdapter(
-                    owner_app=DOCS_WORKSPACE_APP,
+                    owner_app=DOCS_APP,
                     entity_type="plugin_record",
                     resource_type=NATIVE_DOC_RESOURCE_TYPE,
                     label="Plugin Record",
                     label_key="",
-                    workspace_loader=lambda db, *, workspace: [],
+                    company_loader=lambda db,: [],
                     document_loader=lambda db, *, entity_type, entity_id: None,
                 )
             )
@@ -1594,12 +1587,12 @@ def test_search_entity_adapter_exposes_extension_query_vocabulary() -> None:
     try:
         register_search_entity_adapter(
             SearchEntityAdapter(
-                owner_app=DOCS_WORKSPACE_APP,
+                owner_app=DOCS_APP,
                 entity_type="plugin_record",
                 resource_type=NATIVE_DOC_RESOURCE_TYPE,
                 label="Plugin Record",
                 label_key="ai.search.entityPluginRecord",
-                workspace_loader=lambda db, *, workspace: [],
+                company_loader=lambda db,: [],
                 document_loader=lambda db, *, entity_type, entity_id: None,
                 date_fields=("reviewed_at",),
                 person_roles=("reviewer",),
@@ -1619,7 +1612,7 @@ def test_search_projection_registry_accepts_extension_entity_types() -> None:
     try:
         adapter = FunctionSearchProjectionAdapter(
             entity_types=("plugin_record",),
-            workspace_loader=lambda db, *, workspace: [],
+            company_loader=lambda db,: [],
             document_loader=lambda db, *, entity_type, entity_id: {
                 "entity_type": entity_type,
                 "entity_id": entity_id,
@@ -1662,7 +1655,7 @@ def test_default_search_index_hooks_reregister_after_reset() -> None:
     assert has_search_index_hook("docs.enqueue_doc_search_index")
     registration = get_search_index_hook_registration("pms.enqueue_task_search_index")
     assert registration is not None
-    assert registration.owner_app is PMS_WORKSPACE_APP
+    assert registration.owner_app is PMS_APP
     assert registration.entity_type == SearchEntityType.PMS_TASK.value
     assert registration.operations == frozenset({"create", "update", "delete"})
 
@@ -1690,21 +1683,21 @@ def test_search_hook_facade_delegates_pms_task_enqueues_to_registry() -> None:
         register_search_index_hook(
             "pms.enqueue_task_search_index",
             enqueue_task,
-            owner_app=PMS_WORKSPACE_APP,
+            owner_app=PMS_APP,
             entity_type=SearchEntityType.PMS_TASK.value,
             operations=("create", "update", "delete"),
         )
         register_search_index_hook(
             "pms.enqueue_task_search_index_by_id",
             enqueue_task_by_id,
-            owner_app=PMS_WORKSPACE_APP,
+            owner_app=PMS_APP,
             entity_type=SearchEntityType.PMS_TASK.value,
             operations=("update",),
         )
         register_search_index_hook(
             "pms.enqueue_label_task_search_recompute",
             recompute_label_tasks,
-            owner_app=PMS_WORKSPACE_APP,
+            owner_app=PMS_APP,
             entity_type=SearchEntityType.PMS_TASK.value,
             operations=("update",),
         )
@@ -1746,7 +1739,8 @@ def test_default_target_access_adapters_reregister_after_reset() -> None:
     ensure_builtin_target_access_adapters_registered()
     ensure_builtin_target_access_adapters_registered()
 
-    assert get_target_access_adapter("docs") is not None
+    assert get_target_access_adapter("pms") is not None
+    assert get_target_access_adapter("docs") is None
     assert get_target_access_adapter("pms") is not None
 
 
@@ -1769,12 +1763,12 @@ def test_target_access_lookup_lazy_registers_default_adapters() -> None:
         target_access_allowed(
             db=SimpleNamespace(),
             user=SimpleNamespace(id="user-1"),
-            workspace=SimpleNamespace(id="ws-1"),
             ref=TargetRef(app="unknown", type="resource", id="resource-1"),
         )
         is False
     )
-    assert has_target_access_adapter("docs")
+    assert has_target_access_adapter("pms")
+    assert not has_target_access_adapter("docs")
     assert has_target_access_adapter("pms")
 
 
@@ -2101,9 +2095,7 @@ def test_default_llm_generation_profiles_reregister_after_reset() -> None:
     assert resolve_reasoning_effort("local", "vllm", reasoning_effort="high") == "high"
 
     docker_profile = select_llm_generation_profile("local", "docker-model-runner")
-    assert docker_profile.extra_body("none") == {
-        "chat_template_kwargs": {"enable_thinking": False}
-    }
+    assert docker_profile.extra_body("none") == {"chat_template_kwargs": {"enable_thinking": False}}
 
 
 def test_web_search_workloads_register_as_external_only() -> None:
@@ -2241,17 +2233,23 @@ def test_llm_generation_profile_registry_accepts_extension_override() -> None:
 
 def test_default_target_access_adapters_allow_partial_app_override() -> None:
     class ExtensionDocsTargetAdapter:
-        def label_for(self, *, db, workspace, ref) -> str | None:
-            del db, workspace
-            return "Extension Docs" if ref.type == "workspace_sidebar" else None
+        def label_for(self, *, db, ref) -> str | None:
+            del db
+            return "Extension Docs" if ref.type == "group_collection" else None
 
-        def can_access(self, *, db, user, workspace, ref) -> bool:
-            del db, user, workspace
-            return ref.type == "workspace_sidebar"
+        def can_access(self, *, db, user, ref) -> bool:
+            del (
+                db,
+                user,
+            )
+            return ref.type == "group_collection"
 
-        def project_access(self, *, db, user, workspace, ref) -> TargetAccessProjection:
-            del db, user, workspace
-            if ref.type != "workspace_sidebar":
+        def project_access(self, *, db, user, ref) -> TargetAccessProjection:
+            del (
+                db,
+                user,
+            )
+            if ref.type != "group_collection":
                 return TargetAccessProjection(False, False, False)
             return TargetAccessProjection(True, True, False)
 
@@ -2283,10 +2281,10 @@ def test_default_rag_source_adapters_reregister_after_reset() -> None:
     assert resolve_rag_resource_types_for_source_kinds(["pms_task"]) == ("pms_task",)
     native_doc_resource_adapter = get_rag_resource_adapter("docs_native_doc")
     assert native_doc_resource_adapter is not None
-    assert native_doc_resource_adapter.app_id == DOCS_WORKSPACE_APP.app_id
+    assert native_doc_resource_adapter.app_id == DOCS_APP.app_id
     manual_source_adapter = get_rag_source_adapter("manual")
     assert manual_source_adapter is not None
-    assert manual_source_adapter.app_id == DOCS_WORKSPACE_APP.app_id
+    assert manual_source_adapter.app_id == DOCS_APP.app_id
     assert get_rag_resource_adapter("knowledge_source_document") is None
 
 
@@ -2332,9 +2330,7 @@ def test_default_source_access_adapters_reregister_after_reset() -> None:
     reset_source_access_adapters()
     policy = SourceAclPolicy(
         db=SimpleNamespace(),
-        workspace=SimpleNamespace(id="ws-1"),
         user=SimpleNamespace(id="user-1"),
-        workspace_role=None,
     )
 
     assert policy.can_read_resource("unknown", "resource-1") is False
@@ -2351,9 +2347,7 @@ def test_source_access_policy_import_does_not_register_default_adapters() -> Non
 
     policy = source_access_policy.SourceAclPolicy(
         db=SimpleNamespace(),
-        workspace=SimpleNamespace(id="ws-1"),
         user=SimpleNamespace(id="user-1"),
-        workspace_role=None,
     )
 
     assert policy.can_read_resource("unknown", "resource-1") is False
@@ -2363,8 +2357,7 @@ def test_source_access_policy_import_does_not_register_default_adapters() -> Non
 def test_default_source_access_adapters_allow_partial_resource_override(monkeypatch) -> None:
     from open_work_hub_api.domains.source_access import policy as source_policy
 
-    monkeypatch.setattr(source_policy, "resolve_workspace_role", lambda *args: "member")
-    monkeypatch.setattr(source_policy, "is_app_enabled_for_user_context", lambda *args, **kwargs: True)
+    monkeypatch.setattr(source_policy, "can_use_app", lambda *args, **kwargs: True)
 
     class ExtensionNativeDocAccessAdapter:
         app_id = "docs"
@@ -2393,13 +2386,11 @@ def test_default_source_access_adapters_allow_partial_resource_override(monkeypa
         register_source_access_adapter(adapter)
         policy = SourceAclPolicy(
             db=SimpleNamespace(),
-            workspace=SimpleNamespace(id="ws-1"),
             user=SimpleNamespace(id="user-1"),
-            workspace_role=None,
         )
 
         assert policy.can_read_resource(NATIVE_DOC_RESOURCE_TYPE, "extension-doc") is True
-        monkeypatch.setattr(source_policy, "resolve_workspace_role", lambda *args: None)
+        monkeypatch.setattr(source_policy, "can_use_app", lambda *args, **kwargs: False)
         assert policy.can_read_resource(NATIVE_DOC_RESOURCE_TYPE, "extension-doc") is False
         assert get_source_access_adapter(NATIVE_DOC_RESOURCE_TYPE) is adapter
         assert has_source_access_adapter("knowledge_source_document") is not (

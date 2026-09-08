@@ -1,30 +1,28 @@
-import type { MouseEventHandler } from 'react';
 import { ChevronDown, Menu, Search } from 'lucide-react';
+import type { MouseEventHandler } from 'react';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { getInitials } from './app-bar-model';
 import { AppBarNotificationButton } from './AppBarNotificationButton';
 
 export function AppBarMobileHeader({
-  activeContextLabel,
   activeAppTitle,
   canOpenMobileAppMenu,
-  canOpenWorkspaceSearch,
+  canOpenSearch,
   currentUser,
   labels,
   onOpenAccount,
   onOpenMobileAppMenu,
   onOpenMobileNavigation,
-  onOpenWorkspaceSearch,
+  onOpenSearch,
   onToggleNotifications,
   notificationPanelOpen,
   notificationsEnabled,
   unreadCount,
 }: {
-  activeContextLabel: string | null;
   activeAppTitle: string;
   canOpenMobileAppMenu?: boolean;
-  canOpenWorkspaceSearch: boolean;
+  canOpenSearch: boolean;
   currentUser: AuthUser;
   labels: {
     accountTitle: string;
@@ -38,7 +36,7 @@ export function AppBarMobileHeader({
   onOpenAccount: () => void;
   onOpenMobileAppMenu?: () => void;
   onOpenMobileNavigation: () => void;
-  onOpenWorkspaceSearch: () => void;
+  onOpenSearch: () => void;
   onToggleNotifications: MouseEventHandler<HTMLButtonElement>;
   notificationPanelOpen: boolean;
   notificationsEnabled: boolean;
@@ -56,11 +54,6 @@ export function AppBarMobileHeader({
           />
         ) : null}
       </div>
-      {activeContextLabel ? (
-        <div className="app-text-micro truncate text-white/65">
-          {activeContextLabel}
-        </div>
-      ) : null}
     </div>
   );
 
@@ -91,11 +84,11 @@ export function AppBarMobileHeader({
         <div className="min-w-0 flex-1 px-1.5 py-1">{mobileTitle}</div>
       )}
 
-      {canOpenWorkspaceSearch ? (
+      {canOpenSearch ? (
         <button
           aria-label={labels.searchOpen}
           className="flex size-10 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-          onClick={onOpenWorkspaceSearch}
+          onClick={onOpenSearch}
           title={labels.searchTitle}
           type="button"
         >

@@ -52,11 +52,28 @@ describe('useDocsPageContentSaveController', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(['block', 'text'] as const)(
+    'cancels queued %s writes when the authority-owned view unmounts',
+    async (format) => {
+      vi.useFakeTimers();
+      const { result, unmount, savePage } = renderController();
+      act(() => {
+        if (format === 'block')
+          result.current.queueBlockSave('page-1', [{ type: 'paragraph' }]);
+        else result.current.queueTextSave('page-1', 'revoked draft');
+      });
+      unmount();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(800);
+      });
+      expect(savePage).not.toHaveBeenCalled();
+    },
+  );
+
   it('debounces text saves and persists only the latest pending text', async () => {
     vi.useFakeTimers();
     const { result, savePage, onSavedPage, savedPage } = renderController({
       shareToken: 'share-1',
-      workspaceSlug: 'hq',
     });
 
     act(() => {
@@ -74,7 +91,6 @@ describe('useDocsPageContentSaveController', () => {
       'page-2',
       { content_text: 'latest' },
       'share-1',
-      'hq',
     );
     expect(onSavedPage).toHaveBeenCalledWith(savedPage);
   });
@@ -98,7 +114,6 @@ describe('useDocsPageContentSaveController', () => {
       'token-1',
       'page-1',
       { content_text: 'draft' },
-      undefined,
       undefined,
     );
   });
@@ -136,7 +151,6 @@ describe('useDocsPageContentSaveController', () => {
       'token-1',
       'page-1',
       { content_blocks: blocks },
-      undefined,
       undefined,
     );
   });

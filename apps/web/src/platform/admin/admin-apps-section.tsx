@@ -1,5 +1,3 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import {
   ArrowDown,
   ArrowRight,
@@ -11,17 +9,19 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button, SearchField, Tooltip, useFeedback } from '@open-work-hub/ui';
 
 import { IconPickerDialog } from '@/src/components/picker/IconPickerDialog';
 import type { IconPickerGroup } from '@/src/components/picker/icon-picker-model';
+import { useAppBootstrapContext } from '@/src/platform/apps/app-bootstrap-context';
 import {
-  WORKSPACE_APP_ICON_KEYS,
-  WORKSPACE_APP_ICON_PICKER_GROUPS,
-  workspaceAppIconForKey,
-} from '@/src/platform/workspaces/workspace-app-icons';
-import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
+  APP_ICON_KEYS,
+  APP_ICON_PICKER_GROUPS,
+  appIconForKey,
+} from '@/src/platform/apps/app-icons';
 
 import {
   createAdminAppBarCategory,
@@ -39,11 +39,7 @@ import {
   getErrorMessage,
 } from './admin-shared';
 
-export type AdminAppsPage = 'app-bar' | 'platform' | 'workspace';
-export {
-  resolveWorkspaceAppsTab,
-  type WorkspaceAppsTab,
-} from './admin-app-controls-section';
+export type AdminAppsPage = 'app-bar' | 'access';
 
 export function AppsSection({
   page,
@@ -52,14 +48,13 @@ export function AppsSection({
   page: AdminAppsPage;
   token: string;
 }) {
-  const { reload, reloadGlobalApps } = useWorkspaceBootstrapContext();
+  const { reload } = useAppBootstrapContext();
   const handleAppBarCategoriesChanged = useCallback(() => {
     reload();
-    reloadGlobalApps?.();
-  }, [reload, reloadGlobalApps]);
+  }, [reload]);
 
   if (page !== 'app-bar') {
-    return <AppControlsSection page={page} token={token} />;
+    return <AppControlsSection token={token} />;
   }
 
   return (
@@ -73,9 +68,9 @@ export function AppsSection({
 function appBarCategoryIconKeys(
   apiIconKeys: readonly string[] | undefined,
 ): readonly string[] {
-  return Array.from(
-    new Set([...(apiIconKeys ?? []), ...WORKSPACE_APP_ICON_KEYS]),
-  ).sort((left, right) => left.localeCompare(right));
+  return Array.from(new Set([...(apiIconKeys ?? []), ...APP_ICON_KEYS])).sort(
+    (left, right) => left.localeCompare(right),
+  );
 }
 
 function appBarIconPickerGroups(
@@ -83,15 +78,11 @@ function appBarIconPickerGroups(
   labelForGroup: (groupId: string) => string,
 ): readonly IconPickerGroup[] {
   const allowedIconKeys = new Set(iconKeys);
-  const groups: IconPickerGroup[] = WORKSPACE_APP_ICON_PICKER_GROUPS.map(
-    (group) => ({
-      id: group.id,
-      iconKeys: group.iconKeys.filter((iconKey) =>
-        allowedIconKeys.has(iconKey),
-      ),
-      label: labelForGroup(group.id),
-    }),
-  ).filter((group) => group.iconKeys.length > 0);
+  const groups: IconPickerGroup[] = APP_ICON_PICKER_GROUPS.map((group) => ({
+    id: group.id,
+    iconKeys: group.iconKeys.filter((iconKey) => allowedIconKeys.has(iconKey)),
+    label: labelForGroup(group.id),
+  })).filter((group) => group.iconKeys.length > 0);
   const groupedIconKeys = new Set(
     groups.flatMap((group) => [...group.iconKeys]),
   );
@@ -229,7 +220,7 @@ function AppBarCategoriesAdmin({
       : (draftCategories.find((category) => category.id === iconPickerTarget)
           ?.title ?? t('admin.console.apps.appBarCategoryIcon'));
   const SelectedCategoryIcon = selectedCategory
-    ? workspaceAppIconForKey(selectedCategory.icon_key)
+    ? appIconForKey(selectedCategory.icon_key)
     : null;
 
   useEffect(() => {
@@ -526,7 +517,7 @@ function AppBarCategoriesAdmin({
             </div>
             <div className="divide-y divide-app-border">
               {draftCategories.map((category, index) => {
-                const CategoryIcon = workspaceAppIconForKey(category.icon_key);
+                const CategoryIcon = appIconForKey(category.icon_key);
                 const selected = selectedCategory?.id === category.id;
                 return (
                   <div
@@ -806,7 +797,7 @@ function AppBarCategoriesAdmin({
         closeLabel={t('common:actions.close')}
         emptyLabel={t('admin.console.apps.appBarNoFilteredIcons')}
         groups={iconPickerGroups}
-        iconForKey={workspaceAppIconForKey}
+        iconForKey={appIconForKey}
         onClose={() => setIconPickerTarget(null)}
         onSelect={selectIcon}
         open={iconPickerTarget !== null}
@@ -832,7 +823,7 @@ function CategoryIconButton({
   label: string;
   onClick: () => void;
 }) {
-  const Icon = workspaceAppIconForKey(iconKey);
+  const Icon = appIconForKey(iconKey);
   return (
     <div className="space-y-1">
       <span className="app-text-caption text-app-ink/60">{label}</span>
@@ -870,7 +861,7 @@ function AdminAppCategoryItem({
   tooltip: string;
   variant: 'available' | 'selected';
 }) {
-  const Icon = workspaceAppIconForKey(app.icon_key);
+  const Icon = appIconForKey(app.icon_key);
   const itemAction = action ?? (variant === 'selected' ? 'remove' : 'add');
   const ActionIcon =
     itemAction === 'remove' ? X : itemAction === 'move' ? ArrowRight : Plus;

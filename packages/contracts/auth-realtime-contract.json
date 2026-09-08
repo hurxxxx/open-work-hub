@@ -3,7 +3,7 @@
     "eventType": "auth.access.changed",
     "reasons": {
       "appAvailability": "app_availability",
-      "workspaceMembership": "workspace_membership"
+      "principalAccess": "principal"
     }
   }
 }

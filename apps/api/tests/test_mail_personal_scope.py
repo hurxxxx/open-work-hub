@@ -63,18 +63,30 @@ def _message(message_id: str, account_id: str) -> MailMessage:
 @pytest.fixture
 def db() -> Session:
     engine = create_engine("sqlite://")
-    Base.metadata.create_all(engine)
+    from company_admission_fixture import company_authority_tables, seed_company_app_access
+
+    tables = [
+        *company_authority_tables(),
+        MailAccount.__table__,
+        MailMailbox.__table__,
+        MailMessage.__table__,
+        MailMessageBody.__table__,
+        MailSyncJob.__table__,
+    ]
+    Base.metadata.create_all(engine, tables=tables)
     with Session(engine) as session:
+        seed_company_app_access(session, app_ids=["mail"])
         yield session
-    Base.metadata.drop_all(engine)
+    Base.metadata.drop_all(engine, tables=tables)
     engine.dispose()
 
 
-def test_personal_mail_preserves_duplicate_accounts_and_enforces_owner_join(db: Session) -> None:
+def test_personal_mail_supports_distinct_accounts_and_enforces_owner_join(db: Session) -> None:
     owner = _user("owner")
     other = _user("other")
     first = _account("account-1", owner.id, label="Primary")
     duplicate = _account("account-2", owner.id, label="Archive")
+    duplicate.email_address = "archive@example.test"
     foreign = _account("account-3", other.id, label="Other user")
     first_message = _message("message-1", first.id)
     duplicate_message = _message("message-2", duplicate.id)

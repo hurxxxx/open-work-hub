@@ -36,7 +36,9 @@ export interface TimelineSourceCount {
   color: string | undefined;
 }
 
-export function dateOnlyToLocalDate(value: string | null | undefined): Date | null {
+export function dateOnlyToLocalDate(
+  value: string | null | undefined,
+): Date | null {
   const parts = parseDateOnlyParts(value);
   return parts ? new Date(parts.year, parts.month - 1, parts.day) : null;
 }

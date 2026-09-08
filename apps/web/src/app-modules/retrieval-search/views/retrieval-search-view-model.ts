@@ -56,11 +56,9 @@ export function buildRetrievalSearchParams(input: {
   selectedSources: readonly string[];
   strategy: RetrievalStrategy;
   topK: RetrievalTopK;
-  workspaceSlug: string;
 }): URLSearchParams {
   const params = new URLSearchParams();
   const query = input.query.trim();
-  params.set('workspace', input.workspaceSlug);
   if (query) {
     params.set('q', query);
   }
@@ -117,9 +115,7 @@ function isRetrievalTopK(value: number): value is RetrievalTopK {
   return RETRIEVAL_TOP_K_OPTIONS.some((option) => option === value);
 }
 
-function isRetrievalStrategy(
-  value: string | null,
-): value is RetrievalStrategy {
+function isRetrievalStrategy(value: string | null): value is RetrievalStrategy {
   return RETRIEVAL_STRATEGIES.some((strategy) => strategy === value);
 }
 

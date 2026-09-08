@@ -52,14 +52,9 @@ def test_admin_usage_dashboard_aggregates_user_content_and_llm_usage(
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
     user_id = admin["user"]["id"]
-    workspaces_response = client.get(
-        "/api/v1/admin/workspaces",
-        headers=_auth_headers(token),
+    _seed_usage_rows(
+        user_id=user_id,
     )
-    assert workspaces_response.status_code == 200, workspaces_response.text
-    workspace_id = workspaces_response.json()[0]["id"]
-
-    _seed_usage_rows(user_id=user_id, workspace_id=workspace_id)
 
     response = client.get(
         "/api/v1/admin/usage/dashboard?days=30&limit=10",
@@ -95,10 +90,7 @@ def test_admin_usage_dashboard_aggregates_user_content_and_llm_usage(
     assert user_item["llm_total_tokens"] == 15
     assert user_item["activity_score"] >= 11
     assert payload["usage_by_app"][0]["key"] == "docs"
-    assert (
-        payload["usage_by_route"][0]["key"]
-        == "/apps/docs/workspaces/:workspace"
-    )
+    assert payload["usage_by_route"][0]["key"] == "/apps/docs"
     assert payload["content_views_by_kind"][0]["key"] == "doc"
     assert payload["content_views_by_kind"][0]["count"] == 2
     assert payload["llm_by_task_kind"][0]["key"] == "chatbot"
@@ -247,7 +239,7 @@ def test_usage_event_endpoint_dedupes_repeated_events(client: TestClient) -> Non
         "event_type": "app.open",
         "route_path": "/community",
         "source": "shell.nav.community",
-        "metadata": {"has_workspace_route": False},
+        "metadata": {"has_app_route": False},
     }
     first_response = client.post(
         "/api/v1/usage/events",
@@ -564,7 +556,10 @@ def test_admin_audit_logs_ai_security_query_includes_external_calls(
     assert "admin.unrelated" not in explicit_actions
 
 
-def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
+def _seed_usage_rows(
+    *,
+    user_id: str,
+) -> None:
     now = utcnow_naive()
     with get_session_factory()() as db:
         doc_id = new_id()
@@ -573,7 +568,6 @@ def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
         db.add(
             NativeDoc(
                 id=doc_id,
-                workspace_id=workspace_id,
                 owner_id=user_id,
                 title="Usage document",
                 doc_type="general",
@@ -586,7 +580,6 @@ def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
         db.add(
             Whiteboard(
                 id=new_id(),
-                workspace_id=workspace_id,
                 owner_id=user_id,
                 title="Usage whiteboard",
             )
@@ -594,7 +587,6 @@ def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
         db.add(
             Meeting(
                 id=new_id(),
-                workspace_id=workspace_id,
                 organizer_id=user_id,
                 title="Usage meeting",
                 agenda="",
@@ -672,16 +664,14 @@ def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
         record_usage_event(
             db,
             actor_user_id=user_id,
-            workspace_id=workspace_id,
             app_id="docs",
             event_type=USAGE_EVENT_APP_OPEN,
-            route_path="/apps/docs/workspaces/:workspace",
+            route_path="/apps/docs",
             source="shell.nav.docs",
         )
         record_usage_event(
             db,
             actor_user_id=user_id,
-            workspace_id=workspace_id,
             app_id="docs",
             event_type=USAGE_EVENT_CONTENT_VIEW,
             content_kind="doc",
@@ -692,7 +682,6 @@ def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
         record_usage_event(
             db,
             actor_user_id=user_id,
-            workspace_id=workspace_id,
             app_id="docs",
             event_type=USAGE_EVENT_CONTENT_VIEW,
             content_kind="doc",
@@ -703,7 +692,6 @@ def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
         record_usage_event(
             db,
             actor_user_id=user_id,
-            workspace_id=workspace_id,
             app_id="whiteboard",
             event_type=USAGE_EVENT_CONTENT_VIEW,
             content_kind="whiteboard",
@@ -714,7 +702,6 @@ def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
         record_usage_event(
             db,
             actor_user_id=user_id,
-            workspace_id=workspace_id,
             app_id="docs",
             event_type=USAGE_EVENT_SEARCH_QUERY,
             content_kind="doc",
@@ -730,7 +717,6 @@ def _seed_usage_rows(*, user_id: str, workspace_id: str) -> None:
             summary="llm_call source=test pool=local task_kind=chatbot status=ok",
             payload={
                 "actor_user_id": user_id,
-                "workspace_id": workspace_id,
                 "task_kind": "chatbot",
                 "model": "local/test-model",
                 "status": "ok",

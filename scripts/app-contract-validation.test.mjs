@@ -41,24 +41,23 @@ test('schema requires the canonical declaration', () => {
   );
 });
 
-test('workspace global routes require shared chrome', () => {
+test('rejects product workspace paths and removed context fields', () => {
   const candidate = cloneSource();
   const docs = candidate.apps.find((app) => app.app_id === 'docs');
-  docs.routes.find((route) => route.route_id === 'docs.shared').chrome =
-    'standard';
-  assert.throws(
-    () => validateAppContracts(candidate, schema),
-    /Workspace app global route must use shared chrome: docs.shared/,
-  );
+  docs.routes[0].suffix = '/workspaces/:workspaceSlug';
+  assert.throws(() => validateAppContracts(candidate, schema), /Product workspace routes are unsupported/);
+  docs.routes[0].suffix = '';
+  docs.routes[0].context_scope = 'workspace';
+  assert.throws(() => validateAppContracts(candidate, schema), /Invalid app contract schema/);
 });
 
-test('personal tools cannot claim workspace execution', () => {
+test('personal tools cannot claim company execution', () => {
   const candidate = cloneSource();
   const mail = candidate.apps.find((app) => app.app_id === 'mail');
-  mail.execution_context_kind = 'workspace';
+  mail.execution_context_kind = 'company';
   assert.throws(
     () => validateAppContracts(candidate, schema),
-    /Personal-tools app must be platform\/personal: mail/,
+    /Personal-tools app must use personal execution: mail/,
   );
 });
 

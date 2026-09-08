@@ -10,7 +10,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import HERMES_MODEL, HERMES_PROVIDER, get_settings
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.models import (
     HermesDispatchOutbox,
     HermesProfileBinding,
@@ -20,7 +20,6 @@ from open_work_hub_api.domains.hermes.models import (
     HermesSessionBinding,
     HermesToolApproval,
 )
-
 
 TERMINAL_RUN_STATUSES = frozenset(
     {"completed", "failed", "cancelled", "interrupted", "invalid_output"}
@@ -50,10 +49,10 @@ def utcnow_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def deterministic_profile_name(workspace_id: str, user_id: str) -> str:
+def deterministic_profile_name(user_id: str) -> str:
     import hashlib
 
-    digest = hashlib.sha256(f"{workspace_id}:{user_id}".encode()).hexdigest()[:32]
+    digest = hashlib.sha256(f"{get_settings().environment}:{user_id}".encode()).hexdigest()[:32]
     return f"owh-{digest}"
 
 
@@ -99,18 +98,14 @@ def sanitize_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def get_or_create_profile_binding(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
 ) -> HermesProfileBinding:
-    # Serialize the first binding creation for a workspace. Without this lock,
+    # Serialize the first binding creation for a user. Without this lock,
     # simultaneous status/session requests can both miss the unique row and
     # race into a constraint violation.
-    db.execute(
-        select(Workspace.id).where(Workspace.id == workspace.id).with_for_update()
-    ).scalar_one()
+    db.execute(select(User.id).where(User.id == user.id).with_for_update()).scalar_one()
     binding = db.scalar(
         select(HermesProfileBinding).where(
-            HermesProfileBinding.workspace_id == workspace.id,
             HermesProfileBinding.user_id == user.id,
         )
     )
@@ -118,9 +113,8 @@ def get_or_create_profile_binding(
         return binding
     binding = HermesProfileBinding(
         id=str(uuid4()),
-        workspace_id=workspace.id,
         user_id=user.id,
-        profile_name=deterministic_profile_name(workspace.id, user.id),
+        profile_name=deterministic_profile_name(user.id),
         status="provisioning",
         provider=HERMES_PROVIDER,
         model=HERMES_MODEL,
@@ -134,13 +128,11 @@ def get_owned_session(
     db: Session,
     *,
     session_id: str,
-    workspace_id: str,
     user_id: str,
 ) -> HermesSessionBinding | None:
     return db.scalar(
         select(HermesSessionBinding).where(
             HermesSessionBinding.id == session_id,
-            HermesSessionBinding.workspace_id == workspace_id,
             HermesSessionBinding.user_id == user_id,
             HermesSessionBinding.status != "deleted",
         )
@@ -175,7 +167,6 @@ def register_session(
     session = HermesSessionBinding(
         id=local_id or str(uuid4()),
         profile_binding_id=binding.id,
-        workspace_id=binding.workspace_id,
         user_id=binding.user_id,
         hermes_session_id=hermes_session_id,
         title=title,
@@ -244,7 +235,6 @@ class HermesRunRepository:
             id=run_id,
             profile_binding_id=binding.id,
             session_binding_id=session.id if session is not None else None,
-            workspace_id=binding.workspace_id,
             user_id=binding.user_id,
             kind=kind,
             workload_id=workload_id,
@@ -298,13 +288,11 @@ class HermesRunRepository:
         self,
         run_id: str,
         *,
-        workspace_id: str,
         user_id: str,
         for_update: bool = False,
     ) -> HermesRunProjection | None:
         query = select(HermesRunProjection).where(
             HermesRunProjection.id == run_id,
-            HermesRunProjection.workspace_id == workspace_id,
             HermesRunProjection.user_id == user_id,
         )
         if for_update:

@@ -29,10 +29,7 @@ from open_work_hub_api.domains.media.resource_access import (
     resolve_media_access_context,
 )
 
-
-SAFE_MEDIA_CONTENT_TYPES = frozenset(
-    {"image/png", "image/jpeg", "image/gif", "image/webp"}
-)
+SAFE_MEDIA_CONTENT_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
 MEDIA_CONTENT_URL_EXPIRES_SECONDS = 5 * 60
 
 
@@ -66,7 +63,6 @@ def build_media_content_url(
         owner_app_id=context.owner_app_id,
         issuer=content_grant_issuer,
         execution_context_kind=context.execution_context_kind,
-        execution_workspace_id=context.workspace_id,
         route_id=context.route_id,
         source_type=context.source_type,
         source_id=context.source_id,
@@ -91,7 +87,6 @@ def open_media_content_grant(db: Session, *, claims: ContentGrantClaims) -> Cont
         or _normalized_media_content_type(media) not in SAFE_MEDIA_CONTENT_TYPES
         or claims.owner_app_id != context.owner_app_id
         or claims.execution_context_kind != context.execution_context_kind
-        or claims.execution_workspace_id != context.workspace_id
         or claims.route_id != context.route_id
         or claims.source_type != context.source_type
         or claims.source_id != context.source_id

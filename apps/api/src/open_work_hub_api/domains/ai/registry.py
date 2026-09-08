@@ -9,18 +9,14 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel
 
 from open_work_hub_api.domains.ai.schema_compile import compile_input_schemas
-from open_work_hub_api.domains.auth.app_availability import (
-    resolve_platform_enabled_app_ids,
-    resolve_workspace_enabled_app_ids,
-)
-from open_work_hub_api.domains.auth.workspace_apps import iter_workspace_app_catalog
+from open_work_hub_api.domains.auth.app_catalog import iter_app_catalog
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from open_work_hub_api.core.principal import CallerPrincipal
     from open_work_hub_api.domains.ai.internal_agent_contracts import LocalAgentTask
-    from open_work_hub_api.domains.auth.models import User, Workspace
+    from open_work_hub_api.domains.auth.models import User
 
 
 ToolMode = Literal["read", "write"]
@@ -39,16 +35,16 @@ MIN_MAX_OUTPUT_TOKENS = 1_024
 MAX_MAX_OUTPUT_TOKENS = 65_536
 
 ToolHandler = Callable[
-    ["Session", "Workspace", "CallerPrincipal", "User", Mapping[str, Any]],
+    ["Session", "CallerPrincipal", "User", Mapping[str, Any]],
     Any,
 ]
 GatewayArgumentBuilder = Callable[["LocalAgentTask"], Mapping[str, Any]]
 DiscoverabilityPredicate = Callable[
-    ["CallerPrincipal", "WorkspaceContext", "WorkspaceEntitlementView"],
+    ["CallerPrincipal", "AppEntitlementView"],
     bool,
 ]
 PreviewBuilder = Callable[
-    ["CallerPrincipal", "WorkspaceContext", BaseModel | Mapping[str, Any]],
+    ["CallerPrincipal", BaseModel | Mapping[str, Any]],
     "ApprovalPreview",
 ]
 ToolArgsModel = type[BaseModel]
@@ -74,23 +70,9 @@ class ApprovalPreview:
 
 
 @dataclass(frozen=True)
-class WorkspaceContext:
-    workspace_id: str
-    workspace_slug: str
-    display_name: str
-
-
-@dataclass(frozen=True)
-class WorkspaceEntitlementView:
+class AppEntitlementView:
     enabled_app_ids: frozenset[str]
-    platform_enabled_app_ids: frozenset[str] = frozenset()
-    # Reserved for future fine-grained capability rollout. Current discovery
-    # uses app-level enablement and keeps this view additive.
     capability_flags: frozenset[str] = frozenset()
-
-    @property
-    def effective_enabled_app_ids(self) -> frozenset[str]:
-        return self.enabled_app_ids | self.platform_enabled_app_ids
 
 
 @dataclass(frozen=True)
@@ -169,10 +151,10 @@ class AiCapabilityDescriptor:
     preview_builder_id: str | None
     output_projection: OutputProjection
     service_handler_id: str
-    # Workspace app that owns this capability (e.g. "pms", "meeting",
+    # Registered app that owns this capability (e.g. "pms", "meeting",
     # "retrieval-search"). Tool name prefix is not authoritative: ``rag.*``
     # capabilities are owned by the Retrieval Search app.
-    workspace_app_id: str
+    owner_app_id: str
 
 
 @dataclass(frozen=True)
@@ -279,7 +261,7 @@ class ResolvedToolRegistrationPolicy:
     service_handler_id: str
     discoverability_predicate_id: str
     approval_policy: ApprovalPolicy
-    workspace_app_id: str
+    owner_app_id: str
 
 
 def _resolve_tool_registration_policy(
@@ -291,15 +273,15 @@ def _resolve_tool_registration_policy(
     discoverability_predicate_id: str | None,
     preview_builder_id: str | None,
     service_handler_id: str | None,
-    workspace_app_id: str | None,
+    owner_app_id: str | None,
     known_discoverability_predicate_ids: set[str],
     known_preview_builder_ids: set[str],
 ) -> ResolvedToolRegistrationPolicy:
     resolved_service_handler_id = service_handler_id or name
-    resolved_workspace_app_id = (workspace_app_id or owner_domain).strip()
-    if not resolved_workspace_app_id:
-        raise ValueError(f"Tool {name} must declare a workspace_app_id or owner_domain")
-    predicate_id = discoverability_predicate_id or f"{resolved_workspace_app_id}.enabled"
+    resolved_owner_app_id = (owner_app_id or owner_domain).strip()
+    if not resolved_owner_app_id:
+        raise ValueError(f"Tool {name} must declare a owner_app_id or owner_domain")
+    predicate_id = discoverability_predicate_id or f"{resolved_owner_app_id}.enabled"
     if (
         discoverability_predicate_id is not None
         and predicate_id not in known_discoverability_predicate_ids
@@ -317,7 +299,7 @@ def _resolve_tool_registration_policy(
         service_handler_id=resolved_service_handler_id,
         discoverability_predicate_id=predicate_id,
         approval_policy=approval_policy,
-        workspace_app_id=resolved_workspace_app_id,
+        owner_app_id=resolved_owner_app_id,
     )
 
 
@@ -397,9 +379,8 @@ class AiCapabilityRegistry:
         external_max_output_tokens: int = DEFAULT_EXTERNAL_MAX_OUTPUT_TOKENS,
         management_surface: LlmManagementSurface = "llm_routing",
         default_runtime_adapter: AgentRuntimeAdapterId = "chat_completion",
-        allowed_runtime_adapters: tuple[AgentRuntimeAdapterId, ...] | list[
-            AgentRuntimeAdapterId
-        ] = ("chat_completion",),
+        allowed_runtime_adapters: tuple[AgentRuntimeAdapterId, ...]
+        | list[AgentRuntimeAdapterId] = ("chat_completion",),
     ) -> None:
         normalized_workload_id = workload_id.strip().lower()
         normalized_task_kind = task_kind.strip().lower().replace("-", "_")
@@ -464,21 +445,15 @@ class AiCapabilityRegistry:
             raise ValueError(
                 f"LLM workload {normalized_workload_id} must declare model capabilities"
             )
-        normalized_runtime_adapters = _normalize_registration_values(
-            allowed_runtime_adapters
-        )
+        normalized_runtime_adapters = _normalize_registration_values(allowed_runtime_adapters)
         normalized_default_runtime_adapter = default_runtime_adapter.strip().lower()
         if not normalized_runtime_adapters:
-            raise ValueError(
-                f"LLM workload {normalized_workload_id} must allow a runtime adapter"
-            )
+            raise ValueError(f"LLM workload {normalized_workload_id} must allow a runtime adapter")
         if normalized_default_runtime_adapter not in normalized_runtime_adapters:
             raise ValueError(
                 f"LLM workload {normalized_workload_id} default runtime adapter must be allowed"
             )
-        if execution_kind == "chat" and normalized_runtime_adapters != (
-            "chat_completion",
-        ):
+        if execution_kind == "chat" and normalized_runtime_adapters != ("chat_completion",):
             raise ValueError(
                 f"Chat workload {normalized_workload_id} only supports chat_completion"
             )
@@ -662,7 +637,7 @@ class AiCapabilityRegistry:
         preview_builder_id: str | None = None,
         output_projection: OutputProjection = "full",
         service_handler_id: str | None = None,
-        workspace_app_id: str | None = None,
+        owner_app_id: str | None = None,
     ) -> None:
         if name in self.tools or name in self.descriptors:
             raise ValueError(f"Duplicate AI tool registration: {name}")
@@ -674,7 +649,7 @@ class AiCapabilityRegistry:
             discoverability_predicate_id=discoverability_predicate_id,
             preview_builder_id=preview_builder_id,
             service_handler_id=service_handler_id,
-            workspace_app_id=workspace_app_id,
+            owner_app_id=owner_app_id,
             known_discoverability_predicate_ids=set(self._discoverability_predicates),
             known_preview_builder_ids=set(self._preview_builders),
         )
@@ -686,7 +661,7 @@ class AiCapabilityRegistry:
         if policy.discoverability_predicate_id not in self._discoverability_predicates:
             self.register_discoverability_predicate(
                 predicate_id=policy.discoverability_predicate_id,
-                predicate=_app_enabled_predicate(policy.workspace_app_id),
+                predicate=_app_enabled_predicate(policy.owner_app_id),
             )
         descriptor = AiCapabilityDescriptor(
             name=name,
@@ -699,7 +674,7 @@ class AiCapabilityRegistry:
             preview_builder_id=preview_builder_id,
             output_projection=output_projection,
             service_handler_id=policy.service_handler_id,
-            workspace_app_id=policy.workspace_app_id,
+            owner_app_id=policy.owner_app_id,
         )
         self.descriptors[name] = descriptor
         self.tools[name] = RegisteredToolDefinition(
@@ -770,51 +745,28 @@ class AiCapabilityRegistry:
         ]
 
 
-def build_workspace_context(workspace: "Workspace") -> WorkspaceContext:
-    return WorkspaceContext(
-        workspace_id=workspace.id,
-        workspace_slug=workspace.key,
-        display_name=workspace.name,
-    )
+def resolve_app_entitlements(db: "Session", *, user_id: str | None) -> AppEntitlementView:
+    from open_work_hub_api.domains.auth.app_access import allowed_app_ids
 
-
-def resolve_workspace_entitlement_view(
-    db: "Session",
-    *,
-    workspace: "Workspace",
-) -> WorkspaceEntitlementView:
-    return WorkspaceEntitlementView(
-        enabled_app_ids=frozenset(resolve_workspace_enabled_app_ids(db, workspace.id)),
-        platform_enabled_app_ids=frozenset(resolve_platform_enabled_app_ids(db)),
-        capability_flags=frozenset(),
+    return AppEntitlementView(
+        enabled_app_ids=allowed_app_ids(db, user_id=user_id) if user_id else frozenset()
     )
 
 
 def _register_builtin_predicates(registry: AiCapabilityRegistry) -> None:
-    for app in iter_workspace_app_catalog():
-        app_id = app.app_id
+    for app in iter_app_catalog():
         registry.register_discoverability_predicate(
-            predicate_id=f"{app_id}.enabled",
-            predicate=_app_enabled_predicate(
-                app_id,
-                availability_scope=app.availability_scope,
-            ),
+            predicate_id=f"{app.app_id}.enabled", predicate=_app_enabled_predicate(app.app_id)
         )
 
 
-def _app_enabled_predicate(
-    app_id: str,
-    *,
-    availability_scope: Literal["platform", "workspace"] = "workspace",
-) -> DiscoverabilityPredicate:
-    def _predicate(
-        principal: "CallerPrincipal",
-        workspace: WorkspaceContext,
-        entitlements: WorkspaceEntitlementView,
-    ) -> bool:
-        if availability_scope == "platform":
-            return app_id in entitlements.platform_enabled_app_ids
-        return app_id in entitlements.enabled_app_ids
+def _app_enabled_predicate(app_id: str) -> DiscoverabilityPredicate:
+    def _predicate(principal: "CallerPrincipal", entitlements: AppEntitlementView) -> bool:
+        return (
+            principal.kind == "user"
+            and principal.user_id is not None
+            and app_id in entitlements.enabled_app_ids
+        )
 
     return _predicate
 
@@ -882,9 +834,9 @@ def resolve_llm_workload_for_task(
 
 
 def get_chatbot_capable_app_ids() -> tuple[str, ...]:
-    """Workspace app ids that currently expose at least one chatbot tool.
+    """Registered app ids that currently expose at least one chatbot tool.
 
-    Used by the workspace bootstrap response so the chat scope picker stays
+    Used by the company app bootstrap response so the chat scope picker stays
     data-driven: registering a new domain via ``register_ai_capabilities``
     automatically surfaces it in the picker without any frontend change.
     """
@@ -893,7 +845,7 @@ def get_chatbot_capable_app_ids() -> tuple[str, ...]:
     for descriptor in registry.descriptors.values():
         if descriptor.kind != "tool":
             continue
-        seen.setdefault(descriptor.workspace_app_id, None)
+        seen.setdefault(descriptor.owner_app_id, None)
     return tuple(seen.keys())
 
 

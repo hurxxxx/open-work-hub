@@ -66,8 +66,7 @@ class HermesTerminalMcpSocketServer:
             if not stat.S_ISSOCK(mode):
                 self._release_lock()
                 raise RuntimeError(
-                    "Hermes terminal MCP socket path exists and is not a Unix socket: "
-                    f"{self.path}"
+                    f"Hermes terminal MCP socket path exists and is not a Unix socket: {self.path}"
                 )
             self.path.unlink()
 
@@ -128,9 +127,7 @@ class HermesTerminalMcpSocketServer:
             if self._try_acquire_lock():
                 return
             await asyncio.sleep(0.05)
-        raise RuntimeError(
-            "Timed out waiting for the Hermes terminal MCP Unix socket owner."
-        )
+        raise RuntimeError("Timed out waiting for the Hermes terminal MCP Unix socket owner.")
 
     async def _socket_is_healthy(self) -> bool:
         if not self.path.is_socket():

@@ -1,12 +1,12 @@
+import { CalendarDays, ClipboardList, MessagesSquare } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CalendarDays, ClipboardList, MessagesSquare } from 'lucide-react';
 
 import {
   dmManifest,
   FloatingDmWidget,
-  type DmThreadScrollSnapshots,
   useFloatingDmUnreadCount,
+  type DmThreadScrollSnapshots,
 } from '@/src/app-modules/dm';
 import {
   FloatingTodayPlannerWidget,
@@ -16,34 +16,33 @@ import {
 import {
   FloatingPmsWidget,
   pmsManifest,
-  type FloatingPmsWidgetOpenRequest,
   useFloatingPmsAssignedSummary,
+  type FloatingPmsWidgetOpenRequest,
 } from '@/src/app-modules/pms';
+import { useAppBootstrapContext } from '@/src/platform/apps/app-bootstrap-context';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { CALENDAR_EVENTS_CHANGED_EVENT } from '@/src/platform/calendar/calendar-events-changed';
-import { normalizeTimeZone } from '@/src/platform/time/time-utils';
-import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import {
   PersonalWidgetHost,
   type PersonalWidgetSecondaryPanelAdapter,
 } from '@/src/platform/personal-widgets/PersonalWidgetHost';
-import type { PersonalTodoItem } from '@/src/platform/personal-widgets/personal-widgets-api';
 import {
-  FLOATING_DM_OPEN_EVENT,
-  type FloatingDmOpenEventDetail,
-  FLOATING_PMS_OPEN_EVENT,
   dispatchFloatingPmsOpen,
+  FLOATING_DM_OPEN_EVENT,
+  FLOATING_PMS_OPEN_EVENT,
+  type FloatingDmOpenEventDetail,
   type FloatingPmsOpenEventDetail,
 } from '@/src/platform/personal-widgets/floating-panel-events';
+import type { PersonalTodoItem } from '@/src/platform/personal-widgets/personal-widgets-api';
+import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { resolvePersonalWidgetDockPanels } from './personal-widget-registry-model';
 
 export function ShellPersonalWidgetHost() {
   const { token, user } = useAuth();
   const { t } = useTranslation('shell');
-  const workspaceBootstrap = useWorkspaceBootstrapContext();
-  const currentWorkspaceSlug = workspaceBootstrap.data?.workspace.slug ?? null;
+  const appBootstrap = useAppBootstrapContext();
   const plannerEnabled = Boolean(
-    workspaceBootstrap.globalApps?.apps.some(
+    appBootstrap.data?.apps.some(
       (app) => app.app_id === plannerManifest.appBarItem.id,
     ),
   );
@@ -149,7 +148,6 @@ export function ShellPersonalWidgetHost() {
           onCreateTaskOpenRequestHandled={handlePmsCreateTaskOpenRequest}
           openRequest={pmsOpenRequest}
           reloadSeq={pmsReloadSeq}
-          workspaceSlug={currentWorkspaceSlug}
         />
       ),
       shouldActivateOnOpen: (event) => {
@@ -164,7 +162,6 @@ export function ShellPersonalWidgetHost() {
       unreadCount: pmsAssignedCount,
     }),
     [
-      currentWorkspaceSlug,
       handlePmsCreateTaskOpenRequest,
       pmsAssignedCount,
       pmsOpenRequest,

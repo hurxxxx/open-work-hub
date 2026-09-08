@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 
-
 RUNTIME_INTENTS = frozenset({"read", "report", "draft", "write"})
 RUNTIME_OUTPUT_KINDS = frozenset({"answer", "artifact", "approval_preview"})
 
@@ -12,7 +11,7 @@ RUNTIME_OUTPUT_KINDS = frozenset({"answer", "artifact", "approval_preview"})
 class AgentDefinition:
     agent_id: str
     purpose: str
-    workspace_app_ids: frozenset[str] = frozenset()
+    owner_app_ids: frozenset[str] = frozenset()
     graph_tool_names: frozenset[str] = frozenset()
     domains: frozenset[str] = frozenset()
     output_kinds: frozenset[str] = RUNTIME_OUTPUT_KINDS
@@ -30,31 +29,31 @@ _BUILTIN_AGENT_DEFINITIONS = (
     AgentDefinition(
         agent_id="domain.pms",
         purpose="Read PMS task, list, status, and task-draft context.",
-        workspace_app_ids=frozenset({"pms"}),
+        owner_app_ids=frozenset({"pms"}),
         domains=frozenset({"pms"}),
     ),
     AgentDefinition(
         agent_id="domain.meeting",
         purpose="Read meeting transcript, insight, action, and decision context.",
-        workspace_app_ids=frozenset({"meeting"}),
+        owner_app_ids=frozenset({"meeting"}),
         domains=frozenset({"meeting"}),
     ),
     AgentDefinition(
         agent_id="domain.docs",
         purpose="Read document hub and page context.",
-        workspace_app_ids=frozenset({"docs"}),
+        owner_app_ids=frozenset({"docs"}),
         domains=frozenset({"docs"}),
     ),
     AgentDefinition(
         agent_id="domain.planner",
         purpose="Read calendar and availability context.",
-        workspace_app_ids=frozenset({"planner"}),
+        owner_app_ids=frozenset({"planner"}),
         domains=frozenset({"planner"}),
     ),
     AgentDefinition(
         agent_id="domain.rag",
         purpose="Read cross-domain grounded-search context.",
-        workspace_app_ids=frozenset({"chatbot"}),
+        owner_app_ids=frozenset({"chatbot"}),
         graph_tool_names=frozenset(
             {"retrieval.search", "retrieval.list_sources", "rag.query", "rag.list_sources"}
         ),
@@ -64,7 +63,7 @@ _BUILTIN_AGENT_DEFINITIONS = (
     AgentDefinition(
         agent_id="search.planner",
         purpose="Build deterministic search plans for evidence collection.",
-        workspace_app_ids=frozenset({"chatbot"}),
+        owner_app_ids=frozenset({"chatbot"}),
         graph_tool_names=frozenset({"retrieval.list_sources", "rag.list_sources"}),
         domains=frozenset({"rag"}),
         requires_non_empty_scope=True,
@@ -72,7 +71,7 @@ _BUILTIN_AGENT_DEFINITIONS = (
     AgentDefinition(
         agent_id="search.executor",
         purpose="Execute internal search and domain-service adapters.",
-        workspace_app_ids=frozenset({"chatbot"}),
+        owner_app_ids=frozenset({"chatbot"}),
         graph_tool_names=frozenset(
             {"retrieval.search", "retrieval.list_sources", "rag.query", "rag.list_sources"}
         ),
@@ -82,14 +81,14 @@ _BUILTIN_AGENT_DEFINITIONS = (
     AgentDefinition(
         agent_id="verifier.grounding",
         purpose="Check evidence coverage, unsupported claims, and policy risk.",
-        workspace_app_ids=frozenset({"chatbot"}),
+        owner_app_ids=frozenset({"chatbot"}),
         domains=frozenset({"rag"}),
         requires_non_empty_scope=True,
     ),
     AgentDefinition(
         agent_id="external.search",
         purpose="Execute external search through the runtime adapter.",
-        workspace_app_ids=frozenset({"chatbot"}),
+        owner_app_ids=frozenset({"chatbot"}),
         domains=frozenset({"rag"}),
         requires_non_empty_scope=True,
         direct_invocation_allowed=False,

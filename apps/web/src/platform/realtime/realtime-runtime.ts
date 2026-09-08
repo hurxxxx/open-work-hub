@@ -2,6 +2,7 @@ import {
   REALTIME_CLIENT_EVENT_TYPES,
   REALTIME_SERVER_EVENT_TYPES,
   type DocsPagesRealtimeSubscriptionMessage,
+  type WhiteboardAccessRealtimeSubscriptionMessage,
 } from '@open-work-hub/contracts/realtime';
 
 export type RealtimeStatus = 'connecting' | 'live' | 'offline';
@@ -14,7 +15,9 @@ export type RealtimeEvent = {
   published_at_ms?: number;
 };
 
-export type RealtimeSubscriptionMessage = DocsPagesRealtimeSubscriptionMessage;
+export type RealtimeSubscriptionMessage =
+  | DocsPagesRealtimeSubscriptionMessage
+  | WhiteboardAccessRealtimeSubscriptionMessage;
 
 export type RealtimeListener = (event: RealtimeEvent) => void;
 
@@ -67,7 +70,11 @@ const SOCKET_OPEN_READY_STATE = 1;
 const POLICY_CLOSE_CODES = new Set([1008, 4401, 4403, 4409]);
 
 function subscriptionKey(message: RealtimeSubscriptionMessage): string {
-  return `${message.topic}:${message.key}`;
+  return JSON.stringify([
+    message.topic,
+    message.key,
+    message.share_token ?? null,
+  ]);
 }
 
 function sendJson(
@@ -284,6 +291,7 @@ export function createRealtimeRuntime({
             type: REALTIME_CLIENT_EVENT_TYPES.unsubscribe,
             topic: message.topic,
             key: message.key,
+            share_token: message.share_token ?? null,
           });
         }
       };

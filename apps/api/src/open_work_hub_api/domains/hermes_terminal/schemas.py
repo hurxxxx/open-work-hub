@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field, model_validator
 
 from open_work_hub_api.core.settings import HERMES_MODEL, HERMES_PROVIDER, HERMES_RELEASE
 
-
 HermesTerminalMode = Literal["standard", "yolo"]
 HermesTerminalStatus = Literal[
     "starting",
@@ -32,7 +31,6 @@ class HermesTerminalConfigResponse(BaseModel):
     idle_timeout_seconds: int
     artifact_retention_days: int
     max_sessions_per_user: int
-    max_sessions_per_workspace_user: int
     workspace_live_max_bytes: int
 
 

@@ -1,7 +1,7 @@
-import { useRef } from 'react';
-import type * as React from 'react';
-import { createPortal } from 'react-dom';
 import { FileText, FolderOpen, List as ListIcon } from 'lucide-react';
+import type * as React from 'react';
+import { useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   useDismissOnOutside,

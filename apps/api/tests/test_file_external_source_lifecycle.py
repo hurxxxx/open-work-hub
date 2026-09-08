@@ -10,15 +10,14 @@ from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 
+from company_admission_fixture import company_authority_tables, seed_company_app_access
+
 from open_work_hub_api.core.db import Base
-from open_work_hub_api.domains.auth.models import (
-    Team,
-    TeamMember,
-    User,
-    UserSystemRole,
-    Workspace,
-    WorkspaceUserBinding,
-)
+from open_work_hub_api.domains.auth.models import User, UserSystemRole
+from open_work_hub_api.domains.pms.space_models import Team, TeamMember, SpaceGroupBinding
+from open_work_hub_api.domains.groups.models import Group, GroupMember
+from open_work_hub_api.domains.source_access.policy import SourceAclPolicy
+from sqlalchemy.exc import IntegrityError
 from open_work_hub_api.domains.files import external_lifecycle, service as files_service
 from open_work_hub_api.domains.files.external_access import authorize_explicit_file_ids
 from open_work_hub_api.domains.files.external_lifecycle import ExternalFileGrant
@@ -35,17 +34,14 @@ from open_work_hub_api.domains.files.source_access import (
     can_read_file,
     has_accessible_file,
 )
-from open_work_hub_api.domains.organization.models import OrganizationUnit
 from open_work_hub_api.domains.rag.contracts import RagSyncOperation
 from open_work_hub_api.domains.retrieval.models import RetrievalPartition
 
 
-WORKSPACE_ID = "workspace-source"
-OTHER_WORKSPACE_ID = "workspace-other"
 CORPUS_ID = "corpus-source"
 PARTITION_ID = "11111111111111111111111111111111"
 PLATFORM_ADMIN_ID = "platform-admin"
-WORKSPACE_ADMIN_ID = "workspace-admin"
+UNGRANTED_USER_ID = "ungranted-user"
 MEMBER_ID = "member"
 OTHER_ID = "other-user"
 TEAM_MEMBER_ID = "team-member"
@@ -66,13 +62,10 @@ def db() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
-            OrganizationUnit.__table__,
-            User.__table__,
-            UserSystemRole.__table__,
-            WorkspaceUserBinding.__table__,
+            *company_authority_tables(),
             Team.__table__,
             TeamMember.__table__,
+            SpaceGroupBinding.__table__,
             RetrievalPartition.__table__,
             FileManagerCorpus.__table__,
             FileManagerFolder.__table__,
@@ -83,17 +76,12 @@ def db() -> Session:
         ],
     )
     with Session(engine) as session:
-        session.add_all(
-            [
-                Workspace(id=WORKSPACE_ID, key="source", name="Source"),
-                Workspace(id=OTHER_WORKSPACE_ID, key="other", name="Other"),
-            ]
-        )
+        seed_company_app_access(session)
         session.flush()
         session.add_all(
             [
                 _user(PLATFORM_ADMIN_ID),
-                _user(WORKSPACE_ADMIN_ID),
+                _user(UNGRANTED_USER_ID),
                 _user(MEMBER_ID),
                 _user(OTHER_ID),
                 _user(TEAM_MEMBER_ID),
@@ -107,24 +95,22 @@ def db() -> Session:
                     user_id=PLATFORM_ADMIN_ID,
                     role="platform_admin",
                 ),
-                _binding("workspace-admin-binding", WORKSPACE_ADMIN_ID, role="admin"),
-                _binding("member-binding", MEMBER_ID),
-                _binding("team-member-binding", TEAM_MEMBER_ID),
                 Team(
                     id=TEAM_ID,
-                    workspace_id=WORKSPACE_ID,
                     key="search",
                     name="Search",
                 ),
                 Team(
                     id=OTHER_TEAM_ID,
-                    workspace_id=OTHER_WORKSPACE_ID,
                     key="other-search",
                     name="Other Search",
                 ),
             ]
         )
         session.flush()
+        session.add(Group(id="source-group", name="Source audience", kind="manual"))
+        session.flush()
+        session.add(GroupMember(group_id="source-group", user_id=MEMBER_ID))
         session.add(
             TeamMember(
                 id="team-member-link",
@@ -145,9 +131,7 @@ def db() -> Session:
             RetrievalPartition(
                 id=PARTITION_ID,
                 source_namespace="files",
-                managed_workspace_id=WORKSPACE_ID,
-                candidate_scope_kind="workspace",
-                candidate_workspace_id=WORKSPACE_ID,
+                candidate_scope_kind="company",
                 candidate_user_id=None,
                 state="active",
                 metadata_version=1,
@@ -159,8 +143,7 @@ def db() -> Session:
             FileManagerCorpus(
                 id=CORPUS_ID,
                 name="External documents",
-                managed_workspace_id=WORKSPACE_ID,
-                access_scope_kind="workspace",
+                access_scope_kind="company",
                 retrieval_partition_id=PARTITION_ID,
                 created_by_id=PLATFORM_ADMIN_ID,
                 source_managed=True,
@@ -207,7 +190,6 @@ def test_existing_corpus_defaults_remain_cohort() -> None:
     corpus = FileManagerCorpus(
         id="legacy-corpus",
         name="Legacy",
-        managed_workspace_id=WORKSPACE_ID,
         retrieval_partition_id=PARTITION_ID,
         created_by_id=PLATFORM_ADMIN_ID,
     )
@@ -218,16 +200,11 @@ def test_existing_corpus_defaults_remain_cohort() -> None:
     assert FileManagerCorpus.authorization_mode.default.arg == "cohort"
 
 
-def test_source_managed_corpus_scope_cannot_drift_from_source_binding(db: Session) -> None:
-    with pytest.raises(files_service.FileCorpusConflict, match="scope is immutable"):
-        files_service.transition_file_corpus(
-            db,
-            corpus_id=CORPUS_ID,
-            actor=db.get(User, PLATFORM_ADMIN_ID),
-            expected_metadata_version=1,
-            access_scope_kind="company",
-            reason="Source binding must remain stable",
-        )
+def test_source_managed_corpus_scope_cannot_drift_from_company_scope(db: Session) -> None:
+    corpus = db.get(FileManagerCorpus, CORPUS_ID)
+    corpus.access_scope_kind = "personal"
+    with pytest.raises(IntegrityError):
+        db.flush()
 
 
 def test_explicit_acl_denies_workspace_admin_and_allows_platform_admin(
@@ -256,16 +233,15 @@ def test_explicit_acl_denies_workspace_admin_and_allows_platform_admin(
     assert source_metadata.department == "Engineering"
     assert source_metadata.document_type == "technical"
     assert source_metadata.raw_metadata["department"] == "R&D"
-    assert can_read_file(_policy(db, MEMBER_ID, "member"), result.file.id)
-    assert not can_read_file(_policy(db, WORKSPACE_ADMIN_ID, "admin"), result.file.id)
-    assert can_read_file(_policy(db, PLATFORM_ADMIN_ID, None), result.file.id)
-    assert authorize_many_files(_policy(db, WORKSPACE_ADMIN_ID, "admin"), [result.file.id]) == set()
-    assert has_accessible_file(_policy(db, MEMBER_ID, "member"))
+    assert can_read_file(_policy(db, MEMBER_ID), result.file.id)
+    assert not can_read_file(_policy(db, UNGRANTED_USER_ID), result.file.id)
+    assert can_read_file(_policy(db, PLATFORM_ADMIN_ID), result.file.id)
+    assert authorize_many_files(_policy(db, UNGRANTED_USER_ID), [result.file.id]) == set()
+    assert has_accessible_file(_policy(db, MEMBER_ID))
     assert [
         file.id
         for file in files_service.list_accessible_files(
             db,
-            workspace=db.get(Workspace, WORKSPACE_ID),
             user=db.get(User, MEMBER_ID),
             accessible_folder_ids=set(),
         )
@@ -273,8 +249,7 @@ def test_explicit_acl_denies_workspace_admin_and_allows_platform_admin(
     assert (
         files_service.list_accessible_files(
             db,
-            workspace=db.get(Workspace, WORKSPACE_ID),
-            user=db.get(User, WORKSPACE_ADMIN_ID),
+            user=db.get(User, UNGRANTED_USER_ID),
             accessible_folder_ids=set(),
         )
         == []
@@ -282,21 +257,19 @@ def test_explicit_acl_denies_workspace_admin_and_allows_platform_admin(
     with pytest.raises(files_service.FileCorpusAccessDenied):
         files_service.upload_file(
             db,
-            workspace=db.get(Workspace, WORKSPACE_ID),
-            user=db.get(User, WORKSPACE_ADMIN_ID),
+            user=db.get(User, UNGRANTED_USER_ID),
             filename="manual.txt",
             content_type="text/plain",
             content=BytesIO(b"manual"),
             size_bytes=6,
             folder_id=None,
-            visibility="workspace",
+            visibility="company",
             corpus_id=CORPUS_ID,
         )
     with pytest.raises(files_service.FileCorpusAccessDenied):
         files_service.delete_file(
             db,
-            workspace=db.get(Workspace, WORKSPACE_ID),
-            user=db.get(User, WORKSPACE_ADMIN_ID),
+            user=db.get(User, UNGRANTED_USER_ID),
             file_id=result.file.id,
         )
 
@@ -307,7 +280,6 @@ def test_explicit_acl_denies_workspace_admin_and_allows_platform_admin(
         file.id
         for file in files_service.list_accessible_files(
             db,
-            workspace=db.get(Workspace, WORKSPACE_ID),
             user=db.get(User, MEMBER_ID),
             accessible_folder_ids=set(),
         )
@@ -315,8 +287,7 @@ def test_explicit_acl_denies_workspace_admin_and_allows_platform_admin(
     assert (
         files_service.list_accessible_files(
             db,
-            workspace=db.get(Workspace, OTHER_WORKSPACE_ID),
-            user=db.get(User, MEMBER_ID),
+            user=db.get(User, OTHER_ID),
             accessible_folder_ids=set(),
         )
         == []
@@ -325,20 +296,19 @@ def test_explicit_acl_denies_workspace_admin_and_allows_platform_admin(
     with pytest.raises(HTTPException) as denied:
         files_service.require_file_access(
             db,
-            workspace=db.get(Workspace, WORKSPACE_ID),
-            user=db.get(User, WORKSPACE_ADMIN_ID),
+            user=db.get(User, UNGRANTED_USER_ID),
             file_id=result.file.id,
         )
     assert denied.value.status_code == 403
 
 
 @pytest.mark.parametrize(
-    ("grant", "user_id", "workspace_id"),
+    ("grant", "user_id"),
     [
-        (ExternalFileGrant("company"), OTHER_ID, WORKSPACE_ID),
-        (ExternalFileGrant("workspace", WORKSPACE_ID), MEMBER_ID, WORKSPACE_ID),
-        (ExternalFileGrant("user", MEMBER_ID), MEMBER_ID, WORKSPACE_ID),
-        (ExternalFileGrant("team", TEAM_ID), TEAM_MEMBER_ID, WORKSPACE_ID),
+        (ExternalFileGrant("company"), OTHER_ID),
+        (ExternalFileGrant("group", "source-group"), MEMBER_ID),
+        (ExternalFileGrant("user", MEMBER_ID), MEMBER_ID),
+        (ExternalFileGrant("team", TEAM_ID), TEAM_MEMBER_ID),
     ],
 )
 def test_each_explicit_grant_type_uses_current_identity_state(
@@ -346,7 +316,6 @@ def test_each_explicit_grant_type_uses_current_identity_state(
     lifecycle_spies: SimpleNamespace,
     grant: ExternalFileGrant,
     user_id: str,
-    workspace_id: str,
 ) -> None:
     del lifecycle_spies
     result = _upsert(
@@ -361,14 +330,12 @@ def test_each_explicit_grant_type_uses_current_identity_state(
         db,
         file_ids=[result.file.id],
         user_id=user_id,
-        workspace_id=workspace_id,
     ) == {result.file.id}
     assert authorize_explicit_file_ids(
         db,
         file_ids=[result.file.id],
-        user_id=WORKSPACE_ADMIN_ID,
-        workspace_id=workspace_id,
-    ) == ({result.file.id} if grant.grant_type in {"company", "workspace"} else set())
+        user_id=UNGRANTED_USER_ID,
+    ) == ({result.file.id} if grant.grant_type == "company" else set())
 
 
 def test_unresolved_or_empty_explicit_acl_fails_closed_without_partial_grants(
@@ -403,19 +370,19 @@ def test_unresolved_or_empty_explicit_acl_fails_closed_without_partial_grants(
         )
         == 0
     )
-    assert not can_read_file(_policy(db, MEMBER_ID, "member"), unresolved.file.id)
-    assert not can_read_file(_policy(db, MEMBER_ID, "member"), empty.file.id)
-    assert can_read_file(_policy(db, PLATFORM_ADMIN_ID, None), unresolved.file.id)
-    assert can_read_file(_policy(db, PLATFORM_ADMIN_ID, None), empty.file.id)
+    assert not can_read_file(_policy(db, MEMBER_ID), unresolved.file.id)
+    assert not can_read_file(_policy(db, MEMBER_ID), empty.file.id)
+    assert can_read_file(_policy(db, PLATFORM_ADMIN_ID), unresolved.file.id)
+    assert can_read_file(_policy(db, PLATFORM_ADMIN_ID), empty.file.id)
 
-    wrong_workspace_team = _upsert(
+    unknown_team = _upsert(
         db,
-        external_id="wrong-workspace-team",
+        external_id="unknown-team",
         payload=b"wrong-team",
-        grants=[ExternalFileGrant("team", OTHER_TEAM_ID)],
+        grants=[ExternalFileGrant("team", "unknown-team")],
     )
-    assert not wrong_workspace_team.acl_resolved
-    assert not can_read_file(_policy(db, TEAM_MEMBER_ID, "member"), wrong_workspace_team.file.id)
+    assert not unknown_team.acl_resolved
+    assert not can_read_file(_policy(db, TEAM_MEMBER_ID), unknown_team.file.id)
 
 
 def test_external_upsert_delete_and_revive_are_idempotent(
@@ -479,7 +446,7 @@ def test_external_upsert_delete_and_revive_are_idempotent(
         first_key,
         deleted_storage_key,
     ]
-    assert not can_read_file(_policy(db, MEMBER_ID, "member"), replaced.file.id)
+    assert not can_read_file(_policy(db, MEMBER_ID), replaced.file.id)
     assert not external_lifecycle.delete_external_file(
         db,
         actor=db.get(User, PLATFORM_ADMIN_ID),
@@ -503,7 +470,7 @@ def test_external_upsert_delete_and_revive_are_idempotent(
         job.storage_key != revived.file.storage_key
         for job in db.scalars(select(FileManagerStorageCleanupJob))
     )
-    assert can_read_file(_policy(db, MEMBER_ID, "member"), revived.file.id)
+    assert can_read_file(_policy(db, MEMBER_ID), revived.file.id)
     assert lifecycle_spies.sync_operations == [
         RagSyncOperation.UPSERT,
         RagSyncOperation.UPSERT,
@@ -533,7 +500,7 @@ def test_acl_only_change_uses_visibility_event_and_quarantine_is_idempotent(
     db.commit()
     assert acl_changed.changed
     assert lifecycle_spies.sync_operations[-1] == RagSyncOperation.VISIBILITY_UPDATE
-    assert not can_read_file(_policy(db, MEMBER_ID, "member"), created.file.id)
+    assert not can_read_file(_policy(db, MEMBER_ID), created.file.id)
 
     assert external_lifecycle.quarantine_external_file(
         db,
@@ -549,7 +516,7 @@ def test_acl_only_change_uses_visibility_event_and_quarantine_is_idempotent(
         corpus_id=CORPUS_ID,
         external_id="acl-change",
     )
-    assert can_read_file(_policy(db, PLATFORM_ADMIN_ID, None), created.file.id)
+    assert can_read_file(_policy(db, PLATFORM_ADMIN_ID), created.file.id)
 
 
 def test_typed_metadata_change_reuses_extraction_and_raw_metadata_is_bounded(
@@ -800,22 +767,8 @@ def _upsert(
     )
 
 
-def _policy(db: Session, user_id: str, workspace_role: str | None) -> SimpleNamespace:
-    return SimpleNamespace(
-        db=db,
-        workspace=db.get(Workspace, WORKSPACE_ID),
-        user=db.get(User, user_id),
-        workspace_role=workspace_role,
-    )
-
-
-def _binding(binding_id: str, user_id: str, *, role: str = "member"):
-    return WorkspaceUserBinding(
-        id=binding_id,
-        workspace_id=WORKSPACE_ID,
-        user_id=user_id,
-        role=role,
-    )
+def _policy(db: Session, user_id: str) -> SourceAclPolicy:
+    return SourceAclPolicy.for_user(db, user=db.get(User, user_id))
 
 
 def _user(user_id: str) -> User:

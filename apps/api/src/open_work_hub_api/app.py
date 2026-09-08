@@ -6,7 +6,8 @@ from pathlib import Path
 from fastapi import FastAPI, Request, Response, status
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response as FastAPIResponse
+from fastapi.responses import JSONResponse
+from fastapi.responses import Response as FastAPIResponse
 from opentelemetry.trace import SpanKind
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -33,16 +34,14 @@ from open_work_hub_api.core.telemetry import (
     extract_trace_context,
     get_tracer,
 )
-from open_work_hub_api.open_work_hub_desktop_updates import (
-    mount_open_work_hub_desktop_update_feeds,
-    prepare_open_work_hub_desktop_update_dirs,
-)
-from open_work_hub_api.frontend import mount_frontend
-from open_work_hub_api.domains.ai.runtime.registry_validation import RuntimeRegistryValidationError
-from open_work_hub_api.domains.ai.runtime_status import inspect_registered_llm_runtime
 from open_work_hub_api.domains.ai.privacy_filter import (
     check_privacy_filter_health,
     prepare_privacy_filter,
+)
+from open_work_hub_api.domains.ai.runtime.registry_validation import RuntimeRegistryValidationError
+from open_work_hub_api.domains.ai.runtime_status import inspect_registered_llm_runtime
+from open_work_hub_api.domains.hermes_terminal.mcp_socket_server import (
+    HermesTerminalMcpSocketServer,
 )
 from open_work_hub_api.domains.rag.runtime import (
     attach_rag_queue_health,
@@ -50,14 +49,16 @@ from open_work_hub_api.domains.rag.runtime import (
     get_rag_runtime_health,
     preload_rag_runtime,
 )
-from open_work_hub_api.domains.hermes_terminal.mcp_socket_server import (
-    HermesTerminalMcpSocketServer,
-)
 from open_work_hub_api.external_runtime import ApiExternalRuntime, ProductionApiExternalRuntime
+from open_work_hub_api.frontend import mount_frontend
+from open_work_hub_api.open_work_hub_desktop_updates import (
+    mount_open_work_hub_desktop_update_feeds,
+    prepare_open_work_hub_desktop_update_dirs,
+)
 from open_work_hub_api.openapi_contract import stable_operation_id
 from open_work_hub_api.platform_extensions import initialize_platform_extensions
-from open_work_hub_api.version import RUNTIME_REVISION, VERSION as APP_VERSION
-
+from open_work_hub_api.version import RUNTIME_REVISION
+from open_work_hub_api.version import VERSION as APP_VERSION
 
 logger = logging.getLogger(__name__)
 

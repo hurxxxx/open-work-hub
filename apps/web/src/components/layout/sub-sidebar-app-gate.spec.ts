@@ -9,8 +9,8 @@ describe('resolveAppSidebarConfig', () => {
     expect(
       resolveAppSidebarConfig({
         activeAppId: 'pms',
-        canReadWorkspace: true,
-        enabledWorkspaceAppIds: [],
+        canReadApp: true,
+        enabledShellAppIds: [],
         globalAppIds: [],
         load,
       }),
@@ -24,8 +24,8 @@ describe('resolveAppSidebarConfig', () => {
     expect(
       resolveAppSidebarConfig({
         activeAppId: 'pms',
-        canReadWorkspace: true,
-        enabledWorkspaceAppIds: ['pms'],
+        canReadApp: true,
+        enabledShellAppIds: ['pms'],
         globalAppIds: [],
         load,
       }),
@@ -33,8 +33,8 @@ describe('resolveAppSidebarConfig', () => {
     expect(
       resolveAppSidebarConfig({
         activeAppId: 'community',
-        canReadWorkspace: false,
-        enabledWorkspaceAppIds: [],
+        canReadApp: false,
+        enabledShellAppIds: [],
         globalAppIds: ['community'],
         load,
       }),

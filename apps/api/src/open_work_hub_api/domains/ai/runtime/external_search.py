@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass
-import hashlib
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,7 +27,6 @@ from open_work_hub_api.domains.ai.runtime.summary_fields import (
     summary_string,
     summary_string_list,
 )
-
 
 EXTERNAL_SEARCH_ADAPTER_ID = "external_search_v0"
 
@@ -94,15 +93,12 @@ class ExternalSearchExecutionSummaryView:
             return ()
         fallback_count = max(self.result_count, 1)
         return tuple(
-            f"external-search:{query_ref}:result-{index}"
-            for index in range(1, fallback_count + 1)
+            f"external-search:{query_ref}:result-{index}" for index in range(1, fallback_count + 1)
         )
 
 
 _SEARCH_REQUEST_SUMMARY_PROJECTION = external_request_summary_projection(
-    (
-        RedactedSummaryField("query_present", source_attr="query", codec="presence"),
-    )
+    (RedactedSummaryField("query_present", source_attr="query", codec="presence"),)
 )
 _SEARCH_EXECUTION_SUMMARY_PROJECTION = external_execution_summary_projection(
     (
@@ -273,10 +269,7 @@ def _cache_key(
     query_digest: str,
 ) -> str:
     provider_key = provider or "unknown"
-    return (
-        f"{EXTERNAL_SEARCH_ADAPTER_ID}:"
-        f"{execution_provider}:{provider_key}:{query_digest}"
-    )
+    return f"{EXTERNAL_SEARCH_ADAPTER_ID}:{execution_provider}:{provider_key}:{query_digest}"
 
 
 def _mock_result_refs(*, query_digest: str, result_count: int) -> list[str]:

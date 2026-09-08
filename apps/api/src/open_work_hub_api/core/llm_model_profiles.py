@@ -6,7 +6,6 @@ from typing import Any, Mapping, Protocol
 
 from open_work_hub_api.core.llm_provider_registry import external_llm_provider_descriptor
 
-
 LOCAL_DEFAULT_REASONING_EFFORT = "none"
 EXTERNAL_DEFAULT_REASONING_EFFORT = "medium"
 

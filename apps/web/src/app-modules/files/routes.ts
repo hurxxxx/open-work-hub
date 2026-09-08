@@ -1,12 +1,12 @@
-import { createElement, lazy } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import {
   getAppRouteChrome,
   getAppRoutePattern,
 } from '@open-work-hub/contracts/app-routes';
+import { createElement, lazy } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const FileManagerView = lazy(() =>
   import('./views/FileManagerView').then((module) => ({
@@ -36,7 +36,7 @@ function FilesWorkspaceView() {
   );
 }
 
-export const filesWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const filesAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'files',
     chrome: getAppRouteChrome('files.chat'),

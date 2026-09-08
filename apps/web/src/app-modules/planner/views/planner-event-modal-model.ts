@@ -1,4 +1,3 @@
-import type { PlannerEvent, PlannerEventCreateInput } from '../api/planner-api';
 import {
   addLocalCalendarDays,
   addNativeDateInputDays,
@@ -7,6 +6,7 @@ import {
   nativeDateTimeInputValueToIso,
   parseNativeDateInputValue,
 } from '@/src/platform/time/native-date-input';
+import type { PlannerEvent, PlannerEventCreateInput } from '../api/planner-api';
 import { defaultTimedRange } from './planner-event-default-time';
 
 export interface PlannerEventModalRange {

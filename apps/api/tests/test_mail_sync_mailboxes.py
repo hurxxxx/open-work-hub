@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import Base
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.mail.clients import MailboxInfo, MailConnectionSettings
 from open_work_hub_api.domains.mail.models import MailAccount, MailMailbox, MailSyncState
 from open_work_hub_api.domains.mail.sync_mailboxes import (
@@ -21,7 +21,6 @@ def _session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
             User.__table__,
             MailAccount.__table__,
             MailMailbox.__table__,
@@ -75,7 +74,6 @@ def _seed_account(session: Session) -> MailAccount:
     account = _account()
     session.add_all(
         [
-            Workspace(id="workspace-1", key="workspace", name="Workspace", description=""),
             User(
                 id="user-1",
                 login_id="user-1",

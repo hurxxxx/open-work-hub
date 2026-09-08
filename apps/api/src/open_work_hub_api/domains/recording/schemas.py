@@ -5,7 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 RecordingAudioStatus = Literal["local_only", "uploading", "saved", "failed"]
 RecordingProcessingStatus = Literal["pending", "transcribing", "done", "failed"]
 RecordingSummaryStatus = Literal["pending", "analyzing", "verifying", "done", "failed"]
@@ -54,7 +53,6 @@ class RecordingListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    workspace_id: str
     owner_id: str
     title: str
     started_at: datetime
@@ -101,7 +99,6 @@ class RecordingUploadInitRequest(BaseModel):
 
 class RecordingUploadOut(BaseModel):
     id: str
-    workspace_id: str
     uploaded_by_id: str
     idempotency_key: str
     status: str

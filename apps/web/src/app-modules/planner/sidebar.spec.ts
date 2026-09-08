@@ -4,12 +4,11 @@ import type { AppSidebarActionContext } from '@/src/app/shell/sidebar-types';
 import { plannerSidebarConfig } from './sidebar';
 
 function actionContext(
-  enabledWorkspaceAppIds: readonly string[],
+  enabledShellAppIds: readonly string[],
 ): AppSidebarActionContext {
   return {
     currentPathname: '/apps/planner',
-    currentWorkspaceSlug: 'general',
-    enabledWorkspaceAppIds,
+    enabledShellAppIds,
     navigate: vi.fn() as unknown as AppSidebarActionContext['navigate'],
     user: null,
   };

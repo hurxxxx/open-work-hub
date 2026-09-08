@@ -1,11 +1,11 @@
-import { createElement, lazy } from 'react';
 import {
   getAppRouteChrome,
   getAppRoutePattern,
 } from '@open-work-hub/contracts/app-routes';
+import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const HermesTerminalView = lazy(() =>
   import('./views/HermesTerminalView').then((module) => ({
@@ -13,7 +13,7 @@ const HermesTerminalView = lazy(() =>
   })),
 );
 
-export const hermesTerminalWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const hermesTerminalAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'hermes-terminal',
     chrome: getAppRouteChrome('hermes-terminal.root'),

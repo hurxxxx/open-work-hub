@@ -1,11 +1,11 @@
 import { bentoAiBackgroundWorkSource } from './background-work';
 import { bentoManifest } from './manifest';
-import { bentoWorkspaceRoutes } from './routes';
+import { bentoAppRoutes } from './routes';
 
-export { bentoAiBackgroundWorkSource, bentoManifest, bentoWorkspaceRoutes };
+export { bentoAiBackgroundWorkSource, bentoAppRoutes, bentoManifest };
 
 export const bentoModule = {
   backgroundWorkSources: [bentoAiBackgroundWorkSource],
   manifest: bentoManifest,
-  workspaceRoutes: bentoWorkspaceRoutes,
+  appRoutes: bentoAppRoutes,
 } as const;

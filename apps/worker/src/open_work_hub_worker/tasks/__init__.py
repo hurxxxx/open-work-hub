@@ -1,6 +1,10 @@
 """Background tasks for the worker app."""
 
-from open_work_hub_worker.tasks import (  # noqa: F401
+from open_work_hub_worker.runtime import ensure_api_src_on_path
+
+ensure_api_src_on_path()
+
+from open_work_hub_worker.tasks import (  # noqa: E402, F401
     ai_graph,
     documents,
     file_storage_cleanup,

@@ -16,8 +16,10 @@ from open_work_hub_api.domains.ai.boundary_safety import (
     normalize_content_origin,
     normalize_external_safety_values,
 )
-from open_work_hub_api.domains.ai.masking import ExternalPayloadMaskingResult
-from open_work_hub_api.domains.ai.masking import evaluate_external_payload_masking
+from open_work_hub_api.domains.ai.masking import (
+    ExternalPayloadMaskingResult,
+    evaluate_external_payload_masking,
+)
 from open_work_hub_api.domains.ai.runtime.external_egress import (
     ExternalCapability,
     allowed_external_providers,
@@ -29,6 +31,11 @@ from open_work_hub_api.domains.ai.runtime.external_egress_sanitizer import (
 from open_work_hub_api.domains.ai.security_detected_values import (
     collect_ai_security_detected_values,
     serialize_detected_values,
+)
+from open_work_hub_api.domains.ai.security_pipeline_exemption import (
+    AI_SECURITY_PIPELINE_EXEMPT_REASON,
+    AiSecurityPipelineExemptionDecision,
+    resolve_ai_security_pipeline_exemption,
 )
 from open_work_hub_api.domains.ai.security_policy import (
     AI_SECURITY_ENFORCEMENT_DISABLED_REASON,
@@ -49,12 +56,6 @@ from open_work_hub_api.domains.ai.security_policy import (
     hard_external_transfer_blockers,
     resolve_ai_security_external_transfer_exception,
 )
-from open_work_hub_api.domains.ai.security_pipeline_exemption import (
-    AI_SECURITY_PIPELINE_EXEMPT_REASON,
-    AiSecurityPipelineExemptionDecision,
-    resolve_ai_security_pipeline_exemption,
-)
-
 
 ResultT = TypeVar("ResultT")
 ExternalGatewayStatus = str
@@ -80,7 +81,6 @@ class AiExternalCapabilityPolicyViolation(ValueError):
 @dataclass(frozen=True)
 class AiExternalCapabilityRequest:
     source: str
-    workspace_id: str
     task_kind: str
     capability: str
     provider: str | None
@@ -193,7 +193,6 @@ class AiExternalCapabilityExecution:
             actor_user_id=request.actor_user_id,
             principal_kind=request.principal_kind,
             principal_id=request.principal_id,
-            workspace_id=request.workspace_id,
             task_kind=request.task_kind,
             capability=request.capability,
             provider=decision.provider,
@@ -320,7 +319,6 @@ def decide_external_capability(
         )
     security_pipeline_exemption = resolve_ai_security_pipeline_exemption(
         AiSecurityPolicyContext(
-            workspace_id=request.workspace_id,
             actor_user_id=request.actor_user_id,
             app_id=request.app,
             task_kind=request.task_kind,
@@ -384,7 +382,6 @@ def decide_external_capability(
         db_exception = resolve_ai_security_external_transfer_exception(
             db,
             AiSecurityPolicyContext(
-                workspace_id=request.workspace_id,
                 actor_user_id=request.actor_user_id,
                 app_id=request.app,
                 task_kind=request.task_kind,
@@ -779,7 +776,6 @@ def _evaluate_ai_security_policy(
     return evaluate_ai_security_policy(
         db,
         AiSecurityPolicyContext(
-            workspace_id=request.workspace_id,
             actor_user_id=request.actor_user_id,
             app_id=request.app,
             task_kind=request.task_kind,

@@ -93,7 +93,9 @@ def test_publish_conversation_for_user_skips_missing_user(monkeypatch) -> None:
         serialize_calls += 1
         return _Dumpable({"id": "conversation-1"})
 
-    monkeypatch.setattr(realtime_events.serialization, "serialize_conversation", serialize_conversation)
+    monkeypatch.setattr(
+        realtime_events.serialization, "serialize_conversation", serialize_conversation
+    )
     realtime = _FakeRealtime()
 
     publisher = realtime_events.DmEventPublisher(db=_FakeDb({}), realtime=realtime)

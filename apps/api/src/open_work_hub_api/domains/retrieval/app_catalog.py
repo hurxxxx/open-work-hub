@@ -1,13 +1,12 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceNavRegistration,
-    workspace_app_registration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-RETRIEVAL_SEARCH_WORKSPACE_APP = workspace_app_registration(
+RETRIEVAL_SEARCH_APP = app_registration(
     "retrieval-search",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="retrieval-search",
             title="Retrieval 진단 검색",
             category="Business AI",

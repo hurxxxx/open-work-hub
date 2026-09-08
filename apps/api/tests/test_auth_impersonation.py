@@ -1,202 +1,64 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+import pytest
+from sqlalchemy import func, select
+
+from dev_accounts import auth_headers, dev_login
+from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.auth.models import AuditLog, AuthSession, User
 
 
-def _auth_headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
-
-
-def _bootstrap_admin_session(client: TestClient) -> dict:
-    response = client.post(
-        "/api/v1/auth/setup",
-        json={
-            "full_name": "Open Work Hub Admin",
-            "email": "admin@open-work-hub.local",
-            "password": "supersecret123",
-        },
+@pytest.mark.parametrize("actor_account", ["administrator", "delivery-hub-member"])
+@pytest.mark.parametrize("target_blocked", [False, True])
+def test_impersonation_is_removed_for_every_role_and_target_state(
+    client: TestClient, actor_account: str, target_blocked: bool
+) -> None:
+    actor = dev_login(client, actor_account)
+    target = dev_login(client, "knowledge-base-admin")
+    target_id = target["user"]["id"]
+    with get_session_factory()() as db:
+        if target_blocked:
+            db.get(User, target_id).login_blocked = True
+            db.commit()
+        sessions_before = db.scalar(select(func.count()).select_from(AuthSession))
+        impersonation_audits_before = db.scalar(
+            select(func.count()).select_from(AuditLog).where(AuditLog.action == "auth.impersonate")
+        )
+    result = client.post(
+        f"/api/v1/auth/impersonations/{target_id}",
+        headers=auth_headers(actor["token"]),
     )
-    assert response.status_code == 201, response.text
-    return response.json()
+    assert result.status_code == 404
+    with get_session_factory()() as db:
+        assert db.scalar(select(func.count()).select_from(AuthSession)) == sessions_before
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(AuditLog)
+                .where(AuditLog.action == "auth.impersonate")
+            )
+            == impersonation_audits_before
+        )
+    me = client.get("/api/v1/auth/me", headers=auth_headers(actor["token"]))
+    assert me.status_code == 200
+    assert me.json()["id"] == actor["user"]["id"]
+    assert "impersonator_user_id" not in me.json()
 
 
-def _create_user(
-    client: TestClient,
-    admin_token: str,
-    *,
-    login_id: str,
-    email: str,
-    full_name: str,
-) -> dict:
-    response = client.post(
-        "/api/v1/admin/users",
-        headers=_auth_headers(admin_token),
-        json={
-            "login_id": login_id,
-            "email": email,
-            "full_name": full_name,
-        },
-    )
-    assert response.status_code == 201, response.text
-    return response.json()
-
-
-def test_platform_admin_can_impersonate_active_user_and_audit_context(
+def test_administrator_status_does_not_change_an_independently_authenticated_user(
     client: TestClient,
 ) -> None:
-    from open_work_hub_api.core.db import get_session_factory
-    from open_work_hub_api.domains.auth.models import AuditLog, AuthSession
-    from open_work_hub_api.domains.auth.security import hash_token
-
-    admin_session = _bootstrap_admin_session(client)
-    admin_token = admin_session["token"]
-    admin_user_id = admin_session["user"]["id"]
-    created = _create_user(
-        client,
-        admin_token,
-        login_id="supporttarget",
-        email="support-target@example.test",
-        full_name="Support Target",
-    )
-    target_user_id = created["user"]["id"]
-
-    response = client.post(
-        f"/api/v1/auth/impersonations/{target_user_id}",
-        headers=_auth_headers(admin_token),
-    )
-    assert response.status_code == 200, response.text
-    impersonated_session = response.json()
-    assert impersonated_session["user"]["id"] == target_user_id
-    assert "platform_admin" not in impersonated_session["user"]["system_roles"]
-
-    me_response = client.get(
-        "/api/v1/auth/me",
-        headers=_auth_headers(impersonated_session["token"]),
-    )
-    assert me_response.status_code == 200, me_response.text
-    assert me_response.json()["id"] == target_user_id
-
-    logout_response = client.post(
-        "/api/v1/auth/logout",
-        headers=_auth_headers(impersonated_session["token"]),
-    )
-    assert logout_response.status_code == 204, logout_response.text
-
+    administrator = dev_login(client, "administrator")
+    member = dev_login(client, "delivery-hub-member")
     with get_session_factory()() as db:
-        session_row = db.scalar(
-            select(AuthSession).where(
-                AuthSession.token_hash == hash_token(impersonated_session["token"])
-            )
-        )
-        assert session_row is not None
-        assert session_row.user_id == target_user_id
-        assert session_row.impersonator_user_id == admin_user_id
-
-        impersonate_audit = db.scalar(
-            select(AuditLog).where(AuditLog.action == "auth.impersonate")
-        )
-        assert impersonate_audit is not None
-        assert impersonate_audit.actor_user_id == admin_user_id
-        assert impersonate_audit.entity_id == target_user_id
-        assert impersonate_audit.payload["impersonator_user_id"] == admin_user_id
-        assert impersonate_audit.payload["target_user_id"] == target_user_id
-
-        logout_audit = db.scalar(
-            select(AuditLog).where(
-                AuditLog.action == "auth.logout",
-                AuditLog.actor_user_id == target_user_id,
-            )
-        )
-        assert logout_audit is not None
-        assert logout_audit.payload["impersonation"]["impersonator_user_id"] == admin_user_id
-        assert logout_audit.payload["impersonation"]["impersonated_user_id"] == target_user_id
-
-
-def test_non_admin_cannot_impersonate_user(client: TestClient) -> None:
-    admin_session = _bootstrap_admin_session(client)
-    created = _create_user(
-        client,
-        admin_session["token"],
-        login_id="regularuser",
-        email="regular-user@example.test",
-        full_name="Regular User",
-    )
-    login_response = client.post(
-        "/api/v1/auth/login",
-        json={
-            "login_id": "regularuser",
-            "password": created["temporary_password"],
-        },
-    )
-    assert login_response.status_code == 200, login_response.text
-
-    response = client.post(
-        f"/api/v1/auth/impersonations/{admin_session['user']['id']}",
-        headers=_auth_headers(login_response.json()["token"]),
-    )
-    assert response.status_code == 403
-    assert response.json()["code"] == "auth.system_role_required"
-
-
-def test_admin_cannot_impersonate_login_blocked_user(client: TestClient) -> None:
-    admin_session = _bootstrap_admin_session(client)
-    admin_token = admin_session["token"]
-    created = _create_user(
-        client,
-        admin_token,
-        login_id="blockeduser",
-        email="blocked-user@example.test",
-        full_name="Blocked User",
-    )
-    user_id = created["user"]["id"]
-    block_response = client.patch(
-        f"/api/v1/admin/users/{user_id}",
-        headers=_auth_headers(admin_token),
-        json={"login_blocked": True},
-    )
-    assert block_response.status_code == 200, block_response.text
-
-    response = client.post(
-        f"/api/v1/auth/impersonations/{user_id}",
-        headers=_auth_headers(admin_token),
-    )
-    assert response.status_code == 403
-    assert response.json()["code"] == "auth.user_inactive"
-
-
-def test_blocking_impersonator_revokes_impersonated_session(client: TestClient) -> None:
-    admin_session = _bootstrap_admin_session(client)
-    admin_token = admin_session["token"]
-    admin_user_id = admin_session["user"]["id"]
-    created = _create_user(
-        client,
-        admin_token,
-        login_id="impersonatedtarget",
-        email="impersonated-target@example.test",
-        full_name="Impersonated Target",
-    )
-
-    impersonation_response = client.post(
-        f"/api/v1/auth/impersonations/{created['user']['id']}",
-        headers=_auth_headers(admin_token),
-    )
-    assert impersonation_response.status_code == 200, impersonation_response.text
-    impersonated_headers = _auth_headers(impersonation_response.json()["token"])
-    assert client.get("/api/v1/auth/me", headers=impersonated_headers).status_code == 200
-
-    block_response = client.patch(
-        f"/api/v1/admin/users/{admin_user_id}",
-        headers=_auth_headers(admin_token),
-        json={"login_blocked": True},
-    )
-    assert block_response.status_code == 200, block_response.text
-
+        db.get(User, administrator["user"]["id"]).login_blocked = True
+        db.commit()
     assert (
-        client.get(
-            "/api/v1/auth/me",
-            headers=_auth_headers(admin_token),
-        ).status_code
-        == 401
+        client.get("/api/v1/auth/me", headers=auth_headers(administrator["token"])).status_code
+        == 403
     )
-    assert client.get("/api/v1/auth/me", headers=impersonated_headers).status_code == 401
+    member_me = client.get("/api/v1/auth/me", headers=auth_headers(member["token"]))
+    assert member_me.status_code == 200
+    assert member_me.json()["id"] == member["user"]["id"]
+    assert "platform_admin" not in member_me.json()["system_roles"]

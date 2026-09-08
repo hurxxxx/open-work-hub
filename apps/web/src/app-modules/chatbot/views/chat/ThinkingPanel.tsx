@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { Brain, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { ChatStreamStatus } from '../../api/agent-events';
@@ -9,7 +9,10 @@ export interface ThinkingPanelProps {
   status: ChatStreamStatus;
 }
 
-function labelFor(status: ChatStreamStatus, t: (key: string) => string): string {
+function labelFor(
+  status: ChatStreamStatus,
+  t: (key: string) => string,
+): string {
   switch (status) {
     case 'streaming':
       return t('ai.thinking.streaming');

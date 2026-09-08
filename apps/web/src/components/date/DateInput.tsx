@@ -1,3 +1,10 @@
+import {
+  CalendarDays,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+} from 'lucide-react';
 import type {
   ChangeEvent,
   CSSProperties,
@@ -14,13 +21,6 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  CalendarDays,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/src/lib/utils';

@@ -1,9 +1,9 @@
 import { homeManifest } from './manifest';
-import { homeWorkspaceRoutes } from './routes';
+import { homeAppRoutes } from './routes';
 
-export { homeManifest, homeWorkspaceRoutes };
+export { homeAppRoutes, homeManifest };
 
 export const homeModule = {
   manifest: homeManifest,
-  workspaceRoutes: homeWorkspaceRoutes,
+  appRoutes: homeAppRoutes,
 } as const;

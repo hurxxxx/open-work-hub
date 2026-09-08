@@ -1,5 +1,5 @@
-import { Search } from 'lucide-react';
 import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
+import { Search } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -13,7 +13,6 @@ export const retrievalSearchManifest: AppModuleManifest = {
     owner: 'ai-platform',
     permissions: [],
     apiDomain: 'retrieval',
-    workspaceApiPrefixes: ['/api/v1/retrieval'],
     aiCapabilities: ['retrieval.search', 'retrieval.list_sources'],
     writeAuditActions: [],
     appLocalTests: ['apps/api/tests/test_retrieval.py'],
@@ -28,5 +27,5 @@ export const retrievalSearchManifest: AppModuleManifest = {
       appId: 'retrieval-search',
     },
   ],
-  workspaceRoutePaths: [getAppRoutePattern('retrieval-search.root')],
+  appRoutePaths: [getAppRoutePattern('retrieval-search.root')],
 };

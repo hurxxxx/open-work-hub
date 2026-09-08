@@ -28,11 +28,9 @@ from open_work_hub_api.core.settings import (
     HERMES_PROVIDER,
     Settings,
 )
-from open_work_hub_api.domains.auth.models import User, Workspace, utcnow_naive
+from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.hermes.models import HermesProfileBinding
-from open_work_hub_api.domains.hermes.research_sources import (
-    DEFAULT_RESEARCH_SOURCE_POLICY,
-)
+from open_work_hub_api.domains.hermes.research_sources import DEFAULT_RESEARCH_SOURCE_POLICY
 from open_work_hub_api.domains.hermes_terminal.app_catalog import HERMES_TERMINAL_APP
 from open_work_hub_api.domains.hermes_terminal import (
     broker_app,
@@ -54,9 +52,7 @@ from open_work_hub_api.domains.hermes_terminal.broker_runtime import (
     build_runner_mounts,
     build_runner_ulimits,
 )
-from open_work_hub_api.domains.hermes_terminal.schemas import (
-    HermesTerminalSessionCreateRequest,
-)
+from open_work_hub_api.domains.hermes_terminal.schemas import HermesTerminalSessionCreateRequest
 from open_work_hub_api.domains.hermes_terminal.models import HermesTerminalSession
 from open_work_hub_api.domains.hermes_terminal.mcp_socket_server import (
     HermesTerminalMcpSocketServer,
@@ -75,9 +71,9 @@ def _settings(**overrides: object) -> Settings:
         return Settings(_env_file=None, **values)  # type: ignore[arg-type]
 
 
-def test_catalog_exposes_a_workspace_personal_app_to_all_members() -> None:
+def test_catalog_exposes_personal_terminal_for_admitted_company_users() -> None:
     assert HERMES_TERMINAL_APP.app_id == "hermes-terminal"
-    assert HERMES_TERMINAL_APP.availability_scope == "workspace"
+    assert APP_CONTRACT_BY_ID["hermes-terminal"]["execution_context_kind"] == "personal"
     assert APP_CONTRACT_BY_ID["hermes-terminal"]["resource_scope"] == "personal"
     assert HERMES_TERMINAL_APP.required_system_roles == ()
     assert HERMES_TERMINAL_APP.feature_flag == "hermes_enabled"
@@ -225,7 +221,6 @@ def test_partial_archive_upload_removes_every_ambiguous_attempt_object(
 
     with pytest.raises(OSError, match="ambiguous object-store failure"):
         lifecycle._persist_archive_objects(
-            workspace_id="workspace-1",
             user_id="user-1",
             session_id="session-1",
             profile_archive=b"profile",
@@ -938,8 +933,7 @@ def test_terminal_limits_default_to_two_hours_and_thirty_days() -> None:
 
     assert settings.hermes_terminal_idle_timeout_seconds == 7200
     assert settings.hermes_terminal_artifact_retention_days == 30
-    assert settings.hermes_terminal_max_sessions_per_workspace_user == 1
-    assert settings.hermes_terminal_max_sessions_per_user == 2
+    assert settings.hermes_terminal_max_sessions_per_user == 1
 
 
 def test_terminal_mcp_socket_is_rooted_independently_of_process_cwd() -> None:
@@ -1248,17 +1242,17 @@ def test_approval_state_returns_to_running_only_after_all_pending_calls_close() 
     assert closed_db.added == [session]
 
 
-def test_write_tool_access_is_revalidated_after_approval(monkeypatch) -> None:
+@pytest.mark.parametrize("admission_retained", [True, False])
+def test_write_tool_access_is_revalidated_after_approval(monkeypatch, admission_retained) -> None:
     identity = SimpleNamespace(
         session=SimpleNamespace(id="session-1", allowed_app_ids=["tasks"]),
-        workspace=SimpleNamespace(id="workspace-1"),
         user=SimpleNamespace(id="user-1"),
     )
     tool = SimpleNamespace(
         descriptor=SimpleNamespace(
             name="tasks.create",
             approval_policy="required",
-            workspace_app_id="tasks",
+            owner_app_id="tasks",
         ),
         mcp_tool={"name": "tasks.create"},
     )
@@ -1290,8 +1284,6 @@ def test_write_tool_access_is_revalidated_after_approval(monkeypatch) -> None:
             return None
 
         def get(self, model, _identifier):
-            if model.__name__ == "Workspace":
-                return identity.workspace
             if model.__name__ == "User":
                 return identity.user
             return None
@@ -1314,6 +1306,13 @@ def test_write_tool_access_is_revalidated_after_approval(monkeypatch) -> None:
                 },
             }
 
+    admission_calls = []
+
+    def admitted(_db, *, user_id, app_id):
+        admission_calls.append((user_id, app_id))
+        return admission_retained
+
+    monkeypatch.setattr(mcp_router, "can_use_app", admitted)
     monkeypatch.setattr(mcp_router, "_resolve_identity", resolve_identity)
     monkeypatch.setattr(mcp_router, "_available_tools", available_tools)
     monkeypatch.setattr(
@@ -1337,8 +1336,11 @@ def test_write_tool_access_is_revalidated_after_approval(monkeypatch) -> None:
 
     assert resolve_calls == ["session-1", "session-1"]
     assert list_calls == ["session-1", "session-1"]
-    assert tool_calls == ["tasks.create"]
-    assert payload["result"]["isError"] is False
+    assert admission_calls == [("user-1", "hermes-terminal")]
+    assert tool_calls == (["tasks.create"] if admission_retained else [])
+    assert payload["result"]["isError"] is (not admission_retained)
+    if not admission_retained:
+        assert "hermes_terminal.identity_unavailable" in json.dumps(payload)
 
 
 def test_archive_recovery_reclaims_stale_sessions_without_releasing_early(
@@ -1351,11 +1353,6 @@ def test_archive_recovery_reclaims_stale_sessions_without_releasing_early(
     now = utcnow_naive()
     stale = now - timedelta(minutes=15)
     suffix = uuid4().hex
-    workspace = Workspace(
-        id=str(uuid4()),
-        key=f"hermes-terminal-{suffix[:16]}",
-        name="Hermes terminal recovery",
-    )
     user = User(
         id=str(uuid4()),
         login_id=f"hermes-terminal-{suffix[:16]}",
@@ -1365,7 +1362,6 @@ def test_archive_recovery_reclaims_stale_sessions_without_releasing_early(
     )
     binding = HermesProfileBinding(
         id=str(uuid4()),
-        workspace_id=workspace.id,
         user_id=user.id,
         profile_name=f"owh-terminal-{suffix[:24]}",
         status="active",
@@ -1375,7 +1371,6 @@ def test_archive_recovery_reclaims_stale_sessions_without_releasing_early(
     row = HermesTerminalSession(
         id=str(uuid4()),
         profile_binding_id=binding.id,
-        workspace_id=workspace.id,
         user_id=user.id,
         title="Recovery session",
         mode="standard",
@@ -1399,7 +1394,7 @@ def test_archive_recovery_reclaims_stale_sessions_without_releasing_early(
     runtime_handle = row.runtime_handle
     try:
         with Session(engine) as db:
-            db.add_all([workspace, user, binding, row])
+            db.add_all([user, binding, row])
             db.commit()
 
         claimed = maintenance._claim_archive_retries(limit=1)

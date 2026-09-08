@@ -10,9 +10,9 @@ Approval replay, graph execution, and artifact state are owned by [AI Execution]
 - Admin selects active provider/model and workload route.
 - No local/external automatic fallback.
 - External transfer passes classification, masking, approval policy, and audit.
-- Tool execution checks workspace context, owning-app availability, descriptor discoverability, and
+- Tool execution checks the current user/execution principal, owning-app admission, descriptor discoverability, and
   source ACL; write tools also require approval.
-- Audit records actor, workspace, workload, provider/model, token usage, trace ID.
+- Audit records actor, app, workload, provider/model, token usage, trace ID.
 - Agent runtime uses `AgentRuntimeAdapter`, separate from one-shot chat adapter.
 - Runtime choice is a workload override.
 

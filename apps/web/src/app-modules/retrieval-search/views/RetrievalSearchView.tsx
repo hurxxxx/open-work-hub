@@ -1,6 +1,3 @@
-import { useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -10,6 +7,9 @@ import {
   Search,
   XCircle,
 } from 'lucide-react';
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -19,13 +19,12 @@ import type {
   RetrievalSource,
   RetrievalStrategy,
 } from '@/src/platform/retrieval/retrieval-api';
-import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import {
   isSelectableRetrievalSource,
-  retrievalHitKey,
   RETRIEVAL_ANSWER_MODES,
   RETRIEVAL_STRATEGIES,
   RETRIEVAL_TOP_K_OPTIONS,
+  retrievalHitKey,
   type RetrievalTopK,
 } from './retrieval-search-view-model';
 import { useRetrievalSearchController } from './useRetrievalSearchController';
@@ -33,10 +32,9 @@ import { useRetrievalSearchController } from './useRetrievalSearchController';
 export function RetrievalSearchView() {
   const { t } = useTranslation('apps');
   const { token, logout } = useAuth();
-  const workspaceBootstrap = useWorkspaceBootstrapContext();
   const [searchParams, setSearchParams] = useSearchParams();
-  const workspaceSlug = workspaceBootstrap.data?.workspace.slug ?? null;
-  const workspaceName = workspaceBootstrap.data?.workspace.name ?? '';
+
+  const companyName = t('common:labels.company');
   const {
     actions,
     state: {
@@ -60,12 +58,10 @@ export function RetrievalSearchView() {
       queryRequired: t('ai.retrievalSearch.queryRequired'),
       sessionExpired: t('ai.retrievalSearch.sessionExpired'),
       sourcesLoadFailed: t('ai.retrievalSearch.sourcesLoadFailed'),
-      workspaceMissing: t('ai.retrievalSearch.workspaceMissing'),
     },
     searchParams,
     setSearchParams,
     token,
-    workspaceSlug,
   });
 
   const hits = response?.hits ?? [];
@@ -84,13 +80,6 @@ export function RetrievalSearchView() {
       </div>
     );
   }
-  if (!workspaceSlug) {
-    return (
-      <div className="p-8 app-text-body text-app-ink/60">
-        {t('ai.retrievalSearch.workspaceMissing')}
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-app-bg">
@@ -101,9 +90,9 @@ export function RetrievalSearchView() {
               {t('ai.retrievalSearch.title')}
             </h1>
             <p className="app-text-caption text-app-ink/55">
-              {workspaceName
+              {companyName
                 ? t('ai.retrievalSearch.subtitle', {
-                    workspace: workspaceName,
+                    workspace: companyName,
                   })
                 : t('ai.retrievalSearch.subtitleFallback')}
             </p>

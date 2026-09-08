@@ -1,55 +1,54 @@
-import { useState, useCallback, useEffect } from 'react';
-import {
-  X,
-  Maximize2,
-  Minimize2,
-  Share2,
-  MoreHorizontal,
-  Send,
-  Loader2,
-  ChevronRight,
-  Archive,
-  Trash2,
-  Tag,
-  Check,
-  CheckSquare,
-  Unlink,
-  Paperclip,
-  Download,
-  FileIcon,
-  Plus,
-  ExternalLink,
-} from 'lucide-react';
-import { Badge, Button, BlockEditor, BlockViewer } from '@open-work-hub/ui';
-import type { BlockContent } from '@open-work-hub/ui';
-import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { LinkedRecordingsForTarget } from '@/src/app-modules/recording/public-api';
+import { DateInput } from '@/src/components/date/DateInput';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   authenticatedContentObjectUrl,
   downloadAuthenticatedContent,
 } from '@/src/platform/browser/browser-download';
-import { DateInput } from '@/src/components/date/DateInput';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
-import { LinkedRecordingsForTarget } from '@/src/app-modules/recording/public-api';
+import type { BlockContent } from '@open-work-hub/ui';
+import { Badge, BlockEditor, BlockViewer, Button } from '@open-work-hub/ui';
 import {
-  type PmsTask,
+  Archive,
+  Check,
+  CheckSquare,
+  ChevronRight,
+  Download,
+  ExternalLink,
+  FileIcon,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  MoreHorizontal,
+  Paperclip,
+  Plus,
+  Send,
+  Share2,
+  Tag,
+  Trash2,
+  Unlink,
+  X,
+} from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
   type PmsAttachment,
-  type PmsTaskListMember,
-  type PmsMilestone,
   type PmsLabel,
+  type PmsMilestone,
+  type PmsTask,
+  type PmsTaskListMember,
   type PmsTaskListStatus,
 } from '../api/pms-api';
 import {
+  formatDate,
   getStatusSlugs,
   getStatusTone,
   initials,
-  formatDate,
 } from './pms-constants';
+import { TaskDetailActivityPanel } from './TaskDetailActivityPanel';
 import { InlineSaveError, MetaLabel, UserRolePicker } from './TaskDetailFields';
 import { TaskDocPickerModal } from './TaskDocPickerModal';
 import { useTaskDetailAttachments } from './useTaskDetailAttachments';
-import { TaskDetailActivityPanel } from './TaskDetailActivityPanel';
 import { useTaskDetailChecklist } from './useTaskDetailChecklist';
 import { useTaskDetailComments } from './useTaskDetailComments';
 import { useTaskDetailIssueEditing } from './useTaskDetailIssueEditing';
@@ -86,22 +85,17 @@ type TaskDetailProps = {
   taskListStatuses?: PmsTaskListStatus[];
   spaceName?: string | null;
   spaceId?: string | null;
-  workspaceSlug?: string | null;
+
   canEdit?: boolean;
   onClose: () => void;
   onUpdate?: () => void | Promise<void>;
 };
 
 export function TaskDetail(props: TaskDetailProps) {
-  const { workspaceSlug: routeWorkspaceSlug } = useParams();
-  const workspaceSlug = props.workspaceSlug ?? routeWorkspaceSlug ?? null;
-  if (!workspaceSlug) return null;
-  return <TaskDetailContent {...props} workspaceSlug={workspaceSlug} />;
+  return <TaskDetailContent {...props} />;
 }
 
-type TaskDetailContentProps = Omit<TaskDetailProps, 'workspaceSlug'> & {
-  workspaceSlug: string;
-};
+type TaskDetailContentProps = TaskDetailProps;
 
 function TaskDetailContent({
   task,
@@ -111,7 +105,6 @@ function TaskDetailContent({
   taskListStatuses,
   spaceName,
   spaceId = null,
-  workspaceSlug,
   canEdit: canEditProp = true,
   onClose,
   onUpdate,
@@ -145,7 +138,6 @@ function TaskDetailContent({
     taskListStatuses,
     token,
     t,
-    workspaceSlug,
   });
   const [descFullscreen, setDescFullscreen] = useState(false);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
@@ -176,7 +168,6 @@ function TaskDetailContent({
   } = useTaskDetailResources({
     taskId: task.id,
     token,
-    workspaceSlug,
   });
   const {
     addingSubtask,
@@ -197,7 +188,6 @@ function TaskDetailContent({
     taskListStatuses,
     token,
     t,
-    workspaceSlug,
   });
   const {
     addingChecklist,
@@ -222,7 +212,6 @@ function TaskDetailContent({
     taskId: task.id,
     token,
     t,
-    workspaceSlug,
   });
   const {
     dragOver,
@@ -239,7 +228,6 @@ function TaskDetailContent({
     taskId: task.id,
     token,
     t,
-    workspaceSlug,
   });
 
   const handleDownloadAttachment = useCallback(
@@ -278,7 +266,6 @@ function TaskDetailContent({
     taskId: task.id,
     token,
     t,
-    workspaceSlug,
   });
   const {
     buildDocPath,
@@ -298,7 +285,6 @@ function TaskDetailContent({
     spaceId,
     token,
     t,
-    workspaceSlug,
   });
 
   const handleToggleIssueArchive = useCallback(() => {
@@ -1210,10 +1196,9 @@ function TaskDetailContent({
 
             <hr className="border-app-border" />
 
-            {workspaceSlug ? (
+            {
               <>
                 <LinkedRecordingsForTarget
-                  workspaceSlug={workspaceSlug}
                   targetApp="pms"
                   targetType="task"
                   targetId={task.id}
@@ -1223,7 +1208,7 @@ function TaskDetailContent({
 
                 <hr className="border-app-border" />
               </>
-            ) : null}
+            }
 
             {/* Attachments */}
             <div className="space-y-2">
@@ -1387,7 +1372,6 @@ function TaskDetailContent({
         onClose={() => setDocPickerOpen(false)}
         onPick={(doc) => handleLinkDoc(doc.id)}
         excludeDocIds={linkedDocs.map((doc) => doc.doc_id)}
-        workspaceSlug={workspaceSlug}
       />
     </div>
   );

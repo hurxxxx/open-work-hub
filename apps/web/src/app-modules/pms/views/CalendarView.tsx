@@ -1,5 +1,8 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import {
+  UnifiedCalendar,
+  type UnifiedCalendarHandle,
+} from '@/src/components/calendar/UnifiedCalendar';
+import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
 import { Button } from '@open-work-hub/ui';
 import {
   CalendarDays,
@@ -8,12 +11,9 @@ import {
   ChevronsLeft,
   ChevronsRight,
 } from 'lucide-react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import {
-  UnifiedCalendar,
-  type UnifiedCalendarHandle,
-} from '@/src/components/calendar/UnifiedCalendar';
-import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
 import type { PmsTask, PmsTaskListStatus } from '../api/pms-api';
 import {
   addCalendarMonths,

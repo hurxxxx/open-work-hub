@@ -24,12 +24,11 @@ from open_work_hub_api.domains.ai_artifacts.models import (
     AiArtifactSource,
 )
 from open_work_hub_api.domains.ai_artifacts.repository import AiArtifactRepository
-from open_work_hub_api.domains.auth.dependencies import require_current_user, require_current_workspace
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    resolve_enabled_app_ids_for_user_context,
+from open_work_hub_api.domains.auth.app_gate import (
+    allowed_app_ids,
 )
-
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
 
 router = APIRouter(prefix="/ai", tags=["ai-artifacts"])
 
@@ -159,18 +158,15 @@ def _visible_artifact(
     db: Session,
     *,
     identifier: str,
-    workspace: Workspace,
     user: User,
     eager: bool = False,
 ) -> AiArtifact:
-    enabled_app_ids = resolve_enabled_app_ids_for_user_context(
+    enabled_app_ids = allowed_app_ids(
         db,
-        user=user,
-        workspace_id=workspace.id,
+        user_id=user.id,
     )
     artifact = AiArtifactRepository(db).get_visible(
         identifier,
-        workspace_id=workspace.id,
         user_id=user.id,
         eager=eager,
         enabled_app_ids=enabled_app_ids,
@@ -191,15 +187,12 @@ def list_artifacts(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> AiArtifactListResponse:
-    enabled_app_ids = resolve_enabled_app_ids_for_user_context(
+    enabled_app_ids = allowed_app_ids(
         db,
-        user=current_user,
-        workspace_id=current_workspace.id,
+        user_id=current_user.id,
     )
     items, total = AiArtifactRepository(db).list_visible(
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
         artifact_type=artifact_type,
         status=status,
@@ -221,13 +214,11 @@ def get_artifact(
     artifact_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> AiArtifactDetailResponse:
     return _artifact_detail(
         _visible_artifact(
             db,
             identifier=artifact_id,
-            workspace=current_workspace,
             user=current_user,
             eager=True,
         )
@@ -242,12 +233,10 @@ def list_artifact_sources(
     artifact_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> AiArtifactSourceListResponse:
     artifact = _visible_artifact(
         db,
         identifier=artifact_id,
-        workspace=current_workspace,
         user=current_user,
         eager=True,
     )
@@ -278,18 +267,14 @@ def list_artifact_queries(
     artifact_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> AiArtifactQueryListResponse:
     artifact = _visible_artifact(
         db,
         identifier=artifact_id,
-        workspace=current_workspace,
         user=current_user,
         eager=True,
     )
-    return AiArtifactQueryListResponse(
-        items=[_query_response(item) for item in artifact.queries]
-    )
+    return AiArtifactQueryListResponse(items=[_query_response(item) for item in artifact.queries])
 
 
 @router.get(
@@ -300,12 +285,10 @@ def list_artifact_index_generations(
     artifact_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> AiArtifactIndexGenerationListResponse:
     artifact = _visible_artifact(
         db,
         identifier=artifact_id,
-        workspace=current_workspace,
         user=current_user,
         eager=True,
     )

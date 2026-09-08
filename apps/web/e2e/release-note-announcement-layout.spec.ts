@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { stubShellBackend, stubWorkspaceAppDataBackend } from './helpers';
+import { stubShellBackend, stubAppDataBackend } from './helpers';
 
 const LONG_RELEASE_NOTE = {
   id: 'release-note-layout-repro',
@@ -20,14 +20,14 @@ test('keeps release-note actions inside the announcement modal', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 600 });
-  await stubWorkspaceAppDataBackend(page);
+  await stubAppDataBackend(page);
   await stubShellBackend(page);
   await page.unroute('**/api/v1/release-notes/current');
   await page.route('**/api/v1/release-notes/current', (route) =>
     route.fulfill({ json: { item: LONG_RELEASE_NOTE } }),
   );
 
-  await page.goto('/apps/home/workspaces/hq');
+  await page.goto('/apps/home');
 
   const dismissButton = page.getByRole('button', {
     name: /다시 보지 않기|Do not show again/,

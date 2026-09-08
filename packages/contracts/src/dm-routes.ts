@@ -84,31 +84,6 @@ export function isDmRouteId(value: string): boolean {
   );
 }
 
-export function resolveDmAttachmentUrl(
-  value: string | null | undefined,
-  baseUrl: string,
-): string | null {
-  if (!value) {
-    return null;
-  }
-  try {
-    const base = new URL(baseUrl);
-    const url = new URL(value, base);
-    if (
-      url.origin !== base.origin ||
-      url.username ||
-      url.password ||
-      url.hash ||
-      !isDmAttachmentUrl(url)
-    ) {
-      return null;
-    }
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
 export function isDmAttachmentUploadFileAllowed(
   file: DmAttachmentUploadFile,
 ): boolean {
@@ -126,29 +101,4 @@ function encodeSegment(value: string): string {
     );
   }
   return encodeURIComponent(value);
-}
-
-function isDmAttachmentUrl(url: URL): boolean {
-  const segments = url.pathname.slice(1).split('/');
-  const prefixSegments = DM_API_PREFIX.slice(1).split('/');
-  if (
-    segments.length !== prefixSegments.length + 3 ||
-    prefixSegments.some((segment, index) => segments[index] !== segment) ||
-    segments[prefixSegments.length] !== 'attachments'
-  ) {
-    return false;
-  }
-  let attachmentId: string;
-  try {
-    attachmentId = decodeURIComponent(
-      segments[prefixSegments.length + 1] ?? '',
-    );
-  } catch {
-    return false;
-  }
-  const action = segments[prefixSegments.length + 2];
-  if (!isDmRouteId(attachmentId)) {
-    return false;
-  }
-  return action === 'download' || action === 'preview' || action === 'content';
 }

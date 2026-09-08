@@ -9,21 +9,14 @@ from uuid import uuid4
 from sqlalchemy import and_, or_, select
 
 from open_work_hub_api.core.db import get_session_factory
-from open_work_hub_api.domains.auth.access import resolve_workspace_role
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.models import utcnow_naive
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
+from open_work_hub_api.domains.auth.app_gate import (
+    can_use_app,
 )
+from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.hermes.models import HermesMaintenanceState
 from open_work_hub_api.domains.hermes_terminal.broker_client import (
     HermesTerminalBrokerClient,
     HermesTerminalBrokerError,
-)
-from open_work_hub_api.domains.hermes_terminal.models import (
-    HermesTerminalArtifact,
-    HermesTerminalSession,
-    HermesTerminalToolApproval,
 )
 from open_work_hub_api.domains.hermes_terminal.lifecycle import (
     HERMES_TERMINAL_ARCHIVE_FAILURE,
@@ -33,8 +26,12 @@ from open_work_hub_api.domains.hermes_terminal.lifecycle import (
     reconcile_terminal_session_if_finished,
     release_terminal_runtime,
 )
+from open_work_hub_api.domains.hermes_terminal.models import (
+    HermesTerminalArtifact,
+    HermesTerminalSession,
+    HermesTerminalToolApproval,
+)
 from open_work_hub_api.domains.hermes_terminal.storage import remove_object
-
 
 _IDLE_ELIGIBLE_STATUSES = ("starting", "running", "awaiting_approval")
 _RECONCILE_STATUSES = (*_IDLE_ELIGIBLE_STATUSES, "stopping", "archiving")
@@ -189,19 +186,14 @@ def _claim_revoked_sessions(*, limit: int) -> list[str]:
         claimed: list[str] = []
         for session in sessions:
             user = db.get(User, session.user_id)
-            workspace = db.get(Workspace, session.workspace_id)
             allowed = bool(
                 user is not None
                 and user.status == "active"
                 and not user.login_blocked
-                and workspace is not None
-                and workspace.active
-                and resolve_workspace_role(db, user, workspace.id) is not None
-                and is_app_enabled_for_user_context(
+                and can_use_app(
                     db,
                     app_id="hermes-terminal",
                     user_id=user.id,
-                    workspace_id=workspace.id,
                 )
             )
             if allowed:

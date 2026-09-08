@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
-
+from dataclasses import dataclass
 
 DM_MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024
 DM_ATTACHMENT_SNIFF_BYTES = 512

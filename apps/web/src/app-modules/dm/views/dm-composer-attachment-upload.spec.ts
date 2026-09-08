@@ -13,7 +13,7 @@ function attachment(id: string): DmMessageAttachment {
     id,
     filename: `${id}.png`,
     is_image: true,
-    preview_url: `/api/v1/dm/attachments/${id}/preview`,
+
     size_bytes: 1024,
   } as DmMessageAttachment;
 }
@@ -152,7 +152,10 @@ describe('dm composer attachment upload', () => {
       .fn()
       .mockResolvedValueOnce(attachment('attachment-1'))
       .mockResolvedValueOnce(attachment('attachment-2'));
-    const createLocalId = vi.fn().mockReturnValueOnce('local-1').mockReturnValueOnce('local-2');
+    const createLocalId = vi
+      .fn()
+      .mockReturnValueOnce('local-1')
+      .mockReturnValueOnce('local-2');
 
     await uploadDmComposerAttachments({
       files: [file('first.png'), file('second.png')],

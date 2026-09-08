@@ -1,6 +1,3 @@
-import { useEffect, useRef } from 'react';
-import type * as React from 'react';
-import { createPortal } from 'react-dom';
 import {
   Archive,
   ArchiveRestore,
@@ -8,6 +5,9 @@ import {
   Settings,
   Trash2,
 } from 'lucide-react';
+import type * as React from 'react';
+import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -66,7 +66,9 @@ export function ListContextMenu({
             '[role="menuitem"]:not(:disabled)',
           ) ?? [],
         );
-        const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+        const currentIndex = items.indexOf(
+          document.activeElement as HTMLButtonElement,
+        );
         if (event.key === 'Escape') {
           event.preventDefault();
           onClose();

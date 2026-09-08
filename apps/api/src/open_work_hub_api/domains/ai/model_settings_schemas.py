@@ -5,7 +5,6 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
-
 AiModelProviderId = Annotated[
     str,
     Field(min_length=1, max_length=32, pattern=r"^[a-z][a-z0-9_-]{0,31}$"),

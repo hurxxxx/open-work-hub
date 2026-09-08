@@ -4,7 +4,6 @@ import {
   type ApiBinaryResponse,
 } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type HermesTerminalConfig = ApiSchema<'HermesTerminalConfigResponse'>;
 export type HermesTerminalSession = ApiSchema<'HermesTerminalSessionResponse'>;
@@ -25,49 +24,35 @@ export type HermesTerminalApprovalDecision =
 
 const API_ROOT = '/api/v1/hermes-terminal';
 
-function workspacePath(path: string, workspaceSlug: string): string {
-  return rewriteWorkspaceApiPath(`${API_ROOT}${path}`, workspaceSlug);
+function workspacePath(path: string): string {
+  return `${API_ROOT}${path}`;
 }
 
-export function getHermesTerminalConfig(token: string, workspaceSlug: string) {
-  return apiFetchJson<HermesTerminalConfig>(
-    workspacePath('/config', workspaceSlug),
-    token,
-  );
+export function getHermesTerminalConfig(token: string) {
+  return apiFetchJson<HermesTerminalConfig>(workspacePath('/config'), token);
 }
 
-export function listHermesTerminalSessions(
-  token: string,
-  workspaceSlug: string,
-) {
+export function listHermesTerminalSessions(token: string) {
   return apiFetchJson<HermesTerminalSessionList>(
-    workspacePath('/sessions', workspaceSlug),
+    workspacePath('/sessions'),
     token,
   );
 }
 
 export function createHermesTerminalSession(
   token: string,
-  workspaceSlug: string,
   payload: HermesTerminalSessionCreate,
 ) {
   return apiFetchJson<HermesTerminalSession>(
-    workspacePath('/sessions', workspaceSlug),
+    workspacePath('/sessions'),
     token,
     { method: 'POST', body: JSON.stringify(payload) },
   );
 }
 
-export function stopHermesTerminalSession(
-  token: string,
-  workspaceSlug: string,
-  sessionId: string,
-) {
+export function stopHermesTerminalSession(token: string, sessionId: string) {
   return apiFetchJson<HermesTerminalSession>(
-    workspacePath(
-      `/sessions/${encodeURIComponent(sessionId)}/stop`,
-      workspaceSlug,
-    ),
+    workspacePath(`/sessions/${encodeURIComponent(sessionId)}/stop`),
     token,
     { method: 'POST' },
   );
@@ -75,7 +60,6 @@ export function stopHermesTerminalSession(
 
 export function listHermesTerminalFiles(
   token: string,
-  workspaceSlug: string,
   sessionId: string,
   path = '',
 ) {
@@ -83,7 +67,6 @@ export function listHermesTerminalFiles(
   return apiFetchJson<HermesTerminalFileList>(
     workspacePath(
       `/sessions/${encodeURIComponent(sessionId)}/files?${query.toString()}`,
-      workspaceSlug,
     ),
     token,
   );
@@ -91,7 +74,6 @@ export function listHermesTerminalFiles(
 
 export function downloadHermesTerminalFile(
   token: string,
-  workspaceSlug: string,
   sessionId: string,
   path: string,
 ): Promise<ApiBinaryResponse> {
@@ -99,29 +81,20 @@ export function downloadHermesTerminalFile(
   return apiFetchBinary(
     workspacePath(
       `/sessions/${encodeURIComponent(sessionId)}/files/download?${query.toString()}`,
-      workspaceSlug,
     ),
     token,
   );
 }
 
-export function listHermesTerminalApprovals(
-  token: string,
-  workspaceSlug: string,
-  sessionId: string,
-) {
+export function listHermesTerminalApprovals(token: string, sessionId: string) {
   return apiFetchJson<HermesTerminalApprovalList>(
-    workspacePath(
-      `/sessions/${encodeURIComponent(sessionId)}/approvals`,
-      workspaceSlug,
-    ),
+    workspacePath(`/sessions/${encodeURIComponent(sessionId)}/approvals`),
     token,
   );
 }
 
 export function decideHermesTerminalApproval(
   token: string,
-  workspaceSlug: string,
   sessionId: string,
   approvalId: string,
   payload: HermesTerminalApprovalDecision,
@@ -129,21 +102,14 @@ export function decideHermesTerminalApproval(
   return apiFetchJson<HermesTerminalApproval>(
     workspacePath(
       `/sessions/${encodeURIComponent(sessionId)}/approvals/${encodeURIComponent(approvalId)}`,
-      workspaceSlug,
     ),
     token,
     { method: 'POST', body: JSON.stringify(payload) },
   );
 }
 
-export function hermesTerminalWebSocketUrl(
-  workspaceSlug: string,
-  sessionId: string,
-): string {
-  const path = workspacePath(
-    `/sessions/${encodeURIComponent(sessionId)}/ws`,
-    workspaceSlug,
-  );
+export function hermesTerminalWebSocketUrl(sessionId: string): string {
+  const path = workspacePath(`/sessions/${encodeURIComponent(sessionId)}/ws`);
   const url = new URL(path, window.location.origin);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.toString();

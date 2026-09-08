@@ -8,7 +8,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from open_work_hub_api.domains.conversations.default_scope_adapters import is_supported_conversation_scope_ref
+from open_work_hub_api.domains.conversations.default_scope_adapters import (
+    is_supported_conversation_scope_ref,
+)
 from open_work_hub_api.domains.conversations.scope_contract import (
     SCOPE_REF_MAX_LEN,
     SCOPE_RESOURCE_ID_MAX_LEN,
@@ -164,4 +166,6 @@ class ConversationCreateRequest(_CamelModel):
 
 class ConversationUpdateRequest(_CamelModel):
     title: str
+
+
 ConversationScopeRef = str

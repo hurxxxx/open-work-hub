@@ -1,11 +1,11 @@
-import { createElement, lazy } from 'react';
 import {
   getAppRouteChrome,
   getAppRoutePattern,
 } from '@open-work-hub/contracts/app-routes';
+import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const RetrievalSearchView = lazy(() =>
   import('./views/RetrievalSearchView').then((module) => ({
@@ -17,7 +17,7 @@ export const retrievalSearchElement = lazyRoute(
   createElement(RetrievalSearchView),
 );
 
-export const retrievalSearchWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const retrievalSearchAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'retrieval-search',
     chrome: getAppRouteChrome('retrieval-search.root'),

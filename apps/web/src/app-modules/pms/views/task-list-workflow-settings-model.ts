@@ -1,7 +1,4 @@
-import type {
-  PmsStatusCategory,
-  PmsTaskListStatus,
-} from '../api/pms-api';
+import type { PmsStatusCategory, PmsTaskListStatus } from '../api/pms-api';
 
 export type TaskListWorkflowStatusMode = 'inherit' | 'custom';
 export type TaskListWorkflowStatusSource = 'space' | 'list';

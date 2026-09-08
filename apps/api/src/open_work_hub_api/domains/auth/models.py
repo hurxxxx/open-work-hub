@@ -4,13 +4,12 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     ForeignKey,
-    ForeignKeyConstraint,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -27,35 +26,6 @@ def utcnow_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-class Workspace(Base):
-    __tablename__ = "workspaces"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    key: Mapped[str] = mapped_column(String(48), unique=True, index=True)
-    name: Mapped[str] = mapped_column(String(120), index=True)
-    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        onupdate=utcnow_naive,
-        nullable=False,
-    )
-    user_bindings: Mapped[list["WorkspaceUserBinding"]] = relationship(
-        back_populates="workspace",
-        cascade="all, delete-orphan",
-    )
-    app_overrides: Mapped[list["WorkspaceAppOverride"]] = relationship(
-        back_populates="workspace",
-        cascade="all, delete-orphan",
-    )
-    teams: Mapped[list["Team"]] = relationship(
-        back_populates="workspace",
-        cascade="all, delete-orphan",
-    )
-
-
 class User(Base):
     __tablename__ = "users"
 
@@ -69,7 +39,6 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(24), default="active", index=True)
     login_blocked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
-    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     theme_preference: Mapped[str] = mapped_column(String(16), default="system")
     locale: Mapped[str] = mapped_column(String(16), default="ko-KR", nullable=False)
@@ -96,20 +65,9 @@ class User(Base):
     primary_organization_unit: Mapped["OrganizationUnit | None"] = relationship(
         "OrganizationUnit",
         back_populates="users",
+        foreign_keys=[primary_organization_unit_id],
     )
     system_role_links: Mapped[list["UserSystemRole"]] = relationship(
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    workspace_bindings: Mapped[list["WorkspaceUserBinding"]] = relationship(
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    app_workspace_preferences: Mapped[list["UserAppWorkspacePreference"]] = relationship(
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    team_memberships: Mapped[list["TeamMember"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -131,19 +89,6 @@ class UserSystemRole(Base):
     user: Mapped[User] = relationship(back_populates="system_role_links")
 
 
-class WorkspaceUserBinding(Base):
-    __tablename__ = "workspace_user_bindings"
-    __table_args__ = (UniqueConstraint("workspace_id", "user_id", name="uq_workspace_user"),)
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    role: Mapped[str] = mapped_column(String(24), default="member", index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
-    workspace: Mapped[Workspace] = relationship(back_populates="user_bindings")
-    user: Mapped[User] = relationship(back_populates="workspace_bindings")
-
-
 class CompanyAppControl(Base):
     __tablename__ = "company_app_controls"
 
@@ -161,87 +106,6 @@ class CompanyAppControl(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
-
-
-class WorkspaceAppDefault(Base):
-    __tablename__ = "workspace_app_defaults"
-
-    app_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, index=True)
-    updated_by_user_id: Mapped[str | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        onupdate=utcnow_naive,
-        nullable=False,
-    )
-
-
-class WorkspaceAppOverride(Base):
-    __tablename__ = "workspace_app_overrides"
-    __table_args__ = (Index("ix_workspace_app_overrides_app_id", "app_id"),)
-
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    app_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, index=True)
-    updated_by_user_id: Mapped[str | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        onupdate=utcnow_naive,
-        nullable=False,
-    )
-    workspace: Mapped[Workspace] = relationship(back_populates="app_overrides")
-
-
-class UserAppWorkspacePreference(Base):
-    __tablename__ = "user_app_workspace_preferences"
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["workspace_id", "user_id"],
-            ["workspace_user_bindings.workspace_id", "workspace_user_bindings.user_id"],
-            name="fk_user_app_workspace_preference_membership",
-            ondelete="CASCADE",
-        ),
-        Index(
-            "ix_user_app_workspace_preferences_workspace_user",
-            "workspace_id",
-            "user_id",
-        ),
-    )
-
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    app_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        onupdate=utcnow_naive,
-        nullable=False,
-    )
-    user: Mapped[User] = relationship(back_populates="app_workspace_preferences")
-    workspace: Mapped[Workspace] = relationship()
 
 
 class PlatformAppBarCategory(Base):
@@ -287,44 +151,6 @@ class PlatformAppBarCategoryApp(Base):
         nullable=False,
     )
     category: Mapped[PlatformAppBarCategory] = relationship(back_populates="apps")
-
-
-class Team(Base):
-    __tablename__ = "teams"
-    __table_args__ = (UniqueConstraint("workspace_id", "key", name="uq_workspace_team_key"),)
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    key: Mapped[str] = mapped_column(String(48), index=True)
-    name: Mapped[str] = mapped_column(String(120), index=True)
-    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
-    trashed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        onupdate=utcnow_naive,
-        nullable=False,
-    )
-    workspace: Mapped[Workspace] = relationship(back_populates="teams")
-    members: Mapped[list["TeamMember"]] = relationship(
-        back_populates="team",
-        cascade="all, delete-orphan",
-    )
-
-
-class TeamMember(Base):
-    __tablename__ = "team_members"
-    __table_args__ = (UniqueConstraint("team_id", "user_id", name="uq_team_member"),)
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), index=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    role: Mapped[str] = mapped_column(String(24), default="member", index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
-    team: Mapped[Team] = relationship(back_populates="members")
-    user: Mapped[User] = relationship(back_populates="team_memberships")
 
 
 class AuditLog(Base):

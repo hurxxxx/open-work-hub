@@ -96,7 +96,6 @@ class RagQueryService:
             _record_provider_failure(
                 provider_name=_provider_name(self._embedding_client),
                 operation="embed_query",
-                workspace_id=request.workspace_id,
                 source_kind=source_kind,
                 error=error,
             )
@@ -105,7 +104,6 @@ class RagQueryService:
             provider_name=_provider_name(self._embedding_client),
             operation="query_embedding",
             latency_ms=_elapsed_ms(embedding_started),
-            workspace_id=request.workspace_id,
             source_kind=source_kind,
         )
         vector_hit_count = 0
@@ -170,7 +168,6 @@ class RagQueryService:
                 _record_provider_failure(
                     provider_name=_provider_name(rerank_client),
                     operation="rerank",
-                    workspace_id=request.workspace_id,
                     source_kind=source_kind,
                     error=error,
                 )
@@ -180,7 +177,6 @@ class RagQueryService:
                 record_rerank_latency(
                     provider_name=_provider_name(rerank_client),
                     latency_ms=_elapsed_ms(rerank_started),
-                    workspace_id=request.workspace_id,
                     source_kind=source_kind,
                 )
         elif rerank_client is not None and vector_hits:
@@ -217,7 +213,6 @@ class RagQueryService:
                         grounded_answer_synthesizer or self._grounded_answer_synthesizer
                     ),
                     operation="grounded_answer",
-                    workspace_id=request.workspace_id,
                     source_kind=source_kind,
                     error=error,
                 )
@@ -228,7 +223,6 @@ class RagQueryService:
                         grounded_answer_synthesizer or self._grounded_answer_synthesizer
                     ),
                     latency_ms=_elapsed_ms(grounded_started),
-                    workspace_id=request.workspace_id,
                     source_kind=source_kind,
                 )
             if grounded_answer is None and hits:
@@ -244,7 +238,6 @@ class RagQueryService:
 
         latency_ms = int((time.perf_counter() - started) * 1000)
         record_query_latency(
-            workspace_id=request.workspace_id,
             answer_mode=request.answer_mode.value,
             latency_ms=latency_ms,
             source_kind=source_kind,
@@ -312,7 +305,6 @@ class RagQueryService:
                         collection=collection,
                         query=request.query,
                         scope_kind=request.scope_kind,
-                        workspace_id=request.workspace_id,
                         query_embedding=query_embedding,
                         retrieval_partition_ids=request.retrieval_partition_ids,
                         source_kinds=list(request.source_kinds),
@@ -357,8 +349,7 @@ def _apply_hit_hydrator(
     hits: Sequence[RagVectorSearchHit],
 ) -> list[RagVectorSearchHit]:
     candidate_keys = {
-        (hit.projection.resource_type, hit.projection.resource_id, hit.chunk_id)
-        for hit in hits
+        (hit.projection.resource_type, hit.projection.resource_id, hit.chunk_id) for hit in hits
     }
     hydrated = list(hit_hydrator(hits))
     if any(
@@ -412,7 +403,6 @@ def _query_hit_identity(hit: RagVectorSearchHit) -> tuple[str, str | None, str, 
     projection = hit.projection
     return (
         projection.scope_kind.value,
-        projection.workspace_id,
         projection.resource_type,
         projection.resource_id,
         hit.chunk_id,
@@ -460,7 +450,6 @@ def _record_provider_failure(
     *,
     provider_name: str | None,
     operation: str,
-    workspace_id: str | None,
     source_kind: str | None,
     error: Exception,
 ) -> None:
@@ -469,7 +458,6 @@ def _record_provider_failure(
         record_provider_timeout(
             provider_name=provider_name,
             operation=operation,
-            workspace_id=workspace_id,
             source_kind=source_kind,
             error_type=error_type,
         )
@@ -477,7 +465,6 @@ def _record_provider_failure(
     record_provider_error(
         provider_name=provider_name,
         operation=operation,
-        workspace_id=workspace_id,
         source_kind=source_kind,
         error_type=error_type,
     )

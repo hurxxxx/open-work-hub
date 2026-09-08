@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WorkspaceBootstrapResponse } from '@/src/platform/workspaces/workspaces-api';
-import {
-  workspaceBootstrapEnabledAppIds,
-  workspaceFeatureComingSoonItem,
-} from './gates';
+import type { AppsBootstrapResponse } from '@/src/platform/apps/apps-api';
+import { bootstrapEnabledAppIds, featureComingSoonItem } from './gates';
 
-function bootstrapData(): WorkspaceBootstrapResponse {
+function bootstrapData(): AppsBootstrapResponse {
   return {
     apps: [
       {
@@ -34,24 +31,22 @@ function bootstrapData(): WorkspaceBootstrapResponse {
       role: 'member',
       slug: 'workspace-1',
     },
-  } as WorkspaceBootstrapResponse;
+  } as AppsBootstrapResponse;
 }
 
 describe('workspace feature gates', () => {
   it('derives enabled IDs exclusively from bootstrap apps', () => {
-    expect(workspaceBootstrapEnabledAppIds(bootstrapData())).toEqual(['docs']);
+    expect(bootstrapEnabledAppIds(bootstrapData())).toEqual(['docs']);
   });
 
   it('projects coming-soon content from the bootstrap app entry', () => {
-    expect(
-      workspaceFeatureComingSoonItem(bootstrapData(), 'docs'),
-    ).toMatchObject({
+    expect(featureComingSoonItem(bootstrapData(), 'docs')).toMatchObject({
       appId: 'docs',
       comingSoon: true,
       id: 'docs',
       absolutePath: '/apps/docs',
       title: 'Docs from apps',
     });
-    expect(workspaceFeatureComingSoonItem(bootstrapData(), 'mail')).toBeNull();
+    expect(featureComingSoonItem(bootstrapData(), 'mail')).toBeNull();
   });
 });

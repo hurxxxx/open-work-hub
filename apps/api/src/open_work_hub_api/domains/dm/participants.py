@@ -6,11 +6,7 @@ from open_work_hub_api.domains.dm.models import DmConversation, DmConversationPa
 
 
 def active_participants(conversation: DmConversation) -> list[DmConversationParticipant]:
-    return [
-        participant
-        for participant in conversation.participants
-        if participant.left_at is None
-    ]
+    return [participant for participant in conversation.participants if participant.left_at is None]
 
 
 def active_participant(

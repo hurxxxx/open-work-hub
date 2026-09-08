@@ -1,26 +1,36 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.principal import CallerPrincipal
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.auth.access import record_audit_log
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.docs.access_context import (
     SOURCE_NATIVE_DOC,
     NativeAccess,
-    ensure_docs_workspace_access as _ensure_docs_workspace_access,
-    ensure_workspace_for_item_request as _ensure_workspace_for_item_request,
-    ensure_workspace_for_page_request as _ensure_workspace_for_page_request,
+)
+from open_work_hub_api.domains.docs.access_context import (
+    ensure_docs_app_access as _ensure_docs_app_access,
+)
+from open_work_hub_api.domains.docs.access_context import (
     load_accessible_native_docs as _load_accessible_native_docs,
+)
+from open_work_hub_api.domains.docs.access_context import (
     native_doc_from_item_or_404 as _native_doc_from_item_or_404,
+)
+from open_work_hub_api.domains.docs.access_context import (
     native_page_context_from_page_or_404 as _native_page_context_from_page_or_404,
+)
+from open_work_hub_api.domains.docs.access_context import (
     primary_target as _primary_target,
+)
+from open_work_hub_api.domains.docs.access_context import (
     resolve_native_doc_access as _resolve_native_doc_access,
-    workspace_for_doc as _workspace_for_doc,
 )
 from open_work_hub_api.domains.docs.hub_projection import (
     serialize_native_hub_item,
@@ -29,8 +39,8 @@ from open_work_hub_api.domains.docs.hub_projection import (
 from open_work_hub_api.domains.docs.models import (
     DocsUserItemPref,
     NativeDoc,
-    NativeDocTarget,
     NativeDocPage,
+    NativeDocTarget,
 )
 from open_work_hub_api.domains.docs.partitioning import ensure_native_doc_partition
 from open_work_hub_api.domains.docs.rag_sync import enqueue_native_doc_rag_sync
@@ -39,9 +49,8 @@ from open_work_hub_api.domains.pms.models import Task, TaskDocLink, TaskList
 from open_work_hub_api.domains.rag.contracts import RagSyncOperation
 from open_work_hub_api.domains.rag.source_registry import RAG_SCOPE_OFFICIAL, RAG_SCOPE_VALUES
 from open_work_hub_api.domains.source_access import can_read_native_doc
-from open_work_hub_api.domains.source_access.targets import resolve_target_label
 from open_work_hub_api.domains.source_access.policy import SourceAclPolicy
-
+from open_work_hub_api.domains.source_access.targets import resolve_target_label
 
 DOC_TYPE_VALUES = {
     "general",
@@ -58,7 +67,6 @@ DOC_CONTENT_FORMAT_VALUES = {"block", "html"}
 def create_native_doc_for_user(
     db: Session,
     *,
-    workspace_id: str,
     owner_id: str,
     title: str,
     first_page_title: str | None = None,
@@ -72,7 +80,10 @@ def create_native_doc_for_user(
     content_format: str = "block",
     content_text: str | None = None,
     primary_target: tuple[str, str, str, int] | None = None,
+    ownership_kind: Literal["personal", "company"] = "personal",
 ) -> tuple[NativeDoc, NativeDocPage]:
+    if ownership_kind not in {"personal", "company"}:
+        raise ValueError("Unsupported content ownership kind")
     resolved_doc_type = doc_type or _default_doc_type_for_source(source_app, source_kind)
     if resolved_doc_type not in DOC_TYPE_VALUES:
         raise ValueError(f"Unsupported docs doc_type: {resolved_doc_type}")
@@ -86,8 +97,8 @@ def create_native_doc_for_user(
         raise ValueError(f"Unsupported docs rag_scope: {rag_scope}")
     doc = NativeDoc(
         id=new_id(),
-        workspace_id=workspace_id,
         owner_id=owner_id,
+        ownership_kind=ownership_kind,
         title=title.strip(),
         doc_type=resolved_doc_type,
         source_app=source_app,
@@ -122,6 +133,21 @@ def create_native_doc_for_user(
                 is_primary=True,
                 sort_order=sort_order,
             )
+        )
+    if ownership_kind == "company":
+        record_audit_log(
+            db,
+            actor_user_id=owner_id,
+            action="content.create_company",
+            entity_kind="docs_native_doc",
+            entity_id=doc.id,
+            summary="Created company business document",
+            payload={
+                "ownership": "company",
+                "source_app": source_app,
+                "source_kind": source_kind,
+                "source_ref": source_ref,
+            },
         )
     enqueue_native_doc_rag_sync(
         db,
@@ -225,15 +251,13 @@ def _serialize_native_item(
     access: NativeAccess,
     pref: DocsUserItemPref | None,
 ) -> dict[str, Any]:
-    workspace = _workspace_for_doc(db, doc)
     primary_target = _primary_target(doc)
     location_label = resolve_target_label(
         db=db,
-        workspace=workspace,
+        user=user,
         target=primary_target,
     )
     source = describe_source(
-        workspace=workspace,
         doc=doc,
         primary_target=primary_target,
     )
@@ -356,7 +380,6 @@ def _linked_pms_space_doc_ids(
     db: Session,
     *,
     user: User,
-    workspace: Workspace,
     space_id: str | None,
 ) -> set[str]:
     if not space_id:
@@ -364,7 +387,7 @@ def _linked_pms_space_doc_ids(
 
     from open_work_hub_api.domains.pms.source_access import accessible_pms_task_query
 
-    policy = SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
+    policy = SourceAclPolicy.for_user(db, user=user)
     accessible_task_ids = accessible_pms_task_query(policy).subquery()
     doc_ids = db.scalars(
         select(TaskDocLink.doc_id)
@@ -396,13 +419,11 @@ def _matching_space_doc_ids(
     db: Session,
     *,
     user: User,
-    workspace: Workspace,
     space_id: str | None,
 ) -> set[str]:
     return _direct_space_doc_ids(db, space_id) | _linked_pms_space_doc_ids(
         db,
         user=user,
-        workspace=workspace,
         space_id=space_id,
     )
 
@@ -442,7 +463,6 @@ def _sort_docs(
 def create_page(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     hub_id: str,
@@ -455,7 +475,6 @@ def create_page(
 
     return create_native_page_from_markdown(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         hub_id=hub_id,
@@ -482,7 +501,6 @@ def list_hub(
     doc_type: str | None = None,
     space_id: str | None = None,
 ) -> dict[str, Any]:
-    workspace = _ensure_docs_workspace_access(db, user)
     query = {
         "view": view,
         "q": q,
@@ -510,7 +528,6 @@ def list_hub(
     matching_space_doc_ids = _matching_space_doc_ids(
         db,
         user=user,
-        workspace=workspace,
         space_id=space_id,
     )
     docs = _filter_docs(
@@ -538,7 +555,10 @@ def get_item(
     item_id: str,
     share_token: str | None = None,
 ) -> dict[str, Any]:
-    _ensure_workspace_for_item_request(db, user, item_id=item_id, share_token=share_token)
+    _ensure_docs_app_access(
+        db,
+        user,
+    )
     return _lookup_item(db, item_id, user, share_token=share_token)
 
 
@@ -549,7 +569,10 @@ def list_pages(
     item_id: str,
     share_token: str | None = None,
 ) -> dict[str, Any]:
-    _ensure_workspace_for_item_request(db, user, item_id=item_id, share_token=share_token)
+    _ensure_docs_app_access(
+        db,
+        user,
+    )
     doc, access = _native_doc_from_item_or_404(db, item_id, user, share_token=share_token)
     pages = [
         _serialize_native_page(page, can_edit=access.can_edit)
@@ -572,7 +595,10 @@ def read_page(
     page_id: str,
     share_token: str | None = None,
 ) -> dict[str, Any]:
-    _ensure_workspace_for_page_request(db, user, page_id=page_id, share_token=share_token)
+    _ensure_docs_app_access(
+        db,
+        user,
+    )
     context = _native_page_context_from_page_or_404(
         db,
         page_id=page_id,

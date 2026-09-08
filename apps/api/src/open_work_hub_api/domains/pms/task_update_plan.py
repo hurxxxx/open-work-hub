@@ -4,7 +4,6 @@ from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from typing import Any
 
-
 TASK_UPDATE_NULLABLE_FIELDS = frozenset(
     {
         "assignee_id",

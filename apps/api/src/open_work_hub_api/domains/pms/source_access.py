@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import exists, false, or_, select
+from sqlalchemy import exists, or_, select
 
-from open_work_hub_api.domains.auth.models import Team, TeamMember
-from open_work_hub_api.domains.auth.roles import team_role_allows_predicate
 from open_work_hub_api.domains.pms.models import Task, TaskList, TaskUserAccess
+from open_work_hub_api.domains.pms.space_models import Team
 from open_work_hub_api.domains.retrieval.partition_adapter_ids import (
     PMS_RETRIEVAL_PARTITION_ADAPTER_ID,
 )
@@ -18,21 +17,10 @@ def _utcnow() -> datetime:
 
 
 def accessible_pms_task_query(policy):
-    if policy.workspace_role is None:
-        return select(Task.id).where(false())
+    from open_work_hub_api.domains.pms.access import accessible_space_ids_query
 
     now = _utcnow()
-    accessible_team_ids = (
-        select(Team.id)
-        .join(TeamMember, TeamMember.team_id == Team.id)
-        .where(
-            Team.workspace_id == policy.workspace.id,
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
-            TeamMember.user_id == policy.user.id,
-            team_role_allows_predicate(TeamMember.role),
-        )
-    )
+    accessible_team_ids = accessible_space_ids_query(policy.db, user_id=policy.user.id)
     team_access = TaskList.team_id.in_(accessible_team_ids)
     task_grant = exists(
         select(TaskUserAccess.id).where(
@@ -50,7 +38,6 @@ def accessible_pms_task_query(policy):
         .where(
             Task.archived.is_(False),
             TaskList.archived.is_(False),
-            Team.workspace_id == policy.workspace.id,
             Team.active.is_(True),
             Team.trashed_at.is_(None),
             or_(team_access, task_grant),
@@ -69,22 +56,13 @@ def has_accessible_pms_task(policy) -> bool:
     return policy.db.scalar(accessible_pms_task_query(policy).limit(1)) is not None
 
 
-def resolve_pms_task_workspace_id(db, *, task_id: str) -> str | None:
-    return db.scalar(
-        select(Team.workspace_id)
-        .join(TaskList, TaskList.team_id == Team.id)
-        .join(Task, Task.list_id == TaskList.id)
-        .where(Task.id == task_id)
-    )
-
-
 class PmsTaskSourceAccessAdapter:
     app_id = "pms"
     adapter_id = PMS_RETRIEVAL_PARTITION_ADAPTER_ID
     partition_adapter_id = PMS_RETRIEVAL_PARTITION_ADAPTER_ID
     source_namespace = "pms"
     resource_types = (PMS_TASK_RESOURCE_TYPE,)
-    allowed_candidate_scopes = ("workspace",)
+    allowed_candidate_scopes = ("company",)
     allowed_transitions: tuple[str, ...] = ()
     transition_mode = "source_owned"
     keyword_acl_entity_types = ("pms_task",)
@@ -137,31 +115,7 @@ class PmsTaskSourceAccessAdapter:
         return has_accessible_pms_task(policy)
 
     def keyword_acl_branches(self, policy):
-        if policy.workspace_role is None:
-            return [
-                policy._keyword_entity_branch(
-                    "pms_task",
-                    [policy._keyword_acl_clause("team_ids", "__no_pms_task_access__")],
-                )
-            ]
-        if not hasattr(policy, "db"):
-            team_ids = policy._accessible_team_ids()
-        else:
-            team_ids = [
-                str(team_id)
-                for team_id in policy.db.scalars(
-                    select(Team.id)
-                    .join(TeamMember, TeamMember.team_id == Team.id)
-                    .where(
-                        Team.workspace_id == policy.workspace.id,
-                        Team.active.is_(True),
-                        Team.trashed_at.is_(None),
-                        TeamMember.user_id == policy.user.id,
-                        team_role_allows_predicate(TeamMember.role),
-                    )
-                ).all()
-                if team_id
-            ]
+        team_ids = policy._accessible_team_ids()
         clauses = [policy._keyword_acl_clause("granted_user_ids", policy.user.id)]
         if team_ids:
             clauses.append(policy._keyword_acl_clause("team_ids", team_ids))
@@ -174,5 +128,4 @@ __all__ = [
     "accessible_pms_task_query",
     "can_read_pms_task",
     "has_accessible_pms_task",
-    "resolve_pms_task_workspace_id",
 ]

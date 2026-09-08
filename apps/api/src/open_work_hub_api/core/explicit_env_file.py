@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Collection
 from pathlib import Path
-import re
 
 from dotenv.parser import parse_stream
-
 
 _ENV_KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 

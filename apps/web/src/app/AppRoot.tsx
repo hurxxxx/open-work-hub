@@ -1,14 +1,19 @@
+import { NOTIFICATION_REALTIME_EVENT_TYPE_VALUES } from '@open-work-hub/contracts/notifications';
+import { FeedbackProvider } from '@open-work-hub/ui';
 import { lazy, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrowserRouter as Router } from 'react-router-dom';
-import { FeedbackProvider } from '@open-work-hub/ui';
-import { NOTIFICATION_REALTIME_EVENT_TYPE_VALUES } from '@open-work-hub/contracts/notifications';
 
-import { AppContent } from './shell/AppContent';
-import { NotificationPanel } from '../components/layout/NotificationPanel';
 import { pmsManifest } from '../app-modules/pms';
+import { resolveShellState } from '../app-shell';
+import { NotificationPanel } from '../components/layout/NotificationPanel';
 import { getUnreadNotificationCount } from '../platform/notifications/notifications-api';
 import {
+  RealtimeProvider,
+  useRealtime,
+} from '../platform/realtime/realtime-provider';
+import {
+  AI_TOOL_APP_IDS,
   APP_BACKGROUND_WORK_SOURCES,
   APP_BAR_FIXED_APP_IDS,
   APP_BAR_ITEMS,
@@ -16,27 +21,19 @@ import {
   APP_FEATURE_GUIDE_TOOL_IDS,
   APP_GLOBAL_ROUTES,
   APP_LAUNCHER_GLOBAL_PATHS,
+  APP_ROUTES,
   APP_SHELL_PROVIDERS,
-  APP_WORKSPACE_ROUTES,
-  NAV_ITEMS,
-  WORKSPACE_AI_TOOL_APP_IDS,
   getAppModuleManifest,
   getAppModuleSidebarConfig,
+  NAV_ITEMS,
 } from './shell/app-registry';
 import {
   staticAdminLandingRoute,
   staticAdminRedirectRoutes,
   staticAdminSectionRoutes,
-  staticWorkspaceSettingsRoute,
-} from './shell/workspace-route-definitions';
-import { resolveShellState } from '../app-shell';
-import {
-  RealtimeProvider,
-  useRealtime,
-} from '../platform/realtime/realtime-provider';
+} from './shell/app-route-definitions';
+import { AppContent } from './shell/AppContent';
 import { ShellRealtimeProvider } from './shell/shell-realtime-context';
-import { APP_WORKSPACE_API_ROUTE_POLICY } from './shell/workspace-api-routes';
-import { configureWorkspaceApiRoutePolicy } from '../platform/api/workspace-api-path-policy';
 
 type RegisteredAppId = Parameters<typeof getAppModuleManifest>[0];
 
@@ -52,8 +49,6 @@ const getDefaultAppModuleManifest = (appId: string) =>
 const NOTIFICATION_REALTIME_EVENT_TYPE_SET = new Set<string>(
   NOTIFICATION_REALTIME_EVENT_TYPE_VALUES,
 );
-
-configureWorkspaceApiRoutePolicy(APP_WORKSPACE_API_ROUTE_POLICY);
 
 function ShellRealtimeBridge({ children }: { children: ReactNode }) {
   const realtime = useRealtime();
@@ -110,9 +105,8 @@ export default function AppRoot() {
           realtimeProvider={DefaultShellRealtimeProvider}
           resolveShellStateForPath={resolveShellState}
           shellProviders={APP_SHELL_PROVIDERS}
-          workspaceRoutes={APP_WORKSPACE_ROUTES}
-          workspaceAiToolAppIds={WORKSPACE_AI_TOOL_APP_IDS}
-          workspaceSettingsRoute={staticWorkspaceSettingsRoute}
+          appRoutes={APP_ROUTES}
+          aiToolAppIds={AI_TOOL_APP_IDS}
         />
       </Router>
     </FeedbackProvider>

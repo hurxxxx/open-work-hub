@@ -1,10 +1,4 @@
-import {
-  createContext,
-  use,
-  useEffect,
-  useRef,
-  type ReactNode,
-} from 'react';
+import { createContext, use, useEffect, useRef, type ReactNode } from 'react';
 
 export type ShellRealtimeStatus = 'offline' | 'connecting' | 'live';
 

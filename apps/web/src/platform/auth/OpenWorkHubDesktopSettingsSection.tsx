@@ -1,6 +1,6 @@
 import { DesktopInstallerPanel } from './desktop-installer-panel';
-import { SettingsSectionHeader } from './SettingsSectionHeader';
 import type { SettingsTranslator } from './settings-page-model';
+import { SettingsSectionHeader } from './SettingsSectionHeader';
 
 export function OpenWorkHubDesktopSettingsSection({
   t,

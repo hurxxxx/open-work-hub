@@ -1,5 +1,5 @@
-import { useCallback, useState, type SetStateAction } from 'react';
 import type { TFunction } from 'i18next';
+import { useCallback, useState, type SetStateAction } from 'react';
 
 import { formatByteSize } from '@/src/platform/format/byte-size';
 
@@ -25,7 +25,6 @@ export function useTaskDetailAttachments({
   taskId,
   token,
   t,
-  workspaceSlug,
 }: {
   canEdit: boolean;
   onUpdate?: () => void | Promise<void>;
@@ -34,20 +33,19 @@ export function useTaskDetailAttachments({
   taskId: string;
   token: string | null;
   t: TFunction;
-  workspaceSlug: string;
 }) {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
   const handleFileUpload = useCallback(
     async (files: FileList | File[]) => {
-      if (!token || !canEdit || !workspaceSlug) return;
+      if (!token || !canEdit) return;
       setUploading(true);
       setSaveError(null);
       try {
         const uploadedAttachments = await Promise.all(
           Array.from(files).map((file) =>
-            uploadAttachment(token, taskId, file, workspaceSlug),
+            uploadAttachment(token, taskId, file),
           ),
         );
         setAttachments((prev) => [...prev, ...uploadedAttachments]);
@@ -64,24 +62,15 @@ export function useTaskDetailAttachments({
         setDragOver(false);
       }
     },
-    [
-      canEdit,
-      onUpdate,
-      setAttachments,
-      setSaveError,
-      t,
-      taskId,
-      token,
-      workspaceSlug,
-    ],
+    [canEdit, onUpdate, setAttachments, setSaveError, t, taskId, token],
   );
 
   const handleDeleteAttachment = useCallback(
     async (attachmentId: string) => {
-      if (!token || !canEdit || !workspaceSlug) return;
+      if (!token || !canEdit) return;
       setSaveError(null);
       try {
-        await deleteAttachment(token, attachmentId, workspaceSlug);
+        await deleteAttachment(token, attachmentId);
         setAttachments((prev) =>
           prev.filter((attachment) => attachment.id !== attachmentId),
         );
@@ -95,7 +84,7 @@ export function useTaskDetailAttachments({
         );
       }
     },
-    [canEdit, onUpdate, setAttachments, setSaveError, t, token, workspaceSlug],
+    [canEdit, onUpdate, setAttachments, setSaveError, t, token],
   );
 
   return {

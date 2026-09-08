@@ -1,9 +1,9 @@
 import { chatbotManifest } from './manifest';
-import { chatbotWorkspaceRoutes } from './routes';
+import { chatbotAppRoutes } from './routes';
 
-export { chatbotManifest, chatbotWorkspaceRoutes };
+export { chatbotAppRoutes, chatbotManifest };
 
 export const chatbotModule = {
   manifest: chatbotManifest,
-  workspaceRoutes: chatbotWorkspaceRoutes,
+  appRoutes: chatbotAppRoutes,
 } as const;

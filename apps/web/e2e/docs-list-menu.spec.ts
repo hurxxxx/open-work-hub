@@ -52,7 +52,7 @@ const docsHubItems = [
 ];
 
 async function stubDocsList(page: Page) {
-  await page.route('**/api/v1/workspaces/*/docs/hub**', (route) =>
+  await page.route('**/api/v1/docs/hub**', (route) =>
     route.fulfill({
       json: {
         items: docsHubItems,
@@ -62,13 +62,13 @@ async function stubDocsList(page: Page) {
       },
     }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/collections**', (route) =>
+  await page.route('**/api/v1/docs/collections**', (route) =>
     route.fulfill({ json: { items: [], total: 0 } }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/favorites**', (route) =>
+  await page.route('**/api/v1/docs/favorites**', (route) =>
     route.fulfill({ json: [] }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/recent-pages**', (route) =>
+  await page.route('**/api/v1/docs/recent-pages**', (route) =>
     route.fulfill({ json: [] }),
   );
   await page.route('**/api/v1/docs/favorites**', (route) =>
@@ -87,7 +87,7 @@ test.describe('Docs list row menu', () => {
     await stubConversationsApi(page);
     await stubDocsList(page);
 
-    await page.goto('/apps/docs/workspaces/hq');
+    await page.goto('/apps/docs');
     await expect(page.getByText('HP ZGX Nano AI Station 셋업')).toBeVisible();
 
     await page

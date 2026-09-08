@@ -7,31 +7,29 @@ describe('resolveAppRouteContext', () => {
     expect(resolveAppRouteContext('/')).toEqual({
       kind: 'launcher',
       appId: null,
-      workspaceSlug: null,
     });
   });
 
-  it('recognizes unresolved workspace app entry routes', () => {
+  it('recognizes declared app entry routes', () => {
     expect(resolveAppRouteContext('/apps/docs')).toMatchObject({
-      kind: 'entry',
+      kind: 'app',
       appId: 'docs',
     });
   });
 
-  it('extracts canonical workspace context', () => {
-    expect(
-      resolveAppRouteContext('/apps/docs/workspaces/hq/documents/doc-1'),
-    ).toMatchObject({ kind: 'workspace', appId: 'docs', workspaceSlug: 'hq' });
+  it('identifies app resource routes', () => {
+    expect(resolveAppRouteContext('/apps/docs/documents/doc-1')).toMatchObject({
+      kind: 'app',
+      appId: 'docs',
+    });
   });
 
-  it('never assigns workspace context to platform and shared routes', () => {
+  it('identifies personal and shared app routes', () => {
     expect(resolveAppRouteContext('/apps/mail')).toMatchObject({
-      kind: 'global',
-      workspaceSlug: null,
+      kind: 'app',
     });
     expect(resolveAppRouteContext('/apps/docs/shared/token')).toMatchObject({
-      kind: 'global',
-      workspaceSlug: null,
+      kind: 'app',
     });
   });
 });

@@ -4,13 +4,12 @@ import logging
 from collections.abc import Iterable
 from typing import Protocol
 
-from open_work_hub_api.domains.realtime.realtime_event_types import build_realtime_event
 from open_work_hub_api.domains.auth.realtime_contract_generated import (
     AUTH_ACCESS_CHANGED,
     AUTH_ACCESS_CHANGED_REASON_APP_AVAILABILITY,
-    AUTH_ACCESS_CHANGED_REASON_WORKSPACE_MEMBERSHIP,
+    AUTH_ACCESS_CHANGED_REASON_PRINCIPAL,
 )
-
+from open_work_hub_api.domains.realtime.realtime_event_types import build_realtime_event
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +21,8 @@ def _build_access_changed_event(reason: str) -> dict[str, object]:
     )
 
 
-def build_workspace_membership_access_changed_event() -> dict[str, object]:
-    return _build_access_changed_event(AUTH_ACCESS_CHANGED_REASON_WORKSPACE_MEMBERSHIP)
+def build_principal_access_changed_event() -> dict[str, object]:
+    return _build_access_changed_event(AUTH_ACCESS_CHANGED_REASON_PRINCIPAL)
 
 
 def build_app_availability_access_changed_event() -> dict[str, object]:
@@ -56,14 +55,14 @@ def _publish_access_changed(
             )
 
 
-def publish_workspace_membership_access_changed(
+def publish_principal_access_changed(
     realtime: UserRealtimePublisher | None,
     user_ids: Iterable[str],
 ) -> None:
     _publish_access_changed(
         realtime,
         user_ids,
-        event=build_workspace_membership_access_changed_event(),
+        event=build_principal_access_changed_event(),
     )
 
 

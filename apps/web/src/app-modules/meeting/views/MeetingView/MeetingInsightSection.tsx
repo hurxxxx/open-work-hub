@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import { Loader2, Sparkles } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
+import { Loader2, Sparkles } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { MeetingDetail } from '../../api/meeting-api';
 import {
@@ -28,7 +28,7 @@ import {
 
 interface MeetingInsightSectionProps {
   meeting: MeetingDetail;
-  workspaceSlug: string;
+
   token: string | null;
   timeZone: string;
   onOpenInChat: (insight: MeetingInsightItem) => void | Promise<void>;

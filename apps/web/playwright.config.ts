@@ -67,7 +67,7 @@ function resolveChromiumExecutablePath(): string | undefined {
 // First-time setup: `pnpm exec playwright install chromium`.
 // Run:            `pnpm e2e` (or `pnpm e2e -- --ui` for the Playwright UI).
 //
-// Tests stub the auth and workspace bootstrap endpoints via page.route so they
+// Tests stub the auth and app bootstrap endpoints via page.route so they
 // don't require a live API. Only chromium runs by default — extend projects
 // below if we ever need cross-browser coverage.
 export default defineConfig({

@@ -3,12 +3,7 @@ from sqlalchemy import select
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.pms.models import ChecklistItem, TaskActivityLog
-from test_pms_issues import (
-    _auth_headers,
-    _bootstrap_admin,
-    _create_issue,
-    _create_task_list,
-)
+from test_pms_issues import _auth_headers, _bootstrap_admin, _create_issue, _create_task_list
 
 
 def test_checklist_completed_toggle_records_activity_action(client: TestClient) -> None:
@@ -17,7 +12,7 @@ def test_checklist_completed_toggle_records_activity_action(client: TestClient) 
     task = _create_issue(client, token, task_list["id"], title="Checklist activity")
 
     create_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/checklist",
+        f"/api/v1/pms/tasks/{task['id']}/checklist",
         headers=_auth_headers(token),
         json={"text": "Confirm toggle action", "sort_order": 0},
     )
@@ -25,7 +20,7 @@ def test_checklist_completed_toggle_records_activity_action(client: TestClient) 
     item = create_response.json()
 
     checked_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/checklist/{item['id']}",
+        f"/api/v1/pms/checklist/{item['id']}",
         headers=_auth_headers(token),
         json={"completed": True},
     )
@@ -33,7 +28,7 @@ def test_checklist_completed_toggle_records_activity_action(client: TestClient) 
     assert checked_response.json()["completed"] is True
 
     unchecked_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/checklist/{item['id']}",
+        f"/api/v1/pms/checklist/{item['id']}",
         headers=_auth_headers(token),
         json={"completed": False},
     )
@@ -67,7 +62,7 @@ def test_reorder_checklist_ignores_unknown_ids_and_preserves_omitted_sort_order(
         ("Third", 30),
     ):
         response = client.post(
-            f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/checklist",
+            f"/api/v1/pms/tasks/{task['id']}/checklist",
             headers=_auth_headers(token),
             json={"text": text, "sort_order": sort_order},
         )
@@ -75,7 +70,7 @@ def test_reorder_checklist_ignores_unknown_ids_and_preserves_omitted_sort_order(
         items.append(response.json())
 
     reorder_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/checklist/reorder",
+        f"/api/v1/pms/tasks/{task['id']}/checklist/reorder",
         headers=_auth_headers(token),
         json={"item_ids": [items[2]["id"], "missing-checklist-item", items[0]["id"]]},
     )
@@ -84,9 +79,7 @@ def test_reorder_checklist_ignores_unknown_ids_and_preserves_omitted_sort_order(
     with get_session_factory()() as db:
         persisted = {
             item.id: item.sort_order
-            for item in db.scalars(
-                select(ChecklistItem).where(ChecklistItem.task_id == task["id"])
-            )
+            for item in db.scalars(select(ChecklistItem).where(ChecklistItem.task_id == task["id"]))
         }
 
     assert persisted[items[2]["id"]] == 0

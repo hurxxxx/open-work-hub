@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 import time
+from collections.abc import Callable
 
 from open_work_hub_api.domains.rag.contracts import (
     RagDeleteRequest,
@@ -102,7 +102,6 @@ class RagService:
             _record_provider_failure(
                 provider_name=_provider_name(self._embedding_client),
                 operation="embed_texts",
-                workspace_id=projection.workspace_id,
                 resource_type=projection.resource_type,
                 source_kind=projection.source_kind,
                 error=error,
@@ -112,7 +111,6 @@ class RagService:
             provider_name=_provider_name(self._embedding_client),
             operation="ingest_embedding",
             latency_ms=_elapsed_ms(embedding_started),
-            workspace_id=projection.workspace_id,
             resource_type=projection.resource_type,
             source_kind=projection.source_kind,
         )
@@ -142,7 +140,6 @@ class RagService:
                     collection=resolved_collection,
                     retrieval_partition_id=projection.retrieval_partition_id,
                     scope_kind=projection.scope_kind,
-                    workspace_id=projection.workspace_id,
                     resource_type=projection.resource_type,
                     resource_id=projection.resource_id,
                 ),
@@ -152,14 +149,12 @@ class RagService:
             _record_provider_failure(
                 provider_name=_provider_name(self._vector_index),
                 operation="ingest_upsert",
-                workspace_id=projection.workspace_id,
                 resource_type=projection.resource_type,
                 source_kind=projection.source_kind,
                 error=error,
             )
             raise
         record_ingest_latency(
-            workspace_id=projection.workspace_id,
             resource_type=projection.resource_type,
             source_kind=projection.source_kind,
             provider_name=_provider_name(self._vector_index),
@@ -175,8 +170,7 @@ class RagService:
     def delete_projection(
         self,
         *,
-        workspace_id: str | None,
-        scope_kind: RagScopeKind = RagScopeKind.WORKSPACE,
+        scope_kind: RagScopeKind = RagScopeKind.COMPANY,
         resource_type: str,
         resource_id: str,
         collection: str | None = None,
@@ -188,7 +182,6 @@ class RagService:
                 collection=resolved_collection,
                 retrieval_partition_id=retrieval_partition_id,
                 scope_kind=scope_kind,
-                workspace_id=workspace_id,
                 resource_type=resource_type,
                 resource_id=resource_id,
             )
@@ -209,7 +202,6 @@ class RagService:
         *,
         content: bytes,
         content_type: str | None = None,
-        workspace_id: str | None = None,
         resource_type: str | None = None,
         source_kind: str | None = None,
     ) -> str:
@@ -222,7 +214,6 @@ class RagService:
             _record_provider_failure(
                 provider_name=_provider_name(self._ocr_client),
                 operation="ocr",
-                workspace_id=workspace_id,
                 resource_type=resource_type,
                 source_kind=source_kind,
                 error=error,
@@ -231,7 +222,6 @@ class RagService:
         record_ocr_latency(
             provider_name=_provider_name(self._ocr_client),
             latency_ms=_elapsed_ms(started),
-            workspace_id=workspace_id,
             resource_type=resource_type,
             source_kind=source_kind,
         )
@@ -250,7 +240,6 @@ def _record_provider_failure(
     *,
     provider_name: str | None,
     operation: str,
-    workspace_id: str | None,
     resource_type: str | None,
     source_kind: str | None,
     error: Exception,
@@ -260,7 +249,6 @@ def _record_provider_failure(
         record_provider_timeout(
             provider_name=provider_name,
             operation=operation,
-            workspace_id=workspace_id,
             resource_type=resource_type,
             source_kind=source_kind,
             error_type=error_type,
@@ -269,7 +257,6 @@ def _record_provider_failure(
     record_provider_error(
         provider_name=provider_name,
         operation=operation,
-        workspace_id=workspace_id,
         resource_type=resource_type,
         source_kind=source_kind,
         error_type=error_type,

@@ -1,109 +1,58 @@
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import Column, MetaData, String, Table, create_engine, select
 
 from open_work_hub_api.domains.source_access.access_scope import AccessScopeRules
 
 
-def _member_rules() -> AccessScopeRules:
-    return AccessScopeRules(
-        workspace_id="workspace-1",
-        workspace_role="member",
-        user_id="user-1",
-        team_ids=("team-1",),
-    )
+_SCOPE_CASES = [
+    ("company", None, True),
+    ("company", "invented-container", False),
+    ("group", "group-1", True),
+    ("group", "group-2", False),
+    ("group", None, False),
+    ("team", "space-1", True),
+    ("team", "space-2", False),
+    ("team", None, False),
+    ("user", "user-1", True),
+    ("user", "user-2", False),
+    ("user", None, False),
+    ("workspace", None, False),
+    ("workspace", "retired", False),
+    (None, "user-1", False),
+    ("unknown", "group-1", False),
+]
 
 
-def test_access_scope_rules_admin_preserves_workspace_and_scope_boundaries() -> None:
+@pytest.mark.parametrize("platform_admin", [False, True])
+@pytest.mark.parametrize("active", [False, True])
+@pytest.mark.parametrize("scope_kind,scope_id,granted", _SCOPE_CASES)
+def test_source_scope_preserves_group_space_and_personal_boundaries(
+    platform_admin: bool, active: bool, scope_kind: str | None, scope_id: str | None, granted: bool
+) -> None:
     rules = AccessScopeRules(
-        workspace_id="workspace-1",
-        workspace_role="admin",
         user_id="user-1",
-        team_ids=("team-1",),
+        active=active,
+        platform_admin=platform_admin,
+        team_ids=("space-1",),
+        group_ids=("group-1",),
     )
-
-    assert rules.can_access("workspace", "other-workspace") is False
-    assert rules.can_access("team", None) is False
-    assert rules.can_access("team", "other-workspace-team") is False
-    assert rules.can_access("unknown", "scope-1") is False
-    assert rules.can_access("workspace", "workspace-1") is True
-    assert rules.can_access("team", "team-1") is True
-    assert rules.can_access("user", "other-user") is True
-    assert rules.can_access("user", None) is False
+    assert rules.can_access(scope_kind, scope_id) is (active and granted)
 
 
-def test_access_scope_rules_without_workspace_role_blocks_all_scopes() -> None:
+@pytest.mark.parametrize("platform_admin", [False, True])
+@pytest.mark.parametrize("active", [False, True])
+def test_sql_scope_projection_matches_the_same_fail_closed_matrix(
+    platform_admin: bool, active: bool
+) -> None:
     rules = AccessScopeRules(
-        workspace_id="workspace-1",
-        workspace_role=None,
         user_id="user-1",
-        team_ids=("team-1",),
+        active=active,
+        platform_admin=platform_admin,
+        team_ids=("space-1",),
+        group_ids=("group-1",),
     )
-
-    assert rules.can_access("workspace", "workspace-1") is False
-    assert rules.can_access("team", "team-1") is False
-    assert rules.can_access("user", "user-1") is False
-
-
-def test_access_scope_rules_workspace_scope_matches_workspace_or_null_id() -> None:
-    rules = _member_rules()
-
-    assert rules.can_access("workspace", "workspace-1") is True
-    assert rules.can_access("workspace", None) is True
-    assert rules.can_access("workspace", "workspace-2") is False
-
-
-def test_access_scope_rules_team_scope_matches_accessible_teams() -> None:
-    rules = _member_rules()
-
-    assert rules.can_access("team", "team-1") is True
-    assert rules.can_access("team", "team-2") is False
-    assert rules.can_access("team", None) is False
-
-
-def test_access_scope_rules_user_scope_matches_current_user() -> None:
-    rules = _member_rules()
-
-    assert rules.can_access("user", "user-1") is True
-    assert rules.can_access("user", "user-2") is False
-    assert rules.can_access(None, "user-1") is False
-
-
-def test_access_scope_rules_predicate_matches_member_accessible_rows() -> None:
-    rules = _member_rules()
-
-    assert _matching_predicate_labels(rules) == [
-        "team",
-        "user",
-        "workspace-id",
-        "workspace-null",
-    ]
-
-
-def test_access_scope_rules_predicate_handles_admin_and_no_workspace_role() -> None:
-    admin_rules = AccessScopeRules(
-        workspace_id="workspace-1",
-        workspace_role="admin",
-        user_id="user-1",
-        team_ids=("team-1",),
-    )
-    blocked_rules = AccessScopeRules(
-        workspace_id="workspace-1",
-        workspace_role=None,
-        user_id="user-1",
-        team_ids=("team-1",),
-    )
-
-    assert _matching_predicate_labels(admin_rules) == [
-        "team",
-        "user",
-        "workspace-id",
-        "workspace-null",
-    ]
-    assert _matching_predicate_labels(blocked_rules) == []
-
-
-def _matching_predicate_labels(rules: AccessScopeRules) -> list[str]:
     metadata = MetaData()
     scope_rows = Table(
         "scope_rows",
@@ -112,31 +61,75 @@ def _matching_predicate_labels(rules: AccessScopeRules) -> list[str]:
         Column("scope_kind", String, nullable=True),
         Column("scope_id", String, nullable=True),
     )
-    engine = create_engine("sqlite:///:memory:")
-    metadata.create_all(engine)
-    with engine.begin() as connection:
-        connection.execute(
-            scope_rows.insert(),
-            [
-                {
-                    "label": "workspace-id",
-                    "scope_kind": "workspace",
-                    "scope_id": "workspace-1",
-                },
-                {
-                    "label": "workspace-null",
-                    "scope_kind": "workspace",
-                    "scope_id": None,
-                },
-                {"label": "team", "scope_kind": "team", "scope_id": "team-1"},
-                {"label": "user", "scope_kind": "user", "scope_id": "user-1"},
-                {"label": "unknown", "scope_kind": "unknown", "scope_id": "scope-1"},
+    engine = create_engine("sqlite://")
+    try:
+        metadata.create_all(engine)
+        with engine.begin() as connection:
+            connection.execute(
+                scope_rows.insert(),
+                [
+                    {"label": str(index), "scope_kind": kind, "scope_id": identity}
+                    for index, (kind, identity, _allowed) in enumerate(_SCOPE_CASES)
+                ],
+            )
+            actual = set(
+                connection.scalars(
+                    select(scope_rows.c.label).where(
+                        rules.predicate(scope_rows.c.scope_kind, scope_rows.c.scope_id)
+                    )
+                )
+            )
+        expected = {
+            str(index)
+            for index, (_kind, _identity, allowed) in enumerate(_SCOPE_CASES)
+            if active and allowed
+        }
+        assert actual == expected
+    finally:
+        engine.dispose()
+
+
+def test_live_scope_policy_rejects_temporary_password_until_change_is_complete() -> None:
+    from sqlalchemy.orm import Session
+    from company_admission_fixture import company_authority_tables, seed_company_app_access
+    from open_work_hub_api.core.db import Base
+    from open_work_hub_api.domains.auth.models import User
+    from open_work_hub_api.domains.pms.space_models import Team, TeamMember, SpaceGroupBinding
+    from open_work_hub_api.domains.source_access.access_scope import AccessScopePolicy
+
+    engine = create_engine("sqlite://")
+    try:
+        Base.metadata.create_all(
+            engine,
+            tables=[
+                *company_authority_tables(),
+                Team.__table__,
+                TeamMember.__table__,
+                SpaceGroupBinding.__table__,
             ],
         )
-        return list(
-            connection.scalars(
-                select(scope_rows.c.label)
-                .where(rules.predicate(scope_rows.c.scope_kind, scope_rows.c.scope_id))
-                .order_by(scope_rows.c.label)
+        with Session(engine) as db:
+            seed_company_app_access(db)
+            user = User(
+                id="user-1",
+                login_id="scope-user",
+                email="scope@example.test",
+                full_name="Scope User",
+                password_hash="test",
+                must_change_password=True,
             )
-        )
+            db.add(user)
+            db.commit()
+            policy = AccessScopePolicy(db=db, user_id=user.id)
+            assert policy.can_access("company", None) is False
+            assert policy.can_access("user", user.id) is False
+            user.must_change_password = False
+            db.commit()
+            assert policy.can_access("company", None) is True
+            assert policy.can_access("user", user.id) is True
+            user.login_blocked = True
+            db.commit()
+            assert policy.can_access("company", None) is False
+            assert policy.can_access("user", user.id) is False
+    finally:
+        engine.dispose()

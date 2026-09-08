@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-import sys
 from urllib.parse import urlparse
 
 from sqlalchemy import Engine, create_engine

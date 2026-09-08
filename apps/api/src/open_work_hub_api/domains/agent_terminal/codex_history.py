@@ -12,7 +12,6 @@ from open_work_hub_api.domains.agent_terminal.service import (
     build_codex_environment,
 )
 
-
 _APP_SERVER_TIMEOUT_SECONDS = 10
 _APP_SERVER_OUTPUT_LIMIT_BYTES = 1024 * 1024
 _MAX_THREAD_ID_LENGTH = 160

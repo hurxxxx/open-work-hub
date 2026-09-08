@@ -646,6 +646,7 @@ def _configure_test_application_environment(
     monkeypatch.setenv("OPEN_WORK_HUB_MINIO_ACCESS_KEY", minio_access_key)
     monkeypatch.setenv("OPEN_WORK_HUB_MINIO_SECRET_KEY", minio_secret_key)
     monkeypatch.setenv("OPEN_WORK_HUB_MINIO_BUCKET", minio_bucket)
+    monkeypatch.setenv("OPEN_WORK_HUB_CONTENT_GRANT_SIGNING_KEY", "test-content-grant-signing-key")
     monkeypatch.setenv("OPEN_WORK_HUB_MAIL_CREDENTIAL_ENCRYPTION_KEY", "test-mail-credential-key")
     monkeypatch.setenv(
         "OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
@@ -664,10 +665,7 @@ def _configure_test_application_environment(
 
 def _prepare_client_process_state() -> None:
     from open_work_hub_api.core.db import get_engine, get_session_factory
-    from open_work_hub_api.core.llm import (
-        get_async_pool_client,
-        get_pool_client,
-    )
+    from open_work_hub_api.core.llm import get_async_pool_client, get_pool_client
     from open_work_hub_api.core.model_registry import import_all_models
     from open_work_hub_api.core.settings import get_settings
     from open_work_hub_api.core.storage import get_minio_client
@@ -748,10 +746,7 @@ def _build_client(
 
 def _teardown_client_state() -> None:
     from open_work_hub_api.core.db import get_engine, get_session_factory
-    from open_work_hub_api.core.llm import (
-        get_async_pool_client,
-        get_pool_client,
-    )
+    from open_work_hub_api.core.llm import get_async_pool_client, get_pool_client
     from open_work_hub_api.core.settings import get_settings
     from open_work_hub_api.core.storage import get_minio_client
     from open_work_hub_api.domains.ai.registry import reset_ai_capability_registry
@@ -792,19 +787,21 @@ def application_test_app(
     application_postgres_state: ApplicationPostgresState,
 ) -> Iterator[FastAPI]:
     """Worker-local route composition reused with a fresh lifespan per test."""
-    with pytest.MonkeyPatch.context() as monkeypatch:
-        try:
+    try:
+        # Route construction needs test settings, but keeping this override alive
+        # would poison later external integration endpoint discovery.
+        with pytest.MonkeyPatch.context() as monkeypatch:
             app = _build_test_application(
                 monkeypatch,
                 postgres_dsn=application_postgres_state.dsn,
             )
+        _assert_reused_application_idle(app)
+        yield app
+    finally:
+        if "app" in locals():
+            app.dependency_overrides.clear()
             _assert_reused_application_idle(app)
-            yield app
-        finally:
-            if "app" in locals():
-                app.dependency_overrides.clear()
-                _assert_reused_application_idle(app)
-            _teardown_client_state()
+        _teardown_client_state()
 
 
 @pytest.fixture

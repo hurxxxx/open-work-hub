@@ -1,9 +1,9 @@
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import type { MeetingDetail } from '../../api/meeting-api';
 import type {
   MeetingInsightItem,
   MeetingInsightType,
 } from '../../api/meeting-insights-api';
-import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 
 export interface MeetingInsightChatPromptVariables
   extends Record<string, string> {
@@ -34,7 +34,6 @@ export interface MeetingInsightChatHandoffPlan {
 }
 
 export interface PlanMeetingInsightChatHandoffArgs {
-  workspaceSlug: string;
   meeting: Pick<MeetingDetail, 'id' | 'title'>;
   insight: MeetingInsightItem;
   translate: MeetingInsightChatTranslator;
@@ -117,18 +116,15 @@ export function buildMeetingInsightConversationRequest(
 }
 
 export function buildMeetingInsightChatTargetUrl(
-  workspaceSlug: string,
   conversationId: string,
 ): string {
   return buildAppHref({
     routeId: 'chatbot.root',
-    workspaceSlug,
     queryParams: { c: conversationId },
   });
 }
 
 export function planMeetingInsightChatHandoff({
-  workspaceSlug,
   meeting,
   insight,
   translate,
@@ -148,6 +144,6 @@ export function planMeetingInsightChatHandoff({
       aiDraftOrigin: 'meeting_insight',
     },
     targetUrlForConversation: (conversationId) =>
-      buildMeetingInsightChatTargetUrl(workspaceSlug, conversationId),
+      buildMeetingInsightChatTargetUrl(conversationId),
   };
 }

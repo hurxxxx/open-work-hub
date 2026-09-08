@@ -8,8 +8,10 @@ from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.dm import (
     conversation_queries,
-    participants as participant_rules,
     serialization,
+)
+from open_work_hub_api.domains.dm import (
+    participants as participant_rules,
 )
 from open_work_hub_api.domains.dm.schemas import DmMessageItem
 

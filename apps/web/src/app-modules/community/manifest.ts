@@ -1,5 +1,5 @@
-import { MessagesSquare } from 'lucide-react';
 import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
+import { MessagesSquare } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -36,7 +36,7 @@ export const communityManifest: AppModuleManifest = {
       appId: 'community',
     },
   ],
-  workspaceRoutePaths: [],
+  appRoutePaths: [],
   globalRoutePaths: [
     getAppRoutePattern('community.root'),
     getAppRoutePattern('community.post'),

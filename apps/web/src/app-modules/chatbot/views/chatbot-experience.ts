@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
 import type { AppRouteId } from '@open-work-hub/contracts/app-contracts';
+import type { ReactNode } from 'react';
 
-import type { WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
+import type { ShellAppId } from '@/src/platform/apps/app-links';
 import type { ArtifactBuffer } from '../api/agent-events';
 
 export interface ChatbotArtifactRenderContext {
@@ -26,7 +26,7 @@ export type ChatbotExecutionMode = 'inline' | 'durable_background';
 
 export interface ChatbotExperienceConfig {
   title?: string;
-  routeAppId?: WorkspaceAppId;
+  routeAppId?: ShellAppId;
   routeId?: AppRouteId;
   conversationScope?: ChatbotConversationScopeBinding;
   sidebarEyebrow?: string;

@@ -374,7 +374,6 @@ function usePlannerTimelineViewElement({
                   const metadata = item.event.metadata;
                   const metaParts = [
                     formatItemTime(item, formatters),
-                    item.event.workspace?.name,
                     metadata.location,
                     metadata.taskListKey && metadata.taskNumber
                       ? `${metadata.taskListKey}-${metadata.taskNumber}`

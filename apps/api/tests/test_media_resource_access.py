@@ -7,19 +7,13 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from company_admission_fixture import company_authority_tables, seed_company_app_access
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.core.i18n import ERROR_CODE_HEADER
-from open_work_hub_api.domains.auth.models import (
-    CompanyAppControl,
-    Team,
-    TeamMember,
-    User,
-    UserSystemRole,
-    Workspace,
-    WorkspaceAppDefault,
-    WorkspaceAppOverride,
-    WorkspaceUserBinding,
-)
+from open_work_hub_api.domains.auth.models import User, UserSystemRole
+from open_work_hub_api.domains.pms.space_models import Team, TeamMember
+from open_work_hub_api.domains.docs.models import NativeDocGroupShare
+from open_work_hub_api.domains.pms.space_models import SpaceGroupBinding
 from open_work_hub_api.domains.docs.models import (
     DocMeetingAccess,
     DocsCollection,
@@ -51,13 +45,7 @@ def _session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
-            CompanyAppControl.__table__,
-            WorkspaceAppDefault.__table__,
-            WorkspaceAppOverride.__table__,
-            User.__table__,
-            WorkspaceUserBinding.__table__,
-            UserSystemRole.__table__,
+            *company_authority_tables(),
             Team.__table__,
             TeamMember.__table__,
             Folder.__table__,
@@ -67,6 +55,8 @@ def _session() -> Session:
             TaskUserAccess.__table__,
             DocsCollection.__table__,
             NativeDoc.__table__,
+            NativeDocGroupShare.__table__,
+            SpaceGroupBinding.__table__,
             NativeDocPage.__table__,
             NativeDocTarget.__table__,
             NativeDocUserShare.__table__,
@@ -78,7 +68,9 @@ def _session() -> Session:
             MediaFile.__table__,
         ],
     )
-    return Session(engine)
+    session = Session(engine)
+    seed_company_app_access(session)
+    return session
 
 
 def _user(user_id: str) -> User:
@@ -152,23 +144,16 @@ def test_can_resolve_task_media_through_space_membership() -> None:
         outsider = _user("outsider")
         session.add_all(
             [
-                Workspace(id="workspace-1", key="workspace", name="Workspace", description=""),
                 member,
                 outsider,
                 Team(
                     id="team-1",
-                    workspace_id="workspace-1",
                     key="space",
                     name="Space",
                     description="",
                     active=True,
                 ),
                 TeamMember(id="membership-1", team_id="team-1", user_id="member", role="member"),
-                WorkspaceUserBinding(
-                    id="workspace-member", workspace_id="workspace-1", user_id="member", role="member",
-                ),
-                CompanyAppControl(app_id="pms", enabled=True),
-                WorkspaceAppDefault(app_id="pms", enabled=True),
                 TaskList(
                     id="list-1",
                     key="LIST",
@@ -366,12 +351,10 @@ def test_docs_native_page_access_distinguishes_read_from_edit() -> None:
         reader = _user("reader")
         session.add_all(
             [
-                Workspace(id="workspace-1", key="workspace", name="Workspace", description=""),
                 owner,
                 reader,
                 NativeDoc(
                     id="doc-1",
-                    workspace_id="workspace-1",
                     owner_id="owner",
                     title="Doc",
                     source_app="docs",

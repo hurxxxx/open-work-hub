@@ -1,11 +1,11 @@
-import { createElement, lazy } from 'react';
 import {
   getAppRouteChrome,
   getAppRoutePattern,
 } from '@open-work-hub/contracts/app-routes';
+import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const RecordingView = lazy(() =>
   import('./views/RecordingView').then((module) => ({
@@ -18,7 +18,7 @@ const RecordingDetailView = lazy(() =>
   })),
 );
 
-export const recordingWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const recordingAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'recording',
     chrome: getAppRouteChrome('recording.root'),

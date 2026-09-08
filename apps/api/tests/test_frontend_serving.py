@@ -35,40 +35,23 @@ def test_frontend_serving_returns_static_asset_and_spa_fallback(
         root_head_response = client.head("/")
         asset_response = client.get("/assets/app.js")
         worker_response = client.get("/recording-sync-sw.js")
-        route_response = client.get(
-            "/apps/meeting/workspaces/hq/meetings/example"
-        )
+        route_response = client.get("/apps/meeting/meetings/example")
     finally:
         get_settings.cache_clear()
 
     assert root_response.status_code == 200
     assert '<div id="root"></div>' in root_response.text
-    assert (
-        root_response.headers["cache-control"]
-        == "no-cache, max-age=0, must-revalidate"
-    )
+    assert root_response.headers["cache-control"] == "no-cache, max-age=0, must-revalidate"
     assert root_head_response.status_code == 200
-    assert (
-        root_head_response.headers["cache-control"]
-        == "no-cache, max-age=0, must-revalidate"
-    )
+    assert root_head_response.headers["cache-control"] == "no-cache, max-age=0, must-revalidate"
     assert asset_response.status_code == 200
     assert "console.log('ok');" in asset_response.text
-    assert (
-        asset_response.headers["cache-control"]
-        == "public, max-age=31536000, immutable"
-    )
+    assert asset_response.headers["cache-control"] == "public, max-age=31536000, immutable"
     assert worker_response.status_code == 200
-    assert (
-        worker_response.headers["cache-control"]
-        == "no-cache, max-age=0, must-revalidate"
-    )
+    assert worker_response.headers["cache-control"] == "no-cache, max-age=0, must-revalidate"
     assert route_response.status_code == 200
     assert '<div id="root"></div>' in route_response.text
-    assert (
-        route_response.headers["cache-control"]
-        == "no-cache, max-age=0, must-revalidate"
-    )
+    assert route_response.headers["cache-control"] == "no-cache, max-age=0, must-revalidate"
 
 
 def test_frontend_serving_does_not_fallback_missing_static_assets(

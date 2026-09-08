@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 DOCS_RETRIEVAL_PARTITION_ADAPTER_ID = "docs"
 FILES_RETRIEVAL_PARTITION_ADAPTER_ID = "files"
 MEETING_RETRIEVAL_PARTITION_ADAPTER_ID = "meeting"

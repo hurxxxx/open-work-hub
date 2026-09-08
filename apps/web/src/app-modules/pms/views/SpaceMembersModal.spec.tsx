@@ -77,6 +77,8 @@ vi.mock('@open-work-hub/ui', async () => {
   };
 });
 
+vi.mock('./SpaceGroupBindings', () => ({ SpaceGroupBindings: () => null }));
+
 vi.mock('../api/pms-api', () => ({
   addSpaceMember: vi.fn(),
   listPmsUsers: vi.fn(),
@@ -174,7 +176,6 @@ describe('SpaceMembersModal', () => {
         onClose={() => undefined}
         spaceId="space-1"
         spaceName="스페이스"
-        workspaceSlug="workspace"
       />,
     );
 
@@ -203,7 +204,6 @@ describe('SpaceMembersModal', () => {
         'token',
         'space-1',
         'target',
-        'workspace',
       );
     });
   });

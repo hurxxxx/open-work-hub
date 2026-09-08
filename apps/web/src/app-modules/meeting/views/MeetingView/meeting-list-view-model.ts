@@ -1,9 +1,9 @@
+import { formatDateTime } from '@/src/platform/time/time-utils';
 import {
   parseServerDateTime,
   type MeetingListItem,
   type MeetingScope,
 } from '../../api/meeting-api';
-import { formatDateTime } from '@/src/platform/time/time-utils';
 
 export type MeetingTab = 'upcoming' | 'mine' | 'recordings';
 

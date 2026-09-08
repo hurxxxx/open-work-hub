@@ -33,7 +33,6 @@ function target(overrides: Partial<RecordingTarget> = {}): RecordingTarget {
 function recording(overrides: Partial<RecordingDetail> = {}): RecordingDetail {
   return {
     id: 'recording-1',
-    workspace_id: 'workspace-1',
     owner_id: 'user-1',
     title: 'Daily Standup',
     started_at: '2026-05-30T09:00:00Z',
@@ -136,7 +135,7 @@ function deferred<T>() {
 function renderController(
   options: {
     token?: string | null;
-    workspaceSlug?: string | null;
+
     recordingId?: string | null;
     client?: RecordingDetailClient;
     browser?: RecordingDetailBrowserAdapter;
@@ -149,8 +148,6 @@ function renderController(
   const rendered = renderHook(() =>
     useRecordingDetailController({
       token: options.token === undefined ? 'token-1' : options.token,
-      workspaceSlug:
-        options.workspaceSlug === undefined ? 'hq' : options.workspaceSlug,
       recordingId:
         options.recordingId === undefined ? 'recording-1' : options.recordingId,
       messages: messages(),
@@ -178,18 +175,16 @@ describe('useRecordingDetailController', () => {
 
     expect(testClient.getRecording).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       'recording-1',
     );
     expect(result.current.state.recording).toBe(current);
     expect(result.current.state.titleDraft).toBe('Planning Review');
   });
 
-  it('treats missing token, workspace, or recording id as a no-op', async () => {
+  it('treats missing token or recording id as a no-op', async () => {
     const cases = [
-      { token: null, workspaceSlug: 'hq', recordingId: 'recording-1' },
-      { token: 'token-1', workspaceSlug: null, recordingId: 'recording-1' },
-      { token: 'token-1', workspaceSlug: 'hq', recordingId: null },
+      { token: null, recordingId: 'recording-1' },
+      { token: 'token-1', recordingId: null },
     ];
 
     for (const testCase of cases) {
@@ -257,7 +252,6 @@ describe('useRecordingDetailController', () => {
 
     expect(testClient.updateRecording).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       'recording-1',
       { title: 'Customer Call' },
     );
@@ -363,7 +357,6 @@ describe('useRecordingDetailController', () => {
 
     expect(testClient.retryRecording).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       'recording-1',
     );
     expect(result.current.state.busy).toBeNull();
@@ -439,7 +432,6 @@ describe('useRecordingDetailController', () => {
 
     expect(testClient.attachTarget).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       'recording-1',
       {
         target_app: 'pms',
@@ -471,7 +463,6 @@ describe('useRecordingDetailController', () => {
 
     expect(testClient.detachTarget).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       'recording-1',
       'meeting-target',
     );

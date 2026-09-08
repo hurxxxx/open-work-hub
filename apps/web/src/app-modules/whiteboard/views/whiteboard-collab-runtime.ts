@@ -1,4 +1,5 @@
-import { WebsocketProvider } from 'y-websocket';
+import { createAuthenticatedCollabProvider } from '@open-work-hub/ui';
+import type { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
 import {
@@ -83,10 +84,11 @@ export function createWhiteboardCollabProvider({
   token: string;
   wsPath: string;
 }): WhiteboardCollabProvider {
-  return new WebsocketProvider(toWebSocketUrl(wsPath), roomKey, doc, {
-    connect: false,
-    maxBackoffTime: 4000,
-    params: { token },
+  return createAuthenticatedCollabProvider({
+    url: toWebSocketUrl(wsPath),
+    roomKey,
+    doc,
+    token,
   });
 }
 

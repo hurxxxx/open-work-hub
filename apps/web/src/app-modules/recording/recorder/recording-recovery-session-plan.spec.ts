@@ -17,7 +17,6 @@ function localSession(
 ): RecordingSessionState {
   return {
     stagingId: 'staging-1',
-    workspaceSlug: 'hq',
     scopeKey: 'hq:recording:unlinked',
     idempotencyKey: 'idem-1',
     mimeType: 'audio/webm',
@@ -44,7 +43,6 @@ function remoteUpload(
 ): RecordingUpload {
   return {
     id: 'staging-1',
-    workspace_id: 'workspace-1',
     user_id: 'user-1',
     idempotency_key: 'idem-1',
     mime_type: 'audio/webm',

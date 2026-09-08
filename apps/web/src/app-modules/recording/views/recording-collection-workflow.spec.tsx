@@ -11,7 +11,6 @@ import {
 function recording(overrides: Partial<Recording> = {}): Recording {
   return {
     id: 'recording-1',
-    workspace_id: 'workspace-1',
     owner_id: 'user-1',
     title: 'Daily Standup',
     started_at: '2026-05-30T09:00:00Z',
@@ -73,15 +72,12 @@ function renderWorkflow(
     client?: RecordingCollectionClient;
     scope?: RecordingCollectionScope;
     token?: string | null;
-    workspaceSlug?: string | null;
   } = {},
 ) {
   const usedClient = options.client ?? client();
   const rendered = renderHook(() =>
     useRecordingCollectionWorkflow({
       token: options.token === undefined ? 'token-1' : options.token,
-      workspaceSlug:
-        options.workspaceSlug === undefined ? 'hq' : options.workspaceSlug,
       scope: options.scope ?? viewScope,
       messages: {
         loadFailed: 'load failed',
@@ -100,7 +96,7 @@ describe('recording collection workflow', () => {
     renderWorkflow({ client: viewClient, scope: viewScope });
 
     await waitFor(() => {
-      expect(viewClient.listRecordings).toHaveBeenCalledWith('token-1', 'hq', {
+      expect(viewClient.listRecordings).toHaveBeenCalledWith('token-1', {
         view: 'mine',
       });
     });
@@ -109,15 +105,11 @@ describe('recording collection workflow', () => {
     renderWorkflow({ client: targetClient, scope: targetScope });
 
     await waitFor(() => {
-      expect(targetClient.listRecordings).toHaveBeenCalledWith(
-        'token-1',
-        'hq',
-        {
-          target_app: 'meeting',
-          target_type: 'meeting',
-          target_id: 'meeting-1',
-        },
-      );
+      expect(targetClient.listRecordings).toHaveBeenCalledWith('token-1', {
+        target_app: 'meeting',
+        target_type: 'meeting',
+        target_id: 'meeting-1',
+      });
     });
   });
 
@@ -157,7 +149,6 @@ describe('recording collection workflow', () => {
 
     expect(retryClient.retryRecording).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       'recording-1',
     );
     expect(retryClient.listRecordings).toHaveBeenCalledTimes(1);
@@ -183,7 +174,6 @@ describe('recording collection workflow', () => {
 
     expect(deleteClient.deleteRecording).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       'recording-1',
     );
     expect(deleteClient.listRecordings).toHaveBeenCalledTimes(1);

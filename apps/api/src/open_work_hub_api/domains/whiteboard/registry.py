@@ -6,20 +6,23 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
-from open_work_hub_api.domains.auth.access import (
-    resolve_team_role,
-    resolve_workspace_role,
-    team_role_allows,
-    workspace_role_allows,
-)
-from open_work_hub_api.domains.auth.models import Team, User, Workspace
+from open_work_hub_api.domains.auth.app_access import can_use_app
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.meeting.models import Meeting
 from open_work_hub_api.domains.meeting.permissions import is_organizer, is_participant
+from open_work_hub_api.domains.source_access import can_read_meeting
+from open_work_hub_api.domains.pms.access import resolve_pms_space_role
 from open_work_hub_api.domains.pms.links import pms_space_whiteboards_path, pms_task_list_path
 from open_work_hub_api.domains.pms.models import TaskList
+from open_work_hub_api.domains.pms.roles import team_role_allows
+from open_work_hub_api.domains.pms.space_models import Team
 from open_work_hub_api.domains.source_access.targets import (
     TargetRef as SourceTargetRef,
+)
+from open_work_hub_api.domains.source_access.targets import (
     project_target_access as project_source_target_access,
+)
+from open_work_hub_api.domains.source_access.targets import (
     resolve_target_label as resolve_source_target_label,
 )
 from open_work_hub_api.domains.whiteboard.models import Whiteboard, WhiteboardTarget
@@ -51,13 +54,11 @@ def _project_source_target_ref(
     *,
     db: Session,
     user: User,
-    workspace: Workspace,
     ref: TargetRef,
 ) -> TargetAccessProjection:
     projection = project_source_target_access(
         db=db,
         user=user,
-        workspace=workspace,
         ref=_source_ref(ref),
     )
     return TargetAccessProjection(
@@ -71,20 +72,17 @@ def _project_pms_space_access(
     *,
     db: Session,
     user: User,
-    workspace: Workspace,
     space_id: str,
 ) -> TargetAccessProjection:
     return _project_source_target_ref(
         db=db,
         user=user,
-        workspace=workspace,
         ref=TargetRef(app="pms", type="space", id=space_id),
     )
 
 
 def describe_source(
     *,
-    workspace: Workspace,
     whiteboard: Whiteboard,
     primary_target: WhiteboardTarget | None,
 ) -> tuple[str, str | None]:
@@ -100,7 +98,6 @@ def describe_source(
             return (
                 label,
                 pms_space_whiteboards_path(
-                    workspace,
                     primary_target.target_id,
                     whiteboard_id=whiteboard.id,
                 ),
@@ -109,7 +106,6 @@ def describe_source(
             return (
                 label,
                 pms_task_list_path(
-                    workspace,
                     primary_target.target_id,
                     query={"tab": "whiteboard"},
                 ),
@@ -118,14 +114,12 @@ def describe_source(
         return label, build_app_href(
             InternalAppLocation(
                 route_id="meeting.detail",
-                workspace_slug=workspace.key,
                 path_params={"meetingId": primary_target.target_id},
             )
         )
     return label, build_app_href(
         InternalAppLocation(
             route_id="whiteboard.board",
-            workspace_slug=workspace.key,
             path_params={"whiteboardId": whiteboard.id},
         )
     )
@@ -134,8 +128,8 @@ def describe_source(
 def resolve_target_label(
     *,
     db: Session,
-    workspace: Workspace,
     target: WhiteboardTarget | None,
+    user: User,
 ) -> str:
     if target is None:
         return "Unfiled"
@@ -144,12 +138,12 @@ def resolve_target_label(
         type=target.target_type,
         id=target.target_id,
     )
-    if ref.app == "whiteboard" and ref.type == "workspace_sidebar" and ref.id == workspace.id:
-        return "Workspace Whiteboards"
+    if not project_target_access(db=db, user=user, ref=ref).can_view:
+        return f"{ref.app}:{ref.type}"
     if ref.app == "pms" and ref.type == "space":
         return resolve_source_target_label(
             db=db,
-            workspace=workspace,
+            user=user,
             target=target,
         )
     if ref.app == "pms" and ref.type == "task_list":
@@ -164,7 +158,6 @@ def resolve_target_label(
         meeting = db.scalar(
             select(Meeting).where(
                 Meeting.id == ref.id,
-                Meeting.workspace_id == workspace.id,
             )
         )
         return meeting.title if meeting is not None else "Unfiled"
@@ -175,21 +168,14 @@ def project_target_access(
     *,
     db: Session,
     user: User,
-    workspace: Workspace,
     ref: TargetRef,
 ) -> TargetAccessProjection:
-    if ref.app == "whiteboard" and ref.type == "workspace_sidebar" and ref.id == workspace.id:
-        role = resolve_workspace_role(db, user, workspace.id)
-        return TargetAccessProjection(
-            can_view=role is not None,
-            can_edit=workspace_role_allows(role, "member"),
-            can_manage=workspace_role_allows(role, "admin"),
-        )
+    if not can_use_app(db, user_id=user.id, app_id=ref.app):
+        return _empty_projection()
     if ref.app == "pms" and ref.type == "space":
         return _project_source_target_ref(
             db=db,
             user=user,
-            workspace=workspace,
             ref=ref,
         )
     if ref.app == "pms" and ref.type == "task_list":
@@ -204,14 +190,13 @@ def project_target_access(
         team = db.scalar(
             select(Team).where(
                 Team.id == task_list.team_id,
-                Team.workspace_id == workspace.id,
                 Team.active.is_(True),
                 Team.trashed_at.is_(None),
             )
         )
         if team is None:
             return _empty_projection()
-        role = resolve_team_role(db, user, team)
+        role = resolve_pms_space_role(db, user, team)
         return TargetAccessProjection(
             can_view=role is not None,
             can_edit=team_role_allows(role, "member"),
@@ -221,13 +206,12 @@ def project_target_access(
         meeting = db.scalar(
             select(Meeting).where(
                 Meeting.id == ref.id,
-                Meeting.workspace_id == workspace.id,
             )
         )
         if meeting is None:
             return _empty_projection()
         return TargetAccessProjection(
-            can_view=is_participant(user, meeting),
+            can_view=can_read_meeting(db, user=user, meeting_id=meeting.id),
             can_edit=is_participant(user, meeting),
             can_manage=is_organizer(user, meeting),
         )
@@ -238,24 +222,21 @@ def target_write_allowed(
     *,
     db: Session,
     user: User,
-    workspace: Workspace,
     ref: TargetRef,
 ) -> bool:
-    projection = project_target_access(db=db, user=user, workspace=workspace, ref=ref)
-    return projection.can_edit or projection.can_manage
+    projection = project_target_access(db=db, user=user, ref=ref)
+    return projection.can_manage
 
 
 def can_read_pms_space(
     *,
     db: Session,
     user: User,
-    workspace: Workspace,
     space_id: str,
 ) -> bool:
     return _project_pms_space_access(
         db=db,
         user=user,
-        workspace=workspace,
         space_id=space_id,
     ).can_view
 
@@ -264,12 +245,10 @@ def can_edit_pms_space(
     *,
     db: Session,
     user: User,
-    workspace: Workspace,
     space_id: str,
 ) -> bool:
     return _project_pms_space_access(
         db=db,
         user=user,
-        workspace=workspace,
         space_id=space_id,
     ).can_edit

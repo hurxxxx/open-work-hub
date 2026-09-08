@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -20,11 +20,12 @@ import {
 import {
   BodyCell,
   FORM_FIELD_CLASS as fieldClassName,
-  HeadCell,
   getErrorMessage,
+  HeadCell,
 } from './admin-shared';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
+import { DirectoryPicker } from '@/src/platform/directory/DirectoryPicker';
 
 interface OrganizationUnitRow {
   depth: number;
@@ -95,6 +96,7 @@ export function AdminOrganizationSection({ token }: { token: string }) {
   const [unitType, setUnitType] = useState('department');
   const [parentId, setParentId] = useState('');
   const [active, setActive] = useState(true);
+  const [headIds, setHeadIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -137,6 +139,7 @@ export function AdminOrganizationSection({ token }: { token: string }) {
     setSlug('');
     setUnitType('department');
     setParentId('');
+    setHeadIds([]);
     setActive(true);
     setFormError(null);
     setDialogOpen(true);
@@ -148,6 +151,7 @@ export function AdminOrganizationSection({ token }: { token: string }) {
     setSlug(item.slug);
     setUnitType(item.unit_type);
     setParentId(item.parent_id ?? '');
+    setHeadIds(item.head_user_id ? [item.head_user_id] : []);
     setActive(item.active);
     setFormError(null);
     setDialogOpen(true);
@@ -161,6 +165,7 @@ export function AdminOrganizationSection({ token }: { token: string }) {
       if (editing) {
         await updateOrganizationUnit(token, editing.id, {
           active,
+          head_user_id: headIds[0] ?? null,
           name: name.trim(),
           parent_id: parentId || null,
           slug: slug.trim(),
@@ -170,6 +175,7 @@ export function AdminOrganizationSection({ token }: { token: string }) {
       } else {
         await createOrganizationUnit(token, {
           active,
+          head_user_id: headIds[0] ?? null,
           name: name.trim(),
           parent_id: parentId || null,
           slug: slug.trim() || undefined,
@@ -414,6 +420,21 @@ export function AdminOrganizationSection({ token }: { token: string }) {
               ))}
             </select>
           </label>
+          <div>
+            <p>{t('shell:companyGroups.head')}</p>
+            <DirectoryPicker
+              key={editing?.id ?? 'new'}
+              token={token}
+              kind="people"
+              selectedIds={headIds}
+              onChange={setHeadIds}
+              single
+              disabled={saving}
+            />
+            <p className="app-text-caption text-app-ink/60">
+              {t('shell:companyGroups.headRule')}
+            </p>
+          </div>
           <label className="app-text-control flex items-center gap-2">
             <input
               checked={active}

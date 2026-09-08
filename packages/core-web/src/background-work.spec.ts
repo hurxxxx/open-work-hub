@@ -4,7 +4,7 @@ import {
   addCancellingCoreBackgroundWorkKey,
   coreBackgroundWorkItemKey,
   buildCoreBackgroundWorkSessionSnapshot,
-  filterCoreBackgroundWorkSourcesForWorkspace,
+  filterCoreBackgroundWorkSourcesForApps,
   mergeCoreBackgroundWorkSourceListResults,
   removeCancellingCoreBackgroundWorkKey,
   resolveCoreBackgroundWorkCadence,
@@ -66,7 +66,7 @@ describe('core background work session', () => {
     ];
 
     expect(
-      filterCoreBackgroundWorkSourcesForWorkspace(sources, {
+      filterCoreBackgroundWorkSourcesForApps(sources, {
         enabledAppIds: ['research'],
         enabledNavItemIds: ['research-home'],
       }).map((source) => source.id),

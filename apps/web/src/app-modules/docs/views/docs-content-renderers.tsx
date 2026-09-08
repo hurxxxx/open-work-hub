@@ -1,5 +1,5 @@
-import type { ChangeEvent } from 'react';
 import { Download, Upload } from 'lucide-react';
+import type { ChangeEvent } from 'react';
 
 export interface DocsBlockMarkdownActionsProps {
   canImport: boolean;

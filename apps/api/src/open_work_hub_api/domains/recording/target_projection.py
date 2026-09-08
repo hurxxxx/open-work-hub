@@ -15,7 +15,6 @@ from open_work_hub_api.domains.recording.schemas import (
     RecordingListItem,
 )
 
-
 TargetTitleKey = tuple[str, str, str]
 
 
@@ -68,10 +67,8 @@ def serialize_recording(
 ) -> RecordingDetailOut:
     out = RecordingDetailOut.model_validate(recording)
     out.targets = [
-        target.model_copy(
-            update={"target_title": title_map.get(target_title_key(target))}
-        )
-    for target in out.targets
+        target.model_copy(update={"target_title": title_map.get(target_title_key(target))})
+        for target in out.targets
     ]
     publication_doc_ids = {
         publication.target_resource_id
@@ -79,8 +76,7 @@ def serialize_recording(
         if publication.target_app == "docs"
     }
     publication_titles = {
-        doc_id: title
-        for doc_id, title in recording_doc_titles(recording, publication_doc_ids)
+        doc_id: title for doc_id, title in recording_doc_titles(recording, publication_doc_ids)
     }
     out.publications = [
         publication.model_copy(
@@ -100,7 +96,9 @@ def recording_doc_titles(
     session = object_session(recording)
     if session is None:
         return []
-    return list(session.execute(select(NativeDoc.id, NativeDoc.title).where(NativeDoc.id.in_(doc_ids))))
+    return list(
+        session.execute(select(NativeDoc.id, NativeDoc.title).where(NativeDoc.id.in_(doc_ids)))
+    )
 
 
 def serialize_recording_with_target_titles(
@@ -126,9 +124,7 @@ def serialize_recordings_with_target_titles(
     for recording in recordings_list:
         out = RecordingListItem.model_validate(recording)
         out.targets = [
-            target.model_copy(
-                update={"target_title": title_map.get(target_title_key(target))}
-            )
+            target.model_copy(update={"target_title": title_map.get(target_title_key(target))})
             for target in out.targets
         ]
         results.append(out)

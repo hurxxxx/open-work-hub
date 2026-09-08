@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from open_work_hub_api.domains.ai.registry import PreviewField, WorkspaceContext
+from open_work_hub_api.domains.ai.registry import PreviewField
 from open_work_hub_api.domains.planner.approval_preview import (
     build_create_event_preview,
     build_delete_event_preview,
@@ -11,15 +11,7 @@ from open_work_hub_api.domains.planner.approval_preview import (
 from open_work_hub_api.domains.planner.tools import CreateEventArgs, UpdateEventArgs
 
 
-def _workspace_context() -> WorkspaceContext:
-    return WorkspaceContext(
-        workspace_id="workspace-1",
-        workspace_slug="delivery-hub",
-        display_name="Delivery Hub",
-    )
-
-
-def test_create_event_preview_is_personal_and_workspace_independent() -> None:
+def test_create_event_preview_is_personal_and_company_scoped() -> None:
     start_at = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
     parsed_args = CreateEventArgs(
         title="Planning sync",
@@ -28,7 +20,7 @@ def test_create_event_preview_is_personal_and_workspace_independent() -> None:
         description="  Align the delivery timeline.  ",
     )
 
-    preview = build_create_event_preview(object(), _workspace_context(), parsed_args)
+    preview = build_create_event_preview(object(), parsed_args)
 
     assert preview.title == "Create personal planner event"
     assert preview.summary == "Align the delivery timeline."
@@ -46,7 +38,7 @@ def test_update_event_preview_falls_back_summary_and_only_shows_provided_fields(
         title="Updated title",
     )
 
-    preview = build_update_event_preview(object(), _workspace_context(), parsed_args)
+    preview = build_update_event_preview(object(), parsed_args)
 
     assert preview.title == "Update personal planner event"
     assert preview.summary == "Update a planner event from AI."
@@ -59,7 +51,6 @@ def test_update_event_preview_falls_back_summary_and_only_shows_provided_fields(
 def test_delete_event_preview_accepts_mapping_args() -> None:
     preview = build_delete_event_preview(
         object(),
-        _workspace_context(),
         {"event_id": "event-456"},
     )
 

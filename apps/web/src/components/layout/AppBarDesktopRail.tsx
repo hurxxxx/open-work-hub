@@ -1,19 +1,21 @@
 import { HelpCircle, Search, Settings as SettingsIcon } from 'lucide-react';
 import { useMemo, type MouseEventHandler, type RefObject } from 'react';
 
+import type { AppBarItem } from '@/src/app/shell/navigation-types';
 import {
   getDefaultAdminPath,
   hasAnyAdminReadPermission,
 } from '@/src/platform/admin/admin-permissions';
+import type { ShellAppId } from '@/src/platform/apps/app-links';
+import type { BootstrapAppBarCategory } from '@/src/platform/apps/apps-api';
 import {
   hasAdminConsoleAccess,
   type AuthUser,
 } from '@/src/platform/auth/auth-api';
-import type { WorkspaceBootstrapAppBarCategory } from '@/src/platform/workspaces/workspaces-api';
 import {
-  appBarRailControlClassName,
   AppBarIconLink,
   AppBarRailActiveIndicator,
+  appBarRailControlClassName,
   AppBarRailTooltip,
 } from './AppBarIconLink';
 import { AppBarLauncherMenus } from './AppBarLauncherMenus';
@@ -24,11 +26,9 @@ import {
   type AppBarAppContextLabelResolver,
   type AppBarAppLabelResolver,
   type AppBarAppLinkResolver,
+  type AppBarLaunchItem,
   type AppBarTranslator,
-  type AppBarWorkspaceItem,
 } from './app-bar-model';
-import type { AppBarItem } from '@/src/app/shell/navigation-types';
-import type { WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
 
 export function AppBarDesktopRail({
   activeAppId,
@@ -36,10 +36,10 @@ export function AppBarDesktopRail({
   appBarLayoutError,
   appBarLayoutSaving,
   appBarItems = [],
-  canOpenWorkspaceSearch,
+  canOpenSearch,
   currentUser,
   currentPathname,
-  currentWorkspaceName,
+  currentCompanyLabel,
   draftItems,
   draftPinnedAppIds,
   fixedItems,
@@ -54,7 +54,7 @@ export function AppBarDesktopRail({
   onOpenAccount,
   onOpenEditor,
   onOpenHelp,
-  onOpenWorkspaceSearch,
+  onOpenSearch,
   onResetDraft,
   onSaveLayout,
   onToggleCategoryMenu,
@@ -70,48 +70,48 @@ export function AppBarDesktopRail({
   resolveAppLabel,
   t,
   unreadCount,
-  workspaceAppBarCategories,
+  appBarCategories,
 }: {
   activeAppId: string;
   appBarEditorOpen: boolean;
   appBarLayoutError: string | null;
   appBarLayoutSaving: boolean;
   appBarItems?: readonly AppBarItem[];
-  canOpenWorkspaceSearch: boolean;
+  canOpenSearch: boolean;
   currentUser: AuthUser;
   currentPathname: string;
-  currentWorkspaceName: string | null;
-  draftItems: AppBarWorkspaceItem[];
-  draftPinnedAppIds: WorkspaceAppId[];
-  fixedItems: AppBarWorkspaceItem[];
+  currentCompanyLabel: string | null;
+  draftItems: AppBarLaunchItem[];
+  draftPinnedAppIds: ShellAppId[];
+  fixedItems: AppBarLaunchItem[];
   categoryMenuId: string | null;
   favoritesOpen: boolean;
   moreMenuRef: RefObject<HTMLDivElement | null>;
   onCloseEditor: () => void;
   onCloseLauncherMenus: () => void;
-  onMovePinnedApp: (appId: WorkspaceAppId, direction: -1 | 1) => void;
+  onMovePinnedApp: (appId: ShellAppId, direction: -1 | 1) => void;
   onMouseEnter?: MouseEventHandler<HTMLElement>;
   onMouseLeave?: MouseEventHandler<HTMLElement>;
   onOpenAccount: () => void;
   onOpenEditor: () => void;
   onOpenHelp: () => void;
-  onOpenWorkspaceSearch: () => void;
+  onOpenSearch: () => void;
   onResetDraft: () => void;
   onSaveLayout: () => void;
   onToggleCategoryMenu: (categoryId: string) => void;
   onToggleFavorites: () => void;
   onToggleNotifications: MouseEventHandler<HTMLButtonElement>;
   notificationPanelOpen: boolean;
-  onTogglePinnedApp: (appId: WorkspaceAppId, checked: boolean) => void;
+  onTogglePinnedApp: (appId: ShellAppId, checked: boolean) => void;
   notificationsEnabled: boolean;
-  pinnedEligibleAppIds: ReadonlySet<WorkspaceAppId>;
-  pinnedItems: AppBarWorkspaceItem[];
+  pinnedEligibleAppIds: ReadonlySet<ShellAppId>;
+  pinnedItems: AppBarLaunchItem[];
   resolveAppLink: AppBarAppLinkResolver;
   resolveAppContextLabel: AppBarAppContextLabelResolver;
   resolveAppLabel: AppBarAppLabelResolver;
   t: AppBarTranslator;
   unreadCount: number;
-  workspaceAppBarCategories: WorkspaceBootstrapAppBarCategory[];
+  appBarCategories: BootstrapAppBarCategory[];
 }) {
   const appBarItemById = useMemo(
     () => createAppBarItemById(appBarItems),
@@ -132,10 +132,10 @@ export function AppBarDesktopRail({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {canOpenWorkspaceSearch ? (
+      {canOpenSearch ? (
         <DesktopRailSearchButton
           active={activeAppId === 'search'}
-          onOpenWorkspaceSearch={onOpenWorkspaceSearch}
+          onOpenSearch={onOpenSearch}
           t={t}
         />
       ) : null}
@@ -160,12 +160,12 @@ export function AppBarDesktopRail({
         appBarLayoutSaving={appBarLayoutSaving}
         categoryMenuId={categoryMenuId}
         currentPathname={currentPathname}
-        currentWorkspaceName={currentWorkspaceName}
+        currentCompanyLabel={currentCompanyLabel}
         draftItems={draftItems}
         draftPinnedAppIds={draftPinnedAppIds}
         favoritesActive={pinnedItemActive}
         favoritesOpen={favoritesOpen}
-        launcherCategories={workspaceAppBarCategories}
+        launcherCategories={appBarCategories}
         menuRef={moreMenuRef}
         onCloseEditor={onCloseEditor}
         onCloseLauncherMenus={onCloseLauncherMenus}
@@ -219,11 +219,11 @@ function isAppBarItemPathActive(
 
 function DesktopRailSearchButton({
   active,
-  onOpenWorkspaceSearch,
+  onOpenSearch,
   t,
 }: {
   active: boolean;
-  onOpenWorkspaceSearch: () => void;
+  onOpenSearch: () => void;
   t: AppBarTranslator;
 }) {
   const label = t('shell:search.title');
@@ -231,7 +231,7 @@ function DesktopRailSearchButton({
     <button
       aria-label={label}
       className={appBarRailControlClassName(active, undefined, 'fixed')}
-      onClick={onOpenWorkspaceSearch}
+      onClick={onOpenSearch}
       title={label}
       type="button"
     >

@@ -27,6 +27,8 @@ function user(): AuthUser {
     time_zone: 'Asia/Seoul',
     date_format: 'korean',
     system_roles: [],
+    group_ids: [],
+    managed_organization_unit_ids: [],
     workspaces: [],
     workspace_roles: [],
     must_change_password: false,
@@ -99,14 +101,11 @@ function renderController(testClient = client()) {
 }
 
 describe('useAdminPeopleDirectoryController', () => {
-  it('loads users, organization units, and workspaces on mount', async () => {
+  it('loads users and organization units on mount', async () => {
     const testClient = client();
     const { result } = renderController(testClient);
 
     await waitFor(() => expect(result.current.state.users).toHaveLength(1));
-    await waitFor(() =>
-      expect(result.current.state.workspaces).toHaveLength(1),
-    );
     await waitFor(() =>
       expect(result.current.state.organizationUnits).toHaveLength(1),
     );
@@ -116,7 +115,6 @@ describe('useAdminPeopleDirectoryController', () => {
       page_size: ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
       q: '',
     });
-    expect(testClient.listWorkspaces).toHaveBeenCalledWith('token-1');
     expect(testClient.listOrganizationUnits).toHaveBeenCalledWith('token-1');
   });
 

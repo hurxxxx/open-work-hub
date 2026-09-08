@@ -18,8 +18,8 @@ from open_work_hub_api.core.db import get_db_session, get_session_factory
 from open_work_hub_api.core.principal import user_principal
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.mcp import AiMcpClient
-from open_work_hub_api.domains.auth.models import User, Workspace, WorkspaceUserBinding, utcnow_naive
-from open_work_hub_api.domains.auth.workspace_app_gate import is_app_enabled_for_user_context
+from open_work_hub_api.domains.auth.app_gate import can_use_app
+from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.hermes_terminal.models import (
     HERMES_TERMINAL_ACTIVE_STATUSES,
     HermesTerminalSession,
@@ -27,14 +27,12 @@ from open_work_hub_api.domains.hermes_terminal.models import (
 )
 from open_work_hub_api.domains.hermes_terminal.security import token_digest
 
-
 router = APIRouter(prefix="/mcp", tags=["hermes-terminal-mcp"])
 
 
 @dataclass(frozen=True)
 class TerminalMcpIdentity:
     session: HermesTerminalSession
-    workspace: Workspace
     user: User
 
 
@@ -81,9 +79,7 @@ def _resolve_identity(
         supplied = authorization[7:].strip()
     if not supplied:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-    session = db.scalar(
-        select(HermesTerminalSession).where(HermesTerminalSession.id == session_id)
-    )
+    session = db.scalar(select(HermesTerminalSession).where(HermesTerminalSession.id == session_id))
     if session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if not hmac.compare_digest(session.mcp_token_digest, token_digest(supplied)):
@@ -93,26 +89,15 @@ def _resolve_identity(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "hermes_terminal.session_inactive"},
         )
-    workspace = db.get(Workspace, session.workspace_id)
     user = db.get(User, session.user_id)
-    membership = db.scalar(
-        select(WorkspaceUserBinding.id).where(
-            WorkspaceUserBinding.workspace_id == session.workspace_id,
-            WorkspaceUserBinding.user_id == session.user_id,
-        )
-    )
     if (
-        workspace is None
-        or not workspace.active
-        or user is None
+        user is None
         or user.status != "active"
         or user.login_blocked
-        or membership is None
-        or not is_app_enabled_for_user_context(
+        or not can_use_app(
             db,
             app_id="hermes-terminal",
             user_id=session.user_id,
-            workspace_id=session.workspace_id,
         )
     ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
@@ -123,18 +108,16 @@ def _resolve_identity(
     )
     db.add(session)
     db.commit()
-    return TerminalMcpIdentity(session=session, workspace=workspace, user=user)
+    return TerminalMcpIdentity(session=session, user=user)
 
 
 def _available_tools(db: Session, identity: TerminalMcpIdentity):
     principal = user_principal(
-        workspace_id=identity.workspace.id,
         user_id=identity.user.id,
         source="hermes-terminal-mcp",
     )
     tools = AiMcpClient().list_tools(
         db,
-        workspace=identity.workspace,
         principal=principal,
         app_ids=identity.session.allowed_app_ids,
         include_meta=True,
@@ -150,7 +133,7 @@ def _approval_for_call(
     request_id: str,
     tool_name: str,
     arguments: dict[str, Any],
-    workspace_app_id: str,
+    owner_app_id: str,
 ) -> HermesTerminalToolApproval:
     arguments_digest = _arguments_sha256(arguments)
     approval = db.scalar(
@@ -176,11 +159,10 @@ def _approval_for_call(
         request_payload={
             "tool_name": tool_name,
             "arguments": arguments,
-            "workspace_app_id": workspace_app_id,
+            "owner_app_id": owner_app_id,
         },
         status="pending",
-        expires_at=now
-        + timedelta(seconds=get_settings().hermes_terminal_approval_timeout_seconds),
+        expires_at=now + timedelta(seconds=get_settings().hermes_terminal_approval_timeout_seconds),
     )
     identity.session.status = "awaiting_approval"
     db.add(approval)
@@ -265,7 +247,9 @@ def _consume_approved_call(approval_id: str) -> tuple[str | None, str]:
 
 
 async def _await_approval(approval_id: str) -> tuple[str | None, str]:
-    deadline = asyncio.get_running_loop().time() + get_settings().hermes_terminal_approval_timeout_seconds
+    deadline = (
+        asyncio.get_running_loop().time() + get_settings().hermes_terminal_approval_timeout_seconds
+    )
     while True:
         external_call_id, decision = await asyncio.to_thread(
             _consume_approved_call,
@@ -353,7 +337,7 @@ async def handle_mcp_request(
     tool = next((item for item in tools if item.descriptor.name == tool_name), None)
     if tool is None:
         return JSONResponse(
-            _rpc_error(request_id, -32602, "Tool is not available in this workspace"),
+            _rpc_error(request_id, -32602, "Tool is not available for this user"),
             status_code=404,
         )
 
@@ -366,7 +350,7 @@ async def handle_mcp_request(
             request_id=call_id,
             tool_name=tool_name,
             arguments=arguments,
-            workspace_app_id=tool.descriptor.workspace_app_id,
+            owner_app_id=tool.descriptor.owner_app_id,
         )
         external_approval_id, decision = await _await_approval(approval.id)
         if external_approval_id is None:
@@ -393,9 +377,7 @@ async def handle_mcp_request(
             principal, tools = _available_tools(db, identity)
         except HTTPException as error:
             detail = (
-                error.detail
-                if isinstance(error.detail, dict)
-                else {"message": str(error.detail)}
+                error.detail if isinstance(error.detail, dict) else {"message": str(error.detail)}
             )
             return _mcp_tool_result(
                 request_id=request_id,
@@ -414,9 +396,8 @@ async def handle_mcp_request(
             )
 
     db.expire_all()
-    workspace = db.get(Workspace, identity.workspace.id)
     user = db.get(User, identity.user.id)
-    if workspace is None or user is None:
+    if user is None or not can_use_app(db, user_id=user.id, app_id="hermes-terminal"):
         return _mcp_tool_result(
             request_id=request_id,
             value={"code": "hermes_terminal.identity_unavailable"},
@@ -425,7 +406,6 @@ async def handle_mcp_request(
     try:
         result = AiMcpClient().call_tool(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             tool_name=tool_name,

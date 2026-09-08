@@ -1,14 +1,14 @@
+import { getSceneVersion, serializeAsJSON } from '@excalidraw/excalidraw';
+import type { ExcalidrawProps } from '@excalidraw/excalidraw/types';
 import {
-  type Dispatch,
-  type MutableRefObject,
-  type SetStateAction,
   useCallback,
   useEffect,
   useRef,
   useState,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
 } from 'react';
-import { getSceneVersion, serializeAsJSON } from '@excalidraw/excalidraw';
-import type { ExcalidrawProps } from '@excalidraw/excalidraw/types';
 
 import {
   saveWhiteboardCollabSnapshot,
@@ -17,12 +17,12 @@ import {
   type WhiteboardDetail,
   type WhiteboardScene,
 } from '../api/whiteboard-api';
-import { sceneFromExcalidraw, sceneSignature } from './whiteboard-collab-scene';
 import {
   WHITEBOARD_REMOTE_APPLY_GUARD_MS,
   encodeWhiteboardCollabDocumentState,
   type WhiteboardCollabDocument,
 } from './whiteboard-collab-runtime';
+import { sceneFromExcalidraw, sceneSignature } from './whiteboard-collab-scene';
 import {
   WHITEBOARD_CLOSE_FLUSH_RETRY_MS,
   WHITEBOARD_COLLAB_PUBLISH_RETRY_MS,
@@ -68,7 +68,6 @@ export type UseWhiteboardScenePersistenceOptions = {
   shareToken: string | null;
   token: string | null;
   translate: (key: string) => string;
-  workspaceSlug?: string | null;
 };
 
 export type WhiteboardScenePersistenceRuntime = {
@@ -104,9 +103,9 @@ export function useWhiteboardScenePersistence({
   shareToken,
   token,
   translate,
-  workspaceSlug,
 }: UseWhiteboardScenePersistenceOptions): WhiteboardScenePersistenceRuntime {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const mountedRef = useRef(true);
   const saveTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef(false);
   const pendingSceneRef = useRef<WhiteboardScene | null>(null);
@@ -122,15 +121,20 @@ export function useWhiteboardScenePersistence({
   const saveSettledTimerRef = useRef<number | null>(null);
   const lastSaveFailedRef = useRef(false);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      pendingSceneRef.current = null;
+      pendingSceneSignatureRef.current = null;
+      pendingLocalChangeRef.current = null;
+      pendingCollabPublishRef.current = null;
       clearWindowTimer(saveTimerRef);
       clearWindowTimer(localChangeFlushTimerRef);
       clearWindowTimer(collabPublishRetryTimerRef);
       clearWindowTimer(saveSettledTimerRef);
-    },
-    [],
-  );
+    };
+  }, []);
 
   const resetLoadedScene = useCallback((scene: WhiteboardScene) => {
     lastSavedSceneSignatureRef.current = sceneSignature(scene);
@@ -150,7 +154,12 @@ export function useWhiteboardScenePersistence({
   const flushPendingCollabPublish = useCallback(() => {
     collabPublishRetryTimerRef.current = null;
     const pending = pendingCollabPublishRef.current;
-    if (!pending || shareToken || !activeBoardRef.current?.can_edit) {
+    if (
+      !mountedRef.current ||
+      !pending ||
+      shareToken ||
+      !activeBoardRef.current?.can_edit
+    ) {
       return;
     }
 
@@ -168,7 +177,8 @@ export function useWhiteboardScenePersistence({
   }, [activeBoardRef, publishSceneToCollab, shareToken]);
 
   const schedulePendingCollabPublish = useCallback(() => {
-    if (collabPublishRetryTimerRef.current !== null) return;
+    if (!mountedRef.current || collabPublishRetryTimerRef.current !== null)
+      return;
     collabPublishRetryTimerRef.current = window.setTimeout(
       flushPendingCollabPublish,
       0,
@@ -177,7 +187,13 @@ export function useWhiteboardScenePersistence({
 
   const flushSceneSave = useCallback(
     async (resolvedBoardId: string): Promise<boolean> => {
-      if (!token || saveInFlightRef.current) return false;
+      if (
+        !mountedRef.current ||
+        !token ||
+        saveInFlightRef.current ||
+        !activeBoardRef.current?.can_edit
+      )
+        return false;
       const scene = pendingSceneRef.current;
       const signature = pendingSceneSignatureRef.current;
       if (!scene || !signature) return true;
@@ -191,23 +207,14 @@ export function useWhiteboardScenePersistence({
         const collabDoc = collabDocRef.current;
         const updated =
           collabDoc && !shareToken
-            ? await saveWhiteboardCollabSnapshot(
-                token,
-                resolvedBoardId,
-                {
-                  scene,
-                  yjs_state: encodeWhiteboardCollabDocumentState(collabDoc),
-                },
-                workspaceSlug,
-              )
+            ? await saveWhiteboardCollabSnapshot(token, resolvedBoardId, {
+                scene,
+                yjs_state: encodeWhiteboardCollabDocumentState(collabDoc),
+              })
             : shareToken
               ? await updateSharedWhiteboard(token, shareToken, { scene })
-              : await updateWhiteboard(
-                  token,
-                  resolvedBoardId,
-                  { scene },
-                  workspaceSlug,
-                );
+              : await updateWhiteboard(token, resolvedBoardId, { scene });
+        if (!mountedRef.current) return false;
         lastSavedSceneSignatureRef.current = signature;
         if (activeBoardIdRef.current === resolvedBoardId) {
           setActiveBoard((current) =>
@@ -220,6 +227,7 @@ export function useWhiteboardScenePersistence({
         }
         saved = true;
       } catch (err) {
+        if (!mountedRef.current) return false;
         lastSaveFailedRef.current = true;
         setError(
           err instanceof Error
@@ -230,6 +238,7 @@ export function useWhiteboardScenePersistence({
       } finally {
         saveInFlightRef.current = false;
         if (
+          mountedRef.current &&
           pendingSceneRef.current !== null &&
           activeBoardIdRef.current === resolvedBoardId &&
           saveTimerRef.current === null
@@ -238,7 +247,7 @@ export function useWhiteboardScenePersistence({
             saveTimerRef.current = null;
             void flushSceneSave(resolvedBoardId);
           }, WHITEBOARD_SCENE_SAVE_RETRY_MS);
-        } else if (saved) {
+        } else if (mountedRef.current && saved) {
           if (!shareToken) {
             pendingCollabPublishRef.current = { scene, signature };
             schedulePendingCollabPublish();
@@ -278,12 +287,12 @@ export function useWhiteboardScenePersistence({
       shareToken,
       token,
       translate,
-      workspaceSlug,
     ],
   );
 
   const scheduleSceneSave = useCallback(
     (scene: WhiteboardScene, knownSignature?: string) => {
+      if (!mountedRef.current) return;
       const signature = knownSignature ?? sceneSignature(scene);
       const decision = resolveWhiteboardSceneSaveSchedule({
         boardId: activeBoard?.id ?? null,
@@ -321,7 +330,7 @@ export function useWhiteboardScenePersistence({
     const pending = pendingLocalChangeRef.current;
     pendingLocalChangeRef.current = null;
     queuedLocalElementsVersionRef.current = null;
-    if (!pending) {
+    if (!mountedRef.current || !pending) {
       return;
     }
     if (applyingRemoteSceneRef.current) {
@@ -378,6 +387,7 @@ export function useWhiteboardScenePersistence({
 
   const queueLocalChange = useCallback(
     (change: PendingWhiteboardEditorChange) => {
+      if (!mountedRef.current) return;
       const nextVersion = elementsVersion(change.elements);
       if (
         localChangeFlushTimerRef.current !== null &&
@@ -399,6 +409,7 @@ export function useWhiteboardScenePersistence({
 
   const flushPendingSceneBeforeClose =
     useCallback(async (): Promise<boolean> => {
+      if (!mountedRef.current) return false;
       const boardId = activeBoardIdRef.current;
       if (!boardId) return true;
 
@@ -415,6 +426,7 @@ export function useWhiteboardScenePersistence({
 
       const flushUntilSettled = async (attempt: number): Promise<boolean> => {
         for (;;) {
+          if (!mountedRef.current) return false;
           const step = resolveWhiteboardCloseFlushStep({
             attempt,
             lastSaveFailed: lastSaveFailedRef.current,

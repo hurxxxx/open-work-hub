@@ -73,7 +73,6 @@ describe('planner calendar schedule policy', () => {
       command: {
         type: 'updateTask',
         sourceId: 'task-1',
-        workspaceSlug: 'hq',
         payload: { due_date: '2026-03-12' },
       },
     });
@@ -92,7 +91,6 @@ describe('planner calendar schedule policy', () => {
       command: {
         type: 'updateTask',
         sourceId: 'task-1',
-        workspaceSlug: 'hq',
         payload: { due_date: '2026-03-14', start_date: '2026-03-12' },
       },
     });

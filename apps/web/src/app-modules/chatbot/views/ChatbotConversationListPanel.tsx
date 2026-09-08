@@ -1,11 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from 'react';
+import type { AppRouteId } from '@open-work-hub/contracts/app-contracts';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import {
   MessageSquare,
   Pencil,
@@ -14,20 +8,21 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppRouteId } from '@open-work-hub/contracts/app-contracts';
-import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import { useNavigate } from 'react-router-dom';
 
 import { useConfirm, useFeedback, usePrompt } from '@open-work-hub/ui';
 
-import {
-  CONVERSATIONS_UPDATED_EVENT,
-  deleteConversation,
-  listConversations,
-  renameConversation,
-  type ConversationSummary,
-} from '../api/conversations-api';
+import { cn } from '@/src/lib/utils';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   CHATBOT_SIDEBAR_INITIAL_STATE,
   CONVERSATION_LIST_LIMIT,
@@ -37,12 +32,17 @@ import {
   listConversationsWindow,
   shouldAutoLoadMoreForSearch,
 } from '../ai-sidebar-model';
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import { cn } from '@/src/lib/utils';
+import {
+  CONVERSATIONS_UPDATED_EVENT,
+  deleteConversation,
+  listConversations,
+  renameConversation,
+  type ConversationSummary,
+} from '../api/conversations-api';
 
 interface ChatbotConversationListPanelProps {
   activeConversationId: string | null;
-  currentWorkspaceSlug?: string | null;
+
   navigationDisabled?: boolean;
   pendingConversationTitle?: string | null;
   routeId?: AppRouteId;
@@ -329,7 +329,6 @@ function ConversationList({
 
 export function ChatbotConversationListPanel({
   activeConversationId,
-  currentWorkspaceSlug,
   navigationDisabled = false,
   pendingConversationTitle,
   routeId = 'chatbot.root',
@@ -351,7 +350,7 @@ export function ChatbotConversationListPanel({
   const loadedLimitRef = useRef(CONVERSATION_LIST_LIMIT);
 
   const loadConversationWindow = useCallback(async () => {
-    if (!token || !currentWorkspaceSlug) {
+    if (!token) {
       dispatch({ type: 'reset' });
       loadedLimitRef.current = CONVERSATION_LIST_LIMIT;
       return;
@@ -365,7 +364,7 @@ export function ChatbotConversationListPanel({
         listConversations,
         token,
         requestedLimit,
-        { scopeRef, scopeResourceId, workspaceSlug: currentWorkspaceSlug },
+        { scopeRef, scopeResourceId },
       );
       loadedLimitRef.current = Math.max(
         CONVERSATION_LIST_LIMIT,
@@ -385,7 +384,7 @@ export function ChatbotConversationListPanel({
             : t('apps:ai.sidebar.loadConversationsFailed'),
       });
     }
-  }, [currentWorkspaceSlug, scopeRef, scopeResourceId, t, token]);
+  }, [scopeRef, scopeResourceId, t, token]);
 
   useEffect(() => {
     void loadConversationWindow();
@@ -404,16 +403,14 @@ export function ChatbotConversationListPanel({
 
   const navigateToAi = useCallback(
     (conversationId?: string) => {
-      if (!currentWorkspaceSlug) return;
       navigate(
         buildAppHref({
           routeId,
-          workspaceSlug: currentWorkspaceSlug,
           queryParams: conversationId ? { c: conversationId } : {},
         }),
       );
     },
-    [currentWorkspaceSlug, navigate, routeId],
+    [navigate, routeId],
   );
 
   const loadMoreConversations = useCallback(async () => {
@@ -425,7 +422,6 @@ export function ChatbotConversationListPanel({
         cursor: state.nextCursor,
         scopeRef,
         scopeResourceId,
-        workspaceSlug: currentWorkspaceSlug,
       });
       loadedLimitRef.current = Math.max(
         CONVERSATION_LIST_LIMIT,
@@ -446,7 +442,6 @@ export function ChatbotConversationListPanel({
       });
     }
   }, [
-    currentWorkspaceSlug,
     state.conversations.length,
     state.isLoadingMore,
     state.nextCursor,
@@ -467,22 +462,13 @@ export function ChatbotConversationListPanel({
         variant: 'danger',
       });
       if (!confirmed) return;
-      await deleteConversation(token, conversationId, {
-        workspaceSlug: currentWorkspaceSlug,
-      });
+      await deleteConversation(token, conversationId, {});
       dispatch({ type: 'deleteSuccess', conversationId });
       if (activeConversationId === conversationId) {
         navigateToAi();
       }
     },
-    [
-      activeConversationId,
-      confirm,
-      currentWorkspaceSlug,
-      navigateToAi,
-      t,
-      token,
-    ],
+    [activeConversationId, confirm, navigateToAi, t, token],
   );
 
   const handleRenameConversation = useCallback(
@@ -505,7 +491,7 @@ export function ChatbotConversationListPanel({
           token,
           conversation.id,
           trimmedTitle,
-          { workspaceSlug: currentWorkspaceSlug },
+          {},
         );
         dispatch({
           type: 'renameSuccess',
@@ -524,7 +510,7 @@ export function ChatbotConversationListPanel({
         );
       }
     },
-    [currentWorkspaceSlug, prompt, t, toast, token],
+    [prompt, t, toast, token],
   );
 
   return (

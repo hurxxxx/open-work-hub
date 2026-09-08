@@ -1,16 +1,19 @@
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { i18n } from '@/src/platform/i18n';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type KeywordSearchEntityType = string;
 export type KeywordSearchHighlight = ApiSchema<'SearchHighlight'>;
-export type KeywordSearchSnippet = Omit<ApiSchema<'SearchSnippet'>, 'highlights'> & {
+export type KeywordSearchSnippet = Omit<
+  ApiSchema<'SearchSnippet'>,
+  'highlights'
+> & {
   highlights: KeywordSearchHighlight[];
 };
 export type KeywordSearchPerson = ApiSchema<'SearchPerson'>;
 export type KeywordSearchTarget = ApiSchema<'SearchTargetRef'>;
-type KeywordSearchHitContract = ApiSchema<'KeywordSearchResponse'>['hits'][number];
+type KeywordSearchHitContract =
+  ApiSchema<'KeywordSearchResponse'>['hits'][number];
 export type KeywordSearchHit = Omit<
   KeywordSearchHitContract,
   'targets' | 'date_markers' | 'metadata' | 'people' | 'snippet'
@@ -24,7 +27,10 @@ export type KeywordSearchHit = Omit<
 export type KeywordSearchFacetValue = ApiSchema<'EntityTypeFacet'>;
 export type KeywordSearchStatusFacetValue = ApiSchema<'StatusFacet'>;
 export type KeywordSearchTargetFacetValue = ApiSchema<'TargetFacet'>;
-export type KeywordSearchFacets = Omit<ApiSchema<'SearchFacets'>, 'targets' | 'entity_types' | 'status'> & {
+export type KeywordSearchFacets = Omit<
+  ApiSchema<'SearchFacets'>,
+  'targets' | 'entity_types' | 'status'
+> & {
   entity_types: KeywordSearchFacetValue[];
   status: KeywordSearchStatusFacetValue[];
   targets: KeywordSearchTargetFacetValue[];
@@ -38,7 +44,9 @@ export type KeywordSearchResponse = Omit<
   next_offset: number | null;
   trace_id: string | null;
 };
-export type KeywordSearchPayload = Partial<Omit<ApiSchema<'KeywordSearchRequest'>, 'query'>> & {
+export type KeywordSearchPayload = Partial<
+  Omit<ApiSchema<'KeywordSearchRequest'>, 'query'>
+> & {
   query: string;
 };
 
@@ -51,20 +59,18 @@ export class SearchApiError extends Error {
   }
 }
 
-export async function queryWorkspaceKeywordSearch(
+export async function queryKeywordSearch(
   payload: KeywordSearchPayload,
   token: string,
-  workspaceSlug?: string | null,
   options?: { signal?: AbortSignal },
 ): Promise<KeywordSearchResponse> {
   return apiFetchJsonWithMappedError<KeywordSearchResponse>(
-    rewriteWorkspaceApiPath('/api/v1/search/query', workspaceSlug),
+    '/api/v1/search/query',
     token,
     {
       method: 'POST',
       body: JSON.stringify({
         query: payload.query,
-        workspace_id: payload.workspace_id ?? null,
         entity_types: payload.entity_types ?? [],
         people: payload.people ?? { role: 'any', user_ids: [] },
         status_by_type: payload.status_by_type ?? {},
@@ -76,7 +82,11 @@ export async function queryWorkspaceKeywordSearch(
       }),
       signal: options?.signal,
     },
-    (error) => new SearchApiError(error.status, extractErrorMessage(error.payload, error.status)),
+    (error) =>
+      new SearchApiError(
+        error.status,
+        extractErrorMessage(error.payload, error.status),
+      ),
   );
 }
 

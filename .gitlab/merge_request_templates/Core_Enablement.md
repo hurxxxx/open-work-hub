@@ -11,13 +11,13 @@ Keep this description below 2,700 characters. Link logs and owning decisions.
 - App-owned boundary after merge: <!-- open-work-hub:field:app-boundary --> REPLACE_ME
 - Activation owner/MR/condition: <!-- open-work-hub:field:activation --> REPLACE_ME
 - Compatibility/rollback: <!-- open-work-hub:field:compatibility --> REPLACE_ME
-- Workspace search (`none - reason` or `workspace - required evidence`): <!-- open-work-hub:field:workspace-keyword-search --> REPLACE_ME
+- Company search (`none - reason` or `company - required evidence`): <!-- open-work-hub:field:company-keyword-search --> REPLACE_ME
 
 - [ ] <!-- open-work-hub:check:independent-deployable --> Scaffold is independently deployable.
 - [ ] <!-- open-work-hub:check:hidden-default --> Incomplete app stays hidden/disabled/unscheduled.
 - [ ] <!-- open-work-hub:check:extension-contracts --> Registry/API/RBAC/worker/AI contracts tested; independently configurable LLM functions have registered workloads, output caps, audit, common interface, and direct-call guard evidence.
 - [ ] <!-- open-work-hub:check:activation-owner --> Activation ownership is explicit.
-- [ ] <!-- open-work-hub:check:workspace-keyword-search --> Backend registry is authoritative; app availability, source ACL, empty/missing-index, backfill, smoke, and rollback evidence are recorded, or `none` has a reason.
+- [ ] <!-- open-work-hub:check:company-keyword-search --> Backend registry is authoritative; app availability, source ACL, empty/missing-index, backfill, smoke, and rollback evidence are recorded, or `none` has a reason.
 
 ## Verification Evidence
 

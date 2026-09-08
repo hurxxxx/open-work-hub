@@ -1,5 +1,5 @@
-import { SquareTerminal } from 'lucide-react';
 import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
+import { SquareTerminal } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -28,6 +28,6 @@ export const agentTerminalManifest: AppModuleManifest = {
   },
   defaultActiveNavItemId: 'agent-terminal',
   navItems: [],
-  workspaceRoutePaths: [],
+  appRoutePaths: [],
   globalRoutePaths: [getAppRoutePattern('agent-terminal.root')],
 };

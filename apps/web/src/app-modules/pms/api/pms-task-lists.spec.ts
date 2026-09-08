@@ -22,8 +22,8 @@ describe('PMS task-list queries', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(response([]));
 
-    await listPmsTaskLists('token', 'space-1', 'workspace');
-    await listPmsTaskLists('token', 'space-1', 'workspace', {
+    await listPmsTaskLists('token', 'space-1');
+    await listPmsTaskLists('token', 'space-1', {
       archived: true,
     });
 
@@ -37,7 +37,7 @@ describe('PMS task-list queries', () => {
       .mockResolvedValueOnce(response([{ id: 'archived-1' }], 2))
       .mockResolvedValueOnce(response([{ id: 'archived-2' }], 2));
 
-    const result = await listAllPmsTaskLists('token', undefined, 'workspace', {
+    const result = await listAllPmsTaskLists('token', undefined, {
       archived: true,
     });
 

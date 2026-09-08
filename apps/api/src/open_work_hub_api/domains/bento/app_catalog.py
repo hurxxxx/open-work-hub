@@ -1,25 +1,24 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceNavRegistration,
-    workspace_app_registration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-BENTO_WORKSPACE_APP = workspace_app_registration(
+BENTO_APP = app_registration(
     "bento",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="bento-all",
             title="All Presentations",
             category="Library",
             icon_key="presentation",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="bento-mine",
             title="My Presentations",
             category="Library",
             icon_key="user",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="bento-archived",
             title="Archived",
             category="Library",

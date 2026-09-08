@@ -15,10 +15,6 @@ from starlette.websockets import WebSocketDisconnect
 from open_work_hub_api.core.db import get_db_session, get_session_factory
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.settings import Settings, get_settings
-from open_work_hub_api.domains.agent_terminal.models import (
-    AgentTerminalSession,
-    utcnow_naive,
-)
 from open_work_hub_api.domains.agent_terminal.codex_history import (
     AgentTerminalCodexHistoryError,
     list_codex_threads,
@@ -33,14 +29,18 @@ from open_work_hub_api.domains.agent_terminal.git_changes import (
     get_git_status,
     get_git_summary,
 )
+from open_work_hub_api.domains.agent_terminal.models import (
+    AgentTerminalSession,
+    utcnow_naive,
+)
 from open_work_hub_api.domains.agent_terminal.runtime import (
     AgentTerminalRuntime,
     AgentTerminalRuntimeError,
 )
 from open_work_hub_api.domains.agent_terminal.schemas import (
-    AgentTerminalConfigResponse,
     AgentTerminalCodexThreadListResponse,
     AgentTerminalCodexThreadResponse,
+    AgentTerminalConfigResponse,
     AgentTerminalGitChangeScope,
     AgentTerminalGitCommitDetailResponse,
     AgentTerminalGitCommitDiffResponse,
@@ -62,22 +62,21 @@ from open_work_hub_api.domains.agent_terminal.service import (
     serialize_session,
 )
 from open_work_hub_api.domains.auth.access import record_audit_log
+from open_work_hub_api.domains.auth.app_gate import (
+    can_use_app,
+    require_app_access,
+)
 from open_work_hub_api.domains.auth.dependencies import (
     AuthContext,
     require_any_system_role,
     resolve_auth_context_from_token,
 )
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_platform_app_enabled,
-    require_platform_app_enabled,
-)
-
 
 router = APIRouter(prefix="/agent-terminal", tags=["agent-terminal"])
 ws_router = APIRouter(prefix="/agent-terminal", tags=["agent-terminal"])
 _require_platform_admin = require_any_system_role("platform_admin")
-_require_app_enabled = require_platform_app_enabled("agent-terminal")
+_require_app_enabled = require_app_access("agent-terminal")
 _ACTIVE_STATUSES = frozenset({"starting", "running"})
 _ACCESS_RECHECK_SECONDS = 60
 
@@ -638,7 +637,7 @@ def _authorize_websocket(token: str, session_id: str) -> tuple[str, str]:
                 code="auth.system_role_required",
                 roles="platform_admin",
             )
-        if not is_platform_app_enabled(db, "agent-terminal"):
+        if not can_use_app(db, user_id=context.user.id, app_id="agent-terminal"):
             raise localized_http_exception(
                 status_code=status.HTTP_403_FORBIDDEN,
                 code="platform.app_disabled",

@@ -1,6 +1,6 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
-import { authenticatedContentObjectUrl } from '@/src/platform/browser/browser-download';
 import type { ApiSchema } from '@/src/platform/api/types';
+import { authenticatedContentObjectUrl } from '@/src/platform/browser/browser-download';
 
 export type MediaUploadResponse = ApiSchema<'MediaUploadResponse'>;
 

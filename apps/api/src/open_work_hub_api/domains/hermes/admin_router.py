@@ -19,7 +19,7 @@ from open_work_hub_api.core.settings import (
 )
 from open_work_hub_api.domains.auth.access import record_audit_log
 from open_work_hub_api.domains.auth.dependencies import AuthContext, require_admin_context
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.client import HermesClientError
 from open_work_hub_api.domains.hermes.models import (
     HermesDispatchOutbox,
@@ -29,10 +29,6 @@ from open_work_hub_api.domains.hermes.models import (
     HermesToolApproval,
 )
 from open_work_hub_api.domains.hermes.repository import ACTIVE_RUN_STATUSES
-from open_work_hub_api.domains.hermes_terminal.broker_client import (
-    HermesTerminalBrokerClient,
-)
-from open_work_hub_api.domains.hermes_terminal.models import HermesTerminalSession
 from open_work_hub_api.domains.hermes.research_settings import (
     HermesResearchSettingsConflictError,
     HermesResearchSettingsSnapshot,
@@ -47,13 +43,16 @@ from open_work_hub_api.domains.hermes.research_sources import (
 from open_work_hub_api.domains.hermes.service import (
     ensure_profile_binding,
     internal_mcp_server_name,
+    invalidate_profile_policy_cache,
     is_profile_scoped_mcp_server,
     management_client,
     runtime_client,
     scoped_mcp_server_name,
-    invalidate_profile_policy_cache,
 )
-
+from open_work_hub_api.domains.hermes_terminal.broker_client import (
+    HermesTerminalBrokerClient,
+)
+from open_work_hub_api.domains.hermes_terminal.models import HermesTerminalSession
 
 router = APIRouter(prefix="/admin/hermes", tags=["admin-hermes"])
 
@@ -89,7 +88,6 @@ class AdminHermesRuntimeHealthResponse(BaseModel):
 
 class AdminHermesProfileResponse(BaseModel):
     id: str
-    workspace_id: str
     user_id: str
     profile_name: str
     status: str
@@ -168,7 +166,6 @@ def _profile_response(binding: HermesProfileBinding) -> AdminHermesProfileRespon
     return AdminHermesProfileResponse.model_validate(
         {
             "id": binding.id,
-            "workspace_id": binding.workspace_id,
             "user_id": binding.user_id,
             "profile_name": binding.profile_name,
             "status": binding.status,
@@ -201,9 +198,7 @@ def _research_settings_response(
             )
             for source in RESEARCH_SOURCE_DEFINITIONS
         ],
-        updated_at=(
-            snapshot.updated_at.isoformat() if snapshot.updated_at is not None else None
-        ),
+        updated_at=(snapshot.updated_at.isoformat() if snapshot.updated_at is not None else None),
         updated_by=snapshot.updated_by,
     )
 
@@ -223,16 +218,13 @@ def get_hermes_summary(
     profile_counts = {
         row[0]: int(row[1])
         for row in db.execute(
-            select(HermesProfileBinding.status, func.count())
-            .group_by(HermesProfileBinding.status)
+            select(HermesProfileBinding.status, func.count()).group_by(HermesProfileBinding.status)
         )
     }
     run_counts = {
         row[0]: int(row[1])
         for row in db.execute(
-            select(HermesRunProjection.status, func.count()).group_by(
-                HermesRunProjection.status
-            )
+            select(HermesRunProjection.status, func.count()).group_by(HermesRunProjection.status)
         )
     }
     return AdminHermesSummaryResponse(
@@ -275,9 +267,7 @@ async def get_hermes_runtime_health(
             services[check_name] = "offline" if isinstance(result, BaseException) else "online"
 
     maintenance = list(
-        db.scalars(
-            select(HermesMaintenanceState).order_by(HermesMaintenanceState.component)
-        )
+        db.scalars(select(HermesMaintenanceState).order_by(HermesMaintenanceState.component))
     )
     return AdminHermesRuntimeHealthResponse(
         enabled=settings.hermes_enabled,
@@ -359,15 +349,14 @@ async def reconcile_hermes_profile(
     _admin: AuthContext = Depends(require_admin_context),
 ) -> AdminHermesProfileResponse:
     binding = _require_profile(db, binding_id)
-    workspace = db.get(Workspace, binding.workspace_id)
     user = db.get(User, binding.user_id)
-    if workspace is None or user is None:
+    if user is None or user.status != "active" or user.login_blocked:
         raise HTTPException(status_code=409, detail={"code": "hermes.profile_owner_missing"})
     binding.status = "provisioning"
     db.add(binding)
     db.commit()
     try:
-        binding = await ensure_profile_binding(db, workspace=workspace, user=user)
+        binding = await ensure_profile_binding(db, user=user)
     except HermesClientError as error:
         _raise_client_error(error)
     return _profile_response(binding)
@@ -395,14 +384,8 @@ async def get_hermes_profile_inventory(
     return AdminHermesInventoryResponse(
         profile=_profile_response(binding),
         capabilities=capabilities,
-        toolsets=(
-            toolsets_payload.get("data", [])
-            if isinstance(toolsets_payload, dict)
-            else []
-        ),
-        mcp_servers=(
-            mcp_payload.get("servers", []) if isinstance(mcp_payload, dict) else []
-        ),
+        toolsets=(toolsets_payload.get("data", []) if isinstance(toolsets_payload, dict) else []),
+        mcp_servers=(mcp_payload.get("servers", []) if isinstance(mcp_payload, dict) else []),
         skills=(skills_payload.get("skills", []) if isinstance(skills_payload, dict) else []),
     )
 
@@ -532,10 +515,7 @@ async def toggle_hermes_mcp_server(
     _admin: AuthContext = Depends(require_admin_context),
 ) -> dict[str, Any]:
     binding = _require_profile(db, binding_id)
-    if (
-        server_name == internal_mcp_server_name(binding.profile_name)
-        and not body.enabled
-    ):
+    if server_name == internal_mcp_server_name(binding.profile_name) and not body.enabled:
         raise HTTPException(
             status_code=409,
             detail={"code": "hermes.internal_mcp_required"},

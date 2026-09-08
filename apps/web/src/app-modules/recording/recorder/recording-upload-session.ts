@@ -7,7 +7,10 @@ export interface RecordingUploadSessionStore {
   getChunks(stagingId: string): Promise<RecordingChunkState[]>;
   getPendingChunks(stagingId: string): Promise<RecordingChunkState[]>;
   markChunkUploaded(stagingId: string, seq: number): Promise<void>;
-  updateSessionProgress(stagingId: string, update: Partial<RecordingSessionState>): Promise<void>;
+  updateSessionProgress(
+    stagingId: string,
+    update: Partial<RecordingSessionState>,
+  ): Promise<void>;
 }
 
 export interface RecordingUploadSessionClient {
@@ -21,7 +24,10 @@ export interface RecordingUploadSessionClient {
 }
 
 export interface RecordingUploadDrainHooks {
-  afterChunkUploaded?(stagingId: string, chunk: RecordingChunkState): Promise<void> | void;
+  afterChunkUploaded?(
+    stagingId: string,
+    chunk: RecordingChunkState,
+  ): Promise<void> | void;
 }
 
 export interface RecordingUploadDrainResult {
@@ -85,18 +91,28 @@ export async function drainRecordingUploadSession(input: {
 
   while (true) {
     const chunks = await store.getChunks(stagingId);
-    const alreadyUploadedChunks = chunksCoveredByRemoteOffset(chunks, remoteOffset);
+    const alreadyUploadedChunks = chunksCoveredByRemoteOffset(
+      chunks,
+      remoteOffset,
+    );
     if (alreadyUploadedChunks.length > 0) {
       await Promise.all(
-        alreadyUploadedChunks.map((chunk) => store.markChunkUploaded(stagingId, chunk.seq)),
+        alreadyUploadedChunks.map((chunk) =>
+          store.markChunkUploaded(stagingId, chunk.seq),
+        ),
       );
-      reconciledChunkSeqs.push(...alreadyUploadedChunks.map((chunk) => chunk.seq));
+      reconciledChunkSeqs.push(
+        ...alreadyUploadedChunks.map((chunk) => chunk.seq),
+      );
       await store.updateSessionProgress(stagingId, {
-        lastUploadedSeq: alreadyUploadedChunks[alreadyUploadedChunks.length - 1].seq,
+        lastUploadedSeq:
+          alreadyUploadedChunks[alreadyUploadedChunks.length - 1].seq,
       });
     }
 
-    const pending = (await store.getPendingChunks(stagingId)).filter((chunk) => chunk.blob.size > 0);
+    const pending = (await store.getPendingChunks(stagingId)).filter(
+      (chunk) => chunk.blob.size > 0,
+    );
     if (pending.length === 0) {
       break;
     }
@@ -118,7 +134,9 @@ export async function drainRecordingUploadSession(input: {
     );
     await store.markChunkUploaded(stagingId, chunk.seq);
     uploadedChunkSeqs.push(chunk.seq);
-    await store.updateSessionProgress(stagingId, { lastUploadedSeq: chunk.seq });
+    await store.updateSessionProgress(stagingId, {
+      lastUploadedSeq: chunk.seq,
+    });
     await hooks?.afterChunkUploaded?.(stagingId, chunk);
   }
 

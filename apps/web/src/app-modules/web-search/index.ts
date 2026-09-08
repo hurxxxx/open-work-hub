@@ -1,9 +1,9 @@
 import { webSearchManifest } from './manifest';
-import { webSearchWorkspaceRoutes } from './routes';
+import { webSearchAppRoutes } from './routes';
 
-export { webSearchManifest, webSearchWorkspaceRoutes };
+export { webSearchAppRoutes, webSearchManifest };
 
 export const webSearchModule = {
   manifest: webSearchManifest,
-  workspaceRoutes: webSearchWorkspaceRoutes,
+  appRoutes: webSearchAppRoutes,
 } as const;

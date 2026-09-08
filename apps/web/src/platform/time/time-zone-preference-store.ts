@@ -1,14 +1,13 @@
-import {
-  DEFAULT_TIME_ZONE,
-  normalizeTimeZone,
-} from './zoned-date-formatter';
+import { DEFAULT_TIME_ZONE, normalizeTimeZone } from './zoned-date-formatter';
 
 export const TIME_ZONE_STORAGE_KEY = 'open-work-hub:time-zone';
 
 export function readStoredTimeZonePreference(): string {
   if (typeof window === 'undefined') return DEFAULT_TIME_ZONE;
   try {
-    return normalizeTimeZone(window.localStorage.getItem(TIME_ZONE_STORAGE_KEY));
+    return normalizeTimeZone(
+      window.localStorage.getItem(TIME_ZONE_STORAGE_KEY),
+    );
   } catch {
     return DEFAULT_TIME_ZONE;
   }

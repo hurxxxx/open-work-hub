@@ -1,11 +1,11 @@
-import { createElement, lazy } from 'react';
 import {
   getAppRouteChrome,
   getAppRoutePattern,
 } from '@open-work-hub/contracts/app-routes';
+import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const AssignedToMeView = lazy(() =>
   import('./views/AssignedToMeView').then((module) => ({
@@ -23,7 +23,7 @@ const TodayOverdueView = lazy(() =>
 
 export const pmsToolElement = lazyRoute(createElement(PMSView));
 
-export const pmsWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const pmsAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'pms',
     chrome: getAppRouteChrome('pms.root'),

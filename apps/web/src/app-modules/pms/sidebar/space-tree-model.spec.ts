@@ -6,7 +6,6 @@ import { buildPmsSidebarSpaceTree } from './space-tree-model';
 function space(id: string, name: string): PmsSpace {
   return {
     id,
-    workspace_id: 'workspace-1',
     workspace_key: 'workspace',
     key: id,
     name,

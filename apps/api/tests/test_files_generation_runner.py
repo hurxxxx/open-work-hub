@@ -13,7 +13,7 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from open_work_hub_api.core.db import Base
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.files.models import (
     FileManagerCorpus,
     FileManagerFile,
@@ -31,9 +31,7 @@ from open_work_hub_api.domains.retrieval.files_generation_runner import (
     FilesSourceProjectionSnapshot,
     load_files_source_snapshot,
 )
-from open_work_hub_api.domains.retrieval.files_quality_judgments import (
-    FilesQualityJudgmentSnapshot,
-)
+from open_work_hub_api.domains.retrieval.files_quality_judgments import FilesQualityJudgmentSnapshot
 from open_work_hub_api.domains.retrieval.evaluation import (
     RetrievalEvaluationReport,
     RetrievalQualityGateArtifact,
@@ -173,8 +171,7 @@ def _inventory(
 def _loaded_source_snapshot(
     *,
     metadata_version: int = 1,
-    access_scope_kind: str = "workspace",
-    managed_workspace_id: str = "workspace-1",
+    access_scope_kind: str = "company",
     source_title: str | None = None,
 ) -> FilesSourceProjectionSnapshot:
     external = source_title is not None
@@ -204,18 +201,14 @@ def _loaded_source_snapshot(
         filename="source.txt",
         content_type="text/plain",
         size_bytes=18,
-        visibility="workspace",
+        visibility="company",
         folder_id=None,
         corpus_id="corpus-1",
-        workspace_id=managed_workspace_id,
         owner_id="user-1",
         updated_at=datetime(2026, 1, 1, tzinfo=UTC),
         owner_display_name="Owner",
         owner_full_name="Owner Name",
-        workspace_key=f"key-{managed_workspace_id}",
-        workspace_active=True,
         corpus_partition_id=_PARTITION_ID,
-        corpus_managed_workspace_id=managed_workspace_id,
         corpus_access_scope_kind=access_scope_kind,
         corpus_metadata_version=metadata_version,
         corpus_source_managed=external,
@@ -229,11 +222,7 @@ def _loaded_source_snapshot(
         source_metadata_document_type="report" if external else None,
         source_metadata_acl_resolved=True if external else None,
         partition_source_namespace="files",
-        partition_managed_workspace_id=managed_workspace_id,
         partition_candidate_scope_kind=access_scope_kind,
-        partition_candidate_workspace_id=(
-            managed_workspace_id if access_scope_kind == "workspace" else None
-        ),
         partition_candidate_user_id=None,
         partition_state="active",
         partition_metadata_version=metadata_version,
@@ -270,20 +259,19 @@ def test_source_snapshot_binds_corpus_and_partition_acl_metadata_versions() -> N
 
 
 def test_source_snapshot_separates_acl_transitions_from_projection_content() -> None:
-    workspace = _loaded_source_snapshot()
+    initial = _loaded_source_snapshot()
     company = _loaded_source_snapshot(
         metadata_version=2,
         access_scope_kind="company",
     )
     moved = _loaded_source_snapshot(
         metadata_version=3,
-        managed_workspace_id="workspace-2",
     )
 
     assert (
         len(
             {
-                workspace.acl_envelope_sha256,
+                initial.acl_envelope_sha256,
                 company.acl_envelope_sha256,
                 moved.acl_envelope_sha256,
             }
@@ -291,15 +279,15 @@ def test_source_snapshot_separates_acl_transitions_from_projection_content() -> 
         == 3
     )
     assert {
-        workspace.opensearch_projection_sha256,
+        initial.opensearch_projection_sha256,
         company.opensearch_projection_sha256,
         moved.opensearch_projection_sha256,
-    } == {workspace.opensearch_projection_sha256}
+    } == {initial.opensearch_projection_sha256}
     assert {
-        workspace.qdrant_projection_sha256,
+        initial.qdrant_projection_sha256,
         company.qdrant_projection_sha256,
         moved.qdrant_projection_sha256,
-    } == {workspace.qdrant_projection_sha256}
+    } == {initial.qdrant_projection_sha256}
 
 
 def test_source_snapshot_includes_safe_external_metadata_in_projection_contracts() -> None:
@@ -322,7 +310,6 @@ def _quality_corpus_bytes() -> bytes:
             "cases": [
                 {
                     "query_id": f"query-{index}",
-                    "workspace_id": "workspace-1",
                     "user_id": "user-1",
                     "query": f"quality query {index}",
                     "relevant_resource_ids": ["file-1"],
@@ -739,7 +726,6 @@ def test_materializer_refreshes_delayed_opensearch_before_runner_reconciliation(
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
             User.__table__,
             RetrievalPartition.__table__,
             FileManagerCorpus.__table__,
@@ -758,13 +744,6 @@ def test_materializer_refreshes_delayed_opensearch_before_runner_reconciliation(
     with factory.begin() as db:
         db.add_all(
             [
-                Workspace(
-                    id="workspace-1",
-                    key="workspace-1",
-                    name="Workspace 1",
-                    description="",
-                    active=True,
-                ),
                 User(
                     id="user-1",
                     login_id="user-1",
@@ -775,9 +754,7 @@ def test_materializer_refreshes_delayed_opensearch_before_runner_reconciliation(
                 RetrievalPartition(
                     id=_PARTITION_ID,
                     source_namespace="files",
-                    managed_workspace_id="workspace-1",
-                    candidate_scope_kind="workspace",
-                    candidate_workspace_id="workspace-1",
+                    candidate_scope_kind="company",
                     is_default_ingest=False,
                 ),
             ]
@@ -786,14 +763,13 @@ def test_materializer_refreshes_delayed_opensearch_before_runner_reconciliation(
         db.add(
             FileManagerFile(
                 id="file-visible-after-refresh",
-                workspace_id="workspace-1",
                 retrieval_partition_id=_PARTITION_ID,
                 owner_id="user-1",
                 filename="delayed-visibility.txt",
                 content_type="text/plain",
                 size_bytes=25,
                 storage_key="files/workspace-1/delayed-visibility.txt",
-                visibility="workspace",
+                visibility="company",
                 extraction_status="ready",
                 extraction_content_checksum=checksum,
                 extraction_text="visible only after refresh",
@@ -821,7 +797,6 @@ def test_materializer_refreshes_delayed_opensearch_before_runner_reconciliation(
                     retrieval_partition_id=_PARTITION_ID,
                     desired_state="active",
                     content_checksum=checksum,
-                    diagnostic_workspace_id="workspace-1",
                 ),
                 RetrievalProjectionEvent(
                     event_sequence=1,
@@ -832,7 +807,6 @@ def test_materializer_refreshes_delayed_opensearch_before_runner_reconciliation(
                     change_kind="content",
                     desired_state="active",
                     content_checksum=checksum,
-                    diagnostic_workspace_id="workspace-1",
                 ),
             ]
         )
@@ -1274,7 +1248,7 @@ def test_active_empty_generation_accepts_append_only_quality_attestation(
     monkeypatch.setattr(
         runner,
         "_active_source_scope_kinds",
-        lambda: ("workspace",),
+        lambda: ("company",),
     )
     corpus_bytes = _quality_corpus_bytes()
     artifact = _passing_v3_quality_artifact(
@@ -1287,14 +1261,14 @@ def test_active_empty_generation_accepts_append_only_quality_attestation(
         writes_quiesced=True,
         quality_artifact=artifact,
         quality_corpus_bytes=corpus_bytes,
-        scope_coverage=["workspace"],
+        scope_coverage=["company"],
     )
     second = runner.attest_active(
         generation_key="v3-quality",
         writes_quiesced=True,
         quality_artifact=artifact,
         quality_corpus_bytes=corpus_bytes,
-        scope_coverage=["workspace"],
+        scope_coverage=["company"],
     )
 
     assert first.state == second.state == "quality-attested"
@@ -1305,7 +1279,7 @@ def test_active_empty_generation_accepts_append_only_quality_attestation(
     assert attestation.generation_key == "v3-quality"
     assert attestation.source_files_event_watermark == 1
     assert attestation.source_resource_count == 1
-    assert attestation.scope_coverage == ["workspace"]
+    assert attestation.scope_coverage == ["company"]
     assert attestation.quality_details["mode"] == "judged_corpus"
 
 
@@ -1353,7 +1327,7 @@ def test_active_quality_attestation_rejects_scope_mismatch(
     monkeypatch.setattr(
         runner,
         "_active_source_scope_kinds",
-        lambda: ("workspace",),
+        lambda: ("company",),
     )
 
     with pytest.raises(FilesGenerationError) as caught:
@@ -1365,7 +1339,7 @@ def test_active_quality_attestation_rejects_scope_mismatch(
                 corpus_bytes=_quality_corpus_bytes(),
             ).model_copy(update={"source_files_event_watermark": 1}),
             quality_corpus_bytes=_quality_corpus_bytes(),
-            scope_coverage=["company"],
+            scope_coverage=["personal"],
         )
 
     assert caught.value.code == "attestation_scope_coverage_mismatch"
@@ -2540,7 +2514,7 @@ def test_cli_requires_exact_active_attestation_confirmation_before_backend_acces
             "--quality-corpus",
             "/not/read-before-confirmation/corpus.json",
             "--scope-coverage",
-            "workspace",
+            "company",
         ]
     )
 
@@ -2597,9 +2571,7 @@ def test_non_active_materializer_resolves_matching_paused_jobs_after_both_backen
             RetrievalPartition(
                 id=partition_id,
                 source_namespace="files",
-                managed_workspace_id="workspace-1",
-                candidate_scope_kind="workspace",
-                candidate_workspace_id="workspace-1",
+                candidate_scope_kind="company",
                 is_default_ingest=True,
             )
         )
@@ -2612,7 +2584,6 @@ def test_non_active_materializer_resolves_matching_paused_jobs_after_both_backen
                 retrieval_partition_id=partition_id,
                 change_kind="delete",
                 desired_state="deleted",
-                diagnostic_workspace_id="workspace-1",
             )
         )
         db.add(
@@ -2622,13 +2593,11 @@ def test_non_active_materializer_resolves_matching_paused_jobs_after_both_backen
                 projection_version=1,
                 retrieval_partition_id=partition_id,
                 desired_state="deleted",
-                diagnostic_workspace_id="workspace-1",
             )
         )
         db.add(
             SearchIndexJob(
                 id="search-job",
-                workspace_id="workspace-1",
                 retrieval_partition_id=partition_id,
                 resource_type="file_manager_file",
                 projection_event_sequence=1,
@@ -2643,8 +2612,7 @@ def test_non_active_materializer_resolves_matching_paused_jobs_after_both_backen
         db.add(
             RagSyncJob(
                 id="rag-job",
-                scope_kind="workspace",
-                workspace_id="workspace-1",
+                scope_kind="company",
                 retrieval_partition_id=partition_id,
                 projection_event_sequence=1,
                 projection_version=1,
@@ -2722,3 +2690,17 @@ def test_non_active_materializer_resolves_matching_paused_jobs_after_both_backen
         assert db.get(SearchIndexJob, "search-job").status == "succeeded"
         assert db.get(RagSyncJob, "rag-job").status == "succeeded"
     engine.dispose()
+
+
+def test_generation_cli_rejects_removed_workspace_scope_before_backend_access(monkeypatch):
+    script = _load_runner_script()
+    monkeypatch.setattr(
+        script,
+        "FilesPhysicalGenerationBackends",
+        lambda _settings: pytest.fail("removed scope must not access backends"),
+    )
+    with pytest.raises(SystemExit) as error:
+        script.main(
+            ["attest-active", "--generation", "company-release", "--scope-coverage", "workspace"]
+        )
+    assert error.value.code == 2

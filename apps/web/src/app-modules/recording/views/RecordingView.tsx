@@ -1,12 +1,10 @@
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import {
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type RefObject,
-} from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+  Button,
+  DropdownMenu,
+  InlineNotice,
+  useConfirm,
+} from '@open-work-hub/ui';
 import {
   AlertCircle,
   AudioWaveform,
@@ -21,12 +19,14 @@ import {
   Upload,
 } from 'lucide-react';
 import {
-  Button,
-  DropdownMenu,
-  InlineNotice,
-  useConfirm,
-} from '@open-work-hub/ui';
-import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type RefObject,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -44,6 +44,7 @@ import {
 import { useRecordingRecovery } from '../recorder/useRecordingRecovery';
 import { useResilientRecorder } from '../recorder/useResilientRecorder';
 import { RecordingStageRail } from './RecordingStageRail';
+import { useRecordingCollectionWorkflow } from './recording-collection-workflow';
 import {
   compareRecordings,
   connectionChips,
@@ -58,7 +59,6 @@ import {
   titleFor,
   type RecordingSort,
 } from './recording-view-model';
-import { useRecordingCollectionWorkflow } from './recording-collection-workflow';
 
 function formatDateTime(
   value: string,
@@ -77,7 +77,7 @@ function formatDateTime(
 export function RecordingView() {
   const { t, i18n } = useTranslation(['apps', 'common']);
   const { token, user } = useAuth();
-  const { workspaceSlug } = useParams();
+
   const [searchParams] = useSearchParams();
   const timeZone = normalizeTimeZone(user?.time_zone);
   const view = normalizeViewFilter(searchParams.get('view'));
@@ -95,7 +95,6 @@ export function RecordingView() {
   );
   const recordingCollection = useRecordingCollectionWorkflow({
     token,
-    workspaceSlug,
     scope: recordingScope,
     messages: {
       loadFailed: t('apps:recording.errors.loadFailed'),
@@ -135,11 +134,9 @@ export function RecordingView() {
         });
 
   const recovery = useRecordingRecovery({
-    workspaceSlug: workspaceSlug ?? '',
     token,
   });
   const recorder = useResilientRecorder({
-    workspaceSlug: workspaceSlug ?? '',
     token,
     source: 'quick_record',
     title: titleDraft,
@@ -200,10 +197,6 @@ export function RecordingView() {
       behavior: 'smooth',
       block: 'center',
     });
-  }
-
-  if (!workspaceSlug) {
-    return null;
   }
 
   return (
@@ -330,7 +323,6 @@ export function RecordingView() {
                   <Link
                     to={buildAppHref({
                       routeId: 'recording.root',
-                      workspaceSlug,
                     })}
                     className="inline-flex h-[var(--ui-density-dense)] items-center justify-center rounded-[var(--ui-radius-sm)] border border-app-border bg-app-surface-raised px-2.5 text-[0.84rem] font-semibold text-app-ink transition-colors hover:bg-app-surface-subtle"
                   >
@@ -366,7 +358,6 @@ export function RecordingView() {
                     recording={recording}
                     detailHref={buildAppHref({
                       routeId: 'recording.detail',
-                      workspaceSlug,
                       pathParams: { recordingId: recording.id },
                     })}
                     timeZone={timeZone}

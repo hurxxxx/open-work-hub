@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from concurrent.futures import Future, ThreadPoolExecutor, wait
 import logging
 import time
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
 from fastapi import status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_engine
@@ -15,13 +14,9 @@ from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.settings import Settings, get_settings
 from open_work_hub_api.core.telemetry import current_trace_id
 from open_work_hub_api.domains.auth.app_availability import (
-    resolve_workspace_runtime_enabled_app_ids,
+    resolve_company_enabled_app_ids,
 )
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
-    is_company_app_enabled_for_user_context,
-)
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.rag import application as rag_application
 from open_work_hub_api.domains.rag.contracts import (
     RagAnswerMode,
@@ -31,14 +26,11 @@ from open_work_hub_api.domains.rag.default_source_adapters import (
     ensure_rag_source_adapters_registered,
     registered_searchable_rag_app_ids,
 )
+from open_work_hub_api.domains.rag.query_service import RagQueryService
 from open_work_hub_api.domains.rag.runtime import (
     get_provider_bundle,
     get_retrieval_candidate_query_service,
 )
-from open_work_hub_api.domains.rag.source_adapter_registry import (
-    get_rag_resource_adapter,
-)
-from open_work_hub_api.domains.rag.query_service import RagQueryService
 from open_work_hub_api.domains.retrieval.contracts import (
     RetrievalAnswerMode,
     RetrievalCitation,
@@ -70,12 +62,11 @@ from open_work_hub_api.domains.retrieval.source_catalog import (
 from open_work_hub_api.domains.search import service as search_service
 from open_work_hub_api.domains.search.backend_contracts import KeywordSearchClient
 from open_work_hub_api.domains.search.entity_adapter_registry import (
-    resolve_workspace_keyword_search_scope,
+    resolve_keyword_search_scope,
 )
-from open_work_hub_api.domains.search.schemas import KeywordSearchRequest, KeywordSearchResponse
 from open_work_hub_api.domains.search.resource_mapping import resource_type_for_search_entity
+from open_work_hub_api.domains.search.schemas import KeywordSearchRequest, KeywordSearchResponse
 from open_work_hub_api.domains.source_access import SourceAclPolicy
-
 
 _PRIMARY_BACKEND_TIMEOUT_SECONDS = 5.0
 logger = logging.getLogger(__name__)
@@ -88,7 +79,6 @@ _PRIMARY_BACKEND_EXECUTOR = ThreadPoolExecutor(
 def query_retrieval(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     request: RetrievalQueryRequest,
     source: str = "api.retrieval.query",
@@ -96,7 +86,6 @@ def query_retrieval(
     principal_id: str | None = None,
     agent_run_id: str | None = None,
     conversation_id: str | None = None,
-    gateway_workspace_id: str | None = None,
     keyword_search_client: KeywordSearchClient | None = None,
     keyword_evaluation_entity_types: tuple[str, ...] = (),
     keyword_strict_text_match: bool = False,
@@ -106,7 +95,11 @@ def query_retrieval(
     partitioned_generation: bool = False,
 ) -> RetrievalQueryResponse:
     started = time.monotonic()
-    enabled_app_ids = set(resolve_workspace_runtime_enabled_app_ids(db, workspace.id))
+    enabled_app_ids = set(
+        resolve_company_enabled_app_ids(
+            db,
+        )
+    )
     resolved_sources, unavailable_default_sources = _resolve_request_sources(
         request,
         enabled_app_ids=enabled_app_ids,
@@ -135,7 +128,6 @@ def query_retrieval(
     ]
     primary_responses, primary_errors = _query_primary_candidate_backends(
         db,
-        workspace=workspace,
         user=user,
         request=request,
         sources=primary_sources,
@@ -194,7 +186,6 @@ def query_retrieval(
         backend: _filter_current_retrieval_hits(
             db,
             user=user,
-            request_workspace_id=workspace.id,
             hits=hits,
         )
         for backend, hits in backend_hits.items()
@@ -237,7 +228,6 @@ def query_retrieval(
     ranked_hits = _filter_current_retrieval_hits(
         db,
         user=user,
-        request_workspace_id=workspace.id,
         hits=ranked_hits,
     )
     merged_hits = ranked_hits[: request.top_k]
@@ -247,7 +237,6 @@ def query_retrieval(
         try:
             grounding_result = ground_ranked_hits(
                 db=db,
-                workspace=workspace,
                 user=user,
                 query=request.query,
                 hits=merged_hits,
@@ -298,11 +287,14 @@ def query_retrieval(
 def list_retrieval_sources(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
 ) -> RetrievalSourceListResponse:
     del user
-    enabled_app_ids = set(resolve_workspace_runtime_enabled_app_ids(db, workspace.id))
+    enabled_app_ids = set(
+        resolve_company_enabled_app_ids(
+            db,
+        )
+    )
     return RetrievalSourceListResponse(
         sources=[
             source_descriptor(
@@ -314,10 +306,9 @@ def list_retrieval_sources(
     )
 
 
-def query_workspace_rag_response(
+def query_rag_response(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     query: str,
     answer_mode,
@@ -337,9 +328,8 @@ def query_workspace_rag_response(
     required_app_ids: frozenset[str] = frozenset(),
 ) -> RagQueryResponse:
     if not _unified_enabled(settings):
-        return rag_application.query_workspace_rag(
+        return rag_application.query_rag(
             db,
-            workspace=workspace,
             user=user,
             query=query,
             answer_mode=answer_mode,
@@ -360,7 +350,6 @@ def query_workspace_rag_response(
         )
     return _query_generic_rag(
         db,
-        workspace=workspace,
         user=user,
         query=query,
         answer_mode=answer_mode,
@@ -381,39 +370,34 @@ def query_workspace_rag_response(
     )
 
 
-def query_workspace_keyword_search_response(
+def query_keyword_search_response(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     request: KeywordSearchRequest,
     settings: Settings | None = None,
 ) -> KeywordSearchResponse:
     if not _unified_enabled(settings):
-        return search_service.query_workspace_keyword_search(
+        return search_service.query_keyword_search(
             db,
-            workspace=workspace,
             user=user,
             request=request,
         )
-    return search_service.query_workspace_keyword_search(
+    return search_service.query_keyword_search(
         db,
-        workspace=workspace,
         user=user,
         request=request,
     )
 
 
-def list_workspace_rag_sources_response(
+def list_rag_sources_response(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     settings: Settings | None = None,
 ) -> list[dict[str, str]]:
-    return rag_application.list_workspace_rag_sources(
+    return rag_application.list_rag_sources(
         db,
-        workspace=workspace,
         user=user,
         settings=settings,
     )
@@ -422,7 +406,6 @@ def list_workspace_rag_sources_response(
 def _query_primary_candidate_backends(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     request: RetrievalQueryRequest,
     sources: list[str],
@@ -448,7 +431,6 @@ def _query_primary_candidate_backends(
             response = _query_primary_candidate_backend(
                 db,
                 backend=backend,
-                workspace=workspace,
                 user=user,
                 request=request,
                 candidate_k=candidate_k,
@@ -478,7 +460,6 @@ def _query_primary_candidate_backends(
         _PRIMARY_BACKEND_EXECUTOR.submit(
             _query_primary_candidate_backend_in_fresh_session,
             backend=backend,
-            workspace_id=workspace.id,
             user_id=user.id,
             request=request,
             candidate_k=candidate_k,
@@ -521,7 +502,6 @@ def _query_primary_candidate_backends(
 def _query_primary_candidate_backend_in_fresh_session(
     *,
     backend: str,
-    workspace_id: str,
     user_id: str,
     request: RetrievalQueryRequest,
     candidate_k: int,
@@ -539,14 +519,12 @@ def _query_primary_candidate_backend_in_fresh_session(
     partitioned_generation: bool = False,
 ) -> object:
     with Session(get_engine()) as isolated_db:
-        workspace = isolated_db.get(Workspace, workspace_id)
         user = isolated_db.get(User, user_id)
-        if workspace is None or user is None:
+        if user is None or user.status != "active" or user.login_blocked:
             raise RuntimeError("Retrieval execution context no longer exists.")
         return _query_primary_candidate_backend(
             isolated_db,
             backend=backend,
-            workspace=workspace,
             user=user,
             request=request,
             candidate_k=candidate_k,
@@ -569,7 +547,6 @@ def _query_primary_candidate_backend(
     db: Session,
     *,
     backend: str,
-    workspace: Workspace,
     user: User,
     request: RetrievalQueryRequest,
     candidate_k: int,
@@ -589,7 +566,6 @@ def _query_primary_candidate_backend(
     if backend == "keyword":
         return _query_keyword_search(
             db,
-            workspace=workspace,
             user=user,
             request=request,
             candidate_k=candidate_k,
@@ -601,7 +577,6 @@ def _query_primary_candidate_backend(
     if backend == "generic_rag":
         return _query_generic_rag(
             db,
-            workspace=workspace,
             user=user,
             query=request.query,
             answer_mode=RagAnswerMode.SEARCH_ONLY,
@@ -627,7 +602,6 @@ def _query_primary_candidate_backend(
 def _query_generic_rag(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     query: str,
     answer_mode,
@@ -648,9 +622,8 @@ def _query_generic_rag(
     collection: str | None = None,
     partitioned_generation: bool = False,
 ) -> RagQueryResponse:
-    return rag_application.query_workspace_rag(
+    return rag_application.query_rag(
         db,
-        workspace=workspace,
         user=user,
         query=query,
         answer_mode=answer_mode,
@@ -676,7 +649,6 @@ def _query_generic_rag(
 def _query_keyword_search(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     request: RetrievalQueryRequest,
     candidate_k: int | None = None,
@@ -686,13 +658,11 @@ def _query_keyword_search(
     partitioned_generation: bool = False,
 ) -> KeywordSearchResponse:
     keyword_request = _keyword_request_from_retrieval(
-        workspace=workspace,
         request=request,
         candidate_k=candidate_k,
     )
-    return search_service.query_workspace_keyword_search(
+    return search_service.query_keyword_search(
         db,
-        workspace=workspace,
         user=user,
         request=keyword_request,
         backend_timeout_seconds=_PRIMARY_BACKEND_TIMEOUT_SECONDS,
@@ -709,7 +679,6 @@ def _query_keyword_search(
 
 def _keyword_request_from_retrieval(
     *,
-    workspace: Workspace,
     request: RetrievalQueryRequest,
     candidate_k: int | None = None,
 ) -> KeywordSearchRequest:
@@ -720,7 +689,6 @@ def _keyword_request_from_retrieval(
     for key in KeywordSearchRequest.model_fields:
         if key in request.filters:
             raw[key] = request.filters[key]
-    raw["workspace_id"] = workspace.id
     raw["query"] = request.query
     raw["limit"] = candidate_k or request.top_k
     raw.setdefault("offset", 0)
@@ -786,7 +754,6 @@ def _rag_response_to_hits(response: RagQueryResponse, *, source: str) -> list[Re
             source_kind=hit.source_kind,
             resource_type=hit.resource_type,
             resource_id=hit.resource_id,
-            workspace_id=hit.workspace_id,
             title=hit.title,
             summary=hit.summary,
             excerpt=hit.excerpt,
@@ -814,7 +781,6 @@ def _keyword_response_to_hits(response: KeywordSearchResponse) -> list[Retrieval
                 source_kind=str(hit.metadata.get("source_kind") or hit.entity_type),
                 resource_type=resource_type_for_search_entity(hit.entity_type),
                 resource_id=hit.entity_id,
-                workspace_id=hit.workspace_id,
                 title=hit.title,
                 summary=hit.summary,
                 excerpt=hit.snippet.text,
@@ -822,7 +788,7 @@ def _keyword_response_to_hits(response: KeywordSearchResponse) -> list[Retrieval
                 citation=hit.deep_link,
                 methods=["bm25"],
                 metadata={
-                    "scope_kind": "workspace",
+                    "scope_kind": "company",
                     "status": hit.status,
                     "status_label": hit.status_label,
                     "visibility": hit.visibility,
@@ -838,84 +804,21 @@ def _keyword_response_to_hits(response: KeywordSearchResponse) -> list[Retrieval
 
 
 def _filter_current_retrieval_hits(
-    db: Session,
-    *,
-    user: User,
-    request_workspace_id: str,
-    hits: list[RetrievalHit],
+    db: Session, *, user: User, hits: list[RetrievalHit]
 ) -> list[RetrievalHit]:
-    """Re-authorize authoritative app ownership and source ACL at a use seam."""
-
-    if not hits:
-        return []
-    ensure_rag_source_adapters_registered()
-    fresh_user = db.scalar(
-        select(User).where(User.id == user.id).execution_options(populate_existing=True)
+    """Recheck source ACL and live app admission before each use, including AI input."""
+    policy = SourceAclPolicy.for_user(db, user=user)
+    keyword_allowed = policy.authorize_many_resources(
+        (hit.resource_type, hit.resource_id) for hit in hits if not _hit_requires_rag_acl(hit)
     )
-    if fresh_user is None or fresh_user.status != "active" or fresh_user.login_blocked:
-        return []
-
-    policies: dict[tuple[str, str | None], SourceAclPolicy | None] = {}
-    candidates_by_policy: dict[tuple[str, str | None, bool], list[RetrievalHit]] = {}
-    candidate_policy_by_identity: dict[int, tuple[str, str | None, bool]] = {}
-    for hit in hits:
-        adapter = get_rag_resource_adapter(hit.resource_type)
-        if adapter is None or not adapter.app_id:
-            continue
-        scope_kind = str(hit.metadata.get("scope_kind") or "workspace")
-        if scope_kind == "company":
-            if not is_company_app_enabled_for_user_context(
-                db,
-                app_id=adapter.app_id,
-                user_id=fresh_user.id,
-            ):
-                continue
-            policy_key = ("company", None)
-        else:
-            if hit.workspace_id != request_workspace_id or not is_app_enabled_for_user_context(
-                db,
-                app_id=adapter.app_id,
-                user_id=fresh_user.id,
-                workspace_id=request_workspace_id,
-            ):
-                continue
-            policy_key = ("workspace", request_workspace_id)
-        authorization_key = (*policy_key, _hit_requires_rag_acl(hit))
-        candidates_by_policy.setdefault(authorization_key, []).append(hit)
-        candidate_policy_by_identity[id(hit)] = authorization_key
-
-    allowed_keys_by_policy: dict[tuple[str, str | None, bool], set[tuple[str, str]]] = {}
-    for authorization_key, candidates in candidates_by_policy.items():
-        policy_key = authorization_key[:2]
-        if policy_key not in policies:
-            try:
-                policies[policy_key] = (
-                    SourceAclPolicy.for_company(db, user=fresh_user)
-                    if policy_key[0] == "company"
-                    else SourceAclPolicy.for_workspace_id(
-                        db,
-                        workspace_id=request_workspace_id,
-                        user=fresh_user,
-                    )
-                )
-            except ValueError:
-                policies[policy_key] = None
-        policy = policies[policy_key]
-        if policy is None:
-            continue
-        authorize_many = (
-            policy.authorize_many_rag_resources
-            if authorization_key[2]
-            else policy.authorize_many_resources
-        )
-        allowed_keys_by_policy[authorization_key] = set(
-            authorize_many((hit.resource_type, hit.resource_id) for hit in candidates)
-        )
+    rag_allowed = policy.authorize_many_rag_resources(
+        (hit.resource_type, hit.resource_id) for hit in hits if _hit_requires_rag_acl(hit)
+    )
     return [
         hit
         for hit in hits
-        if (policy_key := candidate_policy_by_identity.get(id(hit))) is not None
-        and (hit.resource_type, hit.resource_id) in allowed_keys_by_policy.get(policy_key, set())
+        if (hit.resource_type, hit.resource_id)
+        in (rag_allowed if _hit_requires_rag_acl(hit) else keyword_allowed)
     ]
 
 
@@ -943,7 +846,7 @@ def _source_available(
             and registered_searchable_rag_app_ids().intersection(enabled_app_ids)
         )
     if source == "keyword":
-        return resolve_workspace_keyword_search_scope(enabled_app_ids).has_sources
+        return resolve_keyword_search_scope(enabled_app_ids).has_sources
     return _source_apps_available(required_app_ids, enabled_app_ids)
 
 

@@ -58,7 +58,6 @@ describe('feature module registry', () => {
     await expect(
       registry.backgroundWorkSources[0].list({
         token: 'token',
-        workspaceSlug: 'hq',
         t: (key) => key,
       }),
     ).resolves.toMatchObject([{ href: '/jobs/custom-tool' }]);

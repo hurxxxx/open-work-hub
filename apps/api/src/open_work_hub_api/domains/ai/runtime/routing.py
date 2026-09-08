@@ -10,7 +10,6 @@ from open_work_hub_api.domains.ai.runtime.manager_candidate import (
 from open_work_hub_api.domains.ai.runtime.manager_validation import ManagerGraphValidationResult
 from open_work_hub_api.domains.ai.runtime.routing_signals import select_runtime_profile_signal
 
-
 GraphGateDecision = Literal["disabled", "eligible", "ineligible"]
 GraphFallbackReason = Literal[
     "feature_disabled",
@@ -23,6 +22,7 @@ GraphValidationStatus = Literal[
     "accepted",
     "rejected",
 ]
+
 
 @dataclass(frozen=True)
 class RuntimeRoutingDecision:

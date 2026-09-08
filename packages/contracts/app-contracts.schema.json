@@ -4,7 +4,9 @@
   "required": ["$schema", "apps"],
   "additionalProperties": false,
   "properties": {
-    "$schema": { "const": "./app-contracts.schema.json" },
+    "$schema": {
+      "const": "./app-contracts.schema.json"
+    },
     "apps": {
       "type": "array",
       "minItems": 1,
@@ -15,7 +17,6 @@
           "app_id",
           "title",
           "icon_key",
-          "availability_scope",
           "execution_context_kind",
           "resource_scope",
           "route_base",
@@ -24,37 +25,80 @@
           "routes"
         ],
         "properties": {
-          "app_id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
-          "title": { "type": "string", "minLength": 1 },
-          "icon_key": { "type": "string", "minLength": 1 },
-          "availability_scope": { "enum": ["platform", "workspace"] },
-          "execution_context_kind": { "enum": ["personal", "company", "workspace"] },
-          "resource_scope": { "enum": ["personal", "company", "workspace", "hybrid"] },
-          "route_base": { "type": "string", "pattern": "^/apps/[a-z0-9-]+$" },
-          "entry_route_id": { "type": "string", "minLength": 1 },
+          "app_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "icon_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "execution_context_kind": {
+            "enum": ["personal", "company"]
+          },
+          "resource_scope": {
+            "enum": ["personal", "company", "hybrid"]
+          },
+          "route_base": {
+            "type": "string",
+            "pattern": "^/apps/[a-z0-9-]+$"
+          },
+          "entry_route_id": {
+            "type": "string",
+            "minLength": 1
+          },
           "launcher": {
             "type": "object",
             "additionalProperties": false,
             "required": ["placement", "pinned_by_default"],
             "properties": {
-              "placement": { "enum": ["fixed", "personal_tools", "category"] },
-              "pinned_by_default": { "type": "boolean" }
+              "placement": {
+                "enum": ["fixed", "personal_tools", "category"]
+              },
+              "pinned_by_default": {
+                "type": "boolean"
+              }
             }
           },
-          "feature_flag": { "type": "string", "minLength": 1 },
-          "required_system_roles": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "feature_flag": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required_system_roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
           "routes": {
             "type": "array",
             "minItems": 1,
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["route_id", "context_scope", "suffix", "chrome"],
+              "required": ["route_id", "suffix", "chrome"],
               "properties": {
-                "route_id": { "type": "string", "minLength": 1 },
-                "context_scope": { "enum": ["global", "workspace"] },
-                "suffix": { "type": "string" },
-                "chrome": { "enum": ["standard", "containedSurface", "fullSurface", "shared"] }
+                "route_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "suffix": {
+                  "type": "string"
+                },
+                "chrome": {
+                  "enum": [
+                    "standard",
+                    "containedSurface",
+                    "fullSurface",
+                    "shared"
+                  ]
+                }
               }
             }
           }

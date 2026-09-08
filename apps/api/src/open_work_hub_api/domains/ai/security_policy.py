@@ -21,7 +21,6 @@ from open_work_hub_api.domains.ai.models import (
     AiSecurityPolicyRule,
 )
 
-
 AiSecurityPolicyEffect = Literal[
     "inherit",
     "block_external",
@@ -114,7 +113,6 @@ _CONSERVATIVE_EFFECT_RANK: dict[AiSecurityPolicyEffect, int] = {
 
 @dataclass(frozen=True)
 class AiSecurityPolicyContext:
-    workspace_id: str | None = None
     actor_user_id: str | None = None
     app_id: str | None = None
     task_kind: str | None = None
@@ -570,7 +568,6 @@ def _task_kinds_from_scope(raw_task_kind: object, raw_task_kinds: object) -> tup
 
 def _normalize_context(context: AiSecurityPolicyContext) -> AiSecurityPolicyContext:
     return AiSecurityPolicyContext(
-        workspace_id=_clean_identifier(context.workspace_id),
         actor_user_id=_clean_identifier(context.actor_user_id),
         app_id=_clean_app_id(context.app_id),
         task_kind=_clean_token(context.task_kind),
@@ -584,7 +581,6 @@ def _matching_rules_statement(
 ) -> object:
     conditions = [AiSecurityPolicyRule.enabled.is_(True)]
     conditions.append(_nullable_match(AiSecurityPolicyRule.user_id, context.actor_user_id))
-    conditions.append(_nullable_match(AiSecurityPolicyRule.workspace_id, context.workspace_id))
     conditions.append(_nullable_match(AiSecurityPolicyRule.app_id, context.app_id))
     conditions.append(_nullable_match(AiSecurityPolicyRule.capability, context.capability))
     conditions.append(_nullable_match(AiSecurityPolicyRule.provider, context.provider))
@@ -605,9 +601,6 @@ def _matching_exceptions_statement(
     conditions.append(
         _nullable_match(AiSecurityExternalTransferException.user_id, context.actor_user_id)
     )
-    conditions.append(
-        _nullable_match(AiSecurityExternalTransferException.workspace_id, context.workspace_id)
-    )
     conditions.append(_nullable_match(AiSecurityExternalTransferException.app_id, context.app_id))
     conditions.append(
         _nullable_match(AiSecurityExternalTransferException.capability, context.capability)
@@ -626,7 +619,6 @@ def _match_rule(
     matched_scope: dict[str, str] = {}
     for attr_name, context_value, weight in (
         ("user_id", context.actor_user_id, 64),
-        ("workspace_id", context.workspace_id, 16),
         ("app_id", context.app_id, 8),
         ("capability", context.capability, 2),
         ("provider", context.provider, 1),
@@ -671,7 +663,6 @@ def _match_exception(
     matched_scope: dict[str, str] = {}
     for attr_name, context_value, weight in (
         ("user_id", context.actor_user_id, 64),
-        ("workspace_id", context.workspace_id, 16),
         ("app_id", context.app_id, 8),
         ("capability", context.capability, 2),
         ("provider", context.provider, 1),

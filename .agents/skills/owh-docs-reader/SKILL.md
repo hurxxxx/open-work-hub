@@ -17,9 +17,9 @@ Read-only helper for local PostgreSQL-backed Docs data.
 ## Commands
 
 ```bash
-python3 .agents/skills/owh-docs-reader/scripts/read_open_work_hub_doc.py '/w/general/docs/<doc_id>?page=<page_id>'
-python3 .agents/skills/owh-docs-reader/scripts/read_open_work_hub_doc.py --updates --workspace general --limit 20
-python3 .agents/skills/owh-docs-reader/scripts/read_open_work_hub_doc.py --copy-media /tmp/open-work-hub-doc-media '/w/general/docs/<doc_id>?page=<page_id>'
+python3 .agents/skills/owh-docs-reader/scripts/read_open_work_hub_doc.py '/apps/docs/<doc_id>?page=<page_id>'
+python3 .agents/skills/owh-docs-reader/scripts/read_open_work_hub_doc.py --updates --limit 20
+python3 .agents/skills/owh-docs-reader/scripts/read_open_work_hub_doc.py --copy-media /tmp/open-work-hub-doc-media '/apps/docs/<doc_id>?page=<page_id>'
 ```
 
-Report env label, workspace, doc/page IDs/titles, timestamps, extracted content, and media metadata.
+Report env label, content owner/ownership, doc/page IDs/titles, timestamps, extracted content, and media metadata.

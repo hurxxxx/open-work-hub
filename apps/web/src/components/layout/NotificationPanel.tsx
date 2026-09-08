@@ -1,6 +1,21 @@
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
-  useEffect,
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type NotificationItem,
+} from '@/src/platform/notifications/notifications-api';
+import { FLOATING_DM_OPEN_EVENT } from '@/src/platform/personal-widgets/floating-panel-events';
+import {
+  formatRelativeTime,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
+import { Button } from '@open-work-hub/ui/primitives/button';
+import { Check, CheckCheck, Loader2, X } from 'lucide-react';
+import { LazyMotion, domAnimation, m } from 'motion/react';
+import {
   useCallback,
+  useLayoutEffect,
   useId,
   useReducer,
   useRef,
@@ -8,21 +23,6 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { LazyMotion, domAnimation, m } from 'motion/react';
-import { X, Check, CheckCheck, Loader2 } from 'lucide-react';
-import { Button } from '@open-work-hub/ui/primitives/button';
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import { FLOATING_DM_OPEN_EVENT } from '@/src/platform/personal-widgets/floating-panel-events';
-import {
-  formatRelativeTime,
-  normalizeTimeZone,
-} from '@/src/platform/time/time-utils';
-import {
-  listNotifications,
-  markNotificationRead,
-  markAllNotificationsRead,
-  type WorkspaceNotification,
-} from '@/src/platform/notifications/notifications-api';
 import {
   INITIAL_NOTIFICATION_PANEL_STATE,
   countUnreadNotifications,
@@ -49,13 +49,11 @@ export function NotificationPanel({
   onNavigateToIssue,
   onCountChange,
   refreshKey = 0,
-  workspaceSlug,
 }: {
   onClose: () => void;
   onNavigateToIssue?: (taskId: string) => void;
   onCountChange?: (count: number) => void;
   refreshKey?: number;
-  workspaceSlug: string | null;
 }) {
   const { token, user } = useAuth();
   const { t, i18n } = useTranslation('shell');
@@ -68,35 +66,41 @@ export function NotificationPanel({
     INITIAL_NOTIFICATION_PANEL_STATE,
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    let current = true;
     if (!token) {
       dispatch({ type: 'signed-out' });
       return;
     }
     dispatch({ type: 'loading' });
-    listNotifications(token, 1, workspaceSlug).then((response) =>
-      dispatch({
-        type: 'loaded',
-        notifications: response.items,
-      }),
-    );
-  }, [refreshKey, token, workspaceSlug]);
+    void listNotifications(token, 1)
+      .then((response) => {
+        if (current)
+          dispatch({ type: 'loaded', notifications: response.items });
+      })
+      .catch(() => {
+        if (current) dispatch({ type: 'loaded', notifications: [] });
+      });
+    return () => {
+      current = false;
+    };
+  }, [refreshKey, token]);
 
   const handleRead = useCallback(
-    async (n: WorkspaceNotification) => {
+    async (n: NotificationItem) => {
       if (!token || n.is_read) return;
-      await markNotificationRead(token, n.id, workspaceSlug);
+      await markNotificationRead(token, n.id);
       dispatch({
         type: 'mark-read',
         notificationId: n.id,
       });
       onCountChange?.(-1);
     },
-    [token, onCountChange, workspaceSlug],
+    [token, onCountChange],
   );
 
   const handleClick = useCallback(
-    (n: WorkspaceNotification) => {
+    (n: NotificationItem) => {
       void handleRead(n);
       const action = resolveNotificationAction(n);
       if (action.kind === 'dm') {
@@ -119,11 +123,11 @@ export function NotificationPanel({
 
   const handleReadAll = useCallback(async () => {
     if (!token) return;
-    await markAllNotificationsRead(token, workspaceSlug);
+    await markAllNotificationsRead(token);
     const unreadCount = countUnreadNotifications(notifications);
     dispatch({ type: 'mark-all-read' });
     onCountChange?.(-unreadCount);
-  }, [token, notifications, onCountChange, workspaceSlug]);
+  }, [token, notifications, onCountChange]);
 
   const handlePanelKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {

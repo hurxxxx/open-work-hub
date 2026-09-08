@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from dataclasses import dataclass
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Iterable, Literal
 
 from sqlalchemy import select
@@ -15,22 +14,16 @@ from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.access import (
     is_platform_admin_user,
 )
-from open_work_hub_api.domains.auth.models import Team, User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
-    is_company_app_enabled_for_user_context,
+from open_work_hub_api.domains.auth.app_gate import (
+    can_use_app,
 )
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.docs.models import (
-    DocMeetingAccess,
     NativeDocPage,
-    NativeDocUserShare,
 )
 from open_work_hub_api.domains.media.models import MediaFile
 from open_work_hub_api.domains.media.service import MEDIA_ID_PATTERN
-from open_work_hub_api.domains.source_access.targets import (
-    TargetRef,
-    project_target_access,
-)
+from open_work_hub_api.domains.pms.space_models import Team
 
 MEDIA_RESOURCE_TASK = "task"
 MEDIA_RESOURCE_DOCS_NATIVE_PAGE = "docs_native_page"
@@ -49,8 +42,7 @@ SUPPORTED_MEDIA_LINK_RESOURCE_TYPES = frozenset(
 @dataclass(frozen=True)
 class MediaAccessContext:
     owner_app_id: str
-    execution_context_kind: Literal["personal", "company", "workspace"]
-    workspace_id: str | None
+    execution_context_kind: Literal["personal", "company"]
     route_id: str | None
     source_type: str
     source_id: str
@@ -66,7 +58,6 @@ def resolve_media_access_context(
         return MediaAccessContext(
             owner_app_id="shell",
             execution_context_kind="personal",
-            workspace_id=None,
             route_id=None,
             source_type="media_upload",
             source_id=media.id,
@@ -76,17 +67,17 @@ def resolve_media_access_context(
         from open_work_hub_api.domains.pms.models import Task, TaskList
 
         row = db.execute(
-            select(Team.workspace_id, Task.updated_at)
-            .join(TaskList, TaskList.team_id == Team.id)
-            .join(Task, Task.list_id == TaskList.id)
+            select(Task.updated_at)
+            .select_from(Task)
+            .join(TaskList, Task.list_id == TaskList.id)
+            .join(Team, TaskList.team_id == Team.id)
             .where(Task.id == media.resource_id)
         ).first()
         if row is None:
             return None
         return MediaAccessContext(
             owner_app_id="pms",
-            execution_context_kind="workspace",
-            workspace_id=row.workspace_id,
+            execution_context_kind="company",
             route_id=None,
             source_type="pms_task",
             source_id=media.resource_id,
@@ -102,8 +93,7 @@ def resolve_media_access_context(
             return None
         return MediaAccessContext(
             owner_app_id="docs",
-            execution_context_kind="workspace",
-            workspace_id=page.doc.workspace_id,
+            execution_context_kind="company",
             route_id=None,
             source_type="native_doc",
             source_id=page.doc_id,
@@ -152,7 +142,6 @@ def resolve_media_access_context(
         return MediaAccessContext(
             owner_app_id="community",
             execution_context_kind="company",
-            workspace_id=None,
             route_id="community.post",
             source_type=media.resource_type,
             source_id=media.resource_id,
@@ -171,16 +160,15 @@ def media_owner_app_enabled(db: Session, *, user: User, context: MediaAccessCont
     if context.owner_app_id == "shell":
         return True
     if context.execution_context_kind == "company":
-        return is_company_app_enabled_for_user_context(
+        return can_use_app(
             db,
             app_id=context.owner_app_id,
             user_id=user.id,
         )
-    return is_app_enabled_for_user_context(
+    return can_use_app(
         db,
         app_id=context.owner_app_id,
         user_id=user.id,
-        workspace_id=context.workspace_id,
     )
 
 
@@ -289,83 +277,17 @@ def _ensure_task_access(db: Session, user: User, task_id: str) -> None:
 
 
 def can_access_docs_native_page(
-    db: Session,
-    user: User,
-    page_id: str | None,
-    *,
-    require_edit: bool,
+    db: Session, user: User, page_id: str, *, require_edit: bool = False
 ) -> bool:
-    if page_id is None:
-        return False
+    from open_work_hub_api.domains.docs.access_context import resolve_native_doc_access
 
     page = db.scalar(
-        select(NativeDocPage)
-        .options(joinedload(NativeDocPage.doc))
-        .where(NativeDocPage.id == page_id)
+        select(NativeDocPage).where(NativeDocPage.id == page_id, NativeDocPage.trashed_at.is_(None))
     )
-    if (
-        page is None
-        or page.doc is None
-        or page.trashed_at is not None
-        or page.doc.trashed_at is not None
-    ):
+    if page is None or page.doc is None or page.doc.trashed_at is not None:
         return False
-    if page.doc.owner_id == user.id:
-        return True
-
-    direct_share = db.scalar(
-        select(NativeDocUserShare).where(
-            NativeDocUserShare.doc_id == page.doc_id,
-            NativeDocUserShare.user_id == user.id,
-        )
-    )
-    meeting_grant = db.scalar(
-        select(DocMeetingAccess).where(
-            DocMeetingAccess.doc_id == page.doc_id,
-            DocMeetingAccess.user_id == user.id,
-            DocMeetingAccess.revoked_at.is_(None),
-            (
-                DocMeetingAccess.expires_at.is_(None)
-                | (DocMeetingAccess.expires_at > datetime.now(UTC).replace(tzinfo=None))
-            ),
-        )
-    )
-
-    access_levels = [
-        level
-        for level in (
-            getattr(direct_share, "access_level", None),
-            getattr(meeting_grant, "access_level", None),
-        )
-        if level in {"read", "edit"}
-    ]
-    workspace = db.scalar(
-        select(Workspace).where(
-            Workspace.id == page.doc.workspace_id,
-            Workspace.active.is_(True),
-        )
-    )
-    if workspace is not None:
-        for target in page.doc.targets:
-            projection = project_target_access(
-                db=db,
-                user=user,
-                workspace=workspace,
-                ref=TargetRef(
-                    app=target.target_app,
-                    type=target.target_type,
-                    id=target.target_id,
-                ),
-            )
-            if projection.can_manage or projection.can_edit:
-                access_levels.append("edit")
-            elif projection.can_view:
-                access_levels.append("read")
-    if not access_levels:
-        return False
-    if require_edit:
-        return "edit" in access_levels
-    return True
+    access = resolve_native_doc_access(db, doc=page.doc, user=user)
+    return access.can_edit if require_edit else access.can_view
 
 
 def _ensure_docs_native_page_access(db: Session, user: User, page_id: str) -> None:

@@ -6,15 +6,17 @@ from dataclasses import dataclass
 from open_work_hub_api.domains.rag.contracts import RagChunk, RagProjection
 from open_work_hub_api.domains.rag.sparse_terms import (
     build_korean_sparse_terms as build_korean_sparse_terms,
+)
+from open_work_hub_api.domains.rag.sparse_terms import (
     tokenize_sparse_terms as tokenize_sparse_terms,
 )
-
 
 DEFAULT_TARGET_CHARS = 900
 DEFAULT_HARD_MAX_CHARS = 1400
 DEFAULT_OVERLAP_CHARS = 160
 DEFAULT_MIN_CHARS = 240
 DEFAULT_INDEX_TEXT_MAX_CHARS = 2400
+
 
 @dataclass(frozen=True)
 class ChunkTextSpan:
@@ -60,7 +62,6 @@ def default_korean_aware_chunks(
                     "resource_id": projection.resource_id,
                     "source_kind": projection.source_kind,
                     "scope_kind": projection.scope_kind.value,
-                    "workspace_id": projection.workspace_id,
                     "chunk_index": index,
                     "chunk_strategy": "default_korean_v1",
                 },
@@ -83,7 +84,6 @@ def default_korean_aware_chunks(
                 "resource_id": projection.resource_id,
                 "source_kind": projection.source_kind,
                 "scope_kind": projection.scope_kind.value,
-                "workspace_id": projection.workspace_id,
                 "chunk_index": 0,
                 "chunk_strategy": "default_korean_v1",
             },

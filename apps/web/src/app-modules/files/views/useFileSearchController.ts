@@ -18,14 +18,9 @@ import {
 } from './file-search-view-model';
 
 export interface FileSearchControllerClient {
-  download(
-    token: string,
-    workspaceSlug: string,
-    fileId: string,
-  ): Promise<FileDownloadResponse>;
+  download(token: string, fileId: string): Promise<FileDownloadResponse>;
   search(
     token: string,
-    workspaceSlug: string,
     payload: FileSearchPayload,
     options?: { signal?: AbortSignal },
   ): Promise<FileSearchResponse>;
@@ -37,7 +32,6 @@ export interface FileSearchControllerMessages {
   loadFailed: string;
   queryRequired: string;
   sessionExpired: string;
-  workspaceMissing: string;
 }
 
 export type FileSearchParamsSetter = (
@@ -53,7 +47,6 @@ export interface FileSearchControllerOptions {
   searchParams: URLSearchParams;
   setSearchParams: FileSearchParamsSetter;
   token: string | null | undefined;
-  workspaceSlug: string | null | undefined;
 }
 
 export interface FileSearchControllerState {
@@ -98,7 +91,6 @@ export function useFileSearchController({
   searchParams,
   setSearchParams,
   token,
-  workspaceSlug,
 }: FileSearchControllerOptions): FileSearchController {
   const searchParamsKey = searchParams.toString();
   const urlSearch = useMemo(
@@ -120,7 +112,7 @@ export function useFileSearchController({
   const searchSequenceRef = useRef(0);
   const downloadSequenceRef = useRef(0);
   const lastSearchSignatureRef = useRef('');
-  const scopeKey = fileSearchScopeKey(token, workspaceSlug);
+  const scopeKey = fileSearchScopeKey(token);
   const response =
     scopedResponse?.scopeKey === scopeKey ? scopedResponse.value : null;
 
@@ -145,10 +137,7 @@ export function useFileSearchController({
         setError(messages.authMissing);
         return;
       }
-      if (!workspaceSlug) {
-        setError(messages.workspaceMissing);
-        return;
-      }
+
       const query = (options?.query ?? queryInputRef.current).trim();
       if (!query) {
         setError(messages.queryRequired);
@@ -160,7 +149,7 @@ export function useFileSearchController({
       searchSequenceRef.current = sequence;
       searchAbortRef.current?.abort();
       const controller = new AbortController();
-      const requestScopeKey = fileSearchScopeKey(token, workspaceSlug);
+      const requestScopeKey = fileSearchScopeKey(token);
       searchAbortRef.current = controller;
       setSearching(true);
       setError(null);
@@ -168,7 +157,6 @@ export function useFileSearchController({
       try {
         const result = await client.search(
           token,
-          workspaceSlug,
           {
             page,
             page_size: FILE_SEARCH_PAGE_SIZE,
@@ -193,7 +181,6 @@ export function useFileSearchController({
           query,
           strategy: nextStrategy,
           token,
-          workspaceSlug,
         });
         if (options?.syncUrl !== false) {
           setSearchParams(
@@ -234,17 +221,14 @@ export function useFileSearchController({
       messages.loadFailed,
       messages.queryRequired,
       messages.sessionExpired,
-      messages.workspaceMissing,
       setSearchParams,
       token,
-      workspaceSlug,
     ],
   );
 
   const urlSearchSignature = searchSignature({
     ...urlSearch,
     token,
-    workspaceSlug,
   });
 
   useEffect(() => {
@@ -268,7 +252,7 @@ export function useFileSearchController({
   }, [urlSearch.query]);
 
   useEffect(() => {
-    if (!token || !workspaceSlug || !urlSearch.query) {
+    if (!token || !urlSearch.query) {
       return;
     }
     if (lastSearchSignatureRef.current === urlSearchSignature) {
@@ -287,7 +271,6 @@ export function useFileSearchController({
     urlSearch.query,
     urlSearch.strategy,
     urlSearchSignature,
-    workspaceSlug,
   ]);
 
   useEffect(
@@ -305,16 +288,13 @@ export function useFileSearchController({
         setError(messages.authMissing);
         return;
       }
-      if (!workspaceSlug) {
-        setError(messages.workspaceMissing);
-        return;
-      }
+
       const sequence = downloadSequenceRef.current + 1;
       downloadSequenceRef.current = sequence;
       setBusyDownloadId(fileId);
       setError(null);
       try {
-        const result = await client.download(token, workspaceSlug, fileId);
+        const result = await client.download(token, fileId);
         if (downloadSequenceRef.current === sequence) {
           await openDownload(result.url, token);
         }
@@ -347,10 +327,8 @@ export function useFileSearchController({
       messages.authMissing,
       messages.downloadFailed,
       messages.sessionExpired,
-      messages.workspaceMissing,
       openDownload,
       token,
-      workspaceSlug,
     ],
   );
 
@@ -409,22 +387,14 @@ function searchSignature(input: {
   query: string;
   strategy: FileSearchStrategy;
   token: string | null | undefined;
-  workspaceSlug: string | null | undefined;
 }): string {
-  return [
-    input.token ?? '',
-    input.workspaceSlug ?? '',
-    input.query,
-    input.strategy,
-    input.page,
-  ].join('\u0000');
+  return [input.token ?? '', input.query, input.strategy, input.page].join(
+    '\u0000',
+  );
 }
 
-function fileSearchScopeKey(
-  token: string | null | undefined,
-  workspaceSlug: string | null | undefined,
-): string {
-  return `${token ?? ''}\u0000${workspaceSlug ?? ''}`;
+function fileSearchScopeKey(token: string | null | undefined): string {
+  return token ?? '';
 }
 
 function isAbortError(error: unknown): boolean {

@@ -140,23 +140,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/auth/impersonations/{user_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Impersonate User */
-        post: operations["auth_impersonate_user_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/auth/me": {
         parameters: {
             query?: never;
@@ -310,58 +293,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/apps/{app_id}/eligible-workspaces": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Eligible Workspaces */
-        get: operations["apps_get_eligible_workspaces_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/apps/{app_id}/workspace-preference": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Update App Workspace Preference */
-        put: operations["apps_update_app_workspace_preference_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/bootstrap": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Workspace Bootstrap */
-        get: operations["workspaces_get_workspace_bootstrap_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/capabilities/manifest": {
+    "/api/v1/chatbot/capabilities/manifest": {
         parameters: {
             query?: never;
             header?: never;
@@ -378,7 +310,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/apps/{app_id}/manifest": {
+    "/api/v1/chatbot/apps/{app_id}/manifest": {
         parameters: {
             query?: never;
             header?: never;
@@ -395,7 +327,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/capabilities/openapi.json": {
+    "/api/v1/chatbot/capabilities/openapi.json": {
         parameters: {
             query?: never;
             header?: never;
@@ -412,7 +344,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/apps/{app_id}/openapi.json": {
+    "/api/v1/chatbot/apps/{app_id}/openapi.json": {
         parameters: {
             query?: never;
             header?: never;
@@ -429,7 +361,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/health": {
+    "/api/v1/chatbot/health": {
         parameters: {
             query?: never;
             header?: never;
@@ -451,7 +383,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/chat": {
+    "/api/v1/chatbot/chat": {
         parameters: {
             query?: never;
             header?: never;
@@ -468,7 +400,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/conversations": {
+    "/api/v1/chatbot/conversations": {
         parameters: {
             query?: never;
             header?: never;
@@ -486,7 +418,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/conversations/{conversation_id}": {
+    "/api/v1/chatbot/conversations/{conversation_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -505,7 +437,7 @@ export interface paths {
         patch: operations["chatbot_rename_ai_conversation_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/chat/stream": {
+    "/api/v1/chatbot/chat/stream": {
         parameters: {
             query?: never;
             header?: never;
@@ -530,7 +462,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/approvals/{approval_id}": {
+    "/api/v1/chatbot/approvals/{approval_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -547,7 +479,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/approvals/{approval_id}/resolve": {
+    "/api/v1/chatbot/approvals/{approval_id}/resolve": {
         parameters: {
             query?: never;
             header?: never;
@@ -564,7 +496,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/approvals/{approval_id}/abandon": {
+    "/api/v1/chatbot/approvals/{approval_id}/abandon": {
         parameters: {
             query?: never;
             header?: never;
@@ -581,7 +513,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/runtime/runs/{run_id}": {
+    "/api/v1/chatbot/runtime/runs/{run_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -598,7 +530,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/chat/resume": {
+    "/api/v1/chatbot/chat/resume": {
         parameters: {
             query?: never;
             header?: never;
@@ -615,7 +547,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/chatbot/tools/{tool_name}/invoke": {
+    "/api/v1/chatbot/tools/{tool_name}/invoke": {
         parameters: {
             query?: never;
             header?: never;
@@ -632,7 +564,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/ai/graph-runs": {
+    "/api/v1/ai/graph-runs": {
         parameters: {
             query?: never;
             header?: never;
@@ -649,7 +581,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/ai/graph-runs/{run_id}": {
+    "/api/v1/ai/graph-runs/{run_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -666,7 +598,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/ai/artifacts": {
+    "/api/v1/ai/artifacts": {
         parameters: {
             query?: never;
             header?: never;
@@ -683,7 +615,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/ai/artifacts/{artifact_id}": {
+    "/api/v1/ai/artifacts/{artifact_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -700,7 +632,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/ai/artifacts/{artifact_id}/sources": {
+    "/api/v1/ai/artifacts/{artifact_id}/sources": {
         parameters: {
             query?: never;
             header?: never;
@@ -717,7 +649,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/ai/artifacts/{artifact_id}/queries": {
+    "/api/v1/ai/artifacts/{artifact_id}/queries": {
         parameters: {
             query?: never;
             header?: never;
@@ -734,7 +666,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/ai/artifacts/{artifact_id}/index-generations": {
+    "/api/v1/ai/artifacts/{artifact_id}/index-generations": {
         parameters: {
             query?: never;
             header?: never;
@@ -957,42 +889,6 @@ export interface paths {
         patch: operations["admin_update_company_app_controls_patch"];
         trace?: never;
     };
-    "/api/v1/admin/apps/workspace-defaults": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Workspace App Defaults */
-        get: operations["admin_list_workspace_app_defaults_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update Workspace App Defaults */
-        patch: operations["admin_update_workspace_app_defaults_patch"];
-        trace?: never;
-    };
-    "/api/v1/admin/workspaces/{workspace_id}/app-overrides": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Workspace App Overrides */
-        get: operations["admin_list_workspace_app_overrides_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update Workspace App Overrides */
-        patch: operations["admin_update_workspace_app_overrides_patch"];
-        trace?: never;
-    };
     "/api/v1/admin/app-bar-categories": {
         parameters: {
             query?: never;
@@ -1094,199 +990,6 @@ export interface paths {
         put?: never;
         /** Reset User Password */
         post: operations["admin_reset_user_password_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/workspaces": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Workspaces */
-        get: operations["admin_list_workspaces_get"];
-        put?: never;
-        /** Create Workspace */
-        post: operations["admin_create_workspace_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/workspaces/{workspace_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update Workspace */
-        patch: operations["admin_update_workspace_patch"];
-        trace?: never;
-    };
-    "/api/v1/admin/workspaces/{workspace_id}/bindings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Workspace Bindings */
-        get: operations["admin_list_workspace_bindings_get"];
-        /** Replace Workspace Bindings */
-        put: operations["admin_replace_workspace_bindings_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/workspaces/{workspace_id}/members": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Workspace Members */
-        get: operations["admin_list_workspace_members_get"];
-        put?: never;
-        /** Add Workspace Member */
-        post: operations["admin_add_workspace_member_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/workspaces/{workspace_id}/members/{subject_type}/{subject_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove Workspace Member */
-        delete: operations["admin_remove_workspace_member_delete"];
-        options?: never;
-        head?: never;
-        /** Update Workspace Member Role */
-        patch: operations["admin_update_workspace_member_role_patch"];
-        trace?: never;
-    };
-    "/api/v1/admin/workspaces/{workspace_id}/members/bulk": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Bulk Workspace Members */
-        post: operations["admin_bulk_workspace_members_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/workspaces/{workspace_id}/member-candidates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Workspace Member Candidates */
-        get: operations["admin_list_workspace_member_candidates_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/teams": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Teams */
-        get: operations["admin_list_teams_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/workspaces/{workspace_id}/teams": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Team */
-        post: operations["admin_create_team_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/teams/{team_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Team */
-        delete: operations["admin_delete_team_delete"];
-        options?: never;
-        head?: never;
-        /** Update Team */
-        patch: operations["admin_update_team_patch"];
-        trace?: never;
-    };
-    "/api/v1/admin/teams/{team_id}/members": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Team Members */
-        get: operations["admin_list_team_members_get"];
-        /** Replace Team Members */
-        put: operations["admin_replace_team_members_put"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1932,6 +1635,128 @@ export interface paths {
         patch: operations["admin_organization_update_organization_unit_patch"];
         trace?: never;
     };
+    "/api/v1/admin/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Groups */
+        get: operations["admin_groups_list_groups_get"];
+        put?: never;
+        /** Create Group */
+        post: operations["admin_groups_create_group_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Group */
+        patch: operations["admin_groups_update_group_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/groups/{group_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Members */
+        get: operations["admin_groups_get_members_get"];
+        /** Replace Members */
+        put: operations["admin_groups_replace_members_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/directory/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Groups */
+        get: operations["directory_groups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/directory/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** People */
+        get: operations["directory_people_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/directory/organization-units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Organizations */
+        get: operations["directory_organizations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/apps/{app_id}/access-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Policy */
+        get: operations["admin_app_access_get_policy_get"];
+        /** Replace Policy */
+        put: operations["admin_app_access_replace_policy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/platform-api-keys": {
         parameters: {
             query?: never;
@@ -2224,23 +2049,6 @@ export interface paths {
         patch: operations["dm_mark_dm_conversation_read_patch"];
         trace?: never;
     };
-    "/api/v1/dm/attachments/{attachment_id}/content": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Proxy Dm Attachment Content */
-        get: operations["dm_proxy_dm_attachment_content_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/content": {
         parameters: {
             query?: never;
@@ -2448,6 +2256,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/docs/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Doc Collections */
+        get: operations["docs_list_doc_collections_get"];
+        put?: never;
+        /** Create Doc Collection */
+        post: operations["docs_create_doc_collection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/collections/{collection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Doc Collection */
+        delete: operations["docs_delete_doc_collection_delete"];
+        options?: never;
+        head?: never;
+        /** Update Doc Collection */
+        patch: operations["docs_update_doc_collection_patch"];
+        trace?: never;
+    };
+    "/api/v1/docs/hub": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Docs Hub */
+        get: operations["docs_list_docs_hub_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Doc Item */
+        post: operations["docs_create_doc_item_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/docs/items/{item_id}": {
         parameters: {
             query?: never;
@@ -2455,15 +2333,51 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Shared Doc Item */
-        get: operations["docs_get_shared_doc_item_get"];
+        /** Get Doc Item */
+        get: operations["docs_get_doc_item_get"];
         put?: never;
         post?: never;
+        /** Delete Doc Item */
+        delete: operations["docs_delete_doc_item_delete"];
+        options?: never;
+        head?: never;
+        /** Update Doc Item */
+        patch: operations["docs_update_doc_item_patch"];
+        trace?: never;
+    };
+    "/api/v1/docs/items/{item_id}/pms-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Doc Pms Tasks */
+        get: operations["docs_list_doc_pms_tasks_get"];
+        put?: never;
+        /** Attach Doc Pms Task */
+        post: operations["docs_attach_doc_pms_task_post"];
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Shared Doc Item */
-        patch: operations["docs_update_shared_doc_item_patch"];
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/items/{item_id}/pms-tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Detach Doc Pms Task */
+        delete: operations["docs_detach_doc_pms_task_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/docs/items/{item_id}/duplicate": {
@@ -2475,8 +2389,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Duplicate Shared Doc Item */
-        post: operations["docs_duplicate_shared_doc_item_post"];
+        /** Duplicate Doc Item */
+        post: operations["docs_duplicate_doc_item_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2490,11 +2404,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Shared Doc Pages */
-        get: operations["docs_list_shared_doc_pages_get"];
+        /** List Doc Pages */
+        get: operations["docs_list_doc_pages_get"];
         put?: never;
-        /** Create Shared Doc Page */
-        post: operations["docs_create_shared_doc_page_post"];
+        /** Create Doc Page */
+        post: operations["docs_create_doc_page_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2508,16 +2422,51 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Shared Doc Page */
-        get: operations["docs_get_shared_doc_page_get"];
+        /** Get Doc Page */
+        get: operations["docs_get_doc_page_get"];
         put?: never;
         post?: never;
-        /** Delete Shared Doc Page */
-        delete: operations["docs_delete_shared_doc_page_delete"];
+        /** Delete Doc Page */
+        delete: operations["docs_delete_doc_page_delete"];
         options?: never;
         head?: never;
-        /** Update Shared Doc Page */
-        patch: operations["docs_update_shared_doc_page_patch"];
+        /** Update Doc Page */
+        patch: operations["docs_update_doc_page_patch"];
+        trace?: never;
+    };
+    "/api/v1/docs/items/{item_id}/target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Doc Target */
+        put: operations["docs_update_doc_target_put"];
+        post?: never;
+        /** Delete Doc Target */
+        delete: operations["docs_delete_doc_target_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/items/{item_id}/favorite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Toggle Doc Favorite */
+        patch: operations["docs_toggle_doc_favorite_patch"];
         trace?: never;
     };
     "/api/v1/docs/items/{item_id}/view": {
@@ -2529,9 +2478,113 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Record Shared Doc View */
-        post: operations["docs_record_shared_doc_view_post"];
+        /** Record Doc View */
+        post: operations["docs_record_doc_view_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/favorites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Favorite Docs */
+        get: operations["docs_list_favorite_docs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/recent-pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Recent Pages */
+        get: operations["docs_list_recent_pages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/shareable-users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Shareable Users */
+        get: operations["docs_list_shareable_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/items/{item_id}/sharing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Native Doc Sharing */
+        get: operations["docs_get_native_doc_sharing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/items/{item_id}/sharing/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Native Doc User Share */
+        put: operations["docs_upsert_native_doc_user_share_put"];
+        post?: never;
+        /** Delete Native Doc User Share */
+        delete: operations["docs_delete_native_doc_user_share_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/items/{item_id}/sharing/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Native Doc Link Share */
+        put: operations["docs_upsert_native_doc_link_share_put"];
+        post?: never;
+        /** Disable Native Doc Link Share */
+        delete: operations["docs_disable_native_doc_link_share_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2554,341 +2607,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/docs/collections": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Doc Collections */
-        get: operations["docs_list_doc_collections_get"];
-        put?: never;
-        /** Create Doc Collection */
-        post: operations["docs_create_doc_collection_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/collections/{collection_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Doc Collection */
-        delete: operations["docs_delete_doc_collection_delete"];
-        options?: never;
-        head?: never;
-        /** Update Doc Collection */
-        patch: operations["docs_update_doc_collection_patch"];
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/hub": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Docs Hub */
-        get: operations["docs_list_docs_hub_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Doc Item */
-        post: operations["docs_create_doc_item_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Doc Item */
-        get: operations["docs_get_doc_item_get"];
-        put?: never;
-        post?: never;
-        /** Delete Doc Item */
-        delete: operations["docs_delete_doc_item_delete"];
-        options?: never;
-        head?: never;
-        /** Update Doc Item */
-        patch: operations["docs_update_doc_item_patch"];
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items/{item_id}/pms-tasks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Doc Pms Tasks */
-        get: operations["docs_list_doc_pms_tasks_get"];
-        put?: never;
-        /** Attach Doc Pms Task */
-        post: operations["docs_attach_doc_pms_task_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items/{item_id}/pms-tasks/{task_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Detach Doc Pms Task */
-        delete: operations["docs_detach_doc_pms_task_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items/{item_id}/duplicate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Duplicate Doc Item */
-        post: operations["docs_duplicate_doc_item_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items/{item_id}/pages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Doc Pages */
-        get: operations["docs_list_doc_pages_get"];
-        put?: never;
-        /** Create Doc Page */
-        post: operations["docs_create_doc_page_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/pages/{page_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Doc Page */
-        get: operations["docs_get_doc_page_get"];
-        put?: never;
-        post?: never;
-        /** Delete Doc Page */
-        delete: operations["docs_delete_doc_page_delete"];
-        options?: never;
-        head?: never;
-        /** Update Doc Page */
-        patch: operations["docs_update_doc_page_patch"];
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items/{item_id}/target": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Update Doc Target */
-        put: operations["docs_update_doc_target_put"];
-        post?: never;
-        /** Delete Doc Target */
-        delete: operations["docs_delete_doc_target_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items/{item_id}/favorite": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Toggle Doc Favorite */
-        patch: operations["docs_toggle_doc_favorite_patch"];
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items/{item_id}/view": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Record Doc View */
-        post: operations["docs_record_doc_view_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/favorites": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Favorite Docs */
-        get: operations["docs_list_favorite_docs_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/recent-pages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Recent Pages */
-        get: operations["docs_list_recent_pages_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/shareable-users": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Shareable Users */
-        get: operations["docs_list_shareable_users_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items/{item_id}/sharing": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Native Doc Sharing */
-        get: operations["docs_get_native_doc_sharing_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items/{item_id}/sharing/users/{user_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Upsert Native Doc User Share */
-        put: operations["docs_upsert_native_doc_user_share_put"];
-        post?: never;
-        /** Delete Native Doc User Share */
-        delete: operations["docs_delete_native_doc_user_share_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/items/{item_id}/sharing/link": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Upsert Native Doc Link Share */
-        put: operations["docs_upsert_native_doc_link_share_put"];
-        post?: never;
-        /** Disable Native Doc Link Share */
-        delete: operations["docs_disable_native_doc_link_share_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/session": {
+    "/api/v1/docs/collab/pages/{page_ref}/session": {
         parameters: {
             query?: never;
             header?: never;
@@ -2905,7 +2624,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/snapshot": {
+    "/api/v1/docs/collab/pages/{page_ref}/snapshot": {
         parameters: {
             query?: never;
             header?: never;
@@ -2915,6 +2634,287 @@ export interface paths {
         get?: never;
         /** Save Docs Collab Snapshot */
         put: operations["docs_save_docs_collab_snapshot_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/items/{item_id}/sharing/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Group Shares */
+        get: operations["docs_list_group_shares_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/items/{item_id}/sharing/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Group Share */
+        put: operations["docs_upsert_group_share_put"];
+        post?: never;
+        /** Delete Group Share */
+        delete: operations["docs_delete_group_share_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/items/{item_id}/sharing/company": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Company Sharing */
+        put: operations["docs_update_company_sharing_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/hub": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Whiteboard Hub */
+        get: operations["whiteboard_list_whiteboard_hub_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/contexts/slot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Whiteboard Context Slot */
+        get: operations["whiteboard_get_whiteboard_context_slot_get"];
+        /** Attach Whiteboard Context Slot */
+        put: operations["whiteboard_attach_whiteboard_context_slot_put"];
+        /** Create Whiteboard Context Slot */
+        post: operations["whiteboard_create_whiteboard_context_slot_post"];
+        /** Detach Whiteboard Context Slot */
+        delete: operations["whiteboard_detach_whiteboard_context_slot_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Whiteboard Item */
+        post: operations["whiteboard_create_whiteboard_item_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Whiteboard Item */
+        get: operations["whiteboard_get_whiteboard_item_get"];
+        put?: never;
+        post?: never;
+        /** Delete Whiteboard Item */
+        delete: operations["whiteboard_delete_whiteboard_item_delete"];
+        options?: never;
+        head?: never;
+        /** Update Whiteboard Item */
+        patch: operations["whiteboard_update_whiteboard_item_patch"];
+        trace?: never;
+    };
+    "/api/v1/whiteboard/items/{item_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Whiteboard Item */
+        post: operations["whiteboard_restore_whiteboard_item_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/items/{item_id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Permanently Delete Whiteboard Item */
+        delete: operations["whiteboard_permanently_delete_whiteboard_item_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/items/{item_id}/target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Whiteboard Target */
+        put: operations["whiteboard_update_whiteboard_target_put"];
+        post?: never;
+        /** Delete Whiteboard Target */
+        delete: operations["whiteboard_delete_whiteboard_target_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/shareable-users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Whiteboard Shareable Users */
+        get: operations["whiteboard_list_whiteboard_shareable_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/items/{item_id}/sharing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Whiteboard Sharing */
+        get: operations["whiteboard_get_whiteboard_sharing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/items/{item_id}/sharing/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Whiteboard User Share */
+        put: operations["whiteboard_upsert_whiteboard_user_share_put"];
+        post?: never;
+        /** Delete Whiteboard User Share */
+        delete: operations["whiteboard_delete_whiteboard_user_share_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/items/{item_id}/sharing/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Whiteboard Link Share */
+        put: operations["whiteboard_upsert_whiteboard_link_share_put"];
+        post?: never;
+        /** Disable Whiteboard Link Share */
+        delete: operations["whiteboard_disable_whiteboard_link_share_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/collab/items/{item_id}/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Whiteboard Collab Session */
+        get: operations["whiteboard_get_whiteboard_collab_session_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/collab/items/{item_id}/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Whiteboard Collab Snapshot */
+        put: operations["whiteboard_save_whiteboard_collab_snapshot_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2974,236 +2974,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/hub": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Whiteboard Hub */
-        get: operations["whiteboard_list_whiteboard_hub_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/contexts/slot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Whiteboard Context Slot */
-        get: operations["whiteboard_get_whiteboard_context_slot_get"];
-        /** Attach Whiteboard Context Slot */
-        put: operations["whiteboard_attach_whiteboard_context_slot_put"];
-        /** Create Whiteboard Context Slot */
-        post: operations["whiteboard_create_whiteboard_context_slot_post"];
-        /** Detach Whiteboard Context Slot */
-        delete: operations["whiteboard_detach_whiteboard_context_slot_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/items": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Whiteboard Item */
-        post: operations["whiteboard_create_whiteboard_item_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Whiteboard Item */
-        get: operations["whiteboard_get_whiteboard_item_get"];
-        put?: never;
-        post?: never;
-        /** Delete Whiteboard Item */
-        delete: operations["whiteboard_delete_whiteboard_item_delete"];
-        options?: never;
-        head?: never;
-        /** Update Whiteboard Item */
-        patch: operations["whiteboard_update_whiteboard_item_patch"];
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/restore": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Restore Whiteboard Item */
-        post: operations["whiteboard_restore_whiteboard_item_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/permanent": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Permanently Delete Whiteboard Item */
-        delete: operations["whiteboard_permanently_delete_whiteboard_item_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/target": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Update Whiteboard Target */
-        put: operations["whiteboard_update_whiteboard_target_put"];
-        post?: never;
-        /** Delete Whiteboard Target */
-        delete: operations["whiteboard_delete_whiteboard_target_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/shareable-users": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Whiteboard Shareable Users */
-        get: operations["whiteboard_list_whiteboard_shareable_users_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/sharing": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Whiteboard Sharing */
-        get: operations["whiteboard_get_whiteboard_sharing_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/sharing/users/{user_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Upsert Whiteboard User Share */
-        put: operations["whiteboard_upsert_whiteboard_user_share_put"];
-        post?: never;
-        /** Delete Whiteboard User Share */
-        delete: operations["whiteboard_delete_whiteboard_user_share_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/sharing/link": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Upsert Whiteboard Link Share */
-        put: operations["whiteboard_upsert_whiteboard_link_share_put"];
-        post?: never;
-        /** Disable Whiteboard Link Share */
-        delete: operations["whiteboard_disable_whiteboard_link_share_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/collab/items/{item_id}/session": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Whiteboard Collab Session */
-        get: operations["whiteboard_get_whiteboard_collab_session_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/collab/items/{item_id}/snapshot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Save Whiteboard Collab Snapshot */
-        put: operations["whiteboard_save_whiteboard_collab_snapshot_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/favorite": {
+    "/api/v1/whiteboard/items/{item_id}/favorite": {
         parameters: {
             query?: never;
             header?: never;
@@ -3220,7 +2991,7 @@ export interface paths {
         patch: operations["whiteboard_toggle_whiteboard_favorite_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/view": {
+    "/api/v1/whiteboard/items/{item_id}/view": {
         parameters: {
             query?: never;
             header?: never;
@@ -3237,7 +3008,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/bento/hub": {
+    "/api/v1/whiteboard/items/{item_id}/sharing/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Group Shares */
+        get: operations["whiteboard_list_group_shares_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/items/{item_id}/sharing/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Group Share */
+        put: operations["whiteboard_upsert_group_share_put"];
+        post?: never;
+        /** Delete Group Share */
+        delete: operations["whiteboard_delete_group_share_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/items/{item_id}/sharing/company": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Company Sharing */
+        put: operations["whiteboard_update_company_sharing_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bento/hub": {
         parameters: {
             query?: never;
             header?: never;
@@ -3254,7 +3077,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/bento/items": {
+    "/api/v1/bento/items": {
         parameters: {
             query?: never;
             header?: never;
@@ -3271,7 +3094,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/bento/items/generate": {
+    "/api/v1/bento/items/generate": {
         parameters: {
             query?: never;
             header?: never;
@@ -3288,7 +3111,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/bento/items/{document_id}/ai-edit": {
+    "/api/v1/bento/items/{document_id}/ai-edit": {
         parameters: {
             query?: never;
             header?: never;
@@ -3305,7 +3128,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/bento/ai-jobs": {
+    "/api/v1/bento/ai-jobs": {
         parameters: {
             query?: never;
             header?: never;
@@ -3322,7 +3145,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/bento/ai-jobs/{job_id}": {
+    "/api/v1/bento/ai-jobs/{job_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3339,7 +3162,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/bento/ai-jobs/{job_id}/cancel": {
+    "/api/v1/bento/ai-jobs/{job_id}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -3356,7 +3179,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/bento/items/{document_id}": {
+    "/api/v1/bento/items/{document_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3375,7 +3198,7 @@ export interface paths {
         patch: operations["bento_update_bento_document_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/bento/items/{document_id}/restore": {
+    "/api/v1/bento/items/{document_id}/restore": {
         parameters: {
             query?: never;
             header?: never;
@@ -3392,7 +3215,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/bento/items/{document_id}/permanent": {
+    "/api/v1/bento/items/{document_id}/permanent": {
         parameters: {
             query?: never;
             header?: never;
@@ -3409,7 +3232,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/diagrams/hub": {
+    "/api/v1/diagrams/hub": {
         parameters: {
             query?: never;
             header?: never;
@@ -3426,7 +3249,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/diagrams/items": {
+    "/api/v1/diagrams/items": {
         parameters: {
             query?: never;
             header?: never;
@@ -3443,7 +3266,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/diagrams/items/{item_id}": {
+    "/api/v1/diagrams/items/{item_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3462,7 +3285,7 @@ export interface paths {
         patch: operations["diagrams_update_diagram_item_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/diagrams/items/{item_id}/restore": {
+    "/api/v1/diagrams/items/{item_id}/restore": {
         parameters: {
             query?: never;
             header?: never;
@@ -3479,7 +3302,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/diagrams/items/{item_id}/preview.png": {
+    "/api/v1/diagrams/items/{item_id}/preview.png": {
         parameters: {
             query?: never;
             header?: never;
@@ -3496,7 +3319,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/files": {
+    "/api/v1/files": {
         parameters: {
             query?: never;
             header?: never;
@@ -3513,7 +3336,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/files/search": {
+    "/api/v1/files/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -3530,7 +3353,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/files/folders": {
+    "/api/v1/files/folders": {
         parameters: {
             query?: never;
             header?: never;
@@ -3547,7 +3370,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/files/corpora": {
+    "/api/v1/files/corpora": {
         parameters: {
             query?: never;
             header?: never;
@@ -3565,24 +3388,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/files/corpora/{corpus_id}/transition": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Transition File Corpus */
-        post: operations["files_transition_file_corpus_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/workspaces/{workspace_slug}/files/folders/{folder_id}": {
+    "/api/v1/files/folders/{folder_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3600,7 +3406,7 @@ export interface paths {
         patch: operations["files_update_folder_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/files/upload": {
+    "/api/v1/files/upload": {
         parameters: {
             query?: never;
             header?: never;
@@ -3617,7 +3423,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/files/{file_id}/download": {
+    "/api/v1/files/{file_id}/download": {
         parameters: {
             query?: never;
             header?: never;
@@ -3634,7 +3440,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/files/{file_id}/preview": {
+    "/api/v1/files/{file_id}/preview": {
         parameters: {
             query?: never;
             header?: never;
@@ -3651,7 +3457,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/files/archive": {
+    "/api/v1/files/archive": {
         parameters: {
             query?: never;
             header?: never;
@@ -3668,7 +3474,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/files/bulk-delete": {
+    "/api/v1/files/bulk-delete": {
         parameters: {
             query?: never;
             header?: never;
@@ -3685,7 +3491,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/files/{file_id}": {
+    "/api/v1/files/{file_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3702,7 +3508,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/status": {
+    "/api/v1/agent/status": {
         parameters: {
             query?: never;
             header?: never;
@@ -3719,7 +3525,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/sessions": {
+    "/api/v1/agent/sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -3737,7 +3543,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/sessions/{session_id}": {
+    "/api/v1/agent/sessions/{session_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3756,7 +3562,7 @@ export interface paths {
         patch: operations["hermes_agent_update_session_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/sessions/{session_id}/messages": {
+    "/api/v1/agent/sessions/{session_id}/messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -3773,7 +3579,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/sessions/{session_id}/runs": {
+    "/api/v1/agent/sessions/{session_id}/runs": {
         parameters: {
             query?: never;
             header?: never;
@@ -3790,7 +3596,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/runs": {
+    "/api/v1/agent/runs": {
         parameters: {
             query?: never;
             header?: never;
@@ -3807,7 +3613,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/runs/{run_id}": {
+    "/api/v1/agent/runs/{run_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3824,7 +3630,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/runs/{run_id}/events": {
+    "/api/v1/agent/runs/{run_id}/events": {
         parameters: {
             query?: never;
             header?: never;
@@ -3841,7 +3647,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/runs/{run_id}/stop": {
+    "/api/v1/agent/runs/{run_id}/stop": {
         parameters: {
             query?: never;
             header?: never;
@@ -3858,7 +3664,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/runs/{run_id}/steer": {
+    "/api/v1/agent/runs/{run_id}/steer": {
         parameters: {
             query?: never;
             header?: never;
@@ -3875,7 +3681,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/runs/{run_id}/approval": {
+    "/api/v1/agent/runs/{run_id}/approval": {
         parameters: {
             query?: never;
             header?: never;
@@ -3892,7 +3698,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/jobs": {
+    "/api/v1/agent/jobs": {
         parameters: {
             query?: never;
             header?: never;
@@ -3910,7 +3716,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/jobs/{job_id}/{action}": {
+    "/api/v1/agent/jobs/{job_id}/{action}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3927,7 +3733,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/agent/jobs/{job_id}": {
+    "/api/v1/agent/jobs/{job_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3962,7 +3768,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/hermes-terminal/config": {
+    "/api/v1/hermes-terminal/config": {
         parameters: {
             query?: never;
             header?: never;
@@ -3979,7 +3785,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/hermes-terminal/sessions": {
+    "/api/v1/hermes-terminal/sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -3997,7 +3803,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/hermes-terminal/sessions/{session_id}": {
+    "/api/v1/hermes-terminal/sessions/{session_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4014,7 +3820,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/hermes-terminal/sessions/{session_id}/stop": {
+    "/api/v1/hermes-terminal/sessions/{session_id}/stop": {
         parameters: {
             query?: never;
             header?: never;
@@ -4031,7 +3837,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/hermes-terminal/sessions/{session_id}/files": {
+    "/api/v1/hermes-terminal/sessions/{session_id}/files": {
         parameters: {
             query?: never;
             header?: never;
@@ -4048,7 +3854,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/hermes-terminal/sessions/{session_id}/files/download": {
+    "/api/v1/hermes-terminal/sessions/{session_id}/files/download": {
         parameters: {
             query?: never;
             header?: never;
@@ -4065,7 +3871,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/hermes-terminal/sessions/{session_id}/approvals": {
+    "/api/v1/hermes-terminal/sessions/{session_id}/approvals": {
         parameters: {
             query?: never;
             header?: never;
@@ -4082,7 +3888,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/hermes-terminal/sessions/{session_id}/approvals/{approval_id}": {
+    "/api/v1/hermes-terminal/sessions/{session_id}/approvals/{approval_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4099,7 +3905,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/connectors/ocr/route": {
+    "/api/v1/connectors/ocr/route": {
         parameters: {
             query?: never;
             header?: never;
@@ -4116,7 +3922,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/spaces": {
+    "/api/v1/pms/spaces": {
         parameters: {
             query?: never;
             header?: never;
@@ -4134,7 +3940,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/users": {
+    "/api/v1/pms/users": {
         parameters: {
             query?: never;
             header?: never;
@@ -4151,7 +3957,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/view-preferences": {
+    "/api/v1/pms/view-preferences": {
         parameters: {
             query?: never;
             header?: never;
@@ -4169,7 +3975,7 @@ export interface paths {
         patch: operations["pms_update_view_preferences_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/spaces/{space_id}": {
+    "/api/v1/pms/spaces/{space_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4187,7 +3993,7 @@ export interface paths {
         patch: operations["pms_update_space_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/spaces/{space_id}/members": {
+    "/api/v1/pms/spaces/{space_id}/members": {
         parameters: {
             query?: never;
             header?: never;
@@ -4205,7 +4011,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/spaces/{space_id}/members/{user_id}": {
+    "/api/v1/pms/spaces/{space_id}/members/{user_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4223,7 +4029,7 @@ export interface paths {
         patch: operations["pms_update_space_member_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists": {
+    "/api/v1/pms/lists": {
         parameters: {
             query?: never;
             header?: never;
@@ -4241,7 +4047,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/spaces/{space_id}/lists": {
+    "/api/v1/pms/spaces/{space_id}/lists": {
         parameters: {
             query?: never;
             header?: never;
@@ -4258,7 +4064,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}": {
+    "/api/v1/pms/lists/{list_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4277,7 +4083,7 @@ export interface paths {
         patch: operations["pms_update_task_list_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/spaces/{space_id}/lists/reorder": {
+    "/api/v1/pms/spaces/{space_id}/lists/reorder": {
         parameters: {
             query?: never;
             header?: never;
@@ -4294,7 +4100,7 @@ export interface paths {
         patch: operations["pms_reorder_space_lists_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/milestones": {
+    "/api/v1/pms/lists/{list_id}/milestones": {
         parameters: {
             query?: never;
             header?: never;
@@ -4312,7 +4118,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/milestones/{milestone_id}": {
+    "/api/v1/pms/milestones/{milestone_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4329,7 +4135,7 @@ export interface paths {
         patch: operations["pms_update_milestone_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/labels": {
+    "/api/v1/pms/lists/{list_id}/labels": {
         parameters: {
             query?: never;
             header?: never;
@@ -4347,7 +4153,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/labels/{label_id}": {
+    "/api/v1/pms/labels/{label_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4365,7 +4171,7 @@ export interface paths {
         patch: operations["pms_update_label_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/tasks": {
+    "/api/v1/pms/lists/{list_id}/tasks": {
         parameters: {
             query?: never;
             header?: never;
@@ -4383,7 +4189,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/assigned": {
+    "/api/v1/pms/tasks/assigned": {
         parameters: {
             query?: never;
             header?: never;
@@ -4400,7 +4206,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/today-overdue": {
+    "/api/v1/pms/tasks/today-overdue": {
         parameters: {
             query?: never;
             header?: never;
@@ -4417,7 +4223,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}": {
+    "/api/v1/pms/tasks/{task_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4436,7 +4242,7 @@ export interface paths {
         patch: operations["pms_update_task_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/tasks/reorder": {
+    "/api/v1/pms/lists/{list_id}/tasks/reorder": {
         parameters: {
             query?: never;
             header?: never;
@@ -4453,7 +4259,7 @@ export interface paths {
         patch: operations["pms_reorder_task_list_tasks_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/tasks/bulk": {
+    "/api/v1/pms/lists/{list_id}/tasks/bulk": {
         parameters: {
             query?: never;
             header?: never;
@@ -4470,7 +4276,7 @@ export interface paths {
         patch: operations["pms_bulk_update_tasks_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/comments": {
+    "/api/v1/pms/tasks/{task_id}/comments": {
         parameters: {
             query?: never;
             header?: never;
@@ -4487,7 +4293,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/activity-logs": {
+    "/api/v1/pms/tasks/{task_id}/activity-logs": {
         parameters: {
             query?: never;
             header?: never;
@@ -4504,7 +4310,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/docs": {
+    "/api/v1/pms/tasks/{task_id}/docs": {
         parameters: {
             query?: never;
             header?: never;
@@ -4522,7 +4328,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/docs/{doc_id}": {
+    "/api/v1/pms/tasks/{task_id}/docs/{doc_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4539,7 +4345,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/dashboard/summary": {
+    "/api/v1/pms/dashboard/summary": {
         parameters: {
             query?: never;
             header?: never;
@@ -4556,7 +4362,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/attachments": {
+    "/api/v1/pms/tasks/{task_id}/attachments": {
         parameters: {
             query?: never;
             header?: never;
@@ -4573,7 +4379,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/attachments/{attachment_id}": {
+    "/api/v1/pms/attachments/{attachment_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4590,7 +4396,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/checklist": {
+    "/api/v1/pms/tasks/{task_id}/checklist": {
         parameters: {
             query?: never;
             header?: never;
@@ -4607,7 +4413,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/checklist/{item_id}": {
+    "/api/v1/pms/checklist/{item_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4625,7 +4431,7 @@ export interface paths {
         patch: operations["pms_update_checklist_item_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/checklist/reorder": {
+    "/api/v1/pms/tasks/{task_id}/checklist/reorder": {
         parameters: {
             query?: never;
             header?: never;
@@ -4642,7 +4448,7 @@ export interface paths {
         patch: operations["pms_reorder_checklist_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/statuses": {
+    "/api/v1/pms/lists/{list_id}/statuses": {
         parameters: {
             query?: never;
             header?: never;
@@ -4660,7 +4466,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/status-mode": {
+    "/api/v1/pms/lists/{list_id}/status-mode": {
         parameters: {
             query?: never;
             header?: never;
@@ -4677,7 +4483,7 @@ export interface paths {
         patch: operations["pms_update_task_list_status_mode_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/spaces/{space_id}/statuses": {
+    "/api/v1/pms/spaces/{space_id}/statuses": {
         parameters: {
             query?: never;
             header?: never;
@@ -4695,7 +4501,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/space-statuses/{status_id}": {
+    "/api/v1/pms/space-statuses/{status_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4713,7 +4519,7 @@ export interface paths {
         patch: operations["pms_update_space_status_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/task-list-statuses/{status_id}": {
+    "/api/v1/pms/task-list-statuses/{status_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4731,7 +4537,7 @@ export interface paths {
         patch: operations["pms_update_task_list_status_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/export": {
+    "/api/v1/pms/lists/{list_id}/export": {
         parameters: {
             query?: never;
             header?: never;
@@ -4748,7 +4554,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/templates": {
+    "/api/v1/pms/lists/{list_id}/templates": {
         parameters: {
             query?: never;
             header?: never;
@@ -4766,7 +4572,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/templates/{template_id}": {
+    "/api/v1/pms/templates/{template_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4784,7 +4590,7 @@ export interface paths {
         patch: operations["pms_update_template_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/custom-fields": {
+    "/api/v1/pms/lists/{list_id}/custom-fields": {
         parameters: {
             query?: never;
             header?: never;
@@ -4802,7 +4608,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/custom-fields/{field_id}": {
+    "/api/v1/pms/custom-fields/{field_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4819,7 +4625,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/custom-field-values": {
+    "/api/v1/pms/tasks/{task_id}/custom-field-values": {
         parameters: {
             query?: never;
             header?: never;
@@ -4837,7 +4643,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/assignees": {
+    "/api/v1/pms/tasks/{task_id}/assignees": {
         parameters: {
             query?: never;
             header?: never;
@@ -4854,7 +4660,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/tasks/{task_id}/followers": {
+    "/api/v1/pms/tasks/{task_id}/followers": {
         parameters: {
             query?: never;
             header?: never;
@@ -4871,7 +4677,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/folders": {
+    "/api/v1/pms/folders": {
         parameters: {
             query?: never;
             header?: never;
@@ -4889,7 +4695,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/pms/folders/{folder_id}": {
+    "/api/v1/pms/folders/{folder_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4907,7 +4713,42 @@ export interface paths {
         patch: operations["pms_update_folder_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings": {
+    "/api/v1/pms/spaces/{space_id}/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Space Groups */
+        get: operations["pms_list_space_groups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pms/spaces/{space_id}/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Space Group */
+        put: operations["pms_put_space_group_put"];
+        post?: never;
+        /** Delete Space Group */
+        delete: operations["pms_delete_space_group_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/meeting/meetings": {
         parameters: {
             query?: never;
             header?: never;
@@ -4925,7 +4766,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}": {
+    "/api/v1/meeting/meetings/{meeting_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4944,7 +4785,7 @@ export interface paths {
         patch: operations["meeting_update_meeting_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/notes/ensure": {
+    "/api/v1/meeting/meetings/{meeting_id}/notes/ensure": {
         parameters: {
             query?: never;
             header?: never;
@@ -4961,7 +4802,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/attendees": {
+    "/api/v1/meeting/meetings/{meeting_id}/attendees": {
         parameters: {
             query?: never;
             header?: never;
@@ -4984,7 +4825,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/tasks": {
+    "/api/v1/meeting/meetings/{meeting_id}/tasks": {
         parameters: {
             query?: never;
             header?: never;
@@ -5001,7 +4842,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/tasks/{task_id}": {
+    "/api/v1/meeting/meetings/{meeting_id}/tasks/{task_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5018,7 +4859,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/docs": {
+    "/api/v1/meeting/meetings/{meeting_id}/docs": {
         parameters: {
             query?: never;
             header?: never;
@@ -5035,7 +4876,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/docs/{doc_id}": {
+    "/api/v1/meeting/meetings/{meeting_id}/docs/{doc_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5052,7 +4893,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/files": {
+    "/api/v1/meeting/meetings/{meeting_id}/files": {
         parameters: {
             query?: never;
             header?: never;
@@ -5069,7 +4910,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/files/{file_id}": {
+    "/api/v1/meeting/meetings/{meeting_id}/files/{file_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5086,7 +4927,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/recordings/staging": {
+    "/api/v1/meeting/meetings/{meeting_id}/recordings/staging": {
         parameters: {
             query?: never;
             header?: never;
@@ -5104,7 +4945,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/recordings/staging/{staging_id}/chunks/{seq}": {
+    "/api/v1/meeting/meetings/{meeting_id}/recordings/staging/{staging_id}/chunks/{seq}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5121,7 +4962,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/recordings/staging/{staging_id}/complete": {
+    "/api/v1/meeting/meetings/{meeting_id}/recordings/staging/{staging_id}/complete": {
         parameters: {
             query?: never;
             header?: never;
@@ -5138,7 +4979,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/recordings/staging/{staging_id}": {
+    "/api/v1/meeting/meetings/{meeting_id}/recordings/staging/{staging_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5155,7 +4996,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/recordings/{recording_id}": {
+    "/api/v1/meeting/meetings/{meeting_id}/recordings/{recording_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5172,7 +5013,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/recordings/import": {
+    "/api/v1/meeting/meetings/{meeting_id}/recordings/import": {
         parameters: {
             query?: never;
             header?: never;
@@ -5189,7 +5030,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/recordings/{recording_id}/playback": {
+    "/api/v1/meeting/meetings/{meeting_id}/recordings/{recording_id}/playback": {
         parameters: {
             query?: never;
             header?: never;
@@ -5206,7 +5047,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/recordings/{recording_id}/media": {
+    "/api/v1/meeting/meetings/{meeting_id}/recordings/{recording_id}/media": {
         parameters: {
             query?: never;
             header?: never;
@@ -5223,7 +5064,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/recordings/{recording_id}/retry": {
+    "/api/v1/meeting/meetings/{meeting_id}/recordings/{recording_id}/retry": {
         parameters: {
             query?: never;
             header?: never;
@@ -5240,7 +5081,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/users": {
+    "/api/v1/meeting/users": {
         parameters: {
             query?: never;
             header?: never;
@@ -5249,7 +5090,7 @@ export interface paths {
         };
         /**
          * List Meeting Users
-         * @description Search workspace members for meeting attendee selection.
+         * @description Search active users currently admitted to the meeting app.
          */
         get: operations["meeting_list_meeting_users_get"];
         put?: never;
@@ -5260,7 +5101,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/meeting/availability": {
+    "/api/v1/meeting/availability": {
         parameters: {
             query?: never;
             header?: never;
@@ -5277,7 +5118,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/video-chat/sessions": {
+    "/api/v1/video-chat/sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -5295,7 +5136,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/video-chat/sessions/{session_id}": {
+    "/api/v1/video-chat/sessions/{session_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5312,7 +5153,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/video-chat/sessions/{session_id}/join-token": {
+    "/api/v1/video-chat/sessions/{session_id}/join-token": {
         parameters: {
             query?: never;
             header?: never;
@@ -5329,7 +5170,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/video-chat/sessions/{session_id}/end": {
+    "/api/v1/video-chat/sessions/{session_id}/end": {
         parameters: {
             query?: never;
             header?: never;
@@ -5346,7 +5187,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/video-chat/sessions/{session_id}/recording/start": {
+    "/api/v1/video-chat/sessions/{session_id}/recording/start": {
         parameters: {
             query?: never;
             header?: never;
@@ -5363,7 +5204,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/video-chat/sessions/{session_id}/recording/stop": {
+    "/api/v1/video-chat/sessions/{session_id}/recording/stop": {
         parameters: {
             query?: never;
             header?: never;
@@ -5380,7 +5221,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/video-chat/sessions/{session_id}/captions/start": {
+    "/api/v1/video-chat/sessions/{session_id}/captions/start": {
         parameters: {
             query?: never;
             header?: never;
@@ -5397,7 +5238,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/video-chat/sessions/{session_id}/captions/stop": {
+    "/api/v1/video-chat/sessions/{session_id}/captions/stop": {
         parameters: {
             query?: never;
             header?: never;
@@ -5414,7 +5255,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/tus": {
+    "/api/v1/recording/recordings/tus": {
         parameters: {
             query?: never;
             header?: never;
@@ -5432,7 +5273,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings": {
+    "/api/v1/recording/recordings": {
         parameters: {
             query?: never;
             header?: never;
@@ -5449,7 +5290,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/staging": {
+    "/api/v1/recording/recordings/staging": {
         parameters: {
             query?: never;
             header?: never;
@@ -5467,7 +5308,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}/tus": {
+    "/api/v1/recording/recordings/staging/{staging_id}/tus": {
         parameters: {
             query?: never;
             header?: never;
@@ -5486,7 +5327,7 @@ export interface paths {
         patch: operations["recording_patch_recording_tus_upload_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}/chunks/{seq}": {
+    "/api/v1/recording/recordings/staging/{staging_id}/chunks/{seq}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5503,7 +5344,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}/complete": {
+    "/api/v1/recording/recordings/staging/{staging_id}/complete": {
         parameters: {
             query?: never;
             header?: never;
@@ -5520,7 +5361,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}": {
+    "/api/v1/recording/recordings/staging/{staging_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5537,7 +5378,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/import": {
+    "/api/v1/recording/recordings/import": {
         parameters: {
             query?: never;
             header?: never;
@@ -5554,7 +5395,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}": {
+    "/api/v1/recording/recordings/{recording_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5573,7 +5414,7 @@ export interface paths {
         patch: operations["recording_update_recording_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}/publications/docs": {
+    "/api/v1/recording/recordings/{recording_id}/publications/docs": {
         parameters: {
             query?: never;
             header?: never;
@@ -5590,7 +5431,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}/retry": {
+    "/api/v1/recording/recordings/{recording_id}/retry": {
         parameters: {
             query?: never;
             header?: never;
@@ -5607,7 +5448,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}/playback": {
+    "/api/v1/recording/recordings/{recording_id}/playback": {
         parameters: {
             query?: never;
             header?: never;
@@ -5624,7 +5465,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}/media": {
+    "/api/v1/recording/recordings/{recording_id}/media": {
         parameters: {
             query?: never;
             header?: never;
@@ -5641,7 +5482,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}/targets": {
+    "/api/v1/recording/recordings/{recording_id}/targets": {
         parameters: {
             query?: never;
             header?: never;
@@ -5658,7 +5499,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}/targets/{target_id}": {
+    "/api/v1/recording/recordings/{recording_id}/targets/{target_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5911,7 +5752,7 @@ export interface paths {
         patch: operations["planner_update_planner_event_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/announcements": {
+    "/api/v1/announcements": {
         parameters: {
             query?: never;
             header?: never;
@@ -5929,7 +5770,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/announcements/{announcement_id}": {
+    "/api/v1/announcements/{announcement_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5948,7 +5789,7 @@ export interface paths {
         patch: operations["announcements_update_announcement_route_patch"];
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/retrieval/query": {
+    "/api/v1/retrieval/query": {
         parameters: {
             query?: never;
             header?: never;
@@ -5957,23 +5798,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Query Workspace Retrieval */
-        post: operations["retrieval_query_workspace_retrieval_post"];
+        /** Query Retrieval */
+        post: operations["retrieval_query_retrieval_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/retrieval/sources": {
+    "/api/v1/retrieval/sources": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Workspace Retrieval Sources */
-        get: operations["retrieval_list_workspace_retrieval_sources_get"];
+        /** List Retrieval Sources */
+        get: operations["retrieval_list_retrieval_sources_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5982,7 +5823,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/rag/query": {
+    "/api/v1/rag/query": {
         parameters: {
             query?: never;
             header?: never;
@@ -5991,23 +5832,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Query Workspace Rag */
-        post: operations["rag_query_workspace_rag_post"];
+        /** Query Rag */
+        post: operations["rag_query_rag_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/rag/sources": {
+    "/api/v1/rag/sources": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Workspace Rag Sources */
-        get: operations["rag_list_workspace_rag_sources_get"];
+        /** List Rag Sources */
+        get: operations["rag_list_rag_sources_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6016,7 +5857,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/rag/reindex": {
+    "/api/v1/rag/reindex": {
         parameters: {
             query?: never;
             header?: never;
@@ -6025,15 +5866,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reindex Workspace Rag */
-        post: operations["rag_reindex_workspace_rag_post"];
+        /** Reindex Rag */
+        post: operations["rag_reindex_rag_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/web-search/ask/stream": {
+    "/api/v1/web-search/ask/stream": {
         parameters: {
             query?: never;
             header?: never;
@@ -6256,7 +6097,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/workspaces/{workspace_slug}/search/query": {
+    "/api/v1/search/query": {
         parameters: {
             query?: never;
             header?: never;
@@ -6265,8 +6106,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Query Workspace Search */
-        post: operations["search_query_workspace_search_post"];
+        /** Query Search */
+        post: operations["search_query_search_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6592,8 +6433,6 @@ export interface components {
         AdminHermesProfileResponse: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** User Id */
             user_id: string;
             /** Profile Name */
@@ -7117,14 +6956,12 @@ export interface components {
             date_format: string;
             /** System Roles */
             system_roles: string[];
-            /** Workspaces */
-            workspaces: {
-                [key: string]: unknown;
-            }[];
-            /** Workspace Roles */
-            workspace_roles: {
-                [key: string]: string;
-            }[];
+            /** Group Ids */
+            group_ids: string[];
+            /** Managed Organization Unit Ids */
+            managed_organization_unit_ids: string[];
+            /** Is Department Head */
+            is_department_head: boolean;
             /** Must Change Password */
             must_change_password: boolean;
             /** Last Login At */
@@ -7514,8 +7351,6 @@ export interface components {
             id: string;
             /** Artifactnumber */
             artifactNumber: string;
-            /** Workspaceid */
-            workspaceId: string;
             /** Owneruserid */
             ownerUserId: string | null;
             /** Graphrunid */
@@ -7549,7 +7384,7 @@ export interface components {
              * Visibility
              * @enum {string}
              */
-            visibility: "private" | "workspace";
+            visibility: "private" | "company";
             /**
              * Status
              * @enum {string}
@@ -7676,8 +7511,6 @@ export interface components {
             id: string;
             /** Artifactnumber */
             artifactNumber: string;
-            /** Workspaceid */
-            workspaceId: string;
             /** Owneruserid */
             ownerUserId: string | null;
             /** Graphrunid */
@@ -7711,7 +7544,7 @@ export interface components {
              * Visibility
              * @enum {string}
              */
-            visibility: "private" | "workspace";
+            visibility: "private" | "company";
             /**
              * Status
              * @enum {string}
@@ -7787,8 +7620,6 @@ export interface components {
         AiGraphRunResponse: {
             /** Id */
             id: string;
-            /** Workspaceid */
-            workspaceId: string;
             /** Requestedbyuserid */
             requestedByUserId: string;
             /** Conversationid */
@@ -7826,7 +7657,7 @@ export interface components {
              * Visibility
              * @enum {string}
              */
-            visibility: "private" | "workspace";
+            visibility: "private" | "company";
             /**
              * Createdat
              * Format: date-time
@@ -8320,10 +8151,6 @@ export interface components {
             user_id?: string | null;
             /** User Name */
             user_name?: string | null;
-            /** Workspace Id */
-            workspace_id?: string | null;
-            /** Workspace Name */
-            workspace_name?: string | null;
             /** App Id */
             app_id?: string | null;
             /** Task Kind */
@@ -8361,8 +8188,6 @@ export interface components {
             enabled: boolean;
             /** User Id */
             user_id?: string | null;
-            /** Workspace Id */
-            workspace_id?: string | null;
             /** App Id */
             app_id?: string | null;
             /** Task Kind */
@@ -8491,10 +8316,6 @@ export interface components {
             user_id?: string | null;
             /** User Name */
             user_name?: string | null;
-            /** Workspace Id */
-            workspace_id?: string | null;
-            /** Workspace Name */
-            workspace_name?: string | null;
             /** App Id */
             app_id?: string | null;
             /** Task Kind */
@@ -8533,8 +8354,6 @@ export interface components {
             enabled: boolean;
             /** User Id */
             user_id?: string | null;
-            /** Workspace Id */
-            workspace_id?: string | null;
             /** App Id */
             app_id?: string | null;
             /** Task Kind */
@@ -8561,8 +8380,6 @@ export interface components {
         };
         /** AiSecuritySimulationRequest */
         AiSecuritySimulationRequest: {
-            /** Workspace Id */
-            workspace_id?: string | null;
             /** Actor User Id */
             actor_user_id?: string | null;
             /** App Id */
@@ -8672,10 +8489,10 @@ export interface components {
             body: string;
             /**
              * Scope
-             * @default workspace
-             * @enum {string}
+             * @default company
+             * @constant
              */
-            scope: "workspace" | "company";
+            scope: "company";
             /**
              * Ispinned
              * @default false
@@ -8686,17 +8503,15 @@ export interface components {
         AnnouncementOut: {
             /** Id */
             id: string;
-            /** Workspaceid */
-            workspaceId: string;
             /** Authorid */
             authorId: string;
             /** Authorname */
             authorName: string;
             /**
              * Scope
-             * @enum {string}
+             * @constant
              */
-            scope: "workspace" | "company";
+            scope: "company";
             /** Title */
             title: string;
             /** Body */
@@ -8728,27 +8543,40 @@ export interface components {
             /** Items */
             items: components["schemas"]["AnnouncementOut"][];
         };
+        /** AppAccessPolicyRequest */
+        AppAccessPolicyRequest: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Audience
+             * @enum {string}
+             */
+            audience: "all" | "selected";
+            /** User Ids */
+            user_ids?: string[];
+            /** Group Ids */
+            group_ids?: string[];
+        };
+        /** AppAccessPolicyResponse */
+        AppAccessPolicyResponse: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Audience
+             * @enum {string}
+             */
+            audience: "all" | "selected";
+            /** User Ids */
+            user_ids?: string[];
+            /** Group Ids */
+            group_ids?: string[];
+            /** App Id */
+            app_id: string;
+        };
         /** AppBarLayoutPreference */
         AppBarLayoutPreference: {
             /** Pinned App Ids */
             pinned_app_ids?: string[];
-        };
-        /** AppWorkspacePreferenceRequest */
-        AppWorkspacePreferenceRequest: {
-            /** Workspace Id */
-            workspace_id: string;
-        };
-        /** AppWorkspacePreferenceResponse */
-        AppWorkspacePreferenceResponse: {
-            /** App Id */
-            app_id: string;
-            /** Workspace Id */
-            workspace_id: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
         };
         /** ApprovalAbandonRequest */
         ApprovalAbandonRequest: {
@@ -8769,8 +8597,6 @@ export interface components {
         ApprovalStatusResponse: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Conversation Id */
             conversation_id: string;
             /** Agent Run Id */
@@ -8818,14 +8644,6 @@ export interface components {
              * @constant
              */
             kind: "user";
-            /**
-             * Scope
-             * @default personal
-             * @constant
-             */
-            scope: "personal";
-            /** Workspace Id */
-            workspace_id?: null;
             /** Source */
             source: string;
             /** User Id */
@@ -8836,13 +8654,16 @@ export interface components {
         /** AppsBootstrapResponse */
         AppsBootstrapResponse: {
             /** Apps */
-            apps: (components["schemas"]["PlatformAppsBootstrapAppResponse"] | components["schemas"]["WorkspaceAppsBootstrapAppResponse"])[];
-            /** Global Route App Ids */
-            global_route_app_ids: string[];
+            apps: components["schemas"]["BootstrapAppResponse"][];
+            /** Nav */
+            nav: components["schemas"]["BootstrapNavItemResponse"][];
             /** App Bar Categories */
-            app_bar_categories: components["schemas"]["WorkspaceBootstrapAppBarCategoryResponse"][];
+            app_bar_categories: components["schemas"]["BootstrapAppBarCategoryResponse"][];
             /** Personal Tool App Ids */
             personal_tool_app_ids: string[];
+            /** Chatbot App Ids */
+            chatbot_app_ids: string[];
+            keyword_search: components["schemas"]["BootstrapKeywordSearchResponse"];
             principal: components["schemas"]["AppsBootstrapPrincipalResponse"];
         };
         /**
@@ -8868,6 +8689,11 @@ export interface components {
         };
         /** AttachWhiteboardContextSlotRequest */
         AttachWhiteboardContextSlotRequest: {
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** App */
             app: string;
             /** Type */
@@ -8975,8 +8801,12 @@ export interface components {
             app_bar_layout: components["schemas"]["AppBarLayoutPreference"];
             /** System Roles */
             system_roles: string[];
-            /** Workspaces */
-            workspaces: components["schemas"]["WorkspaceSummaryResponse"][];
+            /** Group Ids */
+            group_ids: string[];
+            /** Managed Organization Unit Ids */
+            managed_organization_unit_ids: string[];
+            /** Is Department Head */
+            is_department_head: boolean;
             /** Must Change Password */
             must_change_password: boolean;
             /** Last Login At */
@@ -9039,15 +8869,13 @@ export interface components {
         BentoDocumentDetail: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Title */
             title: string;
             /**
              * Visibility
              * @enum {string}
              */
-            visibility: "personal" | "workspace";
+            visibility: "personal" | "company";
             /** Version */
             version: number;
             /** Created By Id */
@@ -9077,15 +8905,13 @@ export interface components {
         BentoDocumentItem: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Title */
             title: string;
             /**
              * Visibility
              * @enum {string}
              */
-            visibility: "personal" | "workspace";
+            visibility: "personal" | "company";
             /** Version */
             version: number;
             /** Created By Id */
@@ -9141,7 +8967,12 @@ export interface components {
              * @default private
              * @enum {string}
              */
-            visibility: "private" | "workspace";
+            visibility: "private" | "company";
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** Corpus Id */
             corpus_id?: string | null;
         };
@@ -9203,6 +9034,114 @@ export interface components {
         Body_recording_upload_recording_chunk_put: {
             /** File */
             file: string;
+        };
+        /** BootstrapAppBarCategoryItemResponse */
+        BootstrapAppBarCategoryItemResponse: {
+            /** App Id */
+            app_id: string;
+            /** Title */
+            title: string;
+            /** Route Base */
+            route_base: string;
+            /** Icon Key */
+            icon_key: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Coming Soon
+             * @default false
+             */
+            coming_soon: boolean;
+            /**
+             * Position
+             * @default 0
+             */
+            position: number;
+        };
+        /** BootstrapAppBarCategoryResponse */
+        BootstrapAppBarCategoryResponse: {
+            /** Id */
+            id: string;
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /** Icon Key */
+            icon_key: string;
+            /** Position */
+            position: number;
+            /** Items */
+            items: components["schemas"]["BootstrapAppBarCategoryItemResponse"][];
+        };
+        /** BootstrapAppResponse */
+        BootstrapAppResponse: {
+            /** Entry Route Id */
+            entry_route_id: string;
+            /**
+             * Execution Context Kind
+             * @enum {string}
+             */
+            execution_context_kind: "personal" | "company";
+            /**
+             * Resource Scope
+             * @enum {string}
+             */
+            resource_scope: "personal" | "company" | "hybrid";
+            /** App Id */
+            app_id: string;
+            /** Title */
+            title: string;
+            /** Route Base */
+            route_base: string;
+            /** Icon Key */
+            icon_key: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Coming Soon
+             * @default false
+             */
+            coming_soon: boolean;
+            /** Nav Items */
+            nav_items: components["schemas"]["BootstrapNavItemResponse"][];
+        };
+        /** BootstrapKeywordSearchEntityTypeResponse */
+        BootstrapKeywordSearchEntityTypeResponse: {
+            /** Value */
+            value: string;
+            /** Label */
+            label: string;
+            /** Label Key */
+            label_key: string;
+        };
+        /** BootstrapKeywordSearchResponse */
+        BootstrapKeywordSearchResponse: {
+            /** Entity Types */
+            entity_types?: components["schemas"]["BootstrapKeywordSearchEntityTypeResponse"][];
+        };
+        /** BootstrapNavItemResponse */
+        BootstrapNavItemResponse: {
+            /** Id */
+            id: string;
+            /** App Id */
+            app_id: string;
+            /** Title */
+            title: string;
+            /** Category */
+            category: string;
+            /** Icon Key */
+            icon_key: string;
+            /** Link App Id */
+            link_app_id?: string | null;
+            /** Path Suffix */
+            path_suffix?: string | null;
+            /** Absolute Path */
+            absolute_path?: string | null;
+            /**
+             * Coming Soon
+             * @default false
+             */
+            coming_soon: boolean;
         };
         /** BootstrapStatusResponse */
         BootstrapStatusResponse: {
@@ -9309,22 +9248,12 @@ export interface components {
             sourceId: string;
             /** Color */
             color: string;
-            workspace: components["schemas"]["CalendarWorkspaceRef"] | null;
             metadata: components["schemas"]["CalendarEventMetadata"];
         };
         /** CalendarEventsResponse */
         CalendarEventsResponse: {
             /** Items */
             items: components["schemas"]["CalendarEventOut"][];
-        };
-        /** CalendarWorkspaceRef */
-        CalendarWorkspaceRef: {
-            /** Id */
-            id: string;
-            /** Slug */
-            slug: string;
-            /** Name */
-            name: string;
         };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
@@ -9847,16 +9776,10 @@ export interface components {
             /** Icon Key */
             icon_key: string;
             /**
-             * Availability Scope
-             * @default workspace
-             * @enum {string}
-             */
-            availability_scope: "platform" | "workspace";
-            /**
              * Execution Context Kind
              * @enum {string}
              */
-            execution_context_kind: "personal" | "company" | "workspace";
+            execution_context_kind: "personal" | "company";
             /** Enabled */
             enabled: boolean;
             /** Runtime Enabled */
@@ -9880,6 +9803,32 @@ export interface components {
         CompanyAppControlsUpdateRequest: {
             /** Items */
             items: components["schemas"]["CompanyAppControlUpdateItem"][];
+        };
+        /** CompanyDirectoryPeopleResponse */
+        CompanyDirectoryPeopleResponse: {
+            /** Items */
+            items: components["schemas"]["CompanyDirectoryPersonResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
+        /** CompanyDirectoryPersonResponse */
+        CompanyDirectoryPersonResponse: {
+            /** Id */
+            id: string;
+            /** Display Name */
+            display_name: string;
+            /** Primary Organization Unit Id */
+            primary_organization_unit_id: string | null;
+            /** Job Title */
+            job_title: string | null;
+            /** Managed Organization Unit Ids */
+            managed_organization_unit_ids: string[];
+            /** Is Department Head */
+            is_department_head: boolean;
         };
         /** ConversationBoundChatRequest */
         ConversationBoundChatRequest: {
@@ -10088,11 +10037,16 @@ export interface components {
             /** Title */
             title: string;
             /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
+            /**
              * Visibility
              * @default personal
              * @enum {string}
              */
-            visibility: "personal" | "workspace";
+            visibility: "personal" | "company";
             /** Document Json */
             document_json?: string | null;
         };
@@ -10101,11 +10055,16 @@ export interface components {
             /** Title */
             title: string;
             /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
+            /**
              * Visibility
              * @default personal
              * @enum {string}
              */
-            visibility: "personal" | "workspace";
+            visibility: "personal" | "company";
             /**
              * Xml
              * @default <mxfile host="Open Work Hub"><diagram id="page-1" name="Page-1"><mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>
@@ -10116,6 +10075,16 @@ export interface components {
         };
         /** CreateDocItemRequest */
         CreateDocItemRequest: {
+            /**
+             * Company Visible
+             * @default false
+             */
+            company_visible: boolean;
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** Title */
             title: string;
             /** First Page Title */
@@ -10188,10 +10157,10 @@ export interface components {
             name: string;
             /**
              * Scope
-             * @default workspace
+             * @default private
              * @enum {string}
              */
-            scope: "workspace" | "private";
+            scope: "company" | "private";
             /**
              * Sort Order
              * @default 0
@@ -10200,6 +10169,11 @@ export interface components {
         };
         /** CreateWhiteboardContextSlotRequest */
         CreateWhiteboardContextSlotRequest: {
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** App */
             app: string;
             /** Type */
@@ -10214,6 +10188,16 @@ export interface components {
         };
         /** CreateWhiteboardRequest */
         CreateWhiteboardRequest: {
+            /**
+             * Company Visible
+             * @default false
+             */
+            company_visible: boolean;
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** Title */
             title: string;
             /** Scene */
@@ -10369,15 +10353,13 @@ export interface components {
         DiagramDetail: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Title */
             title: string;
             /**
              * Visibility
              * @enum {string}
              */
-            visibility: "personal" | "workspace";
+            visibility: "personal" | "company";
             /** Version */
             version: number;
             /** Created By Id */
@@ -10427,15 +10409,13 @@ export interface components {
         DiagramItem: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Title */
             title: string;
             /**
              * Visibility
              * @enum {string}
              */
-            visibility: "personal" | "workspace";
+            visibility: "personal" | "company";
             /** Version */
             version: number;
             /** Created By Id */
@@ -10654,10 +10634,6 @@ export interface components {
             size_bytes: number;
             /** Is Image */
             is_image: boolean;
-            /** Download Url */
-            download_url: string;
-            /** Preview Url */
-            preview_url?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -10748,8 +10724,45 @@ export interface components {
             /** Display Name */
             display_name?: string | null;
         };
+        /** DocCompanySharingRequest */
+        DocCompanySharingRequest: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
+        };
+        /** DocGroupShareRequest */
+        DocGroupShareRequest: {
+            /**
+             * Access Level
+             * @enum {string}
+             */
+            access_level: "read" | "edit";
+        };
+        /** DocGroupShareResponse */
+        DocGroupShareResponse: {
+            /** Group Id */
+            group_id: string;
+            /** Name */
+            name: string;
+            /** Active */
+            active: boolean;
+            /**
+             * Access Level
+             * @enum {string}
+             */
+            access_level: "read" | "edit";
+        };
         /** DocTargetPayload */
         DocTargetPayload: {
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** App */
             app: string;
             /** Type */
@@ -10835,9 +10848,7 @@ export interface components {
              * Scope
              * @enum {string}
              */
-            scope: "workspace" | "private";
-            /** Workspace Id */
-            workspace_id: string;
+            scope: "company" | "private";
             /** Owner Id */
             owner_id?: string | null;
             /** Sort Order */
@@ -10873,10 +10884,17 @@ export interface components {
              * Scope
              * @enum {string}
              */
-            scope: "workspace" | "private";
+            scope: "company" | "private";
         };
         /** DocsHubItem */
         DocsHubItem: {
+            /**
+             * Ownership Kind
+             * @enum {string}
+             */
+            ownership_kind: "personal" | "company";
+            /** Company Visible */
+            company_visible: boolean;
             /** Id */
             id: string;
             /** Source App */
@@ -11207,28 +11225,6 @@ export interface components {
              */
             language: "auto" | "ko" | "en";
         };
-        /** EligibleWorkspaceResponse */
-        EligibleWorkspaceResponse: {
-            /** Id */
-            id: string;
-            /** Slug */
-            slug: string;
-            /** Name */
-            name: string;
-        };
-        /** EligibleWorkspacesResponse */
-        EligibleWorkspacesResponse: {
-            /** App Id */
-            app_id: string;
-            /** Items */
-            items: components["schemas"]["EligibleWorkspaceResponse"][];
-            /** Total */
-            total: number;
-            /** Page */
-            page: number;
-            /** Page Size */
-            page_size: number;
-        };
         /** EntityTypeFacet */
         EntityTypeFacet: {
             /** Value */
@@ -11303,13 +11299,11 @@ export interface components {
             id: string;
             /** Name */
             name: string;
-            /** Managed Workspace Id */
-            managed_workspace_id: string;
             /**
              * Access Scope Kind
-             * @enum {string}
+             * @constant
              */
-            access_scope_kind: "workspace" | "company";
+            access_scope_kind: "company";
             /** Retrieval Partition Id */
             retrieval_partition_id: string;
             /** Metadata Version */
@@ -11327,22 +11321,6 @@ export interface components {
              */
             updated_at: string;
         };
-        /** FileCorpusTransitionRequest */
-        FileCorpusTransitionRequest: {
-            /** Expected Metadata Version */
-            expected_metadata_version: number;
-            /**
-             * Access Scope Kind
-             * @enum {string}
-             */
-            access_scope_kind: "workspace" | "company";
-            /** Reason */
-            reason: string;
-            /** Target Workspace Id */
-            target_workspace_id?: string | null;
-            /** Request Id */
-            request_id?: string | null;
-        };
         /** FileDownloadResponse */
         FileDownloadResponse: {
             /** Url */
@@ -11350,6 +11328,11 @@ export interface components {
         };
         /** FileFolderCreateRequest */
         FileFolderCreateRequest: {
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** Name */
             name: string;
             /** Parent Id */
@@ -11359,7 +11342,7 @@ export interface components {
              * @default private
              * @enum {string}
              */
-            visibility: "private" | "workspace";
+            visibility: "private" | "company";
             /** Corpus Id */
             corpus_id?: string | null;
         };
@@ -11397,7 +11380,7 @@ export interface components {
             /** Name */
             name?: string | null;
             /** Visibility */
-            visibility?: ("workspace" | "private") | null;
+            visibility?: ("company" | "private") | null;
         };
         /** FileItem */
         FileItem: {
@@ -11611,11 +11594,16 @@ export interface components {
              */
             language: "auto" | "ko" | "en";
             /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
+            /**
              * Visibility
              * @default personal
-             * @enum {string}
+             * @constant
              */
-            visibility: "personal" | "workspace";
+            visibility: "personal";
         };
         /** GlobalNotificationItem */
         GlobalNotificationItem: {
@@ -11633,8 +11621,6 @@ export interface components {
             source_id: string | null;
             /** Origin App Id */
             origin_app_id: string;
-            /** Origin Workspace Id */
-            origin_workspace_id: string | null;
             /** Action Url */
             action_url?: string | null;
             /** Is Read */
@@ -11660,6 +11646,76 @@ export interface components {
         GlobalUnreadCountResponse: {
             /** Count */
             count: number;
+        };
+        /** GroupCreateRequest */
+        GroupCreateRequest: {
+            /** Name */
+            name: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+        };
+        /** GroupListResponse */
+        GroupListResponse: {
+            /** Items */
+            items: components["schemas"]["GroupResponse"][];
+            /** Total */
+            total: number;
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+        };
+        /** GroupMembersRequest */
+        GroupMembersRequest: {
+            /** User Ids */
+            user_ids: string[];
+        };
+        /** GroupMembersResponse */
+        GroupMembersResponse: {
+            /** Group Id */
+            group_id: string;
+            /** User Ids */
+            user_ids: string[];
+        };
+        /** GroupResponse */
+        GroupResponse: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "manual" | "organization";
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /** Organization Unit Id */
+            organization_unit_id: string | null;
+            /** Active */
+            active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** GroupUpdateRequest */
+        GroupUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Active */
+            active?: boolean | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -11988,8 +12044,6 @@ export interface components {
             artifact_retention_days: number;
             /** Max Sessions Per User */
             max_sessions_per_user: number;
-            /** Max Sessions Per Workspace User */
-            max_sessions_per_workspace_user: number;
             /** Workspace Live Max Bytes */
             workspace_live_max_bytes: number;
         };
@@ -12117,8 +12171,6 @@ export interface components {
         };
         /** KeywordSearchRequest */
         KeywordSearchRequest: {
-            /** Workspace Id */
-            workspace_id?: string | null;
             /**
              * Query
              * @default
@@ -12708,8 +12760,6 @@ export interface components {
         MeetingDetail: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Organizer Id */
             organizer_id: string;
             /** Organizer Name */
@@ -13161,6 +13211,8 @@ export interface components {
              * @default true
              */
             active: boolean;
+            /** Head User Id */
+            head_user_id?: string | null;
         };
         /** OrganizationUnitResponse */
         OrganizationUnitResponse: {
@@ -13176,6 +13228,8 @@ export interface components {
             parent_id: string | null;
             /** Active */
             active: boolean;
+            /** Head User Id */
+            head_user_id?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -13199,6 +13253,8 @@ export interface components {
             unit_type: string;
             /** Active */
             active: boolean;
+            /** Head User Id */
+            head_user_id?: string | null;
         };
         /** OrganizationUnitUpdateRequest */
         OrganizationUnitUpdateRequest: {
@@ -13212,6 +13268,8 @@ export interface components {
             parent_id?: string | null;
             /** Active */
             active?: boolean | null;
+            /** Head User Id */
+            head_user_id?: string | null;
         };
         /** PersonalMemoOut */
         PersonalMemoOut: {
@@ -13242,8 +13300,6 @@ export interface components {
             page: number;
             /** Page Size */
             page_size: number;
-            /** Workspaces */
-            workspaces?: components["schemas"]["PersonalPmsWorkspaceOut"][];
         };
         /** PersonalPmsTaskOut */
         PersonalPmsTaskOut: {
@@ -13331,18 +13387,6 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            workspace: components["schemas"]["PersonalPmsWorkspaceOut"];
-        };
-        /** PersonalPmsWorkspaceOut */
-        PersonalPmsWorkspaceOut: {
-            /** Id */
-            id: string;
-            /** Slug */
-            slug: string;
-            /** Name */
-            name: string;
-            /** Role */
-            role?: string | null;
         };
         /** PersonalTodoCreateRequest */
         PersonalTodoCreateRequest: {
@@ -13549,49 +13593,6 @@ export interface components {
             /** Operations */
             operations: components["schemas"]["PlatformApiScopeOperationResponse"][];
         };
-        /** PlatformAppsBootstrapAppResponse */
-        PlatformAppsBootstrapAppResponse: {
-            /** App Id */
-            app_id: string;
-            /** Title */
-            title: string;
-            /** Route Base */
-            route_base: string;
-            /** Entry Route Id */
-            entry_route_id: string;
-            /** Icon Key */
-            icon_key: string;
-            /**
-             * Execution Context Kind
-             * @enum {string}
-             */
-            execution_context_kind: "personal" | "company" | "workspace";
-            /**
-             * Resource Scope
-             * @enum {string}
-             */
-            resource_scope: "personal" | "company" | "workspace" | "hybrid";
-            /**
-             * Coming Soon
-             * @default false
-             */
-            coming_soon: boolean;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            availability_scope: "platform";
-            /**
-             * Eligible Workspace Count
-             * @default 0
-             * @constant
-             */
-            eligible_workspace_count: 0;
-            /** Preferred Workspace */
-            preferred_workspace?: null;
-            /** Single Eligible Workspace */
-            single_eligible_workspace?: null;
-        };
         /** PmsViewPreferencesResponse */
         PmsViewPreferencesResponse: {
             /**
@@ -13651,7 +13652,7 @@ export interface components {
         };
         /** RagQueryHit */
         RagQueryHit: {
-            /** @default workspace */
+            /** @default company */
             scope_kind: components["schemas"]["RagScopeKind"];
             /** Source Kind */
             source_kind: string;
@@ -13659,8 +13660,6 @@ export interface components {
             resource_type: string;
             /** Resource Id */
             resource_id: string;
-            /** Workspace Id */
-            workspace_id?: string | null;
             /** Title */
             title?: string | null;
             /** Summary */
@@ -13743,7 +13742,7 @@ export interface components {
          * RagScopeKind
          * @enum {string}
          */
-        RagScopeKind: "workspace" | "company";
+        RagScopeKind: "company";
         /** RagSourceDescriptor */
         RagSourceDescriptor: {
             /** Source Kind */
@@ -13825,8 +13824,6 @@ export interface components {
         RecordingDetailOut: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Owner Id */
             owner_id: string;
             /** Title */
@@ -13886,8 +13883,6 @@ export interface components {
         RecordingListItem: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Owner Id */
             owner_id: string;
             /** Title */
@@ -14127,8 +14122,6 @@ export interface components {
         RecordingUploadOut: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Uploaded By Id */
             uploaded_by_id: string;
             /** Idempotency Key */
@@ -14284,8 +14277,6 @@ export interface components {
             resource_type: string;
             /** Resource Id */
             resource_id: string;
-            /** Workspace Id */
-            workspace_id?: string | null;
             /** Title */
             title?: string | null;
             /** Summary */
@@ -14441,8 +14432,6 @@ export interface components {
         RuntimeRunInspectionResponse: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Conversation Id */
             conversation_id: string;
             /** Requested By User Id */
@@ -14529,8 +14518,6 @@ export interface components {
             entity_type: string;
             /** Entity Id */
             entity_id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Title */
             title: string;
             /** Summary */
@@ -14724,14 +14711,32 @@ export interface components {
              */
             description: string;
         };
+        /** SpaceGroupBindingResponse */
+        SpaceGroupBindingResponse: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "viewer" | "member" | "admin";
+            /** Group Id */
+            group_id: string;
+            /** Name */
+            name: string;
+            /** Active */
+            active: boolean;
+        };
+        /** SpaceGroupRoleRequest */
+        SpaceGroupRoleRequest: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "viewer" | "member" | "admin";
+        };
         /** SpaceItem */
         SpaceItem: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
-            /** Workspace Key */
-            workspace_key: string;
             /** Key */
             key: string;
             /** Name */
@@ -15432,49 +15437,6 @@ export interface components {
             /** Label Ids */
             label_ids?: string[] | null;
         };
-        /** TeamItemResponse */
-        TeamItemResponse: {
-            /** Id */
-            id: string;
-            /** Workspace Id */
-            workspace_id: string;
-            /** Workspace Key */
-            workspace_key: string;
-            /** Key */
-            key: string;
-            /** Name */
-            name: string;
-            /** Description */
-            description: string;
-            /** Active */
-            active: boolean;
-            /** Member Count */
-            member_count: number;
-            /** Current User Role */
-            current_user_role?: string | null;
-        };
-        /** TeamMembersUpdateRequest */
-        TeamMembersUpdateRequest: {
-            /** User Ids */
-            user_ids?: string[];
-        };
-        /** TeamUpsertRequest */
-        TeamUpsertRequest: {
-            /** Key */
-            key?: string | null;
-            /** Name */
-            name: string;
-            /**
-             * Description
-             * @default
-             */
-            description: string;
-            /**
-             * Active
-             * @default true
-             */
-            active: boolean;
-        };
         /** ToggleFavoriteResponse */
         ToggleFavoriteResponse: {
             /** Is Favorite */
@@ -15504,8 +15466,13 @@ export interface components {
             version: number;
             /** Title */
             title?: string | null;
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** Visibility */
-            visibility?: ("personal" | "workspace") | null;
+            visibility?: ("personal" | "company") | null;
             /** Document Json */
             document_json?: string | null;
         };
@@ -15515,8 +15482,13 @@ export interface components {
             version: number;
             /** Title */
             title?: string | null;
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** Visibility */
-            visibility?: ("personal" | "workspace") | null;
+            visibility?: ("personal" | "company") | null;
             /** Xml */
             xml?: string | null;
             /** Preview Png Data Url */
@@ -15553,6 +15525,11 @@ export interface components {
         };
         /** UpdateDocTargetRequest */
         UpdateDocTargetRequest: {
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** App */
             app: string;
             /** Type */
@@ -15607,6 +15584,11 @@ export interface components {
         };
         /** UpdateWhiteboardTargetRequest */
         UpdateWhiteboardTargetRequest: {
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** App */
             app: string;
             /** Type */
@@ -15651,8 +15633,6 @@ export interface components {
             app_id: string;
             /** Event Type */
             event_type: string;
-            /** Workspace Id */
-            workspace_id?: string | null;
             /** Content Kind */
             content_kind?: string | null;
             /** Content Id */
@@ -15729,8 +15709,6 @@ export interface components {
         VideoChatSessionOut: {
             /** Id */
             id: string;
-            /** Workspace Id */
-            workspace_id: string;
             /** Meeting Id */
             meeting_id: string | null;
             /** Room Name */
@@ -15851,12 +15829,29 @@ export interface components {
              */
             last_snapshot_at: string;
         };
+        /** WhiteboardCompanySharingRequest */
+        WhiteboardCompanySharingRequest: {
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
+        };
         /** WhiteboardContextSlotResponse */
         WhiteboardContextSlotResponse: {
             item?: components["schemas"]["WhiteboardDetail"] | null;
         };
         /** WhiteboardDetail */
         WhiteboardDetail: {
+            /**
+             * Ownership Kind
+             * @enum {string}
+             */
+            ownership_kind: "personal" | "company";
+            /** Company Visible */
+            company_visible: boolean;
             /** Id */
             id: string;
             /** Source App */
@@ -15923,8 +15918,37 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** WhiteboardGroupShareRequest */
+        WhiteboardGroupShareRequest: {
+            /**
+             * Access Level
+             * @enum {string}
+             */
+            access_level: "read" | "edit";
+        };
+        /** WhiteboardGroupShareResponse */
+        WhiteboardGroupShareResponse: {
+            /** Group Id */
+            group_id: string;
+            /** Name */
+            name: string;
+            /** Active */
+            active: boolean;
+            /**
+             * Access Level
+             * @enum {string}
+             */
+            access_level: "read" | "edit";
+        };
         /** WhiteboardHubItem */
         WhiteboardHubItem: {
+            /**
+             * Ownership Kind
+             * @enum {string}
+             */
+            ownership_kind: "personal" | "company";
+            /** Company Visible */
+            company_visible: boolean;
             /** Id */
             id: string;
             /** Source App */
@@ -16048,6 +16072,11 @@ export interface components {
         };
         /** WhiteboardTargetPayload */
         WhiteboardTargetPayload: {
+            /**
+             * Company Admin Read Acknowledged
+             * @default false
+             */
+            company_admin_read_acknowledged: boolean;
             /** App */
             app: string;
             /** Type */
@@ -16073,471 +16102,6 @@ export interface components {
              * @enum {string}
              */
             access_level: "read" | "edit";
-        };
-        /** WorkspaceAppDefaultItemResponse */
-        WorkspaceAppDefaultItemResponse: {
-            /** App Id */
-            app_id: string;
-            /** Title */
-            title: string;
-            /** Route Base */
-            route_base: string;
-            /** Icon Key */
-            icon_key: string;
-            /**
-             * Execution Context Kind
-             * @default workspace
-             * @constant
-             */
-            execution_context_kind: "workspace";
-            /** Company Enabled */
-            company_enabled: boolean;
-            /** Enabled */
-            enabled: boolean;
-            /** Runtime Enabled */
-            runtime_enabled: boolean;
-            /** Updated At */
-            updated_at?: string | null;
-        };
-        /** WorkspaceAppDefaultUpdateItem */
-        WorkspaceAppDefaultUpdateItem: {
-            /** App Id */
-            app_id: string;
-            /** Enabled */
-            enabled: boolean;
-        };
-        /** WorkspaceAppDefaultsResponse */
-        WorkspaceAppDefaultsResponse: {
-            /** Items */
-            items: components["schemas"]["WorkspaceAppDefaultItemResponse"][];
-        };
-        /** WorkspaceAppDefaultsUpdateRequest */
-        WorkspaceAppDefaultsUpdateRequest: {
-            /** Items */
-            items: components["schemas"]["WorkspaceAppDefaultUpdateItem"][];
-        };
-        /** WorkspaceAppOverrideItemResponse */
-        WorkspaceAppOverrideItemResponse: {
-            /** App Id */
-            app_id: string;
-            /** Title */
-            title: string;
-            /** Route Base */
-            route_base: string;
-            /** Icon Key */
-            icon_key: string;
-            /**
-             * Execution Context Kind
-             * @default workspace
-             * @constant
-             */
-            execution_context_kind: "workspace";
-            /** Company Enabled */
-            company_enabled: boolean;
-            /** Default Enabled */
-            default_enabled: boolean;
-            /** Override Enabled */
-            override_enabled?: boolean | null;
-            /** Effective Enabled */
-            effective_enabled: boolean;
-            /** Runtime Enabled */
-            runtime_enabled: boolean;
-            /** Updated At */
-            updated_at?: string | null;
-        };
-        /** WorkspaceAppOverrideUpdateItem */
-        WorkspaceAppOverrideUpdateItem: {
-            /** App Id */
-            app_id: string;
-            /** Enabled */
-            enabled?: boolean | null;
-        };
-        /** WorkspaceAppOverridesResponse */
-        WorkspaceAppOverridesResponse: {
-            /** Workspace Id */
-            workspace_id: string;
-            /** Workspace Key */
-            workspace_key: string;
-            /** Workspace Name */
-            workspace_name: string;
-            /** Items */
-            items: components["schemas"]["WorkspaceAppOverrideItemResponse"][];
-        };
-        /** WorkspaceAppOverridesUpdateRequest */
-        WorkspaceAppOverridesUpdateRequest: {
-            /** Items */
-            items: components["schemas"]["WorkspaceAppOverrideUpdateItem"][];
-        };
-        /** WorkspaceAppsBootstrapAppResponse */
-        WorkspaceAppsBootstrapAppResponse: {
-            /** App Id */
-            app_id: string;
-            /** Title */
-            title: string;
-            /** Route Base */
-            route_base: string;
-            /** Entry Route Id */
-            entry_route_id: string;
-            /** Icon Key */
-            icon_key: string;
-            /**
-             * Execution Context Kind
-             * @enum {string}
-             */
-            execution_context_kind: "personal" | "company" | "workspace";
-            /**
-             * Resource Scope
-             * @enum {string}
-             */
-            resource_scope: "personal" | "company" | "workspace" | "hybrid";
-            /**
-             * Coming Soon
-             * @default false
-             */
-            coming_soon: boolean;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            availability_scope: "workspace";
-            /** Eligible Workspace Count */
-            eligible_workspace_count: number;
-            preferred_workspace?: components["schemas"]["EligibleWorkspaceResponse"] | null;
-            single_eligible_workspace?: components["schemas"]["EligibleWorkspaceResponse"] | null;
-        };
-        /** WorkspaceBindingInput */
-        WorkspaceBindingInput: {
-            /** Subject Id */
-            subject_id: string;
-            /**
-             * Role
-             * @default member
-             */
-            role: string;
-        };
-        /** WorkspaceBindingItemResponse */
-        WorkspaceBindingItemResponse: {
-            /** Subject Id */
-            subject_id: string;
-            /**
-             * Subject Type
-             * @constant
-             */
-            subject_type: "user";
-            /** Subject Label */
-            subject_label: string;
-            /** Subject Secondary */
-            subject_secondary?: string | null;
-            /** Role */
-            role: string;
-        };
-        /** WorkspaceBindingsUpdateRequest */
-        WorkspaceBindingsUpdateRequest: {
-            /** Users */
-            users?: components["schemas"]["WorkspaceBindingInput"][];
-        };
-        /** WorkspaceBootstrapAppBarCategoryItemResponse */
-        WorkspaceBootstrapAppBarCategoryItemResponse: {
-            /** App Id */
-            app_id: string;
-            /** Title */
-            title: string;
-            /** Route Base */
-            route_base: string;
-            /** Icon Key */
-            icon_key: string;
-            /**
-             * Availability Scope
-             * @default workspace
-             * @enum {string}
-             */
-            availability_scope: "platform" | "workspace";
-            /** Enabled */
-            enabled: boolean;
-            /**
-             * Coming Soon
-             * @default false
-             */
-            coming_soon: boolean;
-            /**
-             * Position
-             * @default 0
-             */
-            position: number;
-        };
-        /** WorkspaceBootstrapAppBarCategoryResponse */
-        WorkspaceBootstrapAppBarCategoryResponse: {
-            /** Id */
-            id: string;
-            /** Key */
-            key: string;
-            /** Title */
-            title: string;
-            /** Icon Key */
-            icon_key: string;
-            /** Position */
-            position: number;
-            /** Items */
-            items: components["schemas"]["WorkspaceBootstrapAppBarCategoryItemResponse"][];
-        };
-        /** WorkspaceBootstrapAppResponse */
-        WorkspaceBootstrapAppResponse: {
-            /** App Id */
-            app_id: string;
-            /** Title */
-            title: string;
-            /** Route Base */
-            route_base: string;
-            /** Icon Key */
-            icon_key: string;
-            /** Enabled */
-            enabled: boolean;
-            /**
-             * Coming Soon
-             * @default false
-             */
-            coming_soon: boolean;
-            /** Nav Items */
-            nav_items: components["schemas"]["WorkspaceBootstrapNavItemResponse"][];
-        };
-        /** WorkspaceBootstrapKeywordSearchEntityTypeResponse */
-        WorkspaceBootstrapKeywordSearchEntityTypeResponse: {
-            /** Value */
-            value: string;
-            /** Label */
-            label: string;
-            /** Label Key */
-            label_key: string;
-        };
-        /** WorkspaceBootstrapKeywordSearchResponse */
-        WorkspaceBootstrapKeywordSearchResponse: {
-            /** Entity Types */
-            entity_types?: components["schemas"]["WorkspaceBootstrapKeywordSearchEntityTypeResponse"][];
-        };
-        /** WorkspaceBootstrapNavItemResponse */
-        WorkspaceBootstrapNavItemResponse: {
-            /** Id */
-            id: string;
-            /** App Id */
-            app_id: string;
-            /** Title */
-            title: string;
-            /** Category */
-            category: string;
-            /** Icon Key */
-            icon_key: string;
-            /** Link App Id */
-            link_app_id?: string | null;
-            /** Path Suffix */
-            path_suffix?: string | null;
-            /** Absolute Path */
-            absolute_path?: string | null;
-            /**
-             * Coming Soon
-             * @default false
-             */
-            coming_soon: boolean;
-        };
-        /** WorkspaceBootstrapResponse */
-        WorkspaceBootstrapResponse: {
-            workspace: components["schemas"]["WorkspaceBootstrapWorkspaceResponse"];
-            /** Apps */
-            apps: components["schemas"]["WorkspaceBootstrapAppResponse"][];
-            /** App Bar Categories */
-            app_bar_categories?: components["schemas"]["WorkspaceBootstrapAppBarCategoryResponse"][];
-            /** Nav */
-            nav: components["schemas"]["WorkspaceBootstrapNavItemResponse"][];
-            /** Chatbot App Ids */
-            chatbot_app_ids?: string[];
-            keyword_search?: components["schemas"]["WorkspaceBootstrapKeywordSearchResponse"];
-        };
-        /** WorkspaceBootstrapWorkspaceResponse */
-        WorkspaceBootstrapWorkspaceResponse: {
-            /** Id */
-            id: string;
-            /** Slug */
-            slug: string;
-            /** Name */
-            name: string;
-            /** Role */
-            role: string;
-        };
-        /** WorkspaceItemResponse */
-        WorkspaceItemResponse: {
-            /** Id */
-            id: string;
-            /** Key */
-            key: string;
-            /** Name */
-            name: string;
-            /** Description */
-            description: string;
-            /** Active */
-            active: boolean;
-            /** Team Count */
-            team_count: number;
-            /**
-             * Member Count
-             * @default 0
-             */
-            member_count: number;
-            /**
-             * Meeting Count
-             * @default 0
-             */
-            meeting_count: number;
-            /**
-             * Doc Count
-             * @default 0
-             */
-            doc_count: number;
-            /** Created At */
-            created_at?: string | null;
-            /** Updated At */
-            updated_at?: string | null;
-        };
-        /** WorkspaceMemberBulkRequest */
-        WorkspaceMemberBulkRequest: {
-            /**
-             * Action
-             * @enum {string}
-             */
-            action: "add" | "remove" | "update_role";
-            /** Subjects */
-            subjects: components["schemas"]["WorkspaceMemberBulkSubject"][];
-        };
-        /** WorkspaceMemberBulkResponse */
-        WorkspaceMemberBulkResponse: {
-            /** Succeeded */
-            succeeded: number;
-            /** Failed */
-            failed?: {
-                [key: string]: string;
-            }[];
-        };
-        /** WorkspaceMemberBulkSubject */
-        WorkspaceMemberBulkSubject: {
-            /**
-             * Subject Type
-             * @constant
-             */
-            subject_type: "user";
-            /** Subject Id */
-            subject_id: string;
-            /** Role */
-            role?: string | null;
-        };
-        /** WorkspaceMemberCandidateResponse */
-        WorkspaceMemberCandidateResponse: {
-            /** Id */
-            id: string;
-            /** Email */
-            email: string;
-            /** Full Name */
-            full_name: string;
-            /** Display Name */
-            display_name: string;
-            /** Status */
-            status: string;
-        };
-        /** WorkspaceMemberItemResponse */
-        WorkspaceMemberItemResponse: {
-            /** Subject Id */
-            subject_id: string;
-            /**
-             * Subject Type
-             * @constant
-             */
-            subject_type: "user";
-            /** Subject Label */
-            subject_label: string;
-            /** Subject Secondary */
-            subject_secondary?: string | null;
-            /** Role */
-            role: string;
-            /** User Status */
-            user_status?: string | null;
-            /** Last Login At */
-            last_login_at?: string | null;
-            /** Created At */
-            created_at?: string | null;
-        };
-        /** WorkspaceMemberRoleCounts */
-        WorkspaceMemberRoleCounts: {
-            /**
-             * Admin
-             * @default 0
-             */
-            admin: number;
-            /**
-             * Member
-             * @default 0
-             */
-            member: number;
-        };
-        /** WorkspaceMemberRoleUpdateRequest */
-        WorkspaceMemberRoleUpdateRequest: {
-            /** Role */
-            role: string;
-        };
-        /** WorkspaceMemberUpsertRequest */
-        WorkspaceMemberUpsertRequest: {
-            /** Subject Id */
-            subject_id: string;
-            /**
-             * Subject Type
-             * @constant
-             */
-            subject_type: "user";
-            /**
-             * Role
-             * @default member
-             */
-            role: string;
-        };
-        /** WorkspaceMembersResponse */
-        WorkspaceMembersResponse: {
-            /** Items */
-            items: components["schemas"]["WorkspaceMemberItemResponse"][];
-            /** Total */
-            total: number;
-            /** Page */
-            page: number;
-            /** Page Size */
-            page_size: number;
-            role_counts: components["schemas"]["WorkspaceMemberRoleCounts"];
-            /** User Count */
-            user_count: number;
-            /** Pending Count */
-            pending_count: number;
-        };
-        /** WorkspaceSummaryResponse */
-        WorkspaceSummaryResponse: {
-            /** Id */
-            id: string;
-            /** Slug */
-            slug: string;
-            /** Name */
-            name: string;
-            /** Role */
-            role: string;
-        };
-        /** WorkspaceUpsertRequest */
-        WorkspaceUpsertRequest: {
-            /** Key */
-            key?: string | null;
-            /** Name */
-            name: string;
-            /**
-             * Description
-             * @default
-             */
-            description: string;
-            /**
-             * Active
-             * @default true
-             */
-            active: boolean;
         };
     };
     responses: never;
@@ -16743,37 +16307,6 @@ export interface operations {
                 "application/json": components["schemas"]["DevLoginRequest"];
             };
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthSessionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    auth_impersonate_user_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -17015,151 +16548,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AppsBootstrapResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    apps_get_eligible_workspaces_get: {
-        parameters: {
-            query?: {
-                q?: string | null;
-                slug?: string | null;
-                page?: number;
-                page_size?: number;
-            };
-            header?: never;
-            path: {
-                app_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EligibleWorkspacesResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    apps_update_app_workspace_preference_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                app_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AppWorkspacePreferenceRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AppWorkspacePreferenceResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    workspaces_get_workspace_bootstrap_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceBootstrapResponse"];
                 };
             };
             /** @description Authentication required. */
@@ -19085,197 +18473,6 @@ export interface operations {
             };
         };
     };
-    admin_list_workspace_app_defaults_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceAppDefaultsResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    admin_update_workspace_app_defaults_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceAppDefaultsUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceAppDefaultsResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_list_workspace_app_overrides_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceAppOverridesResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_update_workspace_app_overrides_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceAppOverridesUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceAppOverridesResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     admin_list_app_bar_categories_get: {
         parameters: {
             query?: never;
@@ -19794,883 +18991,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResetPasswordResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_list_workspaces_get: {
-        parameters: {
-            query?: {
-                include_archived?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceItemResponse"][];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_create_workspace_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceUpsertRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceItemResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_update_workspace_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceUpsertRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceItemResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_list_workspace_bindings_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceBindingItemResponse"][];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_replace_workspace_bindings_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceBindingsUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceBindingItemResponse"][];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_list_workspace_members_get: {
-        parameters: {
-            query?: {
-                q?: string | null;
-                role?: string[] | null;
-                subject_type?: "user" | null;
-                page?: number;
-                page_size?: number;
-                pending_only?: boolean;
-            };
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceMembersResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_add_workspace_member_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceMemberUpsertRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceBindingItemResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_remove_workspace_member_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-                subject_type: "user";
-                subject_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_update_workspace_member_role_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-                subject_type: "user";
-                subject_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceMemberRoleUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceBindingItemResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_bulk_workspace_members_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceMemberBulkRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceMemberBulkResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_list_workspace_member_candidates_get: {
-        parameters: {
-            query?: {
-                q?: string | null;
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceMemberCandidateResponse"][];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_list_teams_get: {
-        parameters: {
-            query?: {
-                workspace_id?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TeamItemResponse"][];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_create_team_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspace_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TeamUpsertRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TeamItemResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_delete_team_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_update_team_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TeamUpsertRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TeamItemResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_list_team_members_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminUserItemResponse"][];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_replace_team_members_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                team_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TeamMembersUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminUserItemResponse"][];
                 };
             };
             /** @description Authentication required. */
@@ -22963,6 +21283,509 @@ export interface operations {
             };
         };
     };
+    admin_groups_list_groups_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                page?: number;
+                page_size?: number;
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupListResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_groups_create_group_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_groups_update_group_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_groups_get_members_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupMembersResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_groups_replace_members_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupMembersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupMembersResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    directory_groups_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                ids?: string[] | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupListResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    directory_people_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                ids?: string[] | null;
+                page?: number;
+                page_size?: number;
+                organization_unit_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyDirectoryPeopleResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    directory_organizations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationUnitResponse"][];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_app_access_get_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppAccessPolicyResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_app_access_replace_policy_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppAccessPolicyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppAccessPolicyResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_platform_api_keys_get_platform_api_keys_get: {
         parameters: {
             query?: never;
@@ -23273,7 +22096,6 @@ export interface operations {
                 include_current?: boolean;
                 q?: string;
                 limit?: number;
-                workspace_key?: string | null;
             };
             header?: never;
             path?: never;
@@ -23903,41 +22725,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    dm_proxy_dm_attachment_content_get: {
-        parameters: {
-            query: {
-                expires: number;
-                signature: string;
-                disposition?: "attachment" | "inline";
-            };
-            header?: never;
-            path: {
-                attachment_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -24639,534 +23426,10 @@ export interface operations {
             };
         };
     };
-    docs_get_shared_doc_item_get: {
-        parameters: {
-            query: {
-                share_token: string;
-            };
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocsHubItem"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    docs_update_shared_doc_item_patch: {
-        parameters: {
-            query: {
-                share_token: string;
-            };
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateDocItemRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocsHubItem"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    docs_duplicate_shared_doc_item_post: {
-        parameters: {
-            query: {
-                share_token: string;
-            };
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocsHubItem"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    docs_list_shared_doc_pages_get: {
-        parameters: {
-            query: {
-                share_token: string;
-            };
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocsPageListResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    docs_create_shared_doc_page_post: {
-        parameters: {
-            query: {
-                share_token: string;
-            };
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateDocPageRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocsPageItem"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    docs_get_shared_doc_page_get: {
-        parameters: {
-            query: {
-                share_token: string;
-            };
-            header?: never;
-            path: {
-                page_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocsPageItem"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    docs_delete_shared_doc_page_delete: {
-        parameters: {
-            query: {
-                share_token: string;
-            };
-            header?: never;
-            path: {
-                page_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    docs_update_shared_doc_page_patch: {
-        parameters: {
-            query: {
-                share_token: string;
-            };
-            header?: never;
-            path: {
-                page_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateDocPageRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocsPageItem"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    docs_record_shared_doc_view_post: {
-        parameters: {
-            query: {
-                share_token: string;
-            };
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RecordViewRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    docs_resolve_shared_link_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                share_token: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResolveSharedLinkResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     docs_list_doc_collections_get: {
         parameters: {
             query?: {
-                scope?: ("workspace" | "private") | null;
+                scope?: ("company" | "private") | null;
             };
             header?: never;
             path?: never;
@@ -26692,6 +24955,55 @@ export interface operations {
             };
         };
     };
+    docs_resolve_shared_link_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolveSharedLinkResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     docs_get_docs_collab_session_get: {
         parameters: {
             query?: never;
@@ -26794,12 +25106,12 @@ export interface operations {
             };
         };
     };
-    whiteboard_resolve_whiteboard_shared_link_get: {
+    docs_list_group_shares_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                share_token: string;
+                item_id: string;
             };
             cookie?: never;
         };
@@ -26811,7 +25123,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ResolveWhiteboardSharedLinkResponse"];
+                    "application/json": components["schemas"]["DocGroupShareResponse"][];
                 };
             };
             /** @description Authentication required. */
@@ -26843,67 +25155,19 @@ export interface operations {
             };
         };
     };
-    whiteboard_get_shared_whiteboard_item_get: {
+    docs_upsert_group_share_put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                share_token: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WhiteboardDetail"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    whiteboard_update_shared_whiteboard_item_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                share_token: string;
+                item_id: string;
+                group_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateWhiteboardRequest"];
+                "application/json": components["schemas"]["DocGroupShareRequest"];
             };
         };
         responses: {
@@ -26913,7 +25177,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WhiteboardDetail"];
+                    "application/json": components["schemas"]["DocGroupShareResponse"];
                 };
             };
             /** @description Authentication required. */
@@ -26945,16 +25209,68 @@ export interface operations {
             };
         };
     };
-    whiteboard_record_shared_whiteboard_view_post: {
+    docs_delete_group_share_delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                share_token: string;
+                item_id: string;
+                group_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    docs_update_company_sharing_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocCompanySharingRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             204: {
@@ -27308,7 +25624,9 @@ export interface operations {
     };
     whiteboard_get_whiteboard_item_get: {
         parameters: {
-            query?: never;
+            query?: {
+                share_token?: string | null;
+            };
             header?: never;
             path: {
                 item_id: string;
@@ -27404,7 +25722,9 @@ export interface operations {
     };
     whiteboard_update_whiteboard_item_patch: {
         parameters: {
-            query?: never;
+            query?: {
+                share_token?: string | null;
+            };
             header?: never;
             path: {
                 item_id: string;
@@ -28059,6 +26379,204 @@ export interface operations {
             };
         };
     };
+    whiteboard_resolve_whiteboard_shared_link_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolveWhiteboardSharedLinkResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_get_shared_whiteboard_item_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardDetail"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_update_shared_whiteboard_item_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWhiteboardRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardDetail"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_record_shared_whiteboard_view_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     whiteboard_toggle_whiteboard_favorite_patch: {
         parameters: {
             query?: never;
@@ -28118,6 +26636,208 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_list_group_shares_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardGroupShareResponse"][];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_upsert_group_share_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WhiteboardGroupShareRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardGroupShareResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_delete_group_share_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_update_company_sharing_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WhiteboardCompanySharingRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             204: {
@@ -29312,59 +28032,6 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FileCorpusItem"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    files_transition_file_corpus_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                corpus_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FileCorpusTransitionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -34847,6 +33514,157 @@ export interface operations {
             };
         };
     };
+    pms_list_space_groups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpaceGroupBindingResponse"][];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pms_put_space_group_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpaceGroupRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpaceGroupBindingResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pms_delete_space_group_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     meeting_list_meetings_get: {
         parameters: {
             query?: {
@@ -38720,7 +37538,7 @@ export interface operations {
     announcements_list_announcements_route_get: {
         parameters: {
             query?: {
-                scope?: "workspace" | "company";
+                scope?: "company";
                 limit?: number;
             };
             header?: never;
@@ -38967,7 +37785,7 @@ export interface operations {
             };
         };
     };
-    retrieval_query_workspace_retrieval_post: {
+    retrieval_query_retrieval_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -39018,7 +37836,7 @@ export interface operations {
             };
         };
     };
-    retrieval_list_workspace_retrieval_sources_get: {
+    retrieval_list_retrieval_sources_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -39056,7 +37874,7 @@ export interface operations {
             };
         };
     };
-    rag_query_workspace_rag_post: {
+    rag_query_rag_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -39107,7 +37925,7 @@ export interface operations {
             };
         };
     };
-    rag_list_workspace_rag_sources_get: {
+    rag_list_rag_sources_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -39145,7 +37963,7 @@ export interface operations {
             };
         };
     };
-    rag_reindex_workspace_rag_post: {
+    rag_reindex_rag_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -39920,7 +38738,7 @@ export interface operations {
             };
         };
     };
-    search_query_workspace_search_post: {
+    search_query_search_post: {
         parameters: {
             query?: never;
             header?: never;

@@ -1,3 +1,5 @@
+import { ChevronDown, FolderKanban, Layout } from 'lucide-react';
+import { AnimatePresence, LazyMotion, domAnimation } from 'motion/react';
 import {
   useCallback,
   useEffect,
@@ -6,10 +8,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import { AnimatePresence, LazyMotion, domAnimation } from 'motion/react';
-import { ChevronDown, FolderKanban, Layout } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { runRequestsWithConcurrency } from '@/src/platform/network/request-concurrency';
@@ -26,13 +26,13 @@ import {
   listTaskListStatuses,
   reorderTaskListTasks,
   updateTask,
-  type TaskFilterParams,
   type PmsLabel,
   type PmsMilestone,
   type PmsTask,
   type PmsTaskList,
   type PmsTaskListMember,
   type PmsTaskListStatus,
+  type TaskFilterParams,
 } from '../api/pms-api';
 import {
   createDefaultTaskFilterParams,
@@ -41,19 +41,21 @@ import {
   withEffectiveTaskStatusFilter,
 } from '../api/pms-filters';
 import { taskListRoleAllows } from '../api/pms-permissions';
-import { FilterBar } from './FilterBar';
-import { getDefaultTaskStatus, getStatusSlugs } from './pms-constants';
 import { BoardView } from './BoardView';
 import { CalendarView } from './CalendarView';
+import { FilterBar } from './FilterBar';
 import { GanttView } from './GanttView';
 import { ListView } from './ListView';
-import { TableView } from './TableView';
 import {
   PmsCenteredLoadingState,
   PmsCenteredStateBlock,
 } from './PmsCenteredStateBlock';
+import { PmsSpaceToolTabs } from './PmsSpaceToolTabs';
+import { TableView } from './TableView';
 import { TaskDetail } from './TaskDetail';
 import { TaskDetailModal } from './TaskDetailModal';
+import { getDefaultTaskStatus, getStatusSlugs } from './pms-constants';
+import type { TaskBoardPositionUpdate } from './pms-task-hierarchy';
 import {
   findPmsTaskInBundles,
   getRequestedPmsTaskId,
@@ -61,10 +63,8 @@ import {
   resolvePmsTaskSelectedTransition,
   resolveRequestedPmsTaskTransition,
 } from './pms-task-selection-workflow';
-import { usePmsTaskListChangeSubscription } from './usePmsTaskListChangeSubscription';
-import { PmsSpaceToolTabs } from './PmsSpaceToolTabs';
 import type { PmsTaskListToolTab } from './pms-view-route';
-import type { TaskBoardPositionUpdate } from './pms-task-hierarchy';
+import { usePmsTaskListChangeSubscription } from './usePmsTaskListChangeSubscription';
 
 type ListBundle = {
   labels: PmsLabel[];
@@ -78,7 +78,6 @@ type SpaceTasksViewProps = {
   activeTab: PmsTaskListToolTab;
   spaceId: string;
   spaceName?: string | null;
-  workspaceSlug?: string | null;
 };
 
 const PMS_SPACE_TASKS_SPACE_MEMBER_CONCURRENCY = 4;
@@ -193,12 +192,10 @@ function useSpaceTasksViewElement({
   activeTab,
   spaceId,
   spaceName,
-  workspaceSlug,
 }: {
   activeTab: PmsTaskListToolTab;
   spaceId: string;
   spaceName?: string | null;
-  workspaceSlug?: string | null;
 }) {
   const { t, i18n } = useTranslation('apps');
   const locale = i18n.resolvedLanguage ?? i18n.language;
@@ -240,11 +237,7 @@ function useSpaceTasksViewElement({
     loadGenerationRef.current = loadGeneration;
     dispatch({ type: 'load:start' });
     try {
-      const listResponse = await listAllPmsTaskLists(
-        token,
-        spaceId,
-        workspaceSlug,
-      );
+      const listResponse = await listAllPmsTaskLists(token, spaceId);
       const sortedLists = sortTaskLists(
         listResponse.items.filter(
           (taskList) => !taskList.archived && taskList.team_id === spaceId,
@@ -263,11 +256,7 @@ function useSpaceTasksViewElement({
         PMS_SPACE_TASKS_SPACE_MEMBER_CONCURRENCY,
         async (spaceId) => {
           try {
-            const response = await listSpaceMembers(
-              token,
-              spaceId,
-              workspaceSlug,
-            );
+            const response = await listSpaceMembers(token, spaceId);
             return [spaceId, response.items] as const;
           } catch {
             return [spaceId, [] as PmsTaskListMember[]] as const;
@@ -295,7 +284,6 @@ function useSpaceTasksViewElement({
                 token,
                 taskList.id,
                 withEffectiveTaskStatusFilter(filterParams, response.items),
-                workspaceSlug,
               ),
             ),
             statusRequest,
@@ -333,7 +321,7 @@ function useSpaceTasksViewElement({
         message: getErrorMessage(caughtError, t('pms.errors.listDataFailed')),
       });
     }
-  }, [filterParams, locale, spaceId, t, token, workspaceSlug]);
+  }, [filterParams, locale, spaceId, t, token]);
 
   useEffect(() => {
     void reloadSpaceTasks();
@@ -359,7 +347,7 @@ function useSpaceTasksViewElement({
     }
 
     let cancelled = false;
-    getTaskDetail(token, transition.detailRequest.taskId, workspaceSlug)
+    getTaskDetail(token, transition.detailRequest.taskId)
       .then((detail) => {
         if (!cancelled) {
           dispatch({
@@ -380,7 +368,7 @@ function useSpaceTasksViewElement({
     return () => {
       cancelled = true;
     };
-  }, [bundles, loading, requestedTaskId, taskLists, token, workspaceSlug]);
+  }, [bundles, loading, requestedTaskId, taskLists, token]);
 
   const handleSelectIssue = useCallback(
     (task: PmsTask) => {
@@ -505,25 +493,20 @@ function useSpaceTasksViewElement({
       ) {
         return;
       }
-      const result = await reorderTaskListTasks(
-        token,
-        taskList.id,
-        {
-          items: updates.map((update) => {
-            const item: {
-              board_position: number;
-              parent_id?: string | null;
-              task_id: string;
-            } = {
-              board_position: update.boardPosition,
-              task_id: update.taskId,
-            };
-            if (update.parentId !== undefined) item.parent_id = update.parentId;
-            return item;
-          }),
-        },
-        workspaceSlug,
-      );
+      const result = await reorderTaskListTasks(token, taskList.id, {
+        items: updates.map((update) => {
+          const item: {
+            board_position: number;
+            parent_id?: string | null;
+            task_id: string;
+          } = {
+            board_position: update.boardPosition,
+            task_id: update.taskId,
+          };
+          if (update.parentId !== undefined) item.parent_id = update.parentId;
+          return item;
+        }),
+      });
       if (result.items.length === 0) return;
       const updatedById = new Map(
         result.items.map((item) => [item.id, item] as const),
@@ -538,7 +521,7 @@ function useSpaceTasksViewElement({
         dispatch({ type: 'selected:set', task: updatedSelectedIssue });
       }
     },
-    [bundles, selectedIssue, token, updateBundleIssues, workspaceSlug],
+    [bundles, selectedIssue, token, updateBundleIssues],
   );
 
   const visibleTasksByListId = useMemo(
@@ -682,7 +665,6 @@ function useSpaceTasksViewElement({
           activeTab={activeTab}
           className="mt-3"
           spaceId={spaceId}
-          workspaceSlug={workspaceSlug}
         />
       </header>
 
@@ -785,7 +767,6 @@ function useSpaceTasksViewElement({
                 onClose={handleClose}
                 onUpdate={reloadSpaceTasks}
                 spaceName={selectedTaskList?.team_name}
-                workspaceSlug={workspaceSlug}
               />
             </TaskDetailModal>
           ) : null}
@@ -800,6 +781,6 @@ function SpaceTasksViewSession(props: SpaceTasksViewProps) {
 }
 
 export function SpaceTasksView(props: SpaceTasksViewProps) {
-  const sessionKey = `${props.workspaceSlug ?? ''}:${props.spaceId}`;
+  const sessionKey = props.spaceId;
   return <SpaceTasksViewSession key={sessionKey} {...props} />;
 }

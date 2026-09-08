@@ -200,7 +200,7 @@ Scope:
 - Do not print secrets, tokens, raw prompts, MR note bodies, .env values, or customer/operations data.
 
 Focus:
-- Bugs, regressions, missing tests, security/auth/RBAC/workspace boundary breaks.
+- Bugs, regressions, missing tests, security/auth/RBAC/app and source ACL boundary breaks.
 - Violations of the trusted target-branch AGENTS.md policies appended to these instructions.
 - CI/agent policy changes that weaken gates or use MR-source code as trusted runner code.
 

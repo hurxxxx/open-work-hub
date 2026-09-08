@@ -10,7 +10,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import Base
-from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.docs import search_hooks as docs_search_hooks
 from open_work_hub_api.domains.meeting import search_hooks as meeting_search_hooks
 from open_work_hub_api.domains.retrieval.models import (
@@ -30,7 +29,7 @@ from open_work_hub_api.domains.search.entity_adapter_registry import (
     register_search_entity_adapter,
     reset_search_entity_adapters,
 )
-from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
+from open_work_hub_api.domains.docs.app_catalog import DOCS_APP
 from open_work_hub_api.domains.search.entity_registry import reset_search_entity_descriptors
 from open_work_hub_api.domains.search.models import SearchIndexJob
 from open_work_hub_api.domains.search.outbox import enqueue_search_index_job
@@ -45,20 +44,10 @@ def _session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
             SearchIndexJob.__table__,
         ],
     )
     session = Session(engine, expire_on_commit=False)
-    session.add(
-        Workspace(
-            id="ws-1",
-            key="ws-1",
-            name="Workspace 1",
-            description="",
-            active=True,
-        )
-    )
     session.commit()
     return session
 
@@ -68,7 +57,6 @@ def _projection_session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
             RetrievalPartition.__table__,
             RetrievalProjectionHead.__table__,
             RetrievalProjectionEvent.__table__,
@@ -78,20 +66,6 @@ def _projection_session() -> Session:
     session = Session(engine, expire_on_commit=False)
     session.add_all(
         [
-            Workspace(
-                id="ws-1",
-                key="ws-1",
-                name="Workspace 1",
-                description="",
-                active=True,
-            ),
-            Workspace(
-                id="ws-2",
-                key="ws-2",
-                name="Workspace 2",
-                description="",
-                active=True,
-            ),
             RetrievalPartition(
                 id=_PROJECTION_PARTITION_ID,
                 source_namespace="search-fence-test",
@@ -128,6 +102,55 @@ def _reset_search_registries() -> None:
     reset_search_projection_adapters()
 
 
+@pytest.mark.parametrize("operation", ["upsert", "delete"])
+def test_search_index_rechecks_app_after_loading_before_backend_mutation(monkeypatch, operation):
+    session = _session()
+    enabled = True
+    writes = []
+    published = []
+    _stub_celery(monkeypatch, published)
+
+    class Client:
+        def upsert_document(self, document):
+            writes.append(document)
+
+        def delete_document(self, **kwargs):
+            writes.append(kwargs)
+
+    def client_factory(db, job):
+        nonlocal enabled
+        if operation == "delete":
+            enabled = False
+        return Client()
+
+    def load_document(db, *, entity_type, entity_id):
+        nonlocal enabled
+        enabled = False
+        return {
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "title": "Fixture",
+            **_search_acl_fields(),
+        }
+
+    monkeypatch.setattr(search_indexing, "load_search_document", load_document)
+    try:
+        job = enqueue_search_index_job(
+            session, entity_type="doc", entity_id="revoked-doc", operation=operation
+        )
+        session.commit()
+        result = process_search_index_job(
+            session, job.id, client_factory=client_factory, execution_allowed=lambda *args: enabled
+        )
+        assert result == "app-disabled"
+        assert writes == []
+        session.refresh(job)
+        assert job.status == "pending" and job.attempts == 0
+        assert job.last_error == "app_disabled"
+    finally:
+        session.close()
+
+
 def _search_acl_fields() -> dict[str, object]:
     return {
         "owner_user_id": None,
@@ -135,6 +158,8 @@ def _search_acl_fields() -> dict[str, object]:
         "team_ids": [],
         "participant_user_ids": [],
         "shared_user_ids": [],
+        "shared_group_ids": [],
+        "ownership_kind": "personal",
         "granted_user_ids": [],
         "target_keys": [],
     }
@@ -143,14 +168,13 @@ def _search_acl_fields() -> dict[str, object]:
 def _register_extension_search_entity(entity_type: str = "plugin_external_record") -> None:
     register_search_entity_adapter(
         SearchEntityAdapter(
-            owner_app=DOCS_WORKSPACE_APP,
+            owner_app=DOCS_APP,
             entity_type=entity_type,
             resource_type="plugin_external_record",
             label="Plugin External Record",
             label_key="ai.search.entityPluginExternalRecord",
-            workspace_loader=lambda db, *, workspace: [],
+            company_loader=lambda db,: [],
             document_loader=lambda db, *, entity_type, entity_id: {
-                "workspace_id": "ws-1",
                 "entity_type": entity_type,
                 "entity_id": entity_id,
                 "title": "Plugin External Record",
@@ -167,7 +191,6 @@ def test_enqueue_search_index_job_persists_resource_job(monkeypatch) -> None:
         with session.begin():
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-1",
                 operation="upsert",
@@ -178,7 +201,7 @@ def test_enqueue_search_index_job_persists_resource_job(monkeypatch) -> None:
 
         stored = session.scalar(select(SearchIndexJob).where(SearchIndexJob.id == job.id))
         assert stored is not None
-        assert stored.workspace_id == "ws-1"
+        assert not hasattr(stored, "workspace_id")
         assert stored.entity_type == "doc"
         assert stored.entity_id == "doc-1"
         assert stored.operation == "upsert"
@@ -210,11 +233,9 @@ def test_versioned_enqueue_cross_workspace_higher_version_wins_over_late_delete(
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="delete",
                 desired_state="deleted",
-                diagnostic_workspace_id="ws-1",
             )
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-versioned",
                 operation="delete",
@@ -227,11 +248,9 @@ def test_versioned_enqueue_cross_workspace_higher_version_wins_over_late_delete(
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="content",
                 desired_state="active",
-                diagnostic_workspace_id="ws-2",
             )
             merged = enqueue_search_index_job(
                 session,
-                workspace_id="ws-2",
                 entity_type="doc",
                 entity_id="doc-versioned",
                 operation="upsert",
@@ -239,7 +258,6 @@ def test_versioned_enqueue_cross_workspace_higher_version_wins_over_late_delete(
             )
             ignored = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-versioned",
                 operation="delete",
@@ -249,7 +267,7 @@ def test_versioned_enqueue_cross_workspace_higher_version_wins_over_late_delete(
         assert merged.id == job.id == ignored.id
         stored = session.get(SearchIndexJob, job.id)
         assert stored is not None
-        assert stored.workspace_id == "ws-2"
+        assert not hasattr(stored, "workspace_id")
         assert stored.resource_type == "docs_native_doc"
         assert stored.projection_event_sequence == moved.event_sequence
         assert stored.projection_version == 2
@@ -276,18 +294,15 @@ def test_versioned_enqueue_is_idempotent_and_same_version_mismatch_fails(
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="content",
                 desired_state="active",
-                diagnostic_workspace_id="ws-1",
             )
             first = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-idempotent",
                 projection_event=projection_event,
             )
             second = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-idempotent",
                 projection_event=projection_event,
@@ -303,7 +318,6 @@ def test_versioned_enqueue_is_idempotent_and_same_version_mismatch_fails(
         with session.begin(), pytest.raises(ValueError, match="same-version"):
             enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-idempotent",
                 operation="upsert",
@@ -326,12 +340,10 @@ def test_versioned_enqueue_validates_adapter_and_event_snapshot(monkeypatch) -> 
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="content",
                 desired_state="active",
-                diagnostic_workspace_id="ws-1",
             )
             with pytest.raises(ValueError, match="resource_type"):
                 enqueue_search_index_job(
                     session,
-                    workspace_id="ws-1",
                     entity_type="doc",
                     entity_id="meeting-mismatch",
                     projection_event=projection_event,
@@ -339,7 +351,6 @@ def test_versioned_enqueue_validates_adapter_and_event_snapshot(monkeypatch) -> 
             with pytest.raises(ValueError, match="resource_id"):
                 enqueue_search_index_job(
                     session,
-                    workspace_id="ws-1",
                     entity_type="meeting",
                     entity_id="other-meeting",
                     projection_event=projection_event,
@@ -347,7 +358,6 @@ def test_versioned_enqueue_validates_adapter_and_event_snapshot(monkeypatch) -> 
             with pytest.raises(ValueError, match="event snapshot"):
                 enqueue_search_index_job(
                     session,
-                    workspace_id="ws-1",
                     entity_type="meeting",
                     entity_id="meeting-mismatch",
                     projection_event=replace(
@@ -358,7 +368,6 @@ def test_versioned_enqueue_validates_adapter_and_event_snapshot(monkeypatch) -> 
             with pytest.raises(ValueError, match="desired_state"):
                 enqueue_search_index_job(
                     session,
-                    workspace_id="ws-1",
                     entity_type="meeting",
                     entity_id="meeting-mismatch",
                     operation="delete",
@@ -382,11 +391,9 @@ def test_legacy_enqueue_cannot_overwrite_versioned_pending_snapshot(monkeypatch)
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="content",
                 desired_state="active",
-                diagnostic_workspace_id="ws-1",
             )
             versioned = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-versioned-legacy",
                 operation="upsert",
@@ -394,7 +401,6 @@ def test_legacy_enqueue_cannot_overwrite_versioned_pending_snapshot(monkeypatch)
             )
             legacy = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-versioned-legacy",
                 operation="delete",
@@ -417,7 +423,6 @@ def test_versioned_enqueue_upgrades_same_target_legacy_pending_job(monkeypatch) 
         with session.begin():
             legacy = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-legacy-upgrade",
             )
@@ -428,11 +433,9 @@ def test_versioned_enqueue_upgrades_same_target_legacy_pending_job(monkeypatch) 
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="content",
                 desired_state="active",
-                diagnostic_workspace_id="ws-1",
             )
             upgraded = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-legacy-upgrade",
                 projection_event=projection_event,
@@ -458,13 +461,11 @@ def test_pending_versioned_resource_identity_is_unique_across_workspaces() -> No
                     retrieval_partition_id=_PROJECTION_PARTITION_ID,
                     change_kind="content",
                     desired_state="active",
-                    diagnostic_workspace_id="ws-1",
                 )
                 session.add_all(
                     [
                         SearchIndexJob(
                             id="canonical-job-a",
-                            workspace_id="ws-1",
                             retrieval_partition_id=_PROJECTION_PARTITION_ID,
                             resource_type="docs_native_doc",
                             projection_event_sequence=projection_event.event_sequence,
@@ -479,7 +480,6 @@ def test_pending_versioned_resource_identity_is_unique_across_workspaces() -> No
                         ),
                         SearchIndexJob(
                             id="canonical-job-b",
-                            workspace_id="ws-2",
                             retrieval_partition_id=_PROJECTION_PARTITION_ID,
                             resource_type="docs_native_doc",
                             projection_event_sequence=projection_event.event_sequence,
@@ -510,7 +510,6 @@ def test_docs_hook_forwards_optional_projection_event(monkeypatch) -> None:
         desired_state="active",
         content_checksum=None,
         visibility_checksum=None,
-        diagnostic_workspace_id="ws-1",
     )
     captured: list[dict[str, object]] = []
     monkeypatch.setattr(
@@ -521,13 +520,14 @@ def test_docs_hook_forwards_optional_projection_event(monkeypatch) -> None:
 
     docs_search_hooks.enqueue_doc_search_index(
         object(),
-        doc=SimpleNamespace(id="doc-hook", workspace_id="ws-1"),
+        doc=SimpleNamespace(
+            id="doc-hook",
+        ),
         projection_event=projection_event,
     )
 
     assert captured == [
         {
-            "workspace_id": "ws-1",
             "entity_type": docs_search_hooks.SearchEntityType.DOC,
             "entity_id": "doc-hook",
             "operation": "upsert",
@@ -546,7 +546,6 @@ def test_meeting_search_only_hook_records_event_from_source_binding(monkeypatch)
                 session,
                 meeting=SimpleNamespace(
                     id="meeting-hook",
-                    workspace_id="ws-1",
                     retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 ),
             )
@@ -579,7 +578,6 @@ def test_enqueue_search_index_job_accepts_extension_resource_keys(monkeypatch) -
         with session.begin():
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="plugin_external_record",
                 entity_id=entity_id,
                 operation="upsert",
@@ -604,7 +602,6 @@ def test_enqueue_search_index_job_rejects_unregistered_upsert_entity_type(monkey
         with pytest.raises(ValueError, match="lacks projection adapter"):
             enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="plugin_typo",
                 entity_id="record-1",
                 operation="upsert",
@@ -625,14 +622,12 @@ def test_enqueue_search_index_job_dedupes_pending_rows_and_latest_operation_wins
         with session.begin():
             first = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-2",
                 operation="delete",
             )
             second = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-2",
                 operation="upsert",
@@ -658,7 +653,6 @@ def test_enqueue_search_index_job_does_not_publish_on_rollback(monkeypatch) -> N
             with session.begin():
                 enqueue_search_index_job(
                     session,
-                    workspace_id="ws-1",
                     entity_type="meeting",
                     entity_id="meeting-1",
                     operation="upsert",
@@ -680,7 +674,6 @@ def test_enqueue_search_index_job_ignores_nested_commit_before_outer_commit(monk
         with session.begin():
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-nested-commit",
                 operation="upsert",
@@ -702,7 +695,6 @@ def test_enqueue_search_index_job_keeps_publish_after_nested_rollback(monkeypatc
         with session.begin():
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-nested-rollback",
                 operation="upsert",
@@ -729,14 +721,13 @@ def test_process_search_index_job_upserts_loaded_projection(monkeypatch) -> None
         def upsert_document(self, document: dict) -> None:
             calls.append(("upsert", document))
 
-        def delete_document(self, *, workspace_id: str, entity_type: str, entity_id: str) -> None:
-            calls.append(("delete", (workspace_id, entity_type, entity_id)))
+        def delete_document(self, *, entity_type: str, entity_id: str) -> None:
+            calls.append(("delete", (entity_type, entity_id)))
 
     monkeypatch.setattr(
         search_indexing,
         "load_search_document",
         lambda db, entity_type, entity_id: {
-            "workspace_id": "ws-1",
             "entity_type": str(entity_type),
             "entity_id": entity_id,
             "title": "Doc",
@@ -748,7 +739,6 @@ def test_process_search_index_job_upserts_loaded_projection(monkeypatch) -> None
         with session.begin():
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-3",
                 operation="upsert",
@@ -764,7 +754,6 @@ def test_process_search_index_job_upserts_loaded_projection(monkeypatch) -> None
             (
                 "upsert",
                 {
-                    "workspace_id": "ws-1",
                     "entity_type": "doc",
                     "entity_id": "doc-3",
                     "title": "Doc",
@@ -786,7 +775,6 @@ def test_process_search_index_job_rechecks_policy_after_claim_before_client_reso
         with session.begin():
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-disabled",
                 operation="upsert",
@@ -822,8 +810,8 @@ def test_versioned_search_job_stale_head_skips_backend_mutation(monkeypatch) -> 
             del document
             raise AssertionError("stale versioned job must not upsert")
 
-        def delete_document(self, *, workspace_id: str, entity_type: str, entity_id: str) -> None:
-            del workspace_id, entity_type, entity_id
+        def delete_document(self, *, entity_type: str, entity_id: str) -> None:
+            del entity_type, entity_id
             raise AssertionError("stale versioned job must not delete")
 
     try:
@@ -835,11 +823,9 @@ def test_versioned_search_job_stale_head_skips_backend_mutation(monkeypatch) -> 
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="delete",
                 desired_state="deleted",
-                diagnostic_workspace_id="ws-1",
             )
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-stale-head",
                 operation="delete",
@@ -852,7 +838,6 @@ def test_versioned_search_job_stale_head_skips_backend_mutation(monkeypatch) -> 
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="content",
                 desired_state="active",
-                diagnostic_workspace_id="ws-2",
             )
 
         result = process_search_index_job(session, job.id, client=_FakeClient())
@@ -888,7 +873,6 @@ def test_versioned_non_files_search_job_keeps_legacy_upsert(
         search_indexing,
         "load_search_document",
         lambda db, entity_type, entity_id: {
-            "workspace_id": "ws-1",
             "entity_type": str(entity_type),
             "entity_id": entity_id,
             "title": "Legacy projection with a database fence",
@@ -904,11 +888,9 @@ def test_versioned_non_files_search_job_keeps_legacy_upsert(
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="content",
                 desired_state="active",
-                diagnostic_workspace_id="ws-1",
             )
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-versioned-legacy-upsert",
                 operation="upsert",
@@ -924,7 +906,6 @@ def test_versioned_non_files_search_job_keeps_legacy_upsert(
         assert result == "upserted"
         assert captured == [
             {
-                "workspace_id": "ws-1",
                 "entity_type": "doc",
                 "entity_id": "doc-versioned-legacy-upsert",
                 "title": "Legacy projection with a database fence",
@@ -943,11 +924,10 @@ def test_versioned_non_files_search_job_keeps_legacy_delete() -> None:
         def delete_document(
             self,
             *,
-            workspace_id: str,
             entity_type: str,
             entity_id: str,
         ) -> None:
-            captured.append((workspace_id, entity_type, entity_id))
+            captured.append((entity_type, entity_id))
 
         def delete_partitioned_document(self, **kwargs) -> str:
             del kwargs
@@ -962,11 +942,9 @@ def test_versioned_non_files_search_job_keeps_legacy_delete() -> None:
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="delete",
                 desired_state="deleted",
-                diagnostic_workspace_id="ws-1",
             )
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-versioned-legacy-delete",
                 operation="delete",
@@ -980,7 +958,7 @@ def test_versioned_non_files_search_job_keeps_legacy_delete() -> None:
         )
 
         assert result == "deleted"
-        assert captured == [("ws-1", "doc", "doc-versioned-legacy-delete")]
+        assert captured == [("doc", "doc-versioned-legacy-delete")]
     finally:
         session.close()
 
@@ -1009,7 +987,6 @@ def test_versioned_files_search_job_uses_partitioned_external_version_upsert(
         search_indexing,
         "load_search_document",
         lambda db, entity_type, entity_id: {
-            "workspace_id": "ws-1",
             "entity_type": str(entity_type),
             "entity_id": entity_id,
             "title": "Partitioned projection",
@@ -1025,11 +1002,9 @@ def test_versioned_files_search_job_uses_partitioned_external_version_upsert(
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="content",
                 desired_state="active",
-                diagnostic_workspace_id="ws-1",
             )
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="file",
                 entity_id="file-versioned-upsert",
                 operation="upsert",
@@ -1041,7 +1016,6 @@ def test_versioned_files_search_job_uses_partitioned_external_version_upsert(
         assert result == "upserted"
         assert captured == [
             {
-                "workspace_id": "ws-1",
                 "entity_type": "file",
                 "entity_id": "file-versioned-upsert",
                 "title": "Partitioned projection",
@@ -1083,11 +1057,9 @@ def test_versioned_files_search_job_uses_partitioned_external_version_delete() -
                 retrieval_partition_id=_PROJECTION_PARTITION_ID,
                 change_kind="delete",
                 desired_state="deleted",
-                diagnostic_workspace_id="ws-1",
             )
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="file",
                 entity_id="file-versioned-delete",
                 operation="delete",
@@ -1132,15 +1104,14 @@ def test_process_search_index_job_rejects_mismatched_projection_identity(monkeyp
             del document
             raise AssertionError("upsert should not run")
 
-        def delete_document(self, *, workspace_id: str, entity_type: str, entity_id: str) -> None:
-            del workspace_id, entity_type, entity_id
+        def delete_document(self, *, entity_type: str, entity_id: str) -> None:
+            del entity_type, entity_id
             raise AssertionError("delete should not run")
 
     monkeypatch.setattr(
         search_indexing,
         "load_search_document",
         lambda db, entity_type, entity_id: {
-            "workspace_id": "ws-other",
             "entity_type": str(entity_type),
             "entity_id": entity_id,
             "title": "Wrong workspace",
@@ -1151,7 +1122,6 @@ def test_process_search_index_job_rejects_mismatched_projection_identity(monkeyp
         with session.begin():
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-mismatch",
                 operation="upsert",
@@ -1179,8 +1149,8 @@ def test_process_search_index_job_deletes_when_projection_missing(monkeypatch) -
         def upsert_document(self, document: dict) -> None:
             calls.append(("upsert", document))
 
-        def delete_document(self, *, workspace_id: str, entity_type: str, entity_id: str) -> None:
-            calls.append(("delete", (workspace_id, entity_type, entity_id)))
+        def delete_document(self, *, entity_type: str, entity_id: str) -> None:
+            calls.append(("delete", (entity_type, entity_id)))
 
     monkeypatch.setattr(
         search_indexing, "load_search_document", lambda db, entity_type, entity_id: None
@@ -1190,7 +1160,6 @@ def test_process_search_index_job_deletes_when_projection_missing(monkeypatch) -
         with session.begin():
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="planner_event",
                 entity_id="event-1",
                 operation="delete",
@@ -1202,7 +1171,7 @@ def test_process_search_index_job_deletes_when_projection_missing(monkeypatch) -
         assert result == "deleted"
         assert stored is not None
         assert stored.status == "succeeded"
-        assert calls == [("delete", ("ws-1", "planner_event", "event-1"))]
+        assert calls == [("delete", ("planner_event", "event-1"))]
     finally:
         session.close()
 
@@ -1219,14 +1188,13 @@ def test_process_search_index_job_respects_delete_operation_when_projection_exis
         def upsert_document(self, document: dict) -> None:
             calls.append(("upsert", document))
 
-        def delete_document(self, *, workspace_id: str, entity_type: str, entity_id: str) -> None:
-            calls.append(("delete", (workspace_id, entity_type, entity_id)))
+        def delete_document(self, *, entity_type: str, entity_id: str) -> None:
+            calls.append(("delete", (entity_type, entity_id)))
 
     monkeypatch.setattr(
         search_indexing,
         "load_search_document",
         lambda db, entity_type, entity_id: {
-            "workspace_id": "ws-1",
             "entity_type": str(entity_type),
             "entity_id": entity_id,
             "title": "Still Present",
@@ -1237,7 +1205,6 @@ def test_process_search_index_job_respects_delete_operation_when_projection_exis
         with session.begin():
             job = enqueue_search_index_job(
                 session,
-                workspace_id="ws-1",
                 entity_type="doc",
                 entity_id="doc-delete",
                 operation="delete",
@@ -1249,7 +1216,7 @@ def test_process_search_index_job_respects_delete_operation_when_projection_exis
         assert result == "deleted"
         assert stored is not None
         assert stored.status == "succeeded"
-        assert calls == [("delete", ("ws-1", "doc", "doc-delete"))]
+        assert calls == [("delete", ("doc", "doc-delete"))]
     finally:
         session.close()
 
@@ -1263,15 +1230,14 @@ def test_process_search_index_job_fails_unregistered_upsert_entity_type() -> Non
             del document
             raise AssertionError("upsert should not run")
 
-        def delete_document(self, *, workspace_id: str, entity_type: str, entity_id: str) -> None:
-            del workspace_id, entity_type, entity_id
+        def delete_document(self, *, entity_type: str, entity_id: str) -> None:
+            del entity_type, entity_id
             raise AssertionError("delete should not run")
 
     try:
         with session.begin():
             job = SearchIndexJob(
                 id="job-unknown-upsert",
-                workspace_id="ws-1",
                 entity_type="plugin_typo",
                 entity_id="record-1",
                 operation="upsert",
@@ -1302,8 +1268,8 @@ def test_process_search_index_job_ignores_fresh_processing_delivery() -> None:
             del document
             calls.append("upsert")
 
-        def delete_document(self, *, workspace_id: str, entity_type: str, entity_id: str) -> None:
-            del workspace_id, entity_type, entity_id
+        def delete_document(self, *, entity_type: str, entity_id: str) -> None:
+            del entity_type, entity_id
             calls.append("delete")
 
     try:
@@ -1311,7 +1277,6 @@ def test_process_search_index_job_ignores_fresh_processing_delivery() -> None:
             session.add(
                 SearchIndexJob(
                     id="job-processing-fresh",
-                    workspace_id="ws-1",
                     entity_type="doc",
                     entity_id="doc-processing-fresh",
                     operation="delete",
@@ -1346,15 +1311,14 @@ def test_process_search_index_job_reclaims_stale_processing_delivery() -> None:
         def upsert_document(self, document: dict) -> None:
             calls.append(("upsert", document))
 
-        def delete_document(self, *, workspace_id: str, entity_type: str, entity_id: str) -> None:
-            calls.append(("delete", (workspace_id, entity_type, entity_id)))
+        def delete_document(self, *, entity_type: str, entity_id: str) -> None:
+            calls.append(("delete", (entity_type, entity_id)))
 
     try:
         with session.begin():
             session.add(
                 SearchIndexJob(
                     id="job-processing-stale",
-                    workspace_id="ws-1",
                     entity_type="doc",
                     entity_id="doc-processing-stale",
                     operation="delete",
@@ -1376,6 +1340,6 @@ def test_process_search_index_job_reclaims_stale_processing_delivery() -> None:
         assert stored is not None
         assert stored.status == "succeeded"
         assert stored.attempts == 2
-        assert calls == [("delete", ("ws-1", "doc", "doc-processing-stale"))]
+        assert calls == [("delete", ("doc", "doc-processing-stale"))]
     finally:
         session.close()

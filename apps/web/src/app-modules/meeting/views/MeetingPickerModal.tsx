@@ -1,15 +1,18 @@
+import { useAppAdmission } from '@/src/platform/apps/app-bootstrap-context';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { NoAccessNotice } from '@/src/components/common/NoAccessNotice';
 import { ResourcePickerDialog } from '@/src/components/picker/ResourcePickerDialog';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import {
   useResourcePickerLoad,
   useResourcePickerSession,
 } from '@/src/platform/pickers/resource-picker-session';
-import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
+import {
+  formatDateTime,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 import { listMeetings, type MeetingListItem } from '../api/meeting-api';
 import {
   INITIAL_MEETING_PICKER_STATE,
@@ -26,7 +29,6 @@ export interface MeetingPickerModalProps {
   onClose: () => void;
   onPick: (meeting: MeetingListItem) => Promise<void> | void;
   excludeMeetingIds?: string[];
-  workspaceSlug: string;
 }
 
 const EMPTY_EXCLUDED_MEETING_IDS: string[] = [];
@@ -36,11 +38,10 @@ export function MeetingPickerModal({
   onClose,
   onPick,
   excludeMeetingIds = EMPTY_EXCLUDED_MEETING_IDS,
-  workspaceSlug,
 }: MeetingPickerModalProps) {
   const { t, i18n } = useTranslation('apps');
   const { token, user } = useAuth();
-  const canAccess = hasWorkspaceMembership(user, workspaceSlug);
+  const canAccess = useAppAdmission('meeting');
   const timeZone = normalizeTimeZone(user?.time_zone);
   const {
     dispatch,
@@ -66,9 +67,9 @@ export function MeetingPickerModal({
 
   const loadMeetings = useCallback(async () => {
     if (!token) return [];
-    const response = await listMeetings(token, workspaceSlug, { scope: 'all' });
+    const response = await listMeetings(token, { scope: 'all' });
     return sortMeetingsForPicker(response.items);
-  }, [token, workspaceSlug]);
+  }, [token]);
 
   useResourcePickerLoad<MeetingListItem, MeetingPickerAction>({
     actions: {
@@ -98,7 +99,7 @@ export function MeetingPickerModal({
     <ResourcePickerDialog
       accessNotice={
         <NoAccessNotice
-          workspaceLabel={t('recording.title')}
+          appLabel={t('recording.title')}
           action={t('recording.detail.addMeeting')}
         />
       }

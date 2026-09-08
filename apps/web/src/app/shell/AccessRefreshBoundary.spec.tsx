@@ -57,7 +57,7 @@ afterEach(() => {
 });
 
 describe('AccessRefreshBoundary', () => {
-  it('masks stale content and refreshes user, apps, then the active workspace', async () => {
+  it('masks stale content while refreshing principal and app admission', async () => {
     const realtime = realtimeHarness();
     const pendingUser = deferred<AuthUser>();
     const calls: string[] = [];
@@ -81,7 +81,6 @@ describe('AccessRefreshBoundary', () => {
           refreshApps={refreshApps}
           refreshUser={refreshUser}
           refreshWorkspace={refreshWorkspace}
-          workspaceSlug="workspace-one"
         >
           <p>protected-content</p>
         </AccessRefreshBoundary>
@@ -90,7 +89,7 @@ describe('AccessRefreshBoundary', () => {
 
     act(() => {
       realtime.emit(AUTH_REALTIME_EVENT_TYPES.accessChanged, {
-        reason: AUTH_ACCESS_CHANGE_REASONS.workspaceMembership,
+        reason: AUTH_ACCESS_CHANGE_REASONS.principalAccess,
       });
     });
     expect(
@@ -123,7 +122,7 @@ describe('AccessRefreshBoundary', () => {
           .parentElement?.getAttribute('aria-hidden'),
       ).toBeNull(),
     );
-    expect(calls).toEqual(['user', 'apps', 'workspace']);
+    expect(calls).toEqual(['user', 'apps']);
   });
 
   it('skips workspace refresh after revocation and performs a trailing refresh for bursts', async () => {
@@ -143,7 +142,6 @@ describe('AccessRefreshBoundary', () => {
           refreshApps={refreshApps}
           refreshUser={refreshUser}
           refreshWorkspace={refreshWorkspace}
-          workspaceSlug="workspace-one"
         >
           <p>protected-content</p>
         </AccessRefreshBoundary>
@@ -152,10 +150,10 @@ describe('AccessRefreshBoundary', () => {
 
     act(() => {
       realtime.emit(AUTH_REALTIME_EVENT_TYPES.accessChanged, {
-        reason: AUTH_ACCESS_CHANGE_REASONS.workspaceMembership,
+        reason: AUTH_ACCESS_CHANGE_REASONS.principalAccess,
       });
       realtime.emit(AUTH_REALTIME_EVENT_TYPES.accessChanged, {
-        reason: AUTH_ACCESS_CHANGE_REASONS.workspaceMembership,
+        reason: AUTH_ACCESS_CHANGE_REASONS.principalAccess,
       });
     });
     await act(async () => {
@@ -181,7 +179,6 @@ describe('AccessRefreshBoundary', () => {
           refreshApps={refreshApps}
           refreshUser={refreshUser}
           refreshWorkspace={refreshWorkspace}
-          workspaceSlug={null}
         >
           <input aria-label="cached event" defaultValue="empty" />
         </AccessRefreshBoundary>
@@ -194,7 +191,7 @@ describe('AccessRefreshBoundary', () => {
 
     act(() => {
       realtime.emit(AUTH_REALTIME_EVENT_TYPES.accessChanged, {
-        reason: AUTH_ACCESS_CHANGE_REASONS.workspaceMembership,
+        reason: AUTH_ACCESS_CHANGE_REASONS.principalAccess,
       });
     });
     await waitFor(() => expect(refreshApps).toHaveBeenCalledTimes(1));
@@ -231,7 +228,6 @@ describe('AccessRefreshBoundary', () => {
           refreshApps={refreshApps}
           refreshUser={refreshUser}
           refreshWorkspace={refreshWorkspace}
-          workspaceSlug={null}
         >
           <p>protected-content</p>
         </AccessRefreshBoundary>
@@ -248,7 +244,7 @@ describe('AccessRefreshBoundary', () => {
 
     act(() => {
       realtime.emit(AUTH_REALTIME_EVENT_TYPES.accessChanged, {
-        reason: AUTH_ACCESS_CHANGE_REASONS.workspaceMembership,
+        reason: AUTH_ACCESS_CHANGE_REASONS.principalAccess,
       });
     });
     await screen.findByRole('alert');
@@ -282,7 +278,6 @@ describe('AccessRefreshBoundary', () => {
           refreshApps={refreshApps}
           refreshUser={refreshUser}
           refreshWorkspace={refreshWorkspace}
-          workspaceSlug={null}
         >
           <input aria-label="draft" defaultValue="work in progress" />
         </AccessRefreshBoundary>
@@ -296,7 +291,6 @@ describe('AccessRefreshBoundary', () => {
           refreshApps={refreshApps}
           refreshUser={refreshUser}
           refreshWorkspace={refreshWorkspace}
-          workspaceSlug={null}
         >
           <input aria-label="draft" defaultValue="work in progress" />
         </AccessRefreshBoundary>
@@ -317,6 +311,8 @@ describe('AccessRefreshBoundary', () => {
     expect((screen.getByLabelText('draft') as HTMLInputElement).value).toBe(
       'work in progress',
     );
-    expect(draft.parentElement?.getAttribute('aria-hidden')).toBeNull();
+    expect(
+      screen.getByLabelText('draft').parentElement?.getAttribute('aria-hidden'),
+    ).toBeNull();
   });
 });

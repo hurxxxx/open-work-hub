@@ -69,16 +69,10 @@ def register_retrieval_partition_adapter(adapter: RetrievalPartitionAdapter) -> 
         label="transition_mode",
     )
     if not resource_types:
-        raise ValueError(
-            f"Retrieval partition adapter {adapter_id!r} must claim resource_types"
-        )
+        raise ValueError(f"Retrieval partition adapter {adapter_id!r} must claim resource_types")
     if not allowed_candidate_scopes:
-        raise ValueError(
-            f"Retrieval partition adapter {adapter_id!r} must allow candidate scopes"
-        )
-    unknown_scopes = sorted(
-        set(allowed_candidate_scopes) - {"company", "workspace", "personal"}
-    )
+        raise ValueError(f"Retrieval partition adapter {adapter_id!r} must allow candidate scopes")
+    unknown_scopes = sorted(set(allowed_candidate_scopes) - {"company", "company", "personal"})
     if unknown_scopes:
         raise ValueError(
             f"Retrieval partition adapter {adapter_id!r} has unsupported candidate "
@@ -90,21 +84,16 @@ def register_retrieval_partition_adapter(adapter: RetrievalPartitionAdapter) -> 
             f"mode: {transition_mode}"
         )
     if not callable(getattr(adapter, "bind_resource_partition", None)):
-        raise ValueError(
-            f"Retrieval partition adapter {adapter_id!r} must declare a binder"
-        )
+        raise ValueError(f"Retrieval partition adapter {adapter_id!r} must declare a binder")
     if adapter.adapter_id != adapter_id or adapter.source_namespace != source_namespace:
-        raise ValueError(
-            "Retrieval partition adapter identifiers must already be normalized"
-        )
+        raise ValueError("Retrieval partition adapter identifiers must already be normalized")
     if tuple(adapter.resource_types) != resource_types:
         raise ValueError(
             f"Retrieval partition adapter {adapter_id!r} resource_types must be normalized"
         )
     if tuple(adapter.allowed_candidate_scopes) != allowed_candidate_scopes:
         raise ValueError(
-            f"Retrieval partition adapter {adapter_id!r} candidate scopes must be "
-            "normalized"
+            f"Retrieval partition adapter {adapter_id!r} candidate scopes must be normalized"
         )
     if tuple(adapter.allowed_transitions) != allowed_transitions:
         raise ValueError(
@@ -118,9 +107,7 @@ def register_retrieval_partition_adapter(adapter: RetrievalPartitionAdapter) -> 
     existing = _adapters_by_id.get(adapter_id)
     if existing is not None:
         if existing != adapter:
-            raise ValueError(
-                f"Retrieval partition adapter already registered: {adapter_id}"
-            )
+            raise ValueError(f"Retrieval partition adapter already registered: {adapter_id}")
         return
     conflicts = {
         resource_type: _adapter_ids_by_resource_type[resource_type]
@@ -129,12 +116,9 @@ def register_retrieval_partition_adapter(adapter: RetrievalPartitionAdapter) -> 
     }
     if conflicts:
         details = ", ".join(
-            f"{resource_type}->{owner_id}"
-            for resource_type, owner_id in sorted(conflicts.items())
+            f"{resource_type}->{owner_id}" for resource_type, owner_id in sorted(conflicts.items())
         )
-        raise ValueError(
-            f"Retrieval partition resources already have adapters: {details}"
-        )
+        raise ValueError(f"Retrieval partition resources already have adapters: {details}")
 
     _adapters_by_id[adapter_id] = adapter
     for resource_type in resource_types:
@@ -177,13 +161,10 @@ def bind_model_partition(
     resource_type: str,
     resource_id: str,
 ) -> RetrievalProjectionBinding:
-    partition_id = db.scalar(
-        select(model.retrieval_partition_id).where(model.id == resource_id)
-    )
+    partition_id = db.scalar(select(model.retrieval_partition_id).where(model.id == resource_id))
     if partition_id is None:
         raise RetrievalPartitionUnbound(
-            f"retrieval resource is missing a partition binding: "
-            f"{resource_type}/{resource_id}"
+            f"retrieval resource is missing a partition binding: {resource_type}/{resource_id}"
         )
     return RetrievalProjectionBinding(
         resource_type=resource_type,

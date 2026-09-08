@@ -9,7 +9,6 @@ import { normalizePublicBaseUrl } from './live-uat-preflight.mjs';
 const ENV_KEY_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 const FALSE_VALUES = new Set(['0', 'false', 'no', 'off']);
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
-const DEFAULT_DM_ATTACHMENT_SIGNING_KEY = 'dev-dm-attachment-signing-key';
 const PORT_KEYS = [
   'OPEN_WORK_HUB_API_DEV_PORT',
   'OPEN_WORK_HUB_BENTO_PORT',
@@ -100,7 +99,9 @@ function parsePort(values, key, { required = false } = {}) {
 function requireSecret(values, key, { minLength = 32 } = {}) {
   const value = (values.get(key) ?? '').trim();
   if (value.length < minLength) {
-    throw new Error(`${key} must use a production secret of at least ${minLength} characters`);
+    throw new Error(
+      `${key} must use a production secret of at least ${minLength} characters`,
+    );
   }
   if (/^(dev|development|example|placeholder|change[-_]?me)/i.test(value)) {
     throw new Error(`${key} must not use a development or placeholder value`);
@@ -125,7 +126,9 @@ function requireLoopbackHttpUrl(values, key) {
     url.search ||
     url.hash
   ) {
-    throw new Error(`${key} must be a loopback HTTP endpoint with an explicit port`);
+    throw new Error(
+      `${key} must be a loopback HTTP endpoint with an explicit port`,
+    );
   }
   return url;
 }
@@ -176,14 +179,7 @@ export function assertProductionAppEnv(values) {
     );
   }
 
-  const signingKey = (
-    values.get('OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY') ?? ''
-  ).trim();
-  if (!signingKey || signingKey === DEFAULT_DM_ATTACHMENT_SIGNING_KEY) {
-    throw new Error(
-      'OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY must use a production value',
-    );
-  }
+  requireSecret(values, 'OPEN_WORK_HUB_CONTENT_GRANT_SIGNING_KEY');
 
   const appPort = parsePort(values, 'OPEN_WORK_HUB_APP_PORT', {
     required: true,
@@ -283,7 +279,9 @@ export function assertProductionAppEnv(values) {
     hermesRuntimeBaseUrl.pathname !== '/' ||
     Number(hermesRuntimeBaseUrl.port) !== hermesRuntimePort
   ) {
-    throw new Error('OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL must match the configured Hermes runtime port');
+    throw new Error(
+      'OPEN_WORK_HUB_HERMES_RUNTIME_BASE_URL must match the configured Hermes runtime port',
+    );
   }
   const hermesManagementBaseUrl = requireLoopbackHttpUrl(
     values,
@@ -293,7 +291,9 @@ export function assertProductionAppEnv(values) {
     hermesManagementBaseUrl.pathname !== '/' ||
     Number(hermesManagementBaseUrl.port) !== hermesManagementPort
   ) {
-    throw new Error('OPEN_WORK_HUB_HERMES_MANAGEMENT_BASE_URL must match the configured Hermes management port');
+    throw new Error(
+      'OPEN_WORK_HUB_HERMES_MANAGEMENT_BASE_URL must match the configured Hermes management port',
+    );
   }
   const hermesTerminalBrokerBaseUrl = requireLoopbackHttpUrl(
     values,
@@ -315,7 +315,9 @@ export function assertProductionAppEnv(values) {
     Number(hermesMcpServerUrl.port) !== appPort ||
     hermesMcpServerUrl.pathname !== '/api/v1/internal/hermes/mcp'
   ) {
-    throw new Error('OPEN_WORK_HUB_HERMES_MCP_SERVER_URL must target the production API internal Hermes MCP endpoint');
+    throw new Error(
+      'OPEN_WORK_HUB_HERMES_MCP_SERVER_URL must target the production API internal Hermes MCP endpoint',
+    );
   }
 
   requireSecret(values, 'OPENROUTER_API_KEY', { minLength: 16 });
@@ -325,7 +327,9 @@ export function assertProductionAppEnv(values) {
     requireSecret(values, 'OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET'),
   ];
   if (new Set(hermesSecrets).size !== hermesSecrets.length) {
-    throw new Error('Hermes runtime, management, and MCP secrets must be distinct');
+    throw new Error(
+      'Hermes runtime, management, and MCP secrets must be distinct',
+    );
   }
   requireExact(values, 'OPEN_WORK_HUB_HERMES_PROFILE_CLONE_SOURCE', 'default');
   return {

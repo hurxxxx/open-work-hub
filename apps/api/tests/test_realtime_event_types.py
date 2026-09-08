@@ -4,8 +4,8 @@ from open_work_hub_api.domains.realtime import realtime_event_types
 from open_work_hub_api.domains.auth.realtime import (
     AUTH_ACCESS_CHANGED,
     build_app_availability_access_changed_event,
-    build_workspace_membership_access_changed_event,
-    publish_workspace_membership_access_changed,
+    build_principal_access_changed_event,
+    publish_principal_access_changed,
 )
 
 
@@ -39,10 +39,10 @@ def test_build_realtime_event_uses_shared_wire_shape() -> None:
     ) == {"type": "realtime.keepalive", "data": {"now": 123}}
 
 
-def test_workspace_membership_access_event_uses_public_auth_contract() -> None:
-    assert build_workspace_membership_access_changed_event() == {
+def test_principal_access_event_uses_public_auth_contract() -> None:
+    assert build_principal_access_changed_event() == {
         "type": "auth.access.changed",
-        "data": {"reason": "workspace_membership"},
+        "data": {"reason": "principal"},
     }
     assert build_app_availability_access_changed_event() == {
         "type": "auth.access.changed",
@@ -50,7 +50,7 @@ def test_workspace_membership_access_event_uses_public_auth_contract() -> None:
     }
 
 
-def test_workspace_membership_access_publish_deduplicates_users() -> None:
+def test_principal_access_publish_deduplicates_users() -> None:
     class FakeRealtime:
         def __init__(self) -> None:
             self.published: list[tuple[str, dict]] = []
@@ -59,7 +59,7 @@ def test_workspace_membership_access_publish_deduplicates_users() -> None:
             self.published.append((user_id, event))
 
     realtime = FakeRealtime()
-    publish_workspace_membership_access_changed(
+    publish_principal_access_changed(
         realtime,
         ["user-b", "user-a", "user-b", ""],
     )
@@ -69,14 +69,14 @@ def test_workspace_membership_access_publish_deduplicates_users() -> None:
             "user-a",
             {
                 "type": "auth.access.changed",
-                "data": {"reason": "workspace_membership"},
+                "data": {"reason": "principal"},
             },
         ),
         (
             "user-b",
             {
                 "type": "auth.access.changed",
-                "data": {"reason": "workspace_membership"},
+                "data": {"reason": "principal"},
             },
         ),
     ]

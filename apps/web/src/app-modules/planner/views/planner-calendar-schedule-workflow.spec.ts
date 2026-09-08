@@ -162,7 +162,6 @@ describe('planner calendar schedule workflow', () => {
 
     expect(scheduleAdapters.updateMeeting).toHaveBeenCalledWith(
       'token',
-      'hq',
       'meeting-1',
       { end_at: '2026-03-10T11:00:00+09:00' },
     );

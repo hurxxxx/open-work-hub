@@ -3,7 +3,10 @@ import type { MeetingDetail, MeetingListItem } from './meeting-api';
 
 export function isOrganizer(
   user: AuthUser | null | undefined,
-  meeting: Pick<MeetingDetail | MeetingListItem, 'organizer_id'> | null | undefined,
+  meeting:
+    | Pick<MeetingDetail | MeetingListItem, 'organizer_id'>
+    | null
+    | undefined,
 ): boolean {
   if (!user || !meeting) return false;
   return user.id === meeting.organizer_id;
@@ -20,11 +23,14 @@ export function isParticipant(
 
 /**
  * Can the caller edit meeting metadata (title, time, agenda, attendees,
- * delete the meeting itself)? Organizer + admins only.
+ * delete the meeting itself)? Organizer only.
  */
 export function canEditMeeting(
   user: AuthUser | null | undefined,
-  meeting: Pick<MeetingDetail | MeetingListItem, 'organizer_id'> | null | undefined,
+  meeting:
+    | Pick<MeetingDetail | MeetingListItem, 'organizer_id'>
+    | null
+    | undefined,
 ): boolean {
   if (!user || !meeting) return false;
   return isOrganizer(user, meeting);
@@ -32,7 +38,7 @@ export function canEditMeeting(
 
 /**
  * Can the caller add attachments (tasks/docs/files) to the meeting?
- * Organizer + attendees + admins. The intent is that participants can
+ * Organizer and attendees. The intent is that participants can
  * upload prep material before the meeting starts.
  */
 export function canAttachToMeeting(
@@ -60,7 +66,7 @@ export function canInviteAttendees(
 }
 
 /**
- * Can the caller remove a specific attachment? Organizer, admins, or the
+ * Can the caller remove a specific attachment? Organizer or the
  * user who originally added it. Attendees cannot remove each other's
  * attachments.
  */

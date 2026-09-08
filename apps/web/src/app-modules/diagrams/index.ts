@@ -1,13 +1,13 @@
 import { diagramsManifest } from './manifest';
-import { diagramsWorkspaceRoutes } from './routes';
+import { diagramsAppRoutes } from './routes';
 import { diagramsSidebarConfig } from './sidebar';
 
-export { diagramsManifest };
-export { diagramsToolElement, diagramsWorkspaceRoutes } from './routes';
+export { diagramsAppRoutes, diagramsToolElement } from './routes';
 export { diagramsSidebarConfig } from './sidebar';
+export { diagramsManifest };
 
 export const diagramsModule = {
   manifest: diagramsManifest,
   sidebarConfig: diagramsSidebarConfig,
-  workspaceRoutes: diagramsWorkspaceRoutes,
+  appRoutes: diagramsAppRoutes,
 } as const;

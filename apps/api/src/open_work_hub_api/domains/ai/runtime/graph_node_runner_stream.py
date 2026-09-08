@@ -10,10 +10,10 @@ from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.domains.ai.agent import run_agent_turn_stream
 from open_work_hub_api.domains.ai.events import EnvelopeEncoder
 from open_work_hub_api.domains.ai.runtime.graph_events import make_done_envelope_with_meta
+from open_work_hub_api.domains.ai.runtime.graph_evidence_packet import GRAPH_WRITER_AGENT_ID
 from open_work_hub_api.domains.ai.runtime.graph_execution_fallback_policy import (
     GRAPH_NODE_RUNNER_ADAPTER_ID,
 )
-from open_work_hub_api.domains.ai.runtime.graph_evidence_packet import GRAPH_WRITER_AGENT_ID
 from open_work_hub_api.domains.ai.runtime.graph_node_execution_projection import (
     graph_execution_adapter_error_summary,
     graph_node_execution_summary,
@@ -35,7 +35,7 @@ from open_work_hub_api.domains.ai.runtime.routing import RuntimeRoutingDecision
 from open_work_hub_api.domains.ai.runtime.routing_metadata import runtime_routing_stream_kwargs
 from open_work_hub_api.domains.ai.runtime.tool_calling import stream_tool_calling_enabled
 from open_work_hub_api.domains.ai.tool_contracts import AgentToolSpec
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.conversations.models import Conversation
 
 
@@ -44,7 +44,6 @@ async def run_graph_node_runner_stream(
     context: LlmTaskContext,
     execution: ResolvedLlmExecution,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     messages: list[dict[str, Any]],
@@ -75,7 +74,6 @@ async def run_graph_node_runner_stream(
             context=context,
             execution=execution,
             db=db,
-            workspace=workspace,
             principal=principal,
             user=user,
             agent_id=agent_id,
@@ -111,7 +109,6 @@ async def run_graph_node_runner_stream(
         context=context,
         execution=execution,
         db=db,
-        workspace=workspace,
         principal=principal,
         user=user,
         messages=messages,
@@ -159,7 +156,6 @@ async def _run_hidden_graph_node(
     context: LlmTaskContext,
     execution: ResolvedLlmExecution,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     agent_id: str,
@@ -190,7 +186,6 @@ async def _run_hidden_graph_node(
         context=context,
         execution=execution,
         db=db,
-        workspace=workspace,
         principal=principal,
         user=user,
         messages=hidden_messages,
@@ -233,12 +228,8 @@ def attach_graph_execution_adapter_error_summary(
         messages=messages,
         error_class=error_class,
         candidate_summary=runtime_routing.graph_candidate_summary,
-        external_planner_execution_summary=(
-            runtime_routing.external_planner_execution_summary
-        ),
-        external_search_execution_summary=(
-            runtime_routing.external_search_execution_summary
-        ),
+        external_planner_execution_summary=(runtime_routing.external_planner_execution_summary),
+        external_search_execution_summary=(runtime_routing.external_search_execution_summary),
     )
     return updated
 

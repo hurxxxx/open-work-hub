@@ -1,5 +1,5 @@
-import { Calendar, User, Users, Video } from 'lucide-react';
 import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
+import { Calendar, User, Users, Video } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -9,7 +9,6 @@ export const meetingManifest: AppModuleManifest = {
     owner: 'meeting-platform',
     permissions: [],
     apiDomain: 'meeting',
-    workspaceApiPrefixes: ['/api/v1/meeting'],
     aiCapabilities: [
       'meeting.list_meetings',
       'meeting.get_meeting',
@@ -51,7 +50,7 @@ export const meetingManifest: AppModuleManifest = {
       pathSuffix: '?tab=recordings',
     },
   ],
-  workspaceRoutePaths: [
+  appRoutePaths: [
     getAppRoutePattern('meeting.root'),
     getAppRoutePattern('meeting.detail'),
   ],

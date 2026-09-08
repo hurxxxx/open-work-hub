@@ -10,15 +10,15 @@ import { i18n } from '@/src/platform/i18n';
 import { buildMockCalendarEvents, listCalendarEvents } from './calendar-api';
 import { dispatchCalendarEventsChanged } from './calendar-events-changed';
 import {
-  ALL_CALENDAR_SOURCES,
-  type CalendarEvent,
-  type CalendarSourceFilter,
-} from './calendar-types';
-import {
   calendarEventsReducer,
   getCalendarEventSourcesKey,
   INITIAL_CALENDAR_EVENTS_STATE,
 } from './calendar-events-session';
+import {
+  ALL_CALENDAR_SOURCES,
+  type CalendarEvent,
+  type CalendarSourceFilter,
+} from './calendar-types';
 
 export interface UseCalendarEventsOptions {
   from: string; // ISO date or datetime

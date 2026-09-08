@@ -1,12 +1,3 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Play,
   Plus,
@@ -17,6 +8,15 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   BarChartCard,
@@ -34,59 +34,6 @@ import {
   normalizeTimeZone,
 } from '@/src/platform/time/time-utils';
 import {
-  createAdminAiSecurityExternalTransferException,
-  createAdminAiSecurityRule,
-  deleteAdminAiSecurityExternalTransferException,
-  deleteAdminAiSecurityRule,
-  getAdminAiSecurityDetectedValueDetails,
-  getAdminAiSecurityDetectedValueGroups,
-  getAdminAiSecurityMonitoring,
-  getAdminAiSecuritySummary,
-  listWorkspaces,
-  simulateAdminAiSecurityPolicy,
-  updateAdminAiSecurityExternalTransferException,
-  updateAdminAiSecurityDataProtection,
-  updateAdminAiSecurityEnforcement,
-  updateAdminAiSecurityRule,
-  type AiSecurityDataProtectionAction,
-  type AiSecurityDetectedValueDetailsResponse,
-  type AiSecurityDetectedValueGroup,
-  type AiSecurityDetectedValueGroupsResponse,
-  type AiSecurityDetectedValueStat,
-  type AiSecurityExternalAppAction,
-  type AiSecurityExternalAppCandidate,
-  type AiSecurityExternalTransferBlocker,
-  type AiSecurityExternalTransferExceptionPayload,
-  type AiSecurityMonitoring,
-  type AiSecurityPolicyEffect,
-  type AiSecurityRulePayload,
-  type AiSecuritySimulationPayload,
-  type AiSecuritySimulationResult,
-  type AiSecuritySummary,
-  type WorkspaceItem,
-} from './admin-api';
-import { AuditLogList } from './admin-audit-section';
-import {
-  Badge,
-  BodyCell,
-  EmptyPanel,
-  EmptyRow,
-  FORM_FIELD_CLASS as fieldClassName,
-  HeadCell,
-  SurfaceCard,
-  getErrorMessage,
-} from './admin-shared';
-import {
-  buildUsageDateRangePreset,
-  DEFAULT_USAGE_PERIOD_PRESET,
-  getKstDateInputValue,
-  getUsagePeriodPresetOptions,
-  normalizeUsageDateRange,
-  type UsageDateRange,
-  type UsagePeriodPreset,
-} from './admin-usage-period-model';
-import { formatUsageNumber } from './admin-usage-format';
-import {
   AiSecurityAppPicker,
   AiSecurityConditionInput,
   AiSecurityFieldLabel,
@@ -95,24 +42,10 @@ import {
   AiSecurityTaskKindPicker,
   AiSecurityTermsTagInput,
   AiSecurityUserPicker,
-  AiSecurityWorkspacePicker,
   aiSecuritySelectedUserFromException,
   aiSecuritySelectedUserFromRule,
   type AiSecuritySelectedUser,
 } from './admin-ai-security-fields';
-import {
-  AiSecurityDetectedValueDetailsDialog,
-  AiSecurityDetectedValueGroupTable,
-  AiSecurityDetectedValueGroupsDialog,
-  AiSecurityMetric,
-  AiSecurityMonitoringBreakdownList,
-  AiSecurityMonitoringUserTable,
-  buildAiSecurityDetectionDetectorChart,
-  buildAiSecurityDetectionEntityChart,
-  buildAiSecurityMonitoringTrendChart,
-  aiSecurityMonitoringEntityLabel,
-  aiSecurityMonitoringReasonLabel,
-} from './admin-ai-security-monitoring';
 import {
   AI_SECURITY_DATA_ACTIONS,
   AI_SECURITY_DETECTED_VALUE_PAGE_SIZE,
@@ -146,6 +79,70 @@ import {
   type AiSecurityExternalAppActions,
   type AiSecurityTab,
 } from './admin-ai-security-model';
+import {
+  AiSecurityDetectedValueDetailsDialog,
+  AiSecurityDetectedValueGroupTable,
+  AiSecurityDetectedValueGroupsDialog,
+  AiSecurityMetric,
+  AiSecurityMonitoringBreakdownList,
+  AiSecurityMonitoringUserTable,
+  aiSecurityMonitoringEntityLabel,
+  aiSecurityMonitoringReasonLabel,
+  buildAiSecurityDetectionDetectorChart,
+  buildAiSecurityDetectionEntityChart,
+  buildAiSecurityMonitoringTrendChart,
+} from './admin-ai-security-monitoring';
+import {
+  createAdminAiSecurityExternalTransferException,
+  createAdminAiSecurityRule,
+  deleteAdminAiSecurityExternalTransferException,
+  deleteAdminAiSecurityRule,
+  getAdminAiSecurityDetectedValueDetails,
+  getAdminAiSecurityDetectedValueGroups,
+  getAdminAiSecurityMonitoring,
+  getAdminAiSecuritySummary,
+  simulateAdminAiSecurityPolicy,
+  updateAdminAiSecurityDataProtection,
+  updateAdminAiSecurityEnforcement,
+  updateAdminAiSecurityExternalTransferException,
+  updateAdminAiSecurityRule,
+  type AiSecurityDataProtectionAction,
+  type AiSecurityDetectedValueDetailsResponse,
+  type AiSecurityDetectedValueGroup,
+  type AiSecurityDetectedValueGroupsResponse,
+  type AiSecurityDetectedValueStat,
+  type AiSecurityExternalAppAction,
+  type AiSecurityExternalAppCandidate,
+  type AiSecurityExternalTransferBlocker,
+  type AiSecurityExternalTransferExceptionPayload,
+  type AiSecurityMonitoring,
+  type AiSecurityPolicyEffect,
+  type AiSecurityRulePayload,
+  type AiSecuritySimulationPayload,
+  type AiSecuritySimulationResult,
+  type AiSecuritySummary,
+} from './admin-api';
+import { AuditLogList } from './admin-audit-section';
+import {
+  Badge,
+  BodyCell,
+  EmptyPanel,
+  EmptyRow,
+  HeadCell,
+  SurfaceCard,
+  FORM_FIELD_CLASS as fieldClassName,
+  getErrorMessage,
+} from './admin-shared';
+import { formatUsageNumber } from './admin-usage-format';
+import {
+  DEFAULT_USAGE_PERIOD_PRESET,
+  buildUsageDateRangePreset,
+  getKstDateInputValue,
+  getUsagePeriodPresetOptions,
+  normalizeUsageDateRange,
+  type UsageDateRange,
+  type UsagePeriodPreset,
+} from './admin-usage-period-model';
 
 export function AiSecuritySection({ token }: { token: string }) {
   const { t, i18n } = useTranslation('apps');
@@ -186,7 +183,6 @@ export function AiSecuritySection({ token }: { token: string }) {
   const [monitoringView, setMonitoringView] = useState<
     'overview' | 'detections' | 'users' | 'events'
   >('overview');
-  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [dataTermsText, setDataTermsText] = useState('');
   const [dataBlockerActions, setDataBlockerActions] = useState<
     Partial<
@@ -217,7 +213,6 @@ export function AiSecuritySection({ token }: { token: string }) {
   const [exceptionQuery, setExceptionQuery] = useState('');
   const [simulationDraft, setSimulationDraft] =
     useState<AiSecuritySimulationPayload>({
-      workspace_id: null,
       actor_user_id: null,
       app_id: null,
       task_kind: null,
@@ -270,12 +265,8 @@ export function AiSecuritySection({ token }: { token: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [nextSummary, nextWorkspaces] = await Promise.all([
-        getAdminAiSecuritySummary(token),
-        listWorkspaces(token, { includeArchived: true }),
-      ]);
+      const nextSummary = await getAdminAiSecuritySummary(token);
       setSummary(nextSummary);
-      setWorkspaces(nextWorkspaces);
       setDataTermsText(
         aiSecurityTermsText(nextSummary.data_protection.custom_block_terms),
       );
@@ -516,7 +507,6 @@ export function AiSecuritySection({ token }: { token: string }) {
       name: ruleDraft.name.trim(),
       description: ruleDraft.description.trim(),
       user_id: ruleDraft.user_id ? ruleDraft.user_id.trim() : null,
-      workspace_id: ruleDraft.workspace_id || null,
       app_id: ruleDraft.app_id ? ruleDraft.app_id.trim() : null,
       task_kind: taskKinds.length === 1 ? taskKinds[0] : null,
       task_kinds: taskKinds,
@@ -576,7 +566,6 @@ export function AiSecuritySection({ token }: { token: string }) {
       name: exceptionDraft.name.trim(),
       description: exceptionDraft.description.trim(),
       user_id: exceptionDraft.user_id ? exceptionDraft.user_id.trim() : null,
-      workspace_id: exceptionDraft.workspace_id || null,
       app_id: exceptionDraft.app_id ? exceptionDraft.app_id.trim() : null,
       task_kind: taskKinds.length === 1 ? taskKinds[0] : null,
       task_kinds: taskKinds,
@@ -642,7 +631,6 @@ export function AiSecuritySection({ token }: { token: string }) {
     try {
       const result = await simulateAdminAiSecurityPolicy(token, {
         ...simulationDraft,
-        workspace_id: simulationDraft.workspace_id || null,
         actor_user_id: simulationDraft.actor_user_id || null,
         app_id: simulationDraft.app_id || null,
         task_kind: simulationDraft.task_kind || null,
@@ -685,7 +673,6 @@ export function AiSecuritySection({ token }: { token: string }) {
         rule.capability,
         rule.provider,
         rule.user_name,
-        rule.workspace_name,
       ]
         .filter(aiSecurityPresent)
         .join(' ')
@@ -706,7 +693,7 @@ export function AiSecuritySection({ token }: { token: string }) {
         exception.capability,
         exception.provider,
         exception.user_name,
-        exception.workspace_name,
+
         ...exception.allowed_blocker_types,
       ]
         .filter(aiSecurityPresent)
@@ -2369,35 +2356,6 @@ export function AiSecuritySection({ token }: { token: string }) {
                         token={token}
                         value={ruleDraft.user_id ?? null}
                       />
-
-                      <AiSecurityWorkspacePicker
-                        allLabel={t(
-                          'admin.console.aiSecurity.rules.allWorkspaces',
-                        )}
-                        clearLabel={t(
-                          'admin.console.aiSecurity.rules.clearWorkspace',
-                        )}
-                        help={t(
-                          'admin.console.aiSecurity.rules.help.workspace',
-                        )}
-                        label={t(
-                          'admin.console.aiSecurity.rules.fields.workspace',
-                        )}
-                        noResultsLabel={t(
-                          'admin.console.aiSecurity.rules.noWorkspaceResults',
-                        )}
-                        onChange={(workspaceId) =>
-                          setRuleDraft((current) => ({
-                            ...current,
-                            workspace_id: workspaceId,
-                          }))
-                        }
-                        searchPlaceholder={t(
-                          'admin.console.aiSecurity.rules.workspaceSearchPlaceholder',
-                        )}
-                        value={ruleDraft.workspace_id ?? null}
-                        workspaces={workspaces}
-                      />
                     </div>
                   </AiSecurityFormSection>
 
@@ -2974,35 +2932,6 @@ export function AiSecuritySection({ token }: { token: string }) {
                         token={token}
                         value={exceptionDraft.user_id ?? null}
                       />
-
-                      <AiSecurityWorkspacePicker
-                        allLabel={t(
-                          'admin.console.aiSecurity.rules.allWorkspaces',
-                        )}
-                        clearLabel={t(
-                          'admin.console.aiSecurity.rules.clearWorkspace',
-                        )}
-                        help={t(
-                          'admin.console.aiSecurity.rules.help.workspace',
-                        )}
-                        label={t(
-                          'admin.console.aiSecurity.rules.fields.workspace',
-                        )}
-                        noResultsLabel={t(
-                          'admin.console.aiSecurity.rules.noWorkspaceResults',
-                        )}
-                        onChange={(workspaceId) =>
-                          setExceptionDraft((current) => ({
-                            ...current,
-                            workspace_id: workspaceId,
-                          }))
-                        }
-                        searchPlaceholder={t(
-                          'admin.console.aiSecurity.rules.workspaceSearchPlaceholder',
-                        )}
-                        value={exceptionDraft.workspace_id ?? null}
-                        workspaces={workspaces}
-                      />
                     </div>
                   </AiSecurityFormSection>
 
@@ -3227,35 +3156,6 @@ export function AiSecuritySection({ token }: { token: string }) {
                     selectedUser={simulationSelectedUser}
                     token={token}
                     value={simulationDraft.actor_user_id ?? null}
-                  />
-
-                  <AiSecurityWorkspacePicker
-                    allLabel={t(
-                      'admin.console.aiSecurity.simulator.workspaceAny',
-                    )}
-                    clearLabel={t(
-                      'admin.console.aiSecurity.rules.clearWorkspace',
-                    )}
-                    help={t(
-                      'admin.console.aiSecurity.simulator.help.workspace',
-                    )}
-                    label={t(
-                      'admin.console.aiSecurity.simulator.fields.workspace_id',
-                    )}
-                    noResultsLabel={t(
-                      'admin.console.aiSecurity.rules.noWorkspaceResults',
-                    )}
-                    onChange={(workspaceId) =>
-                      setSimulationDraft((current) => ({
-                        ...current,
-                        workspace_id: workspaceId,
-                      }))
-                    }
-                    searchPlaceholder={t(
-                      'admin.console.aiSecurity.rules.workspaceSearchPlaceholder',
-                    )}
-                    value={simulationDraft.workspace_id ?? null}
-                    workspaces={workspaces}
                   />
                 </div>
               </div>

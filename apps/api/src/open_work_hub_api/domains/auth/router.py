@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request, status
@@ -31,18 +31,17 @@ from open_work_hub_api.domains.auth.access import (
     replace_user_system_roles,
     serialize_auth_user,
 )
+from open_work_hub_api.domains.auth.app_bar_preferences import (
+    normalize_app_bar_pinned_app_ids,
+)
 from open_work_hub_api.domains.auth.date_format_preferences import (
     default_date_format_value,
     normalize_date_format_payload,
     validate_date_format_value,
 )
-from open_work_hub_api.domains.auth.app_bar_preferences import (
-    normalize_app_bar_pinned_app_ids,
-)
 from open_work_hub_api.domains.auth.dependencies import (
     AuthContext,
     require_auth_context,
-    require_permission,
 )
 from open_work_hub_api.domains.auth.models import (
     AuthSession,
@@ -51,10 +50,10 @@ from open_work_hub_api.domains.auth.models import (
 )
 from open_work_hub_api.domains.auth.security import (
     derive_login_id_from_email,
-    hash_token,
     hash_password,
-    issue_session_token,
+    hash_token,
     is_valid_login_id,
+    issue_session_token,
     new_id,
     normalize_email,
     normalize_login_id,
@@ -127,13 +126,6 @@ class DevLoginAccountResponse(BaseModel):
     category: str
 
 
-class WorkspaceSummaryResponse(BaseModel):
-    id: str
-    slug: str
-    name: str
-    role: str
-
-
 class AppBarLayoutPreference(BaseModel):
     pinned_app_ids: list[str] = Field(default_factory=list)
 
@@ -163,7 +155,9 @@ class AuthUserResponse(BaseModel):
     date_format: str
     app_bar_layout: AppBarLayoutPreference
     system_roles: list[str]
-    workspaces: list[WorkspaceSummaryResponse]
+    group_ids: list[str]
+    managed_organization_unit_ids: list[str]
+    is_department_head: bool
     must_change_password: bool
     last_login_at: datetime | None
     created_at: datetime
@@ -678,42 +672,6 @@ def dev_login(
     )
     db.commit()
     return _issue_auth_response(db, user, request)
-
-
-@router.post("/impersonations/{user_id}", response_model=AuthSessionResponse)
-def impersonate_user(
-    user_id: str,
-    request: Request,
-    context: AuthContext = Depends(require_permission("user.impersonate")),
-    db: Session = Depends(get_db_session),
-) -> AuthSessionResponse:
-    target_user = db.scalar(select(User).where(User.id == user_id))
-    if target_user is None:
-        raise localized_http_exception(status_code=404, code="auth.user_not_found")
-    _ensure_active_user(target_user)
-
-    impersonator_user_id = context.impersonator_user_id or context.user.id
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="auth.impersonate",
-        entity_kind="user",
-        entity_id=target_user.id,
-        summary=f"User impersonation started: {context.user.email} -> {target_user.email}",
-        payload={
-            "impersonator_user_id": impersonator_user_id,
-            "impersonator_email": context.user.email,
-            "target_user_id": target_user.id,
-            "target_email": target_user.email,
-            "source_session_id": context.session.id,
-        },
-    )
-    return _issue_auth_response(
-        db,
-        target_user,
-        request,
-        impersonator_user_id=impersonator_user_id,
-    )
 
 
 @router.get("/me", response_model=AuthUserResponse)

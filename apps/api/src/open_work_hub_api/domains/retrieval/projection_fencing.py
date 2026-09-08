@@ -28,7 +28,6 @@ class ProjectionEventRef:
     desired_state: str
     content_checksum: str | None
     visibility_checksum: str | None
-    diagnostic_workspace_id: str | None
 
 
 def record_projection_event(
@@ -41,7 +40,6 @@ def record_projection_event(
     desired_state: str | RetrievalProjectionDesiredState,
     content_checksum: str | None = None,
     visibility_checksum: str | None = None,
-    diagnostic_workspace_id: str | None = None,
     trace_context: Mapping[str, object] | None = None,
 ) -> ProjectionEventRef:
     """Advance one canonical resource stream without committing its outer transaction."""
@@ -79,11 +77,6 @@ def record_projection_event(
         field="visibility_checksum",
         max_length=128,
     )
-    normalized_workspace_id = _optional_text(
-        diagnostic_workspace_id,
-        field="diagnostic_workspace_id",
-        max_length=36,
-    )
     if normalized_change_kind == RetrievalProjectionChangeKind.DELETE.value:
         if normalized_desired_state != RetrievalProjectionDesiredState.DELETED.value:
             raise ValueError("delete projection events require desired_state='deleted'")
@@ -115,7 +108,6 @@ def record_projection_event(
             desired_state=normalized_desired_state,
             content_checksum=normalized_content_checksum,
             visibility_checksum=normalized_visibility_checksum,
-            diagnostic_workspace_id=normalized_workspace_id,
             updated_at=now,
         )
         db.add(head)
@@ -126,7 +118,6 @@ def record_projection_event(
         head.desired_state = normalized_desired_state
         head.content_checksum = normalized_content_checksum
         head.visibility_checksum = normalized_visibility_checksum
-        head.diagnostic_workspace_id = normalized_workspace_id
         head.updated_at = now
 
     event = RetrievalProjectionEvent(
@@ -138,7 +129,6 @@ def record_projection_event(
         desired_state=normalized_desired_state,
         content_checksum=normalized_content_checksum,
         visibility_checksum=normalized_visibility_checksum,
-        diagnostic_workspace_id=normalized_workspace_id,
         trace_context=dict(trace_context) if trace_context is not None else None,
         created_at=now,
     )
@@ -155,7 +145,6 @@ def record_projection_event(
         desired_state=event.desired_state,
         content_checksum=event.content_checksum,
         visibility_checksum=event.visibility_checksum,
-        diagnostic_workspace_id=event.diagnostic_workspace_id,
     )
 
 

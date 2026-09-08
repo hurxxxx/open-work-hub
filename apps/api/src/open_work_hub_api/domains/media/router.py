@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 import logging
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Response, UploadFile, status
 from pydantic import BaseModel
@@ -17,6 +17,7 @@ from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.content_access.dependencies import require_content_grant_issuer
 from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
+from open_work_hub_api.domains.media.content_access import build_media_content_url
 from open_work_hub_api.domains.media.lifecycle import (
     apply_media_links,
     build_media_upload_record,
@@ -25,7 +26,6 @@ from open_work_hub_api.domains.media.lifecycle import (
 )
 from open_work_hub_api.domains.media.models import MediaFile
 from open_work_hub_api.domains.media.object_storage import media_object_storage
-from open_work_hub_api.domains.media.content_access import build_media_content_url
 from open_work_hub_api.domains.media.resource_access import (
     can_resolve_media,
     ensure_media_link_resource_access,
@@ -219,9 +219,7 @@ def cleanup_orphan_media(
         .limit(500)
     ).all()
 
-    removal_result = media_object_storage().remove_many(
-        orphan.storage_key for orphan in orphans
-    )
+    removal_result = media_object_storage().remove_many(orphan.storage_key for orphan in orphans)
     cleanup_plan = plan_orphan_media_cleanup(orphans, removal_result)
 
     for orphan in cleanup_plan.rows_to_delete:

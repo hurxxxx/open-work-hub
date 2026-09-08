@@ -9,7 +9,6 @@ from typing import Iterator
 @dataclass(frozen=True)
 class ToolExecutionContext:
     source: str
-    workspace_id: str
     tool_name: str
     call_id: str | None = None
     agent_run_id: str | None = None

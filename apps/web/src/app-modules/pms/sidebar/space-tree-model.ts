@@ -155,8 +155,6 @@ export function buildPmsSidebarSpaceTree({
 function createPlaceholderSpace(teamId: string, name: string): PmsSpace {
   return {
     id: teamId,
-    workspace_id: '',
-    workspace_key: '',
     key: '',
     name,
     description: '',

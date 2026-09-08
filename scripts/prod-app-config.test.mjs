@@ -230,7 +230,8 @@ function validEnv(overrides = {}) {
       OPEN_WORK_HUB_API_ENVIRONMENT: 'production',
       OPEN_WORK_HUB_API_OBJECT_STORAGE_REQUIRED: 'true',
       OPEN_WORK_HUB_API_SEED_DEV_LOGIN_ACCOUNT: 'false',
-      OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY: 'production-test-signing-key',
+      OPEN_WORK_HUB_CONTENT_GRANT_SIGNING_KEY:
+        'production-test-content-signing-key',
       OPEN_WORK_HUB_APP_BIND_HOST: '127.0.0.1',
       OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS: '127.0.0.1',
       OPEN_WORK_HUB_APP_PORT: '8000',
@@ -370,16 +371,22 @@ test('requires a separate credential-free HTTPS Bento origin', () => {
 });
 
 test('rejects unsafe production secrets and proxy trust', () => {
-  assert.throws(
-    () =>
-      assertProductionAppEnv(
-        validEnv({
-          OPEN_WORK_HUB_DM_ATTACHMENT_SIGNING_KEY:
-            'dev-dm-attachment-signing-key',
-        }),
-      ),
-    /DM_ATTACHMENT_SIGNING_KEY/,
-  );
+  for (const value of [
+    '',
+    'dev-content-grant-signing-key',
+    'short',
+    'a'.repeat(31),
+    `development-${'a'.repeat(32)}`,
+    `CHANGE_ME-${'a'.repeat(32)}`,
+  ]) {
+    assert.throws(
+      () =>
+        assertProductionAppEnv(
+          validEnv({ OPEN_WORK_HUB_CONTENT_GRANT_SIGNING_KEY: value }),
+        ),
+      /CONTENT_GRANT_SIGNING_KEY/,
+    );
+  }
   assert.throws(
     () =>
       assertProductionAppEnv(

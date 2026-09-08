@@ -19,7 +19,7 @@ function makeRuntime(response: Response) {
     runtime: {
       fetch,
       location: {
-        href: 'https://app.test/apps/pms/workspaces/hq',
+        href: 'https://app.test/apps/pms',
         origin: 'https://app.test',
         replace,
       },
@@ -40,7 +40,7 @@ describe('client build fetch guard', () => {
     const { fetch, runtime } = makeRuntime(new Response('{}', { status: 200 }));
     installClientBuildFetchGuard(runtime, { buildId: 'build-current' });
 
-    await runtime.fetch('/api/v1/workspaces', {
+    await runtime.fetch('/api/v1/apps/bootstrap', {
       headers: { Authorization: 'Bearer token' },
     });
 
@@ -89,12 +89,12 @@ describe('client build fetch guard', () => {
       reloadOptions: { nowMs: () => 3000 },
     });
 
-    await runtime.fetch('/api/v1/workspaces');
-    await runtime.fetch('/api/v1/workspaces');
+    await runtime.fetch('/api/v1/apps/bootstrap');
+    await runtime.fetch('/api/v1/apps/bootstrap');
 
     expect(replace).toHaveBeenCalledTimes(1);
     expect(replace).toHaveBeenCalledWith(
-      'https://app.test/apps/pms/workspaces/hq?__reload=3000',
+      'https://app.test/apps/pms?__reload=3000',
     );
   });
 
@@ -138,7 +138,7 @@ describe('client build fetch guard', () => {
     request.responseHeaders.set('X-Open-Work-Hub-Reload-Required', '1');
     request.dispatchEvent(new Event('load'));
     expect(replace).toHaveBeenCalledWith(
-      'https://app.test/apps/pms/workspaces/hq?__reload=4000',
+      'https://app.test/apps/pms?__reload=4000',
     );
   });
 
@@ -214,7 +214,7 @@ describe('client build fetch guard', () => {
     });
     socket.dispatchEvent(closeEvent);
     expect(replace).toHaveBeenCalledWith(
-      'https://app.test/apps/pms/workspaces/hq?__reload=5000',
+      'https://app.test/apps/pms?__reload=5000',
     );
   });
 });

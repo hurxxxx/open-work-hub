@@ -2,7 +2,7 @@
 
 These fixtures are synthetic seed cases for runtime evaluation checks. They are
 intentionally small and deterministic. They must not call an LLM, network
-provider, or workspace data source during tests.
+provider, or company data source during tests.
 
 Fixtures should stay here only while they feed an executable runtime evaluation. The sanitizer
 fixture is consumed by external-egress tests. `routing_cases.json` is currently a reserved

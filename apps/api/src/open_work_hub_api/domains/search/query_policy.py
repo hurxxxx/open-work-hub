@@ -16,7 +16,6 @@ from open_work_hub_api.domains.search.backend_contracts import (
 from open_work_hub_api.domains.search.schemas import KeywordSearchRequest
 from open_work_hub_api.domains.search.target_keys import search_target_filter_keys
 
-
 DEFAULT_KEYWORD_SEARCH_CANDIDATE_SIZE = 10000
 KEYWORD_SEARCH_TEXT_FIELDS = (
     "title.exact^6",
@@ -36,7 +35,6 @@ KEYWORD_SEARCH_TEXT_FIELDS = (
 
 def build_keyword_search_query(
     *,
-    workspace_id: str,
     retrieval_partition_ids: tuple[str, ...] | None = None,
     acl_filter: KeywordAclFilter | None,
     request: KeywordSearchRequest,
@@ -46,7 +44,6 @@ def build_keyword_search_query(
     text_minimum_should_match: str | int | None = None,
 ) -> KeywordSearchQuery:
     return KeywordSearchQuery(
-        workspace_id=workspace_id,
         retrieval_partition_ids=retrieval_partition_ids,
         text=request.query.strip(),
         entity_types=tuple(str(item) for item in request.entity_types),

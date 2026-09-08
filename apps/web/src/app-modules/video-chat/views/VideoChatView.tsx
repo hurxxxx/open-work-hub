@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import { Copy, Loader2, Plus, RefreshCw, Video, VideoOff } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -32,7 +32,7 @@ function formatDateTime(
 export function VideoChatView() {
   const { t, i18n } = useTranslation(['apps', 'common']);
   const { token, user } = useAuth();
-  const { workspaceSlug } = useParams();
+
   const navigate = useNavigate();
   const timeZone = normalizeTimeZone(user?.time_zone);
 
@@ -53,11 +53,10 @@ export function VideoChatView() {
   );
 
   const refresh = useCallback(async () => {
-    if (!workspaceSlug) return;
     setLoading(true);
     setError(null);
     try {
-      const response = await listVideoChatSessions(token, workspaceSlug);
+      const response = await listVideoChatSessions(token);
       setSessions(response.items);
     } catch (loadError) {
       setError(
@@ -68,29 +67,23 @@ export function VideoChatView() {
     } finally {
       setLoading(false);
     }
-  }, [t, token, workspaceSlug]);
+  }, [t, token]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  if (!workspaceSlug) {
-    return null;
-  }
-  const activeWorkspaceSlug = workspaceSlug;
-
   async function handleCreate() {
     setCreating(true);
     setError(null);
     try {
-      const session = await createVideoChatSession(token, activeWorkspaceSlug, {
+      const session = await createVideoChatSession(token, {
         title: titleDraft.trim() || null,
       });
       setTitleDraft('');
       navigate(
         buildAppHref({
           routeId: 'video-chat.session',
-          workspaceSlug: activeWorkspaceSlug,
           pathParams: { sessionId: session.id },
         }),
       );
@@ -108,7 +101,6 @@ export function VideoChatView() {
   function roomPath(session: VideoChatSession): string {
     return buildAppHref({
       routeId: 'video-chat.session',
-      workspaceSlug: activeWorkspaceSlug,
       pathParams: { sessionId: session.id },
     });
   }

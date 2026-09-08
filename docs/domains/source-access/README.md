@@ -1,63 +1,52 @@
 # Source Access
 
-Source Access is the shared authorization composition point for registered searchable resources.
-It gives keyword search, Retrieval, and RAG one way to ask a source whether the current caller may
-read a canonical candidate. It never replaces the source app's own ACL or makes an index/storage
-locator authoritative. Notifications and content delivery have separate dispatchers but must reuse
-the same source-owned authorization semantics.
+Source Access composes source-owned authorization for keyword search, Retrieval, and RAG.
+Indexes and partitions identify candidates; PostgreSQL source ACLs decide disclosure.
+Notifications and content delivery use separate dispatchers with the same owning-app rules.
 
 ## Contract
 
-- `SourceAclPolicy` is built for an authenticated workspace or company execution context.
-- Each registered resource type has exactly one source-access adapter with an explicit owning
-  `app_id`. Missing adapters or owner app identities deny
-  access. Batch/RAG authorization admits a non-workspace context only when the paired retrieval
-  partition adapter declares that candidate scope; callers must not use a workspace-only adapter
-  through an unguarded direct path.
-- Direct, batch, RAG, and source-discovery dispatch apply the same execution-scope admission.
-  Company calls to workspace-only sources return a denial without invoking their adapter.
-- Every dispatch rechecks current account status, login blocking, runtime app availability, and
-  active workspace membership where applicable. A previously constructed `SourceAclPolicy` and
-  an ORM-loaded user graph are not authorization snapshots that survive revocation. Adapters
-  receive the current workspace role; batch calls check execution once per resource type.
-- Company file corpora remain accessible through an authenticated company execution policy and
-  their own cohort/explicit-grant ACL. Company scope never admits workspace-only sources.
-- The source app owns direct and batch authorization predicates, inactive/deleted handling, and
-  keyword ACL branches. The shared policy groups candidates and dispatches to those adapters.
-- Docs linked to PMS spaces use direct, supported space membership for source SQL and keyword
-  candidates, matching document REST and collaboration access. Workspace administration alone
-  does not grant those private documents. Explicit document/meeting shares must carry a supported
-  `read` or `edit` level. Other independent owner or valid sharing rights still apply.
-- PMS task grants require the task's active space in the explicitly bound workspace, current
-  membership and PMS availability, and a supported grant level. They cannot bypass workspace
-  revocation through another workspace's URL or expose inactive/trashed spaces. This applies to
-  task detail and custom-field reads as well as source authorization. Archived-list detail remains
-  readable under its existing source policy; active search/RAG excludes archived work.
-- Registered resource types are `docs_native_doc`, `file_manager_file`, `meeting`, `pms_task`, and
-  `planner_event`.
-- Candidate partition, workspace metadata, search index fields, notification rows, signed content
-  grants, and browser routes are never grants. Recheck current source-owned access against
-  PostgreSQL before exposing the resource.
-- Final authorization precedes result counts, facets, highlights, reranking, summaries, external
-  LLM input, grounding, and citations.
-- Batch authorization may optimize the decision but must preserve the same result as direct
-  source authorization. Returned IDs are intersected with requested candidates. Filtering
-  survivors must not reorder them.
-- Scope rules accept only supported scope kinds. A workspace administrator may manage user
-  scopes within an already workspace-constrained source query, but cannot authorize another
-  workspace ID, an inactive/foreign team, or an unknown scope kind. Source queries must still
-  constrain resource ownership to the policy workspace.
-- A new indexed resource type requires a source-access adapter, explicit registry composition,
-  retrieval-partition alignment when applicable, and direct/batch/revocation tests. A non-indexed
-  notification/content source may instead use its owning dispatcher's explicit branch.
+- `SourceAclPolicy.for_user(db, user=...)` carries the authenticated caller. There is no global
+  workspace or replacement company container identifier.
+- Each registered resource type has one source adapter and an explicit owning `app_id`. Missing
+  adapters, unknown scope kinds, inactive accounts, and unavailable apps deny access.
+- Every direct, batch, RAG, discovery, and keyword dispatch rechecks current app admission. A
+  constructed policy, queued job, approval, token, or ORM user graph cannot preserve revoked rights.
+- Apps own resource predicates, lifecycle handling, and role semantics. Core company groups are
+  reusable principals, resolved from current active assignments; they are not business roles.
+- Docs authoring starts personal. Direct user/group read or edit shares do not transfer ownership
+  or permit resharing. PMS publication transfers ownership explicitly; removing its target does
+  not restore personal ownership. `company_visible` grants an all-admitted-users read audience
+  separately from company ownership. Company ownership grants platform administrators read only.
+- PMS uses active app-local spaces, explicit user membership, live group bindings, and supported
+  task grants. Platform administrators can read company business resources but do not inherit a
+  space write role. Archived-list detail and active search exclusion remain source-owned rules.
+- Meeting records, recordings, and generated meeting notes are company business resources.
+  Administrators can read them while admitted to the relevant app. Participation or organizer
+  authority is still required for business mutations. Personal planner events remain owner-only.
+- Linked-resource metadata is independently authorized. Access to a meeting, document, or
+  whiteboard cannot expose another app's private or disabled target title.
+- File corpora and files retain source-owned scope, explicit grant, lifecycle, and content rules.
+  Company candidate scope never makes personal files visible.
+- Registered searchable types are `docs_native_doc`, `file_manager_file`, `meeting`, `pms_task`,
+  and `planner_event`. A new type needs registry composition, source adapter, partition alignment,
+  and direct/batch/revocation tests.
+- Final source authorization precedes counts, facets, highlights, reranking, external model input,
+  summaries, grounding, and citations. Candidate fields, signed grants, notification rows, routes,
+  and retrieval partitions are never grants.
+- Batch results must equal individual authorization, intersect the requested IDs, and preserve
+  survivor order. PostgreSQL version, generation, checksum, and tombstone fences prevent stale
+  projections from reappearing after replacement or deletion.
 
-Retrieval partition and projection rules are owned by
-[ADR 0009](../../../adr/0009-retrieval-partition-projection-generations.md). Signed byte delivery
-is owned by [Content Access](../content-access/README.md); source-event visibility is owned by
-[Notifications](../notifications/README.md).
+Company policy is owned by [App Platform](../app-platform/README.md) and
+[Organization](../organization/README.md). Retrieval generations remain defined by
+[ADR 0009](../../../adr/0009-retrieval-partition-projection-generations.md), with its former
+workspace requirements superseded by [ADR 0012](../../../adr/0012-company-app-access-without-workspaces.md).
+Byte grants are owned by [Content Access](../content-access/README.md), and source-event visibility
+by [Notifications](../notifications/README.md).
 
 ## Checks
 
 ```bash
-(cd apps/api && uv run --python 3.12 --group dev python -m pytest tests/test_source_access_policy.py tests/test_platform_adapter_registries.py tests/test_search_query_policy.py tests/test_notification_visibility.py tests/test_retrieval.py -q)
+(cd apps/api && uv run --python 3.12 --group dev pytest tests/test_company_content_boundaries.py tests/test_company_groups.py tests/test_source_access_policy.py tests/test_platform_adapter_registries.py tests/test_search_query_policy.py tests/test_notification_visibility.py tests/test_retrieval.py -q)
 ```

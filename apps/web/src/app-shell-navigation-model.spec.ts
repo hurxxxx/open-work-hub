@@ -5,10 +5,10 @@ import type { AppModuleId } from './app/shell/navigation-types';
 import {
   getShellPathname,
   getShellSearchParams,
-  getWorkspaceAppRelativePath,
+  getAppRelativePath,
   resolveGlobalRouteAppId,
   resolveManifestNavItemId,
-  resolveWorkspaceRouteAppId,
+  resolveAppRouteAppId,
 } from './app-shell-navigation-model';
 import { APP_MODULE_MANIFESTS } from './app/shell/app-registry';
 
@@ -28,62 +28,39 @@ function resolveManifestNavItem(appId: AppModuleId, path: string): string {
 describe('app shell navigation model', () => {
   it('separates pathname and query parameters from shell paths', () => {
     expect(
-      getShellPathname(
-        '/apps/docs/workspaces/delivery-hub/documents/doc-1?view=recent#page-2',
-      ),
-    ).toBe('/apps/docs/workspaces/delivery-hub/documents/doc-1');
+      getShellPathname('/apps/docs/documents/doc-1?view=recent#page-2'),
+    ).toBe('/apps/docs/documents/doc-1');
     expect(getShellPathname('?view=recent')).toBe('/');
 
     const params = getShellSearchParams(
-      '/apps/docs/workspaces/delivery-hub/documents/doc-1?view=recent&page=page-1#page-2',
+      '/apps/docs/documents/doc-1?view=recent&page=page-1#page-2',
     );
     expect(params.get('view')).toBe('recent');
     expect(params.get('page')).toBe('page-1');
   });
 
   it('resolves manifest query views to navigation item ids', () => {
+    expect(resolveManifestNavItem('docs', '/apps/docs?view=mine')).toBe(
+      'docs-my',
+    );
+    expect(resolveManifestNavItem('docs', '/apps/docs?view=shared')).toBe(
+      'docs-shared',
+    );
+    expect(resolveManifestNavItem('docs', '/apps/docs?view=private')).toBe(
+      'docs-private',
+    );
     expect(
-      resolveManifestNavItem(
-        'docs',
-        '/apps/docs/workspaces/delivery-hub?view=mine',
-      ),
-    ).toBe('docs-my');
-    expect(
-      resolveManifestNavItem(
-        'docs',
-        '/apps/docs/workspaces/delivery-hub?view=shared',
-      ),
-    ).toBe('docs-shared');
-    expect(
-      resolveManifestNavItem(
-        'docs',
-        '/apps/docs/workspaces/delivery-hub?view=private',
-      ),
-    ).toBe('docs-private');
-    expect(
-      resolveManifestNavItem(
-        'docs',
-        '/apps/docs/workspaces/delivery-hub?view=meeting_notes',
-      ),
+      resolveManifestNavItem('docs', '/apps/docs?view=meeting_notes'),
     ).toBe('docs-notes');
     expect(
-      resolveManifestNavItem(
-        'docs',
-        '/apps/docs/workspaces/delivery-hub/documents/doc-1?view=recent',
-      ),
+      resolveManifestNavItem('docs', '/apps/docs/documents/doc-1?view=recent'),
     ).toBe('docs-recent');
-    expect(
-      resolveManifestNavItem(
-        'docs',
-        '/apps/docs/workspaces/delivery-hub?view=archived',
-      ),
-    ).toBe('docs-archived');
-    expect(
-      resolveManifestNavItem(
-        'docs',
-        '/apps/docs/workspaces/delivery-hub?view=unknown',
-      ),
-    ).toBe('docs-all');
+    expect(resolveManifestNavItem('docs', '/apps/docs?view=archived')).toBe(
+      'docs-archived',
+    );
+    expect(resolveManifestNavItem('docs', '/apps/docs?view=unknown')).toBe(
+      'docs-all',
+    );
 
     expect(
       resolveManifestNavItem('mail', '/apps/mail?view=settings&unread=true'),
@@ -109,41 +86,32 @@ describe('app shell navigation model', () => {
 
   it('resolves workspace app ids from manifest route paths', () => {
     expect(
-      resolveWorkspaceRouteAppId({
+      resolveAppRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/apps/docs/workspaces/delivery-hub/documents/doc-1',
+        pathname: '/apps/docs/documents/doc-1',
       }),
     ).toBe('docs');
     expect(
-      resolveWorkspaceRouteAppId({
+      resolveAppRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/apps/meeting/workspaces/delivery-hub/meetings/meeting-1',
+        pathname: '/apps/meeting/meetings/meeting-1',
       }),
     ).toBe('meeting');
     expect(
-      resolveWorkspaceRouteAppId({
+      resolveAppRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname:
-          '/apps/not-registered/workspaces/delivery-hub/documents/doc-1',
+        pathname: '/apps/not-registered/documents/doc-1',
       }),
     ).toBeNull();
     expect(
-      resolveWorkspaceRouteAppId({
+      resolveAppRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/apps/not-registered/workspaces/delivery-hub',
+        pathname: '/apps/not-registered',
       }),
     ).toBeNull();
+    expect(getAppRelativePath('/apps/pms/assigned', 'pms')).toBe('/assigned');
     expect(
-      getWorkspaceAppRelativePath(
-        '/apps/pms/workspaces/delivery-hub/assigned',
-        'pms',
-      ),
-    ).toBe('/assigned');
-    expect(
-      getWorkspaceAppRelativePath(
-        '/apps/not-registered/workspaces/delivery-hub/pms/assigned',
-        'not-registered',
-      ),
+      getAppRelativePath('/apps/not-registered/pms/assigned', 'not-registered'),
     ).toBe('/pms/assigned');
   });
 

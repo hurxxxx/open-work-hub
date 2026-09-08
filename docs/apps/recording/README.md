@@ -1,6 +1,6 @@
 # Recording App
 
-Recording is a workspace app. It owns recording upload, transcription and summary state, durable
+Recording is a personal app. It owns recording upload, transcription and summary state, durable
 results, linked targets, playback authorization, and explicit publication of a completed result.
 App entry and availability follow the [App Platform Contract](../../domains/app-platform/README.md).
 
@@ -20,8 +20,7 @@ App entry and availability follow the [App Platform Contract](../../domains/app-
 ## Docs Publication
 
 - Processing never creates a Docs document automatically.
-- `POST /recording/recordings/{recording_id}/publications/docs` is an explicit user action on the
-  workspace API prefix.
+- `POST /api/v1/recording/recordings/{recording_id}/publications/docs` is an explicit user action.
 - Publication requires recording access, a completed non-empty summary, current Recording and Docs
   app availability, and current Docs write authorization.
 - The publication key is `(recording_id, target_app, result_version)`. Repeating publication for the

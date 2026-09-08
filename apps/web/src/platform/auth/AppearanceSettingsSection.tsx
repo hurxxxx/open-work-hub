@@ -1,18 +1,18 @@
 import { Monitor, Moon, Sun } from 'lucide-react';
 
+import { cn } from '@/src/lib/utils';
+import { LOCALE_OPTIONS } from '@/src/platform/i18n';
 import {
   DATE_FORMAT_OPTIONS,
   TIME_ZONE_OPTIONS,
 } from '@/src/platform/time/time-utils';
-import { LOCALE_OPTIONS } from '@/src/platform/i18n';
-import { cn } from '@/src/lib/utils';
 import { SettingsFieldRow } from './SettingsFieldRow';
 import { SettingsSectionHeader } from './SettingsSectionHeader';
+import type { ThemePreference } from './auth-api';
 import {
   type ProfilePageState,
   type SettingsTranslator,
 } from './settings-page-model';
-import type { ThemePreference } from './auth-api';
 
 const themeOptions: {
   value: ThemePreference;

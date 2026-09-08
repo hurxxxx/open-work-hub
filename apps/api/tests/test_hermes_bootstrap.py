@@ -42,9 +42,7 @@ def _load_bootstrap(monkeypatch, config: dict[str, Any]):
 def test_bootstrap_uses_official_settings_to_replace_gemini_fallback(monkeypatch) -> None:
     config = {
         "model": {"provider": "anthropic", "default": "claude"},
-        "fallback_providers": [
-            {"provider": "openai-codex", "model": "gpt-codex"}
-        ],
+        "fallback_providers": [{"provider": "openai-codex", "model": "gpt-codex"}],
         "fallback_model": {"provider": "google", "model": "gemini"},
         "agent": {"environment_probe": False},
         "compression": {"progress_notices": True},

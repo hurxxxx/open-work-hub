@@ -14,36 +14,27 @@ from open_work_hub_api.domains.ai.tool_surface import (
     resolve_filtered_capability_tools,
 )
 from open_work_hub_api.domains.auth.access import load_user_graph
-from open_work_hub_api.domains.auth.models import (
-    CompanyAppControl,
-    Workspace,
-)
+from open_work_hub_api.domains.auth.models import CompanyAppControl
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
     return dev_login(client, account_key)
 
 
-def _load_workspace_principal(session: dict) -> tuple[Workspace, CallerPrincipal]:
+def _load_principal(session: dict) -> CallerPrincipal:
     with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         user = load_user_graph(db, session["user"]["id"])
-        assert workspace is not None
         assert user is not None
         principal = user_principal(
-            workspace_id=workspace.id,
             user_id=user.id,
             source="api.stream",
         )
-        db.expunge(workspace)
-        return workspace, principal
+        return principal
 
 
 def _disable_platform_app(app_id: str) -> None:
     with Session(get_engine()) as db:
-        control = db.scalar(
-            select(CompanyAppControl).where(CompanyAppControl.app_id == app_id)
-        )
+        control = db.scalar(select(CompanyAppControl).where(CompanyAppControl.app_id == app_id))
         assert control is not None
         control.enabled = False
         db.add(control)
@@ -52,12 +43,11 @@ def _disable_platform_app(app_id: str) -> None:
 
 def test_agent_tool_surface_empty_scope_disables_all_tools(client: TestClient) -> None:
     session = _dev_login(client, "delivery-hub-admin")
-    workspace, principal = _load_workspace_principal(session)
+    principal = _load_principal(session)
 
     with get_session_factory()() as db:
         surface = resolve_agent_tool_surface(
             db,
-            workspace=workspace,
             principal=principal,
             messages=[{"role": "user", "content": "hi"}],
             allowed_app_ids=[],
@@ -72,12 +62,11 @@ def test_agent_tool_surface_empty_scope_disables_all_tools(client: TestClient) -
 
 def test_agent_tool_surface_exposes_provider_neutral_tool_metadata(client: TestClient) -> None:
     session = _dev_login(client, "delivery-hub-admin")
-    workspace, principal = _load_workspace_principal(session)
+    principal = _load_principal(session)
 
     with get_session_factory()() as db:
         surface = resolve_agent_tool_surface(
             db,
-            workspace=workspace,
             principal=principal,
             messages=[{"role": "user", "content": "문서 근거를 찾아줘"}],
             allowed_app_ids=["retrieval-search"],
@@ -96,12 +85,11 @@ def test_agent_tool_surface_uses_scope_not_message_keywords_for_rag(
     client: TestClient,
 ) -> None:
     session = _dev_login(client, "delivery-hub-admin")
-    workspace, principal = _load_workspace_principal(session)
+    principal = _load_principal(session)
 
     with get_session_factory()() as db:
         surface = resolve_agent_tool_surface(
             db,
-            workspace=workspace,
             principal=principal,
             messages=[{"role": "user", "content": "안녕하세요"}],
             allowed_app_ids=["retrieval-search"],
@@ -117,12 +105,11 @@ def test_agent_tool_surface_does_not_cross_tool_owner_app_scope(
     client: TestClient,
 ) -> None:
     session = _dev_login(client, "delivery-hub-admin")
-    workspace, principal = _load_workspace_principal(session)
+    principal = _load_principal(session)
 
     with get_session_factory()() as db:
         surface = resolve_agent_tool_surface(
             db,
-            workspace=workspace,
             principal=principal,
             messages=[{"role": "user", "content": "문서를 검색해줘"}],
             allowed_app_ids=["chatbot"],
@@ -136,14 +123,13 @@ def test_filtered_capability_tools_intersect_app_scope_with_platform_visibility(
     client: TestClient,
 ) -> None:
     session = _dev_login(client, "delivery-hub-admin")
-    workspace, principal = _load_workspace_principal(session)
+    principal = _load_principal(session)
     _disable_platform_app("planner")
 
     with get_session_factory()() as db:
         tools = resolve_filtered_capability_tools(
             db,
             registry=get_ai_capability_registry(),
-            workspace=workspace,
             principal=principal,
             app_ids=["planner"],
         )
@@ -155,20 +141,19 @@ def test_agent_tool_surface_hides_disabled_platform_apps_in_legacy_openai_path(
     client: TestClient,
 ) -> None:
     session = _dev_login(client, "delivery-hub-admin")
-    workspace, principal = _load_workspace_principal(session)
+    principal = _load_principal(session)
     _disable_platform_app("planner")
 
     with get_session_factory()() as db:
         surface = resolve_agent_tool_surface(
             db,
-            workspace=workspace,
             principal=principal,
             messages=[{"role": "user", "content": "계획을 정리해줘"}],
         )
 
     registry = get_ai_capability_registry()
     surfaced_app_ids = {
-        registry.descriptors[name].workspace_app_id
+        registry.descriptors[name].owner_app_id
         for name in surface.tool_names
         if name in registry.descriptors
     }

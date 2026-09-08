@@ -1,13 +1,11 @@
-import { createElement, lazy } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
 import {
   getAppRouteChrome,
   getAppRoutePattern,
 } from '@open-work-hub/contracts/app-routes';
+import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
-import { buildBentoPresentationPath } from './bento-route-paths';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const BentoView = lazy(() =>
   import('./views/BentoView').then((module) => ({
@@ -15,16 +13,7 @@ const BentoView = lazy(() =>
   })),
 );
 
-function BentoLegacyPresentationRedirect() {
-  const { workspaceSlug, documentId } = useParams();
-  const destination =
-    workspaceSlug && documentId
-      ? buildBentoPresentationPath(workspaceSlug, documentId)
-      : '/';
-  return createElement(Navigate, { replace: true, to: destination });
-}
-
-export const bentoWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const bentoAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'bento',
     chrome: getAppRouteChrome('bento.root'),
@@ -36,11 +25,5 @@ export const bentoWorkspaceRoutes: WorkspaceRouteDefinition[] = [
     chrome: getAppRouteChrome('bento.presentation'),
     path: getAppRoutePattern('bento.presentation'),
     element: lazyRoute(createElement(BentoView)),
-  },
-  {
-    appId: 'bento',
-    chrome: getAppRouteChrome('bento.presentation-legacy'),
-    path: getAppRoutePattern('bento.presentation-legacy'),
-    element: createElement(BentoLegacyPresentationRedirect),
   },
 ];

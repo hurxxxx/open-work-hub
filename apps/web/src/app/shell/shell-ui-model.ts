@@ -1,12 +1,12 @@
+import type { ShellAppId } from '@/src/platform/apps/app-links';
 import type { ThemePreference } from '@/src/platform/auth/auth-api';
 import {
   APP_CONTRACT_BY_ID,
   type AppId,
 } from '@open-work-hub/contracts/app-contracts';
-import type { WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
 
 export type ResolvedThemePreference = 'light' | 'dark';
-export type AppDisplayScope = 'company' | 'personal' | 'workspace';
+export type AppDisplayScope = 'company' | 'personal';
 
 export const DARK_MODE_QUERY = '(prefers-color-scheme: dark)';
 
@@ -55,11 +55,10 @@ export function getInitials(label: string, fallback: string): string {
 }
 
 export function resolveAppDisplayScope(
-  appId: WorkspaceAppId,
+  appId: ShellAppId,
 ): AppDisplayScope | null {
   const contract = APP_CONTRACT_BY_ID.get(appId as AppId);
   if (!contract) return null;
-  if (contract.availability_scope === 'workspace') return 'workspace';
   return contract.execution_context_kind === 'personal'
     ? 'personal'
     : 'company';

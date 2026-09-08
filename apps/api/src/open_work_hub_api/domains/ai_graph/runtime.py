@@ -31,7 +31,6 @@ from open_work_hub_api.domains.ai_graph.repository import (
     AiGraphRunRepository,
 )
 
-
 logger = logging.getLogger(__name__)
 
 _SAFE_ERROR_DETAIL = re.compile(r"^[a-z][a-z0-9_.-]{0,119}$")
@@ -50,7 +49,6 @@ class _RuntimeState(TypedDict):
 @dataclass(frozen=True)
 class AiGraphRuntimeContext:
     run_id: str
-    workspace_id: str
     requested_by_user_id: str
     app_id: str
     conversation_id: str | None
@@ -95,9 +93,7 @@ def _node_runner(
             if not isinstance(result, AiGraphNodeResult):
                 result = AiGraphNodeResult.model_validate(result)
             if node.routes and result.route not in node.routes:
-                raise ValueError(
-                    f"node {node.node_id} returned unknown route {result.route!r}"
-                )
+                raise ValueError(f"node {node.node_id} returned unknown route {result.route!r}")
             if not node.routes and result.route is not None:
                 raise ValueError(f"node {node.node_id} returned an undeclared route")
             values: dict[str, Any] = {"outputs": {node.node_id: result.output}}
@@ -147,25 +143,18 @@ def compile_graph(
     missing = {node.node_id for node in spec.nodes} - set(node_adapters)
     extra = set(node_adapters) - {node.node_id for node in spec.nodes}
     if missing or extra:
-        raise ValueError(
-            f"node adapter mismatch; missing={sorted(missing)}, extra={sorted(extra)}"
-        )
+        raise ValueError(f"node adapter mismatch; missing={sorted(missing)}, extra={sorted(extra)}")
 
     builder = StateGraph(_RuntimeState, context_schema=AiGraphRuntimeContext)
     for node in spec.nodes:
         builder.add_node(node.node_id, _node_runner(node, node_adapters[node.node_id]))
 
     routed_targets = {
-        target
-        for node in spec.nodes
-        for target in node.routes.values()
-        if target is not None
+        target for node in spec.nodes for target in node.routes.values() if target is not None
     }
     static_dependents = {
         node.node_id: {
-            candidate.node_id
-            for candidate in spec.nodes
-            if node.node_id in candidate.depends_on
+            candidate.node_id for candidate in spec.nodes if node.node_id in candidate.depends_on
         }
         for node in spec.nodes
     }
@@ -173,11 +162,7 @@ def compile_graph(
     for node in spec.nodes:
         if node.depends_on:
             starts: str | list[str]
-            starts = (
-                node.depends_on[0]
-                if len(node.depends_on) == 1
-                else list(node.depends_on)
-            )
+            starts = node.depends_on[0] if len(node.depends_on) == 1 else list(node.depends_on)
             builder.add_edge(starts, node.node_id)
         elif node.node_id not in routed_targets:
             builder.add_edge(START, node.node_id)
@@ -358,8 +343,7 @@ async def run_graph(
         else:
             run = repository.require(run_id)
             if (
-                run.workspace_id != request.workspace_id
-                or run.app_id != request.app_id
+                run.app_id != request.app_id
                 or run.graph_id != request.graph.graph_id
                 or run.graph_version != request.graph.graph_version
             ):
@@ -392,7 +376,6 @@ async def run_graph(
 
     context = AiGraphRuntimeContext(
         run_id=run_id,
-        workspace_id=request.workspace_id,
         requested_by_user_id=request.requested_by_user_id,
         app_id=request.app_id,
         conversation_id=request.conversation_id,

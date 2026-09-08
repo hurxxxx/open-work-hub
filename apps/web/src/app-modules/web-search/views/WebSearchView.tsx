@@ -1,5 +1,3 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import {
   Globe2,
   MessageSquare,
@@ -7,6 +5,8 @@ import {
   Search,
   type LucideIcon,
 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   ChatComposer,
@@ -19,16 +19,15 @@ import {
   type ConversationSummary,
   type ConversationTurn,
 } from '@/src/app-modules/chatbot/public-api';
+import { cn } from '@/src/lib/utils';
 import { iterSseEvents } from '@/src/platform/api/sse-parser';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { cn } from '@/src/lib/utils';
 import {
-  type WebSearchAnswerResponse,
-  type WebSearchStreamEvent,
   WebSearchApiError,
   streamWebSearch,
+  type WebSearchAnswerResponse,
+  type WebSearchStreamEvent,
 } from '../api/web-search-api';
-import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
 
 export interface WebSearchExperience {
   apiPrefix: string;
@@ -228,8 +227,7 @@ export function WebSearchExperienceView({
   const i18nKey = experience.i18nKey;
   const ExperienceIcon = experience.icon;
   const { token } = useAuth();
-  const workspaceBootstrap = useWorkspaceBootstrapContext();
-  const workspaceSlug = workspaceBootstrap.data?.workspace.slug ?? null;
+
   const authToken = token ?? '';
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -253,22 +251,20 @@ export function WebSearchExperienceView({
 
   const loadConversationDetail = useCallback(
     async (conversationId: string) => {
-      if (!authToken || !workspaceSlug) {
+      if (!authToken) {
         return;
       }
-      const detail = await getConversation(authToken, conversationId, {
-        workspaceSlug,
-      });
+      const detail = await getConversation(authToken, conversationId, {});
       setActiveConversation(detail);
       setActiveConversationId(detail.id);
       setActiveTurns(detail.turns.map(toChatTurn));
       setDraftTitle(null);
     },
-    [authToken, workspaceSlug],
+    [authToken],
   );
 
   const refreshConversationList = useCallback(async () => {
-    if (!authToken || !workspaceSlug) {
+    if (!authToken) {
       setConversations([]);
       return [];
     }
@@ -276,14 +272,13 @@ export function WebSearchExperienceView({
       limit: 50,
       scopeRef: experience.conversationScopeRef,
       scopeResourceId: 'default',
-      workspaceSlug,
     });
     setConversations(result.items);
     return result.items;
-  }, [authToken, experience.conversationScopeRef, workspaceSlug]);
+  }, [authToken, experience.conversationScopeRef]);
 
   useEffect(() => {
-    if (!authToken || !workspaceSlug) {
+    if (!authToken) {
       setConversations([]);
       setActiveConversation(null);
       setActiveConversationId(null);
@@ -322,7 +317,6 @@ export function WebSearchExperienceView({
     experience.conversationScopeRef,
     loadConversationDetail,
     refreshConversationList,
-    workspaceSlug,
   ]);
 
   useEffect(() => {
@@ -341,7 +335,7 @@ export function WebSearchExperienceView({
 
   const handleAsk = useCallback(async () => {
     const trimmed = question.trim();
-    if (!trimmed || !authToken || !workspaceSlug) {
+    if (!trimmed || !authToken) {
       return;
     }
     const existingStream = activeStreamRef.current;
@@ -369,7 +363,6 @@ export function WebSearchExperienceView({
     try {
       const response = await streamWebSearch({
         token: authToken,
-        workspaceSlug,
         question: trimmed,
         conversationId: requestedConversationId,
         apiPrefix: experience.apiPrefix,
@@ -511,7 +504,6 @@ export function WebSearchExperienceView({
     question,
     setActiveStream,
     t,
-    workspaceSlug,
   ]);
 
   const composer = (
@@ -528,7 +520,7 @@ export function WebSearchExperienceView({
       isStreaming={isCurrentViewStreaming}
       chatError={chatError}
       placeholder={t(`${i18nKey}.placeholder`)}
-      isDisabled={!authToken || !workspaceSlug}
+      isDisabled={!authToken}
       leadingControls={null}
     />
   );

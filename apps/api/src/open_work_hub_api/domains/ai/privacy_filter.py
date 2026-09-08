@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+import re
+import shutil
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass
 from pathlib import Path
-import re
-import shutil
 from threading import Lock
 from typing import Any
 
 import httpx
 
 from open_work_hub_api.core.settings import Settings, get_settings
-
 
 DEFAULT_OPF_REPOSITORY = "openai/privacy-filter"
 
@@ -216,12 +215,8 @@ def _detect_privacy_filter_spans_service(
                 for span in payload.get("spans", ())
                 if isinstance(span, dict)
             ),
-            entity_types=tuple(
-                str(item) for item in payload.get("entity_types", ()) if item
-            ),
-            blocker_types=tuple(
-                str(item) for item in payload.get("blocker_types", ()) if item
-            ),
+            entity_types=tuple(str(item) for item in payload.get("entity_types", ()) if item),
+            blocker_types=tuple(str(item) for item in payload.get("blocker_types", ()) if item),
             pii_hits=tuple(str(item) for item in payload.get("pii_hits", ()) if item),
             enabled=bool(payload.get("enabled", True)),
             used=bool(payload.get("used", True)),
@@ -253,11 +248,7 @@ def _check_privacy_filter_service_health(settings: Settings) -> PrivacyFilterHea
             status=str(payload.get("status") or "error"),
             checkpoint=str(payload.get("checkpoint") or settings.opf_checkpoint),
             device=str(payload.get("device") or "cpu"),
-            detail=(
-                payload.get("detail")
-                if isinstance(payload.get("detail"), str)
-                else None
-            ),
+            detail=(payload.get("detail") if isinstance(payload.get("detail"), str) else None),
         )
     except Exception as error:  # noqa: BLE001 - readiness should report concise failure.
         return PrivacyFilterHealth(

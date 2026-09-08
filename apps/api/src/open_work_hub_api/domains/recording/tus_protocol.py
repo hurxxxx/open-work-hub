@@ -10,7 +10,6 @@ from fastapi import status
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.settings import get_settings
 
-
 TUS_RESUMABLE_VERSION = "1.0.0"
 TUS_EXTENSION_HEADER = "creation,creation-defer-length,checksum"
 TUS_UPLOAD_LENGTH_META_KEY = "__tus_upload_length"

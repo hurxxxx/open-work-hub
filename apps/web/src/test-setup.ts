@@ -1,5 +1,5 @@
-import { vi } from 'vitest';
 import '@/src/platform/i18n';
+import { vi } from 'vitest';
 
 Object.defineProperty(window, 'scrollTo', {
   configurable: true,

@@ -3,14 +3,14 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from sqlalchemy import select
-from sqlalchemy.sql import Select
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.sql import Select
 
 from open_work_hub_api.domains.auth.access import is_platform_admin_user
-from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    resolve_enabled_app_contexts_for_user,
+from open_work_hub_api.domains.auth.app_gate import (
+    allowed_app_ids,
 )
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.community.models import CommunityPost
 from open_work_hub_api.domains.pms.models import Notification
 from open_work_hub_api.domains.source_access import SourceAclPolicy
@@ -42,56 +42,29 @@ def visible_notifications(
         for row in rows
         if row.user_id == user.id and row.type != "dm_message" and row.origin_app_id
     ]
-    enabled_contexts = resolve_enabled_app_contexts_for_user(
-        db,
-        user=user,
-        contexts=(
-            (row.origin_app_id, row.origin_workspace_id)
-            for row in owned_rows
-            if row.origin_app_id is not None
-        ),
-    )
-    candidates = [
-        row
-        for row in owned_rows
-        if (row.origin_app_id, row.origin_workspace_id) in enabled_contexts
-    ]
+    enabled_app_ids = allowed_app_ids(db, user_id=user.id)
+    candidates = [row for row in owned_rows if row.origin_app_id in enabled_app_ids]
 
     allowed_notification_ids: set[str] = set()
-    pms_by_workspace: dict[str, list[Notification]] = {}
-    community_rows: list[Notification] = []
-    for row in candidates:
-        if (
-            row.origin_app_id == "pms"
-            and row.origin_workspace_id is not None
-            and row.source_type == "pms_task"
-            and row.source_id is not None
-        ):
-            pms_by_workspace.setdefault(row.origin_workspace_id, []).append(row)
-        elif (
-            row.origin_app_id == "community"
-            and row.source_type == "community_post"
-            and row.source_id is not None
-        ):
-            community_rows.append(row)
-
-    for workspace_id, workspace_rows in pms_by_workspace.items():
-        try:
-            policy = SourceAclPolicy.for_workspace_id(
-                db,
-                workspace_id=workspace_id,
-                user=user,
-            )
-        except ValueError:
-            continue
-        allowed_sources = set(
-            policy.authorize_many_resources(
-                ("pms_task", row.source_id) for row in workspace_rows if row.source_id is not None
-            )
-        )
-        allowed_notification_ids.update(
-            row.id for row in workspace_rows if ("pms_task", row.source_id) in allowed_sources
-        )
+    pms_rows = [
+        row
+        for row in candidates
+        if row.origin_app_id == "pms" and row.source_type == "pms_task" and row.source_id
+    ]
+    community_rows = [
+        row
+        for row in candidates
+        if row.origin_app_id == "community"
+        and row.source_type == "community_post"
+        and row.source_id
+    ]
+    policy = SourceAclPolicy.for_user(db, user=user)
+    allowed_sources = policy.authorize_many_resources(
+        ("pms_task", row.source_id) for row in pms_rows
+    )
+    allowed_notification_ids.update(
+        row.id for row in pms_rows if ("pms_task", row.source_id) in allowed_sources
+    )
 
     if community_rows:
         source_ids = {row.source_id for row in community_rows if row.source_id is not None}

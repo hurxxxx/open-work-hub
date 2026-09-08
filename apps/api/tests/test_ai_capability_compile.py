@@ -3,11 +3,10 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from open_work_hub_api.core.principal import personal_user_principal
+from open_work_hub_api.core.principal import user_principal
 from open_work_hub_api.domains.ai.registry import (
     AiCapabilityRegistry,
-    WorkspaceContext,
-    WorkspaceEntitlementView,
+    AppEntitlementView,
     get_ai_capability_registry,
     reset_ai_capability_registry,
 )
@@ -31,16 +30,16 @@ def test_compile_rejects_non_nullable_union_schema() -> None:
     registry = AiCapabilityRegistry()
     registry.register_discoverability_predicate(
         predicate_id="custom.enabled",
-        predicate=lambda principal, workspace, entitlements: True,
+        predicate=lambda principal, entitlements: True,
     )
     registry.register_tool(
         name="custom.union_tool",
         description="Unsupported union tool",
         owner_domain="custom",
         args_model=UnsupportedArgs,
-        handler=lambda db, workspace, principal, user, arguments: {"ok": True},
+        handler=lambda db, principal, user, arguments: {"ok": True},
         discoverability_predicate_id="custom.enabled",
-        workspace_app_id="chatbot",
+        owner_app_id="chatbot",
     )
 
     with pytest.raises(ValueError, match="nullable unions"):
@@ -54,16 +53,16 @@ def test_registry_rejects_duplicate_tool_registration() -> None:
     registry = AiCapabilityRegistry()
     registry.register_discoverability_predicate(
         predicate_id="custom.enabled",
-        predicate=lambda principal, workspace, entitlements: True,
+        predicate=lambda principal, entitlements: True,
     )
     registry.register_tool(
         name="custom.read_item",
         description="Read item",
         owner_domain="custom",
         args_model=Args,
-        handler=lambda db, workspace, principal, user, arguments: {"ok": True},
+        handler=lambda db, principal, user, arguments: {"ok": True},
         discoverability_predicate_id="custom.enabled",
-        workspace_app_id="chatbot",
+        owner_app_id="chatbot",
     )
 
     with pytest.raises(ValueError, match="Duplicate AI tool registration"):
@@ -72,82 +71,68 @@ def test_registry_rejects_duplicate_tool_registration() -> None:
             description="Read item again",
             owner_domain="custom",
             args_model=Args,
-            handler=lambda db, workspace, principal, user, arguments: {"ok": True},
+            handler=lambda db, principal, user, arguments: {"ok": True},
             discoverability_predicate_id="custom.enabled",
-            workspace_app_id="chatbot",
+            owner_app_id="chatbot",
         )
 
 
-def test_registry_accepts_plugin_workspace_app_without_core_catalog_entry() -> None:
+def test_registry_accepts_plugin_app_without_core_catalog_entry() -> None:
     registry = AiCapabilityRegistry()
 
     registry.register_tool(
         name="plugin.read_item",
         description="Read plugin item",
         owner_domain="plugin",
-        workspace_app_id="plugin.app",
-        handler=lambda db, workspace, principal, user, arguments: {"ok": True},
+        owner_app_id="plugin.app",
+        handler=lambda db, principal, user, arguments: {"ok": True},
     )
 
     descriptor = registry.descriptors["plugin.read_item"]
     predicate = registry.resolve_discoverability_predicate(descriptor.discoverability_predicate_id)
 
-    assert descriptor.workspace_app_id == "plugin.app"
+    assert descriptor.owner_app_id == "plugin.app"
     assert descriptor.discoverability_predicate_id == "plugin.app.enabled"
     assert predicate is not None
     assert predicate(
-        None,
-        WorkspaceContext(workspace_id="ws-1", workspace_slug="ws", display_name="Workspace"),
-        WorkspaceEntitlementView(enabled_app_ids=frozenset({"plugin.app"})),
+        user_principal(user_id="user-1", source="test"),
+        AppEntitlementView(enabled_app_ids=frozenset({"plugin.app"})),
     )
     assert not predicate(
-        None,
-        WorkspaceContext(workspace_id="ws-1", workspace_slug="ws", display_name="Workspace"),
-        WorkspaceEntitlementView(enabled_app_ids=frozenset({"other.app"})),
+        user_principal(user_id="user-1", source="test"),
+        AppEntitlementView(enabled_app_ids=frozenset({"other.app"})),
     )
 
 
-def test_platform_app_predicate_uses_platform_availability() -> None:
+def test_app_predicate_uses_current_entitlement() -> None:
     reset_ai_capability_registry()
     registry = get_ai_capability_registry()
     predicate = registry.resolve_discoverability_predicate("mail.enabled")
 
     assert predicate is not None
     assert predicate(
-        personal_user_principal(user_id="user-1", source="test"),
-        WorkspaceContext(
-            workspace_id="ws-1",
-            workspace_slug="ws",
-            display_name="Workspace",
-        ),
-        WorkspaceEntitlementView(
-            enabled_app_ids=frozenset(),
-            platform_enabled_app_ids=frozenset({"mail"}),
+        user_principal(user_id="user-1", source="test"),
+        AppEntitlementView(
+            enabled_app_ids=frozenset({"mail"}),
         ),
     )
     assert not predicate(
-        personal_user_principal(user_id="user-1", source="test"),
-        WorkspaceContext(
-            workspace_id="ws-1",
-            workspace_slug="ws",
-            display_name="Workspace",
-        ),
-        WorkspaceEntitlementView(
-            enabled_app_ids=frozenset({"mail"}),
-            platform_enabled_app_ids=frozenset(),
+        user_principal(user_id="user-1", source="test"),
+        AppEntitlementView(
+            enabled_app_ids=frozenset(),
         ),
     )
 
 
-def test_personal_user_principal_has_no_workspace_scope() -> None:
-    principal = personal_user_principal(
+def test_user_principal_has_no_workspace_scope() -> None:
+    principal = user_principal(
         user_id="user-1",
         source="test.personal",
         session_id="session-1",
     )
 
     assert principal.scope == "personal"
-    assert principal.workspace_id is None
+    assert "workspace_id" not in principal.as_payload()
     assert principal.principal_id == "user-1"
     assert principal.as_payload()["scope"] == "personal"
 
@@ -155,10 +140,10 @@ def test_personal_user_principal_has_no_workspace_scope() -> None:
 def test_registry_rejects_duplicate_predicate_and_preview_registration() -> None:
     registry = AiCapabilityRegistry()
 
-    def predicate(principal, workspace, entitlements):
+    def predicate(principal, entitlements):
         return True
 
-    def preview(principal, workspace, parsed_args):
+    def preview(principal, parsed_args):
         return None
 
     registry.register_discoverability_predicate(
@@ -186,7 +171,7 @@ def test_registry_rejects_write_tool_without_approval_gate() -> None:
     registry = AiCapabilityRegistry()
     registry.register_discoverability_predicate(
         predicate_id="custom.enabled",
-        predicate=lambda principal, workspace, entitlements: True,
+        predicate=lambda principal, entitlements: True,
     )
 
     with pytest.raises(ValueError, match="must set approval_required=True"):
@@ -195,9 +180,9 @@ def test_registry_rejects_write_tool_without_approval_gate() -> None:
             description="Unsafe write item",
             owner_domain="custom",
             mode="write",
-            handler=lambda db, workspace, principal, user, arguments: {"ok": True},
+            handler=lambda db, principal, user, arguments: {"ok": True},
             discoverability_predicate_id="custom.enabled",
-            workspace_app_id="chatbot",
+            owner_app_id="chatbot",
         )
 
 
@@ -205,7 +190,7 @@ def test_registry_rejects_approval_tool_with_unknown_preview_builder() -> None:
     registry = AiCapabilityRegistry()
     registry.register_discoverability_predicate(
         predicate_id="custom.enabled",
-        predicate=lambda principal, workspace, entitlements: True,
+        predicate=lambda principal, entitlements: True,
     )
 
     with pytest.raises(ValueError, match="Unknown preview builder"):
@@ -215,8 +200,8 @@ def test_registry_rejects_approval_tool_with_unknown_preview_builder() -> None:
             owner_domain="custom",
             mode="write",
             approval_required=True,
-            handler=lambda db, workspace, principal, user, arguments: {"ok": True},
+            handler=lambda db, principal, user, arguments: {"ok": True},
             discoverability_predicate_id="custom.enabled",
             preview_builder_id="custom.missing_preview",
-            workspace_app_id="chatbot",
+            owner_app_id="chatbot",
         )

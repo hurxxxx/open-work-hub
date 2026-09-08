@@ -13,7 +13,6 @@ from open_work_hub_api.domains.dm.schemas import (
     DmUserItem,
 )
 
-
 DM_REPLY_BODY_PREVIEW_LENGTH = 120
 
 
@@ -103,8 +102,7 @@ def build_participant_item(
 def build_attachment_item(
     attachment: Any,
     *,
-    download_url: str,
-    preview_url: str | None,
+    is_image: bool,
 ) -> DmMessageAttachmentItem:
     return DmMessageAttachmentItem(
         id=attachment.id,
@@ -113,9 +111,7 @@ def build_attachment_item(
         filename=attachment.filename,
         content_type=attachment.content_type,
         size_bytes=attachment.size_bytes,
-        is_image=preview_url is not None,
-        download_url=download_url,
-        preview_url=preview_url,
+        is_image=is_image,
         created_at=attachment.created_at,
     )
 

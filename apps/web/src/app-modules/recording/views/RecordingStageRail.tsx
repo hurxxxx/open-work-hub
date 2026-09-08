@@ -1,5 +1,5 @@
-import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import type { Recording } from '../api/recording-api';
 import { summarizeRecordingStages } from './recording-detail-model';

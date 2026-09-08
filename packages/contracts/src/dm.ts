@@ -14,7 +14,6 @@ export {
   isDmAttachmentUploadFileAllowed,
   isDmRouteId,
   normalizeDmLimit,
-  resolveDmAttachmentUrl,
 } from './dm-routes.js';
 export type { DmAttachmentUploadFile } from './dm-routes.js';
 
@@ -217,7 +216,9 @@ export function normalizeDmSendMessageRequest(
   if (!attachmentIds || (!body && attachmentIds.length === 0)) {
     return null;
   }
-  const replyToMessageId = optionalNullableDmRequestId(value.reply_to_message_id);
+  const replyToMessageId = optionalNullableDmRequestId(
+    value.reply_to_message_id,
+  );
   if (replyToMessageId === undefined) {
     return null;
   }
@@ -264,14 +265,12 @@ export function normalizeDmMessageAttachment(
     typeof value.content_type !== 'string' ||
     !isNonNegativeInteger(value.size_bytes) ||
     typeof value.is_image !== 'boolean' ||
-    typeof value.download_url !== 'string' ||
     !isDateTimeString(value.created_at)
   ) {
     return null;
   }
   const messageId = optionalNullableDmResponseId(value.message_id);
-  const previewUrl = optionalNullableString(value.preview_url);
-  if (messageId === undefined || previewUrl === undefined) {
+  if (messageId === undefined) {
     return null;
   }
   return {
@@ -282,8 +281,6 @@ export function normalizeDmMessageAttachment(
     content_type: value.content_type,
     size_bytes: value.size_bytes,
     is_image: value.is_image,
-    download_url: value.download_url,
-    preview_url: previewUrl,
     created_at: value.created_at,
   };
 }
@@ -315,7 +312,9 @@ export function normalizeDmMessageReadState(
   };
 }
 
-export function normalizeDmMessageReplyTo(value: unknown): DmMessageReplyTo | null {
+export function normalizeDmMessageReplyTo(
+  value: unknown,
+): DmMessageReplyTo | null {
   if (
     !isRecord(value) ||
     !isDmResponseId(value.id) ||
@@ -523,7 +522,9 @@ export function canMarkDmConversationRead(input: DmReadVisibility): boolean {
   return input.visible && input.focused;
 }
 
-export function totalDmUnreadCount(conversations: readonly DmConversation[]): number {
+export function totalDmUnreadCount(
+  conversations: readonly DmConversation[],
+): number {
   return conversations.reduce(
     (sum, conversation) => sum + Math.max(0, conversation.unread_count),
     0,
@@ -549,7 +550,10 @@ export function dmConversationDisplayName(
   },
 ): string {
   if (conversation.conversation_type === 'direct') {
-    return dmUserDisplayName(conversation.other_user, input.labels.directFallback);
+    return dmUserDisplayName(
+      conversation.other_user,
+      input.labels.directFallback,
+    );
   }
   if (conversation.title) {
     return conversation.title;

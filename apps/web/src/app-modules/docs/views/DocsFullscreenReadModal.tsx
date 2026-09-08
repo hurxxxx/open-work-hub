@@ -1,13 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent,
-  type WheelEvent,
-} from 'react';
+import { BlockViewer, type BlockContent } from '@open-work-hub/ui';
 import {
   ChevronLeft,
   ChevronRight,
@@ -23,8 +14,17 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent,
+  type WheelEvent,
+} from 'react';
 import { useTranslation } from 'react-i18next';
-import { BlockViewer, type BlockContent } from '@open-work-hub/ui';
 
 import { cn } from '@/src/lib/utils';
 import {

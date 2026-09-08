@@ -4,15 +4,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.domains.meeting.models import MeetingTaskLink
-from open_work_hub_api.domains.pms.models import Task, TaskLabel, TaskUserAccess, Label, Milestone, TaskList
+from open_work_hub_api.domains.pms.models import (
+    Label,
+    Milestone,
+    Task,
+    TaskLabel,
+    TaskList,
+    TaskUserAccess,
+)
 from open_work_hub_api.domains.rag.contracts import RagSyncOperation
 from open_work_hub_api.domains.search.hooks import (
-    enqueue_task_search_index,
-    enqueue_task_search_index_by_id,
     enqueue_label_task_search_recompute,
     enqueue_task_list_task_search_recompute,
+    enqueue_task_search_index,
+    enqueue_task_search_index_by_id,
 )
-
 
 PMS_MEETING_VISIBILITY_SCOPE = "pms_meeting"
 PMS_TASK_LIST_RECOMPUTE_SCOPE = "pms_task_list"
@@ -94,11 +100,7 @@ def collect_label_task_ids(
     label_id: str,
     cursor: dict | None = None,
 ) -> list[str]:
-    task_ids = {
-        str(task_id)
-        for task_id in (cursor or {}).get("task_ids", [])
-        if task_id
-    }
+    task_ids = {str(task_id) for task_id in (cursor or {}).get("task_ids", []) if task_id}
     task_ids.update(
         str(task_id)
         for task_id in db.scalars(select(TaskLabel.task_id).where(TaskLabel.label_id == label_id))
@@ -118,14 +120,12 @@ def collect_meeting_task_ids(
     if explicit_task_ids:
         return sorted(explicit_task_ids)
 
-    resolved = {
-        str(task_id)
-        for task_id in (cursor or {}).get("task_ids", [])
-        if task_id
-    }
+    resolved = {str(task_id) for task_id in (cursor or {}).get("task_ids", []) if task_id}
     resolved.update(
         str(task_id)
-        for task_id in db.scalars(select(MeetingTaskLink.task_id).where(MeetingTaskLink.meeting_id == meeting_id))
+        for task_id in db.scalars(
+            select(MeetingTaskLink.task_id).where(MeetingTaskLink.meeting_id == meeting_id)
+        )
         if task_id
     )
     resolved.update(

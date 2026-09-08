@@ -9,24 +9,24 @@ import {
 import { Link } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
-import type { WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
+import { appIconForKey } from '@/src/platform/apps/app-icons';
+import type { ShellAppId } from '@/src/platform/apps/app-links';
 import type {
-  WorkspaceBootstrapAppBarCategory,
-  WorkspaceBootstrapAppBarCategoryItem,
-} from '@/src/platform/workspaces/workspaces-api';
-import { workspaceAppIconForKey } from '@/src/platform/workspaces/workspace-app-icons';
+  BootstrapAppBarCategory,
+  BootstrapAppBarCategoryItem,
+} from '@/src/platform/apps/apps-api';
+import { AppBarEditor } from './AppBarEditor';
 import {
   AppBarRailActiveIndicator,
   AppBarRailTooltip,
   appBarRailControlClassName,
 } from './AppBarIconLink';
-import { AppBarEditor } from './AppBarEditor';
 import {
   type AppBarAppContextLabelResolver,
   type AppBarAppLabelResolver,
   type AppBarAppLinkResolver,
+  type AppBarLaunchItem,
   type AppBarTranslator,
-  type AppBarWorkspaceItem,
 } from './app-bar-model';
 
 type LauncherGridColumnCount = 3 | 4 | 5;
@@ -61,7 +61,7 @@ export function AppBarLauncherMenus({
   appBarLayoutSaving,
   categoryMenuId,
   currentPathname,
-  currentWorkspaceName,
+  currentCompanyLabel,
   draftItems,
   draftPinnedAppIds,
   favoritesActive,
@@ -89,24 +89,24 @@ export function AppBarLauncherMenus({
   appBarLayoutSaving: boolean;
   categoryMenuId: string | null;
   currentPathname: string;
-  currentWorkspaceName: string | null;
-  draftItems: AppBarWorkspaceItem[];
-  draftPinnedAppIds: WorkspaceAppId[];
+  currentCompanyLabel: string | null;
+  draftItems: AppBarLaunchItem[];
+  draftPinnedAppIds: ShellAppId[];
   favoritesActive: boolean;
   favoritesOpen: boolean;
-  launcherCategories: WorkspaceBootstrapAppBarCategory[];
+  launcherCategories: BootstrapAppBarCategory[];
   menuRef: RefObject<HTMLDivElement | null>;
   onCloseEditor: () => void;
   onCloseLauncherMenus: () => void;
-  onMovePinnedApp: (appId: WorkspaceAppId, direction: -1 | 1) => void;
+  onMovePinnedApp: (appId: ShellAppId, direction: -1 | 1) => void;
   onOpenEditor: () => void;
   onResetDraft: () => void;
   onSaveLayout: () => void;
   onToggleCategoryMenu: (categoryId: string) => void;
   onToggleFavorites: () => void;
-  onTogglePinnedApp: (appId: WorkspaceAppId, checked: boolean) => void;
-  pinnedEligibleAppIds: ReadonlySet<WorkspaceAppId>;
-  pinnedItems: AppBarWorkspaceItem[];
+  onTogglePinnedApp: (appId: ShellAppId, checked: boolean) => void;
+  pinnedEligibleAppIds: ReadonlySet<ShellAppId>;
+  pinnedItems: AppBarLaunchItem[];
   resolveAppLink: AppBarAppLinkResolver;
   resolveAppContextLabel: AppBarAppContextLabelResolver;
   resolveAppLabel: AppBarAppLabelResolver;
@@ -162,7 +162,7 @@ export function AppBarLauncherMenus({
       {favoritesOpen ? (
         <LauncherPopover
           columnCount={favoritesColumnCount}
-          currentWorkspaceName={currentWorkspaceName}
+          currentCompanyLabel={currentCompanyLabel}
           iconKey="star"
           title={t('shell:appBar.favorites')}
         >
@@ -208,7 +208,7 @@ export function AppBarLauncherMenus({
             }
             activeItem={activeItem}
             category={category}
-            currentWorkspaceName={currentWorkspaceName}
+            currentCompanyLabel={currentCompanyLabel}
             currentPathname={currentPathname}
             key={category.id}
             onClose={onCloseLauncherMenus}
@@ -249,7 +249,7 @@ export function AppBarLauncherMenus({
                 }
                 activeItem={activeItem}
                 category={category}
-                currentWorkspaceName={currentWorkspaceName}
+                currentCompanyLabel={currentCompanyLabel}
                 currentPathname={currentPathname}
                 onClose={onCloseLauncherMenus}
                 onToggle={() => onToggleCategoryMenu(category.id)}
@@ -317,7 +317,7 @@ function CategoryLauncher({
   active,
   activeItem,
   category,
-  currentWorkspaceName,
+  currentCompanyLabel,
   currentPathname,
   onClose,
   onToggle,
@@ -328,9 +328,9 @@ function CategoryLauncher({
   t,
 }: {
   active: boolean;
-  activeItem: WorkspaceBootstrapAppBarCategoryItem | null;
-  category: WorkspaceBootstrapAppBarCategory;
-  currentWorkspaceName: string | null;
+  activeItem: BootstrapAppBarCategoryItem | null;
+  category: BootstrapAppBarCategory;
+  currentCompanyLabel: string | null;
   currentPathname: string;
   onClose: () => void;
   onToggle: () => void;
@@ -340,9 +340,7 @@ function CategoryLauncher({
   resolveAppLink: AppBarAppLinkResolver;
   t: AppBarTranslator;
 }) {
-  const Icon = workspaceAppIconForKey(
-    activeItem?.icon_key ?? category.icon_key,
-  );
+  const Icon = appIconForKey(activeItem?.icon_key ?? category.icon_key);
   const title = category.title;
   const activeItemTitle = activeItem
     ? t(`shell:apps.${activeItem.app_id}`, {
@@ -376,12 +374,7 @@ function CategoryLauncher({
       {open ? (
         <LauncherPopover
           columnCount={columnCount}
-          currentWorkspaceName={
-            category.contextLabel ??
-            (category.showWorkspaceContext === false
-              ? null
-              : currentWorkspaceName)
-          }
+          currentCompanyLabel={category.contextLabel ?? currentCompanyLabel}
           iconKey={category.icon_key}
           title={title}
         >
@@ -411,7 +404,7 @@ function CategoryItemSearch({
   resolveAppLink,
   t,
 }: {
-  category: WorkspaceBootstrapAppBarCategory;
+  category: BootstrapAppBarCategory;
   columnCount: LauncherGridColumnCount;
   currentPathname: string;
   onClose: () => void;
@@ -477,17 +470,17 @@ function CategoryItemSearch({
 function LauncherPopover({
   children,
   columnCount = 3,
-  currentWorkspaceName,
+  currentCompanyLabel,
   iconKey,
   title,
 }: {
   children: ReactNode;
   columnCount?: LauncherGridColumnCount;
-  currentWorkspaceName: string | null;
+  currentCompanyLabel: string | null;
   iconKey: string;
   title: string;
 }) {
-  const Icon = workspaceAppIconForKey(iconKey);
+  const Icon = appIconForKey(iconKey);
   return (
     <div
       className={cn(
@@ -504,9 +497,9 @@ function LauncherPopover({
           <div className="app-text-body-sm font-semibold text-app-ink">
             {title}
           </div>
-          {currentWorkspaceName ? (
+          {currentCompanyLabel ? (
             <div className="app-text-caption truncate text-app-ink/55">
-              {currentWorkspaceName}
+              {currentCompanyLabel}
             </div>
           ) : null}
         </div>
@@ -542,7 +535,7 @@ function FavoriteLauncherItem({
   t,
 }: {
   currentPathname: string;
-  item: AppBarWorkspaceItem;
+  item: AppBarLaunchItem;
   onClose: () => void;
   resolveAppContextLabel: AppBarAppContextLabelResolver;
   resolveAppLabel: AppBarAppLabelResolver;
@@ -574,18 +567,18 @@ function CategoryLauncherItem({
   t,
 }: {
   currentPathname: string;
-  item: WorkspaceBootstrapAppBarCategoryItem;
+  item: BootstrapAppBarCategoryItem;
   onClose: () => void;
   resolveAppContextLabel: AppBarAppContextLabelResolver;
   resolveAppLabel: AppBarAppLabelResolver;
   resolveAppLink: AppBarAppLinkResolver;
   t: AppBarTranslator;
 }) {
-  const Icon = workspaceAppIconForKey(item.icon_key);
+  const Icon = appIconForKey(item.icon_key);
   const title = t(`shell:apps.${item.app_id}`, {
     defaultValue: item.title,
   });
-  const appId = item.app_id as WorkspaceAppId;
+  const appId = item.app_id as ShellAppId;
   const link = resolveAppLink(appId);
   return (
     <LauncherLink
@@ -616,7 +609,7 @@ function LauncherLink({
   accessibleLabel: string;
   active: boolean;
   comingSoon?: boolean | null;
-  icon: AppBarWorkspaceItem['icon'];
+  icon: AppBarLaunchItem['icon'];
   onClose: () => void;
   scopeLabel?: string | null;
   title: string;
@@ -699,14 +692,14 @@ function isCategoryActive({
   currentPathname,
   resolveAppLink,
 }: {
-  category: WorkspaceBootstrapAppBarCategory;
+  category: BootstrapAppBarCategory;
   currentPathname: string;
   resolveAppLink: AppBarAppLinkResolver;
 }) {
   return category.items.some((item) =>
     isLauncherPathActive({
       currentPathname,
-      link: resolveAppLink(item.app_id as WorkspaceAppId),
+      link: resolveAppLink(item.app_id as ShellAppId),
     }),
   );
 }
@@ -716,7 +709,7 @@ function findActiveCategoryItem({
   currentPathname,
   resolveAppLink,
 }: {
-  category: WorkspaceBootstrapAppBarCategory;
+  category: BootstrapAppBarCategory;
   currentPathname: string;
   resolveAppLink: AppBarAppLinkResolver;
 }) {
@@ -724,7 +717,7 @@ function findActiveCategoryItem({
     category.items.find((item) =>
       isLauncherPathActive({
         currentPathname,
-        link: resolveAppLink(item.app_id as WorkspaceAppId),
+        link: resolveAppLink(item.app_id as ShellAppId),
       }),
     ) ?? null
   );

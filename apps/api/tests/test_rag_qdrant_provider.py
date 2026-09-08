@@ -77,7 +77,6 @@ def test_qdrant_vector_index_smoke_syncs_queries_and_deletes(qdrant_client) -> N
     )
 
     projection = RagProjection(
-        workspace_id="ws-1",
         resource_type="doc",
         resource_id="doc-1",
         source_kind="docs",
@@ -99,7 +98,6 @@ def test_qdrant_vector_index_smoke_syncs_queries_and_deletes(qdrant_client) -> N
     response = query_service.query(
         RagQueryRequest(
             collection="rag-qdrant-smoke",
-            workspace_id="ws-1",
             query="budget approval risk",
             source_kinds=["docs"],
             filters={
@@ -112,11 +110,10 @@ def test_qdrant_vector_index_smoke_syncs_queries_and_deletes(qdrant_client) -> N
     assert response.hits
     assert response.hits[0].resource_id == "doc-1"
     assert response.hits[0].resource_type == "doc"
-    assert response.hits[0].workspace_id == "ws-1"
+    assert not hasattr(response.hits[0], "workspace_id")
     assert response.hits[0].metadata["resource_id"] == "doc-1"
 
     delete_result = rag_service.delete_projection(
-        workspace_id="ws-1",
         resource_type="doc",
         resource_id="doc-1",
         collection="rag-qdrant-smoke",
@@ -124,7 +121,6 @@ def test_qdrant_vector_index_smoke_syncs_queries_and_deletes(qdrant_client) -> N
     after_delete = query_service.query(
         RagQueryRequest(
             collection="rag-qdrant-smoke",
-            workspace_id="ws-1",
             query="budget approval risk",
             source_kinds=["docs"],
         )
@@ -150,7 +146,6 @@ def test_file_projection_survives_default_text_modality_filter(qdrant_client) ->
     )
     file = SimpleNamespace(
         id="file-1",
-        workspace_id="ws-1",
         corpus_id=None,
         corpus=None,
         folder_id=None,
@@ -189,7 +184,6 @@ def test_file_projection_survives_default_text_modality_filter(qdrant_client) ->
     response = query_service.query(
         RagQueryRequest(
             collection="rag-qdrant-files-text-modality",
-            workspace_id="ws-1",
             query="정상 작동 전압",
             source_kinds=["files"],
             filters={"content_modality": "text"},
@@ -215,7 +209,6 @@ def test_qdrant_point_ids_keep_same_chunk_id_across_resources(qdrant_client) -> 
     }
 
     first = RagProjection(
-        workspace_id="ws-1",
         resource_type="plugin_document",
         resource_id="doc-1",
         source_kind="plugin_source",
@@ -223,7 +216,6 @@ def test_qdrant_point_ids_keep_same_chunk_id_across_resources(qdrant_client) -> 
         chunks=[shared_chunk],
     )
     second = RagProjection(
-        workspace_id="ws-1",
         resource_type="plugin_document",
         resource_id="doc-2",
         source_kind="plugin_source",
@@ -251,7 +243,6 @@ def test_legacy_projection_keeps_existing_scope_bound_point_id(qdrant_client) ->
 
     rag_service.sync_projection(
         RagProjection(
-            workspace_id="ws-legacy",
             resource_type="native_doc",
             resource_id="doc-legacy",
             source_kind="docs",
@@ -263,8 +254,7 @@ def test_legacy_projection_keeps_existing_scope_bound_point_id(qdrant_client) ->
     legacy_identity = ":".join(
         (
             collection,
-            "workspace",
-            "ws-legacy",
+            "company",
             "docs",
             "native_doc",
             "doc-legacy",
@@ -288,7 +278,6 @@ def test_default_generation_does_not_mix_partitioned_point_identity(qdrant_clien
         RagProjection(
             retrieval_partition_id="11111111-1111-1111-1111-111111111111",
             projection_version=3,
-            workspace_id="ws-legacy",
             resource_type="native_doc",
             resource_id="doc-versioned",
             source_kind="docs",
@@ -304,8 +293,7 @@ def test_default_generation_does_not_mix_partitioned_point_identity(qdrant_clien
     legacy_identity = ":".join(
         (
             collection,
-            "workspace",
-            "ws-legacy",
+            "company",
             "docs",
             "native_doc",
             "doc-versioned",
@@ -338,7 +326,6 @@ def test_partitioned_generation_rejects_operations_outside_bound_collection() ->
     projection = RagProjection(
         retrieval_partition_id=partition_id,
         projection_version=1,
-        workspace_id="ws-1",
         resource_type="doc",
         resource_id="doc-1",
         source_kind="docs",
@@ -357,7 +344,6 @@ def test_partitioned_generation_rejects_operations_outside_bound_collection() ->
     delete_request = RagDeleteRequest(
         collection=wrong_collection,
         retrieval_partition_id=partition_id,
-        workspace_id="ws-1",
         resource_type="doc",
         resource_id="doc-1",
     )
@@ -396,7 +382,6 @@ def test_partitioned_generation_rejects_operations_outside_bound_collection() ->
 def test_partitioned_upsert_requires_projection_fence_on_request_and_records() -> None:
     collection = "rag-partitioned-generation-v2"
     unfenced_projection = RagProjection(
-        workspace_id="ws-1",
         resource_type="doc",
         resource_id="doc-1",
         source_kind="docs",
@@ -404,7 +389,6 @@ def test_partitioned_upsert_requires_projection_fence_on_request_and_records() -
     fenced_projection = RagProjection(
         retrieval_partition_id="11111111-1111-1111-1111-111111111111",
         projection_version=1,
-        workspace_id="ws-1",
         resource_type="doc",
         resource_id="doc-1",
         source_kind="docs",
@@ -462,7 +446,6 @@ def test_partitioned_query_and_deletes_require_partition_ids() -> None:
 
     delete_request = RagDeleteRequest(
         collection=collection,
-        workspace_id="ws-1",
         resource_type="doc",
         resource_id="doc-1",
     )
@@ -498,7 +481,6 @@ def test_legacy_delete_filter_remains_scope_bound_for_versioned_projection() -> 
         request=RagDeleteRequest(
             collection="rag-legacy",
             retrieval_partition_id="11111111-1111-1111-1111-111111111111",
-            workspace_id="ws-1",
             resource_type="doc",
             resource_id="doc-1",
         )
@@ -506,7 +488,7 @@ def test_legacy_delete_filter_remains_scope_bound_for_versioned_projection() -> 
 
     assert client.count_filter is not None
     keys = {condition.key for condition in client.count_filter.must}
-    assert keys == {"scope_kind", "workspace_id", "resource_type", "resource_id"}
+    assert keys == {"scope_kind", "resource_type", "resource_id"}
     assert "retrieval_partition_id" not in keys
 
 
@@ -531,8 +513,7 @@ def test_partition_aware_points_keep_canonical_id_across_scope_move(qdrant_clien
         RagProjection(
             retrieval_partition_id=partition_id,
             projection_version=1,
-            scope_kind=RagScopeKind.WORKSPACE,
-            workspace_id="ws-before",
+            scope_kind=RagScopeKind.COMPANY,
             resource_type="native_doc",
             resource_id="doc-1",
             source_kind="docs",
@@ -559,7 +540,6 @@ def test_partition_aware_points_keep_canonical_id_across_scope_move(qdrant_clien
             retrieval_partition_id=partition_id,
             projection_version=2,
             scope_kind=RagScopeKind.COMPANY,
-            workspace_id=None,
             resource_type="native_doc",
             resource_id="doc-1",
             source_kind="docs",
@@ -779,7 +759,6 @@ def _partitioned_v1_payload_schema() -> dict[str, dict[str, str]]:
         "retrieval_partition_id": {"data_type": "keyword"},
         "projection_version": {"data_type": "integer"},
         "scope_kind": {"data_type": "keyword"},
-        "workspace_id": {"data_type": "keyword"},
         "resource_type": {"data_type": "keyword"},
         "resource_id": {"data_type": "keyword"},
         "source_kind": {"data_type": "keyword"},
@@ -880,7 +859,6 @@ def test_optional_metadata_filters_do_not_change_the_v1_generation_schema() -> N
 def test_rag_projection_requires_complete_partition_version_fence(projection_fields) -> None:
     with pytest.raises(ValidationError, match="must be provided together"):
         RagProjection(
-            workspace_id="ws-1",
             resource_type="doc",
             resource_id="doc-1",
             source_kind="docs",
@@ -1117,7 +1095,6 @@ def test_qdrant_query_opens_circuit_breaker_after_repeated_failures() -> None:
     vector_index = QdrantVectorIndexClient(client=failing_client)
     request = RagVectorSearchRequest(
         collection="rag-qdrant-breaker",
-        workspace_id="ws-1",
         query="budget risk",
         query_embedding=[0.1, 0.2, 0.3],
         source_kinds=["docs"],
@@ -1157,7 +1134,6 @@ def test_qdrant_dense_mode_skips_legacy_sparse_prefetch() -> None:
     vector_index.query(
         request=RagVectorSearchRequest(
             collection="rag-dense",
-            workspace_id="ws-1",
             query="hybrid",
             query_embedding=[0.1, 0.2],
             search_mode=RagVectorSearchMode.DENSE,
@@ -1166,7 +1142,6 @@ def test_qdrant_dense_mode_skips_legacy_sparse_prefetch() -> None:
     vector_index.query(
         request=RagVectorSearchRequest(
             collection="rag-hybrid",
-            workspace_id="ws-1",
             query="hybrid",
             query_embedding=[0.1, 0.2],
         )

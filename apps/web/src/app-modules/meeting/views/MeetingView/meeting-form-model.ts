@@ -1,4 +1,8 @@
 import {
+  formatNativeDateTimeInputValue,
+  nativeDateTimeInputValueToIso,
+} from '@/src/platform/time/native-date-input';
+import {
   parseServerDateTime,
   type MeetingAttendeeInput,
   type MeetingCreateInput,
@@ -6,10 +10,6 @@ import {
   type MeetingUpdateInput,
   type MeetingUser,
 } from '../../api/meeting-api';
-import {
-  formatNativeDateTimeInputValue,
-  nativeDateTimeInputValueToIso,
-} from '@/src/platform/time/native-date-input';
 
 export interface PickedTask {
   id: string;
@@ -331,11 +331,18 @@ export function projectMeetingCreateForm(
   currentUserId: string | undefined,
 ): MeetingCreateFormProjection {
   const userLookup = buildUserLookup(state.pickedAttendeeUsers, state.users);
-  const visibleAttendees = getVisibleCreateAttendees(state.attendees, currentUserId);
+  const visibleAttendees = getVisibleCreateAttendees(
+    state.attendees,
+    currentUserId,
+  );
   return {
     availabilityUsers: mapAvailabilityUsers(visibleAttendees, userLookup),
     canSubmit: Boolean(state.title.trim() && !state.submitting),
-    filteredUsers: filterCreateCandidateUsers(state.users, state.attendees, currentUserId),
+    filteredUsers: filterCreateCandidateUsers(
+      state.users,
+      state.attendees,
+      currentUserId,
+    ),
     pickedDocIds: state.pickedDocs.map((doc) => doc.id),
     pickedTaskIds: state.pickedTasks.map((task) => task.id),
     userLookup,
@@ -346,11 +353,7 @@ export function projectMeetingCreateForm(
 export function projectMeetingEditForm(
   state: Pick<
     MeetingEditState,
-    | 'attendees'
-    | 'knownUsers'
-    | 'submitting'
-    | 'title'
-    | 'users'
+    'attendees' | 'knownUsers' | 'submitting' | 'title' | 'users'
   >,
   organizerId: string,
   currentUserId: string | undefined,

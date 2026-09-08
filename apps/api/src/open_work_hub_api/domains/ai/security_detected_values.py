@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from collections import Counter
-from dataclasses import dataclass
 import hashlib
 import re
+from collections import Counter
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.domains.ai.boundary_safety import detect_external_payload_text_spans
 from open_work_hub_api.domains.ai.models import AiSecurityDetectedValue
 from open_work_hub_api.domains.ai.security_policy import (
-    SENSITIVE_IDENTIFIER_ENTITY_TYPES,
     CUSTOM_BLOCK_ENTITY_TYPE,
     HARD_EXTERNAL_TRANSFER_BLOCKERS,
     MASK_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS,
+    SENSITIVE_IDENTIFIER_ENTITY_TYPES,
     UNKNOWN_EXTERNAL_ENTITY_BLOCKER,
     normalize_custom_block_terms,
 )
@@ -108,7 +108,6 @@ def record_ai_security_detected_values(
                 id=new_id(),
                 audit_log_id=audit_log.id,
                 actor_user_id=audit_log.actor_user_id,
-                workspace_id=_payload_string(payload, "workspace_id"),
                 action=audit_log.action,
                 source=_payload_string(payload, "source"),
                 app_id=_payload_string(payload, "app_id"),

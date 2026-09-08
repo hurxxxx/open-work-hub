@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 from open_work_hub_api.core.db import get_session_factory  # noqa: E402
 from open_work_hub_api.core.settings import get_settings, is_production_environment  # noqa: E402
 from open_work_hub_api.core.storage import get_minio_client  # noqa: E402
-from open_work_hub_api.domains.auth.models import User, Workspace  # noqa: E402
+from open_work_hub_api.domains.auth.models import User  # noqa: E402
 from open_work_hub_api.domains.files import bulk_ingest  # noqa: E402
 from open_work_hub_api.domains.files.models import (  # noqa: E402
     FileManagerBulkIngestEntry,
@@ -110,14 +110,13 @@ def _parser() -> argparse.ArgumentParser:
 
     create_run = subcommands.add_parser("create-run")
     _manifest_argument(create_run)
-    create_run.add_argument("--workspace-key", required=True)
     create_run.add_argument("--actor-login-id", required=True)
     create_run.add_argument(
         "--owner-login-id",
         help=(
-            "Optional workspace member who owns the root folder. Use the same login "
+            "Optional active platform administrator who owns the root folder. Use the same login "
             "as ingest --actor-login-id when uploaded files must share that owner; "
-            "the create-run actor remains the workspace-admin control-plane creator."
+            "the create-run actor remains the platform-admin control-plane creator."
         ),
     )
     create_run.add_argument(
@@ -162,7 +161,7 @@ def _mutation_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--confirm-production",
         help=(
-            "On production, create-run requires 'workspace:<workspace-key>'; "
+            "On production, create-run requires 'company-run:<run-key>'; "
             "other commands require 'run:<run-id>'."
         ),
     )
@@ -241,12 +240,10 @@ def _create_run(args: argparse.Namespace) -> int:
         )
         return 0
     with get_session_factory().begin() as db:
-        workspace = _require_workspace(db, args.workspace_key)
         actor = _require_actor(db, args.actor_login_id)
         owner = _require_actor(db, args.owner_login_id or args.actor_login_id)
         run = bulk_ingest.create_run(
             db,
-            workspace=workspace,
             actor=actor,
             owner=owner,
             corpus_name=args.corpus_name,
@@ -479,18 +476,6 @@ def _require_private_regular_file(path: Path) -> None:
         raise bulk_ingest.FilesBulkIngestError("manifest_permissions_invalid")
 
 
-def _require_workspace(db: Session, workspace_key: str) -> Workspace:
-    workspace = db.scalar(
-        select(Workspace).where(
-            Workspace.key == str(workspace_key or "").strip(),
-            Workspace.active.is_(True),
-        )
-    )
-    if workspace is None:
-        raise bulk_ingest.FilesBulkIngestError("workspace_not_found")
-    return workspace
-
-
 def _require_actor(db: Session, login_id: str) -> User:
     actor = db.scalar(
         select(User).where(
@@ -558,7 +543,7 @@ def _require_production_confirmation(*, args: argparse.Namespace, settings) -> N
     if not is_production_environment(settings.environment):
         return
     if args.command == "create-run":
-        expected = f"workspace:{args.workspace_key}"
+        expected = f"company-run:{args.run_key}"
     else:
         expected = f"run:{args.run_id}"
     if str(args.confirm_production or "").strip() != expected:

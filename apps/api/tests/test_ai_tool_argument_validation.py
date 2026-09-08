@@ -54,9 +54,7 @@ def test_validate_tool_arguments_normalizes_generic_validation_failure() -> None
 
     failure = failure_info.value
     assert failure.message.startswith("Invalid tool arguments: count:")
-    assert failure.generic_reason == failure.message.removeprefix(
-        "Invalid tool arguments: "
-    )
+    assert failure.generic_reason == failure.message.removeprefix("Invalid tool arguments: ")
     assert failure.localized_error is None
 
 

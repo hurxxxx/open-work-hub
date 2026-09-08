@@ -1,13 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import { useTranslation } from 'react-i18next';
-import { LazyMotion, domAnimation, m } from 'motion/react';
+import { Button } from '@open-work-hub/ui/primitives/button';
+import { Input } from '@open-work-hub/ui/primitives/input';
 import {
   Check,
   CheckCircle2,
@@ -24,8 +16,16 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Button } from '@open-work-hub/ui/primitives/button';
-import { Input } from '@open-work-hub/ui/primitives/input';
+import { LazyMotion, domAnimation, m } from 'motion/react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -34,16 +34,6 @@ import {
   PERSONAL_TODO_PMS_TASK_CREATED_EVENT,
   type PersonalTodoPmsTaskCreatedEventDetail,
 } from './floating-panel-events';
-import {
-  createPersonalTodo,
-  deletePersonalTodo,
-  getPersonalMemo,
-  listPersonalTodos,
-  savePersonalMemo,
-  updatePersonalTodo,
-  type PersonalMemo,
-  type PersonalTodoItem,
-} from './personal-widgets-api';
 import {
   DEFAULT_PERSONAL_WIDGET_PREFERENCES,
   countOpenTodos,
@@ -55,6 +45,16 @@ import {
   type PersonalWidgetMode,
   type PersonalWidgetPreferences,
 } from './personal-widget-state';
+import {
+  createPersonalTodo,
+  deletePersonalTodo,
+  getPersonalMemo,
+  listPersonalTodos,
+  savePersonalMemo,
+  updatePersonalTodo,
+  type PersonalMemo,
+  type PersonalTodoItem,
+} from './personal-widgets-api';
 type TodoMutation = 'create' | 'delete' | 'toggle';
 type FloatingPanelSection = 'personal' | 'dockPanel';
 type PersonalWidgetDockItemId = PersonalWidgetId | string;
@@ -142,11 +142,6 @@ export function PersonalWidgetHost({
   );
   const [error, setError] = useState<string | null>(null);
   const [mutating, setMutating] = useState<TodoMutation | null>(null);
-  const [activePanelSection, setActivePanelSection] =
-    useState<FloatingPanelSection>('personal');
-  const [activeDockPanelId, setActiveDockPanelId] = useState<string | null>(
-    secondaryPanel?.id ?? dockPanels[0]?.id ?? null,
-  );
   const [backgroundMountedDockPanelIds, setBackgroundMountedDockPanelIds] =
     useState<Set<string>>(() => new Set());
   const [mutatingTodoIds, setMutatingTodoIds] = useState<Set<string>>(
@@ -160,9 +155,12 @@ export function PersonalWidgetHost({
     [dockPanels, secondaryPanel],
   );
   const activeDockPanel =
-    externalDockPanels.find((panel) => panel.id === activeDockPanelId) ??
-    externalDockPanels[0] ??
-    null;
+    externalDockPanels.find(
+      (panel) => panel.id === preferences.activeDockPanelId,
+    ) ?? null;
+  const activePanelSection: FloatingPanelSection = activeDockPanel
+    ? 'dockPanel'
+    : 'personal';
   const memoDirty = memoBody !== (memo?.body ?? '');
   const activeWidgetTitle =
     activeWidget === 'memo'
@@ -218,19 +216,17 @@ export function PersonalWidgetHost({
     setPreferences((current) => ({ ...current, mode: nextMode }));
   }, []);
 
-  const setActiveWidget = useCallback((nextWidget: PersonalWidgetId) => {
-    setPreferences((current) => ({ ...current, activeWidget: nextWidget }));
+  const setActiveDockPanelId = useCallback((panelId: string) => {
+    setPreferences((current) => ({ ...current, activeDockPanelId: panelId }));
   }, []);
 
-  const showPersonalSection = useCallback(
-    (nextWidget?: PersonalWidgetId) => {
-      if (nextWidget) {
-        setActiveWidget(nextWidget);
-      }
-      setActivePanelSection('personal');
-    },
-    [setActiveWidget],
-  );
+  const showPersonalSection = useCallback((nextWidget?: PersonalWidgetId) => {
+    setPreferences((current) => ({
+      ...current,
+      activeWidget: nextWidget ?? current.activeWidget,
+      activeDockPanelId: undefined,
+    }));
+  }, []);
 
   const showDockPanel = useCallback(
     (panelId: string) => {
@@ -238,9 +234,8 @@ export function PersonalWidgetHost({
         return;
       }
       setActiveDockPanelId(panelId);
-      setActivePanelSection('dockPanel');
     },
-    [externalDockPanels],
+    [externalDockPanels, setActiveDockPanelId],
   );
 
   const handleDockItemClick = useCallback(
@@ -279,7 +274,6 @@ export function PersonalWidgetHost({
             return;
           }
           setActiveDockPanelId(panel.id);
-          setActivePanelSection('dockPanel');
           setMode('panel');
         };
 
@@ -294,16 +288,7 @@ export function PersonalWidgetHost({
         window.removeEventListener(eventName, handler);
       });
     };
-  }, [externalDockPanels, setMode]);
-
-  useEffect(() => {
-    if (activePanelSection !== 'dockPanel') {
-      return;
-    }
-    if (!activeDockPanel) {
-      setActivePanelSection('personal');
-    }
-  }, [activeDockPanel, activePanelSection]);
+  }, [externalDockPanels, setActiveDockPanelId, setMode]);
 
   const reloadTodos = useCallback(async () => {
     if (!token) {
@@ -700,7 +685,7 @@ export function PersonalWidgetHost({
           initial={{ opacity: 0, x: mode === 'fullscreen' ? 0 : 32 }}
           animate={{ opacity: 1, x: 0 }}
           className={cn(
-            'fixed z-[75] flex flex-col overflow-hidden border border-app-border bg-app-bg text-app-ink shadow-2xl outline-none',
+            'fixed z-[var(--ui-z-floating-panel)] flex flex-col overflow-hidden border border-app-border bg-app-bg text-app-ink shadow-2xl outline-none',
             panelFrameClassName,
           )}
         >
@@ -1080,7 +1065,7 @@ export function PersonalWidgetHost({
 
       <nav
         aria-label={t('personalWidgets.dockLabel')}
-        className="scrollbar-none relative z-[80] flex h-full w-10 shrink-0 flex-col overflow-x-hidden overflow-y-auto border-l border-app-border bg-app-bg/95 shadow-[var(--ui-shadow-side-dock)] backdrop-blur"
+        className="scrollbar-none relative z-[var(--ui-z-dock)] flex h-full w-10 shrink-0 flex-col overflow-x-hidden overflow-y-auto border-l border-app-border bg-app-bg/95 shadow-[var(--ui-shadow-side-dock)] backdrop-blur"
       >
         {dockItems.map((item, index) => {
           const active = mode !== 'collapsed' && activeDockItemId === item.id;

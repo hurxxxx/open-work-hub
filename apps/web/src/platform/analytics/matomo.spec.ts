@@ -55,7 +55,7 @@ describe('Matomo tracking configuration', () => {
 
 describe('Matomo tracker installation', () => {
   it('installs the Matomo script and queues the base tracker settings', () => {
-    window.history.replaceState({}, '', '/apps/home/workspaces/main');
+    window.history.replaceState({}, '', '/apps/home');
     document.title = 'Open Work Hub Home';
 
     installedTracking = installMatomoTracking(
@@ -77,7 +77,7 @@ describe('Matomo tracker installation', () => {
   });
 
   it('tracks shell route context once per page key', () => {
-    window.history.replaceState({}, '', '/apps/home/workspaces/main');
+    window.history.replaceState({}, '', '/apps/home');
 
     installedTracking = installMatomoTracking(
       { VITE_OPEN_WORK_HUB_MATOMO_ALLOWED_HOSTS: 'localhost' },
@@ -85,27 +85,27 @@ describe('Matomo tracker installation', () => {
     );
     window._paq?.splice(0);
 
-    window.history.pushState({}, '', '/apps/docs/workspaces/main');
+    window.history.pushState({}, '', '/apps/docs');
     trackMatomoPageView(
       {
         appId: 'collaboration:docs-main',
-        appRoute: '/apps/docs/workspaces/:workspace',
+        appRoute: '/apps/docs',
       },
       window,
     );
     trackMatomoPageView(
       {
         appId: 'collaboration:docs-main',
-        appRoute: '/apps/docs/workspaces/:workspace',
+        appRoute: '/apps/docs',
       },
       window,
     );
 
     expect(window._paq).toEqual([
-      ['setCustomUrl', 'http://localhost:3000/apps/docs/workspaces/main'],
+      ['setCustomUrl', 'http://localhost:3000/apps/docs'],
       ['setDocumentTitle', document.title],
       ['setCustomDimension', 2, 'collaboration:docs-main'],
-      ['setCustomDimension', 3, '/apps/docs/workspaces/:workspace'],
+      ['setCustomDimension', 3, '/apps/docs'],
       ['trackPageView'],
     ]);
   });

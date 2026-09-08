@@ -193,9 +193,7 @@ def test_resolved_pool_health_reports_missing_admin_model() -> None:
     health = llm.check_resolved_pool_health(
         _admin_resolved_local_config(),
         live=True,
-        sync_client_factory=lambda pool, external_provider=None: FakeClient(
-            ["other-local-model"]
-        ),
+        sync_client_factory=lambda pool, external_provider=None: FakeClient(["other-local-model"]),
     )
 
     assert health.ready is False
@@ -260,9 +258,7 @@ def test_official_provider_health_maps_model_not_found(
 def test_legacy_pool_health_does_not_accept_environment_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(
-        "OPEN_WORK_HUB_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model"
-    )
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model")
     monkeypatch.setenv("OPEN_WORK_HUB_LLM_EXTERNAL_ALLOWED_PROVIDERS", "openai")
 
     monkeypatch.setattr(
@@ -285,12 +281,8 @@ def test_legacy_pool_health_does_not_accept_environment_model(
 def test_configured_health_does_not_probe_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(
-        "OPEN_WORK_HUB_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model"
-    )
-    monkeypatch.setenv(
-        "OPEN_WORK_HUB_LLM_LOCAL_CANONICAL_MODEL", "local/current-moe-test-model"
-    )
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model")
+    monkeypatch.setenv("OPEN_WORK_HUB_LLM_LOCAL_CANONICAL_MODEL", "local/current-moe-test-model")
     monkeypatch.setattr(
         llm,
         "get_pool_client",
@@ -322,7 +314,6 @@ def test_choose_pool_defaults_to_local_only_without_policy_row(
     context = LlmTaskContext(
         source="api.chat",
         actor_user_id="user-1",
-        workspace_id="ws-1",
         task_kind="unknown_task_kind_xyz",
         app_id="chatbot",
     )
@@ -343,7 +334,6 @@ def test_llm_task_context_requires_app_id() -> None:
         LlmTaskContext(
             source="api.chat",
             actor_user_id="user-1",
-            workspace_id="ws-1",
             task_kind="chatbot",
             app_id="",
         )
@@ -363,7 +353,6 @@ def test_choose_pool_local_hint_forces_local_even_on_external_policy() -> None:
     context = LlmTaskContext(
         source="api.chat",
         actor_user_id="user-1",
-        workspace_id="ws-1",
         task_kind="allowed_external",
         app_id="chatbot",
     )
@@ -396,7 +385,6 @@ def test_choose_pool_does_not_apply_payload_security_in_core_transport() -> None
     context = LlmTaskContext(
         source="api.chat",
         actor_user_id="user-1",
-        workspace_id="ws-1",
         task_kind="allowed_external",
         app_id="chatbot",
     )
@@ -430,7 +418,6 @@ def test_choose_pool_does_not_rescan_security_documents_in_core_transport() -> N
     context = LlmTaskContext(
         source="api.chat",
         actor_user_id="user-1",
-        workspace_id="ws-1",
         task_kind="allowed_external",
         app_id="chatbot",
     )
@@ -463,7 +450,6 @@ def test_choose_pool_uses_external_when_policy_external_and_no_pii() -> None:
     context = LlmTaskContext(
         source="api.chat",
         actor_user_id="user-1",
-        workspace_id="ws-1",
         task_kind="allowed_external",
         app_id="chatbot",
     )
@@ -749,20 +735,8 @@ def test_official_gemini_stream_emits_deltas_usage_and_done(
 
 
 def test_official_provider_finish_reasons_normalize_to_stream_contract() -> None:
-    assert (
-        llm_official_providers._normalize_finish_reason("anthropic", "end_turn")
-        == "stop"
-    )
-    assert (
-        llm_official_providers._normalize_finish_reason("anthropic", "max_tokens")
-        == "length"
-    )
-    assert (
-        llm_official_providers._normalize_finish_reason("anthropic", "tool_use")
-        == "tool_calls"
-    )
+    assert llm_official_providers._normalize_finish_reason("anthropic", "end_turn") == "stop"
+    assert llm_official_providers._normalize_finish_reason("anthropic", "max_tokens") == "length"
+    assert llm_official_providers._normalize_finish_reason("anthropic", "tool_use") == "tool_calls"
     assert llm_official_providers._normalize_finish_reason("gemini", "STOP") == "stop"
-    assert (
-        llm_official_providers._normalize_finish_reason("gemini", "MAX_TOKENS")
-        == "length"
-    )
+    assert llm_official_providers._normalize_finish_reason("gemini", "MAX_TOKENS") == "length"

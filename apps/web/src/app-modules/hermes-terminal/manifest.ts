@@ -1,5 +1,5 @@
-import { SquareTerminal } from 'lucide-react';
 import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
+import { SquareTerminal } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -13,7 +13,6 @@ export const hermesTerminalManifest: AppModuleManifest = {
     owner: 'ai-platform',
     permissions: [],
     apiDomain: 'hermes_terminal',
-    workspaceApiPrefixes: ['/api/v1/hermes-terminal'],
     aiCapabilities: [],
     writeAuditActions: [
       'hermes_terminal.session.start',
@@ -30,5 +29,5 @@ export const hermesTerminalManifest: AppModuleManifest = {
   },
   defaultActiveNavItemId: 'hermes-terminal',
   navItems: [],
-  workspaceRoutePaths: [getAppRoutePattern('hermes-terminal.root')],
+  appRoutePaths: [getAppRoutePattern('hermes-terminal.root')],
 };

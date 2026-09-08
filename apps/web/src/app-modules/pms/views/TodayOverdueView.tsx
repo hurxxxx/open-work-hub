@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { Calendar, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   normalizeTimeZone,
   zonedDateKey,
 } from '@/src/platform/time/time-utils';
+import { AlertCircle, Calendar, CheckCircle2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import {
   listAllPmsTaskLists,
   listAllTodayOverdueTasks,
@@ -15,10 +15,10 @@ import {
   type PmsTaskList,
 } from '../api/pms-api';
 import { formatDate } from './pms-constants';
-import { PmsCenteredLoadingState } from './PmsCenteredStateBlock';
-import { TaskAssigneeStack } from './TaskAssigneeStack';
 import { buildPmsTaskContextLabel } from './pms-task-context';
 import { buildPmsTaskListToolPath } from './pms-view-route';
+import { PmsCenteredLoadingState } from './PmsCenteredStateBlock';
+import { TaskAssigneeStack } from './TaskAssigneeStack';
 import { buildTodayOverdueTaskGroups } from './today-overdue-model';
 import { usePmsTaskListChangeSubscription } from './usePmsTaskListChangeSubscription';
 
@@ -30,11 +30,10 @@ type TodayOverdueTaskLoadResult = {
 export async function loadTodayOverdueTasks(
   token: string,
   today: string,
-  workspaceSlug?: string | null,
 ): Promise<TodayOverdueTaskLoadResult> {
   const [taskListResponse, taskResponse] = await Promise.all([
-    listAllPmsTaskLists(token, undefined, workspaceSlug),
-    listAllTodayOverdueTasks(token, today, workspaceSlug),
+    listAllPmsTaskLists(token, undefined),
+    listAllTodayOverdueTasks(token, today),
   ]);
   return {
     taskLists: taskListResponse.items,
@@ -42,15 +41,10 @@ export async function loadTodayOverdueTasks(
   };
 }
 
-export const TodayOverdueView = ({
-  workspaceSlug: workspaceSlugProp = null,
-}: {
-  workspaceSlug?: string | null;
-}) => {
+export const TodayOverdueView = (_context: Record<string, never>) => {
   const { t } = useTranslation('apps');
   const { token, user } = useAuth();
-  const { workspaceSlug: routeWorkspaceSlug } = useParams();
-  const workspaceSlug = workspaceSlugProp ?? routeWorkspaceSlug ?? null;
+
   const [data, setData] = useState<TodayOverdueTaskLoadResult>({
     taskLists: [],
     tasks: [],
@@ -65,16 +59,12 @@ export const TodayOverdueView = ({
     loadGenerationRef.current = loadGeneration;
     setLoading(true);
     try {
-      const nextData = await loadTodayOverdueTasks(
-        token,
-        today,
-        workspaceSlug,
-      );
+      const nextData = await loadTodayOverdueTasks(token, today);
       if (loadGeneration === loadGenerationRef.current) setData(nextData);
     } finally {
       if (loadGeneration === loadGenerationRef.current) setLoading(false);
     }
-  }, [today, token, workspaceSlug]);
+  }, [today, token]);
 
   useEffect(() => {
     void reloadTodayOverdueTasks();
@@ -101,7 +91,6 @@ export const TodayOverdueView = ({
     buildPmsTaskListToolPath({
       taskId: task.id,
       taskListId: task.list_id,
-      workspaceSlug,
     });
 
   return (

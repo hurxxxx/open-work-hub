@@ -8,22 +8,15 @@ from tempfile import SpooledTemporaryFile
 from typing import BinaryIO, Literal
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.models import (
-    User,
-    Workspace,
-    WorkspaceUserBinding,
-)
-from open_work_hub_api.domains.auth.roles import workspace_role_allows
+from open_work_hub_api.domains.auth.app_access import can_use_app
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.content_access.ownership import record_ownership_transition
 from open_work_hub_api.domains.files import storage_adapter as file_storage
-from open_work_hub_api.domains.files.external_access import (
-    authorize_explicit_file_ids,
-    is_current_platform_admin,
-)
 from open_work_hub_api.domains.files.archive_planner import (
     ArchivePlanFile,
     ArchivePlanFolder,
@@ -31,10 +24,13 @@ from open_work_hub_api.domains.files.archive_planner import (
     plan_archive_entries,
     safe_filename,
 )
+from open_work_hub_api.domains.files.external_access import (
+    authorize_explicit_file_ids,
+    is_current_platform_admin,
+)
 from open_work_hub_api.domains.files.models import (
     FileManagerBulkIngestRun,
     FileManagerCorpus,
-    FileManagerCorpusTransitionAudit,
     FileManagerFile,
     FileManagerFolder,
     FileManagerStorageCleanupJob,
@@ -47,9 +43,8 @@ from open_work_hub_api.domains.retrieval.partitioning import (
     ensure_default_partition,
 )
 
-
-FILE_VISIBILITIES = frozenset({"private", "workspace"})
-FILE_CORPUS_ACCESS_SCOPE_KINDS = frozenset({"workspace", "company"})
+FILE_VISIBILITIES = frozenset({"private", "company"})
+FILE_CORPUS_ACCESS_SCOPE_KINDS = frozenset({"company"})
 MAX_FILE_UPLOAD_SIZE = 250 * 1024 * 1024
 ARCHIVE_SPOOL_LIMIT_BYTES = 64 * 1024 * 1024
 ARCHIVE_CHUNK_BYTES = 1024 * 1024
@@ -70,8 +65,7 @@ class _FileDeleteScope:
     folder_ids: tuple[str, ...]
     file_ids: tuple[str, ...]
     corpus_ids: tuple[str, ...]
-    legacy_partition_ids: tuple[str, ...]
-    legacy_workspace_ids: tuple[str, ...]
+    standalone_partition_ids: tuple[str, ...]
 
 
 FileCorpusLockMode = Literal["shared", "exclusive"]
@@ -98,12 +92,10 @@ def utcnow_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def is_workspace_admin(db: Session, *, workspace: Workspace, user: User) -> bool:
-    if not _is_current_active_user(db, user.id) or not _is_current_active_workspace(
-        db, workspace.id
-    ):
-        return False
-    return _is_current_workspace_admin(db, user_id=user.id, workspace_id=workspace.id)
+def is_corpus_admin(db: Session, *, user: User) -> bool:
+    return is_current_platform_admin(db, user.id) and can_use_app(
+        db, user_id=user.id, app_id="files"
+    )
 
 
 def normalize_visibility(value: str) -> str:
@@ -116,26 +108,22 @@ def normalize_visibility(value: str) -> str:
 def create_file_corpus(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     name: str,
 ) -> FileManagerCorpus:
-    """Create a workspace-managed corpus with its own stable partition."""
+    """Create a company corpus with its own stable partition."""
 
-    if not is_workspace_admin(db, workspace=workspace, user=user):
-        raise FileCorpusAccessDenied("file corpus creation requires workspace admin")
+    if not is_corpus_admin(db, user=user):
+        raise FileCorpusAccessDenied("file corpus creation requires platform admin")
     partition = create_managed_partition(
         db,
         source_namespace="files",
-        managed_workspace_id=workspace.id,
-        candidate_scope_kind="workspace",
-        workspace_id=workspace.id,
+        candidate_scope_kind="company",
     )
     corpus = FileManagerCorpus(
         id=new_id(),
         name=_normalize_name(name),
-        managed_workspace_id=workspace.id,
-        access_scope_kind="workspace",
+        access_scope_kind="company",
         retrieval_partition_id=partition.id,
         created_by_id=user.id,
         metadata_version=1,
@@ -148,15 +136,14 @@ def create_file_corpus(
 def list_managed_file_corpora(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
 ) -> list[FileManagerCorpus]:
-    if not is_workspace_admin(db, workspace=workspace, user=user):
-        raise FileCorpusAccessDenied("file corpus listing requires workspace admin")
+    if not is_corpus_admin(db, user=user):
+        raise FileCorpusAccessDenied("file corpus listing requires platform admin")
     return list(
         db.scalars(
             select(FileManagerCorpus)
-            .where(FileManagerCorpus.managed_workspace_id == workspace.id)
+            .where()
             .order_by(FileManagerCorpus.created_at.asc(), FileManagerCorpus.id.asc())
         ).all()
     )
@@ -165,16 +152,14 @@ def list_managed_file_corpora(
 def require_managed_file_corpus(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     corpus_id: str,
 ) -> FileManagerCorpus:
-    if not is_workspace_admin(db, workspace=workspace, user=user):
-        raise FileCorpusAccessDenied("file corpus management requires workspace admin")
+    if not is_corpus_admin(db, user=user):
+        raise FileCorpusAccessDenied("file corpus management requires platform admin")
     corpus = db.scalar(
         select(FileManagerCorpus).where(
             FileManagerCorpus.id == corpus_id,
-            FileManagerCorpus.managed_workspace_id == workspace.id,
         )
     )
     if corpus is None:
@@ -182,123 +167,17 @@ def require_managed_file_corpus(
     return corpus
 
 
-def transition_file_corpus(
-    db: Session,
-    *,
-    corpus_id: str,
-    actor: User,
-    expected_metadata_version: int,
-    access_scope_kind: str,
-    reason: str,
-    target_workspace_id: str | None = None,
-    request_id: str | None = None,
-) -> FileManagerCorpus:
-    """Move a corpus ACL envelope without touching derived or stored content."""
-
-    target_scope = _normalize_corpus_access_scope(access_scope_kind)
-    normalized_reason = _normalize_corpus_transition_reason(reason)
-    normalized_request_id = str(request_id or "").strip()[:128] or None
-    corpus = _lock_file_corpora(db, (corpus_id,), lock_mode="exclusive")[corpus_id]
-    _require_current_active_user(db, actor.id)
-    partition = db.scalar(
-        select(RetrievalPartition)
-        .where(RetrievalPartition.id == corpus.retrieval_partition_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-    if partition is None:
-        raise FileCorpusConflict("file corpus partition is missing")
-    _validate_file_corpus_partition(corpus, partition)
-    if (
-        corpus.metadata_version != expected_metadata_version
-        or partition.metadata_version != expected_metadata_version
-    ):
-        raise FileCorpusConflict("file corpus metadata version does not match")
-    if corpus.source_managed:
-        raise FileCorpusConflict(
-            "source-managed corpus scope is immutable outside its source binding"
-        )
-
-    source_workspace = _load_active_workspace(db, corpus.managed_workspace_id)
-    if target_scope == "company":
-        if target_workspace_id is not None:
-            raise FileCorpusConflict("company corpus cannot declare target workspace")
-        target_workspace = source_workspace
-    else:
-        if target_workspace_id is None:
-            raise FileCorpusConflict("workspace corpus requires target workspace")
-        target_workspace = _load_active_workspace(db, target_workspace_id)
-
-    _authorize_file_corpus_transition(
-        db,
-        corpus=corpus,
-        actor=actor,
-        source_workspace=source_workspace,
-        target_workspace=target_workspace,
-        target_scope=target_scope,
-    )
-    if (
-        corpus.access_scope_kind == target_scope
-        and corpus.managed_workspace_id == target_workspace.id
-    ):
-        return corpus
-
-    from_scope = corpus.access_scope_kind
-    from_workspace_id = corpus.managed_workspace_id
-    next_version = corpus.metadata_version + 1
-    partition.managed_workspace_id = target_workspace.id
-    partition.candidate_scope_kind = target_scope
-    partition.candidate_workspace_id = target_workspace.id if target_scope == "workspace" else None
-    partition.candidate_user_id = None
-    partition.metadata_version = next_version
-    corpus.managed_workspace_id = target_workspace.id
-    corpus.access_scope_kind = target_scope
-    corpus.metadata_version = next_version
-    audit = FileManagerCorpusTransitionAudit(
-        id=new_id(),
-        corpus_id=corpus.id,
-        actor_id=actor.id,
-        reason=normalized_reason,
-        request_id=normalized_request_id,
-        from_access_scope_kind=from_scope,
-        to_access_scope_kind=target_scope,
-        from_managed_workspace_id=from_workspace_id,
-        to_managed_workspace_id=target_workspace.id,
-        from_metadata_version=expected_metadata_version,
-        to_metadata_version=next_version,
-    )
-    db.add_all([partition, corpus, audit])
-    db.flush()
-
-    if source_workspace.id != target_workspace.id:
-        changed_at = utcnow_naive()
-        db.execute(
-            update(FileManagerFolder)
-            .where(FileManagerFolder.corpus_id == corpus.id)
-            .values(workspace_id=target_workspace.id, updated_at=changed_at)
-        )
-        db.execute(
-            update(FileManagerFile)
-            .where(FileManagerFile.corpus_id == corpus.id)
-            .values(workspace_id=target_workspace.id, updated_at=changed_at)
-        )
-    db.flush()
-    return corpus
-
-
 def list_accessible_folders(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
 ) -> list[FileManagerFolder]:
-    is_admin = is_workspace_admin(db, workspace=workspace, user=user)
+    is_admin = is_corpus_admin(db, user=user)
     folders = list(
         db.scalars(
             select(FileManagerFolder)
             .options(joinedload(FileManagerFolder.owner))
             .where(
-                FileManagerFolder.workspace_id == workspace.id,
                 FileManagerFolder.deleted_at.is_(None),
             )
             .order_by(FileManagerFolder.name.asc(), FileManagerFolder.created_at.asc())
@@ -329,17 +208,15 @@ def list_accessible_folders(
 def list_accessible_files(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     accessible_folder_ids: set[str],
 ) -> list[FileManagerFile]:
-    is_admin = is_workspace_admin(db, workspace=workspace, user=user)
+    is_admin = is_corpus_admin(db, user=user)
     files = list(
         db.scalars(
             select(FileManagerFile)
             .options(joinedload(FileManagerFile.owner))
             .where(
-                FileManagerFile.workspace_id == workspace.id,
                 FileManagerFile.deleted_at.is_(None),
             )
             .order_by(FileManagerFile.filename.asc(), FileManagerFile.created_at.asc())
@@ -367,7 +244,6 @@ def list_accessible_files(
         db,
         file_ids=explicit_file_ids,
         user_id=user.id,
-        workspace_id=workspace.id,
     )
     accessible: list[FileManagerFile] = []
     for file in files:
@@ -375,15 +251,9 @@ def list_accessible_files(
             corpus = corpora.get(file.corpus_id)
             if corpus is None:
                 continue
-            scope_allowed = corpus.access_scope_kind == "company" or (
-                corpus.access_scope_kind == "workspace"
-                and corpus.managed_workspace_id == workspace.id
-            )
+            scope_allowed = corpus.access_scope_kind == "company"
             if not scope_allowed:
                 continue
-            # The Files browser remains workspace-local because the source query
-            # above is workspace-bound. Company corpora managed elsewhere remain
-            # discoverable through company retrieval, not this workspace listing.
             if corpus.authorization_mode == "explicit_grants" and file.id not in explicit_allowed:
                 continue
             accessible.append(file)
@@ -398,15 +268,12 @@ def list_accessible_files(
 def require_folder_access(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     folder_id: str | None,
 ) -> FileManagerFolder | None:
     if folder_id is None:
         return None
-    accessible = {
-        folder.id: folder for folder in list_accessible_folders(db, workspace=workspace, user=user)
-    }
+    accessible = {folder.id: folder for folder in list_accessible_folders(db, user=user)}
     folder = accessible.get(folder_id)
     if folder is None:
         raise localized_http_exception(status_code=404, code="files.folder_not_found")
@@ -416,17 +283,16 @@ def require_folder_access(
 def create_folder(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     name: str,
     parent_id: str | None,
     visibility: str,
+    company_admin_read_acknowledged: bool = False,
     corpus_id: str | None = None,
     operator_ingest_run_id: str | None = None,
 ) -> FileManagerFolder:
     parent, corpus, retrieval_partition_id = _prepare_file_corpus_ingress(
         db,
-        workspace=workspace,
         user=user,
         requested_corpus_id=corpus_id,
         parent_id=parent_id,
@@ -435,20 +301,18 @@ def create_folder(
     if parent is not None:
         _ensure_can_manage_record(
             db,
-            workspace=workspace,
             user=user,
             owner_id=parent.owner_id,
             error_code="files.parent_manage_access_required",
         )
     if corpus is not None:
-        effective_visibility = "workspace"
+        effective_visibility = "company"
     elif parent is not None:
         effective_visibility = parent.visibility
     else:
         effective_visibility = normalize_visibility(visibility)
     folder = FileManagerFolder(
         id=new_id(),
-        workspace_id=workspace.id,
         corpus_id=corpus.id if corpus is not None else None,
         parent_id=parent.id if parent else None,
         owner_id=user.id,
@@ -456,6 +320,16 @@ def create_folder(
         visibility=effective_visibility,
         retrieval_partition_id=retrieval_partition_id,
     )
+    if effective_visibility == "company":
+        record_ownership_transition(
+            db,
+            actor_user_id=user.id,
+            resource_kind="file_folder",
+            resource_id=folder.id,
+            current_kind="personal",
+            next_kind="company",
+            company_admin_read_acknowledged=company_admin_read_acknowledged,
+        )
     db.add(folder)
     db.flush()
     return folder
@@ -464,30 +338,27 @@ def create_folder(
 def update_folder(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     folder_id: str,
     name: str | None = None,
     visibility: str | None = None,
 ) -> FileManagerFolder:
-    locked_corpora, locked_legacy_partitions = _lock_corpora_for_children(
+    locked_corpora, locked_standalone_partitions = _lock_corpora_for_children(
         db,
-        workspace_id=workspace.id,
         folder_ids=(folder_id,),
         lock_mode="shared",
     )
-    folder = _load_folder_for_workspace(
+    folder = _load_folder(
         db,
-        workspace=workspace,
         folder_id=folder_id,
         lock_mode="exclusive",
     )
     _validate_locked_child_corpus(
         folder,
         locked_corpora,
-        locked_legacy_partitions=locked_legacy_partitions,
+        locked_standalone_partitions=locked_standalone_partitions,
     )
-    _ensure_can_manage_record(db, workspace=workspace, user=user, owner_id=folder.owner_id)
+    _ensure_can_manage_record(db, user=user, owner_id=folder.owner_id)
     if name is not None:
         folder.name = _normalize_name(name)
     if visibility is not None:
@@ -505,25 +376,20 @@ def update_folder(
 def delete_folder(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     folder_id: str,
 ) -> list[str]:
     folders, files = _lock_tree_delete_scope(
         db,
-        workspace_id=workspace.id,
         selected_folder_ids=(folder_id,),
         selected_file_ids=(),
     )
-    _require_current_mutation_context(db, user_id=user.id, workspace_id=workspace.id)
-    is_admin = _is_current_workspace_admin(
+    _require_current_mutation_context(
         db,
         user_id=user.id,
-        workspace_id=workspace.id,
     )
-    if not is_admin and (
-        any(item.owner_id != user.id for item in folders)
-        or any(item.owner_id != user.id for item in files)
+    if any(item.owner_id != user.id for item in folders) or any(
+        item.owner_id != user.id for item in files
     ):
         raise localized_http_exception(status_code=403, code="files.delete_access_required")
 
@@ -540,7 +406,6 @@ def delete_folder(
 def upload_file(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     filename: str | None,
     content_type: str | None,
@@ -548,6 +413,7 @@ def upload_file(
     size_bytes: int,
     folder_id: str | None,
     visibility: str,
+    company_admin_read_acknowledged: bool = False,
     corpus_id: str | None = None,
     operator_ingest_run_id: str | None = None,
     reserved_file_id: str | None = None,
@@ -560,7 +426,6 @@ def upload_file(
         )
     folder, corpus, retrieval_partition_id = _prepare_file_corpus_ingress(
         db,
-        workspace=workspace,
         user=user,
         requested_corpus_id=corpus_id,
         parent_id=folder_id,
@@ -569,13 +434,12 @@ def upload_file(
     if folder is not None:
         _ensure_can_manage_record(
             db,
-            workspace=workspace,
             user=user,
             owner_id=folder.owner_id,
             error_code="files.parent_manage_access_required",
         )
     if corpus is not None:
-        effective_visibility = "workspace"
+        effective_visibility = "company"
     elif folder is not None:
         effective_visibility = folder.visibility
     else:
@@ -587,7 +451,6 @@ def upload_file(
     storage_key = f"files/{file_id}/{stored_name}"
     row = FileManagerFile(
         id=file_id,
-        workspace_id=workspace.id,
         corpus_id=corpus.id if corpus is not None else None,
         folder_id=folder.id if folder else None,
         owner_id=user.id,
@@ -598,6 +461,16 @@ def upload_file(
         visibility=effective_visibility,
         retrieval_partition_id=retrieval_partition_id,
     )
+    if effective_visibility == "company":
+        record_ownership_transition(
+            db,
+            actor_user_id=user.id,
+            resource_kind="file",
+            resource_id=row.id,
+            current_kind="personal",
+            next_kind="company",
+            company_admin_read_acknowledged=company_admin_read_acknowledged,
+        )
     db.add(row)
     db.flush()
 
@@ -620,28 +493,25 @@ def upload_file(
 def delete_file(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     file_id: str,
 ) -> str:
-    locked_corpora, locked_legacy_partitions = _lock_corpora_for_children(
+    locked_corpora, locked_standalone_partitions = _lock_corpora_for_children(
         db,
-        workspace_id=workspace.id,
         file_ids=(file_id,),
         lock_mode="shared",
     )
-    file = _load_file_for_workspace(
+    file = _load_file(
         db,
-        workspace=workspace,
         file_id=file_id,
         lock_mode="exclusive",
     )
     _validate_locked_child_corpus(
         file,
         locked_corpora,
-        locked_legacy_partitions=locked_legacy_partitions,
+        locked_standalone_partitions=locked_standalone_partitions,
     )
-    _ensure_can_manage_record(db, workspace=workspace, user=user, owner_id=file.owner_id)
+    _ensure_can_manage_record(db, user=user, owner_id=file.owner_id)
     file.deleted_at = utcnow_naive()
     purge_file_retrieval_artifact(file)
     db.add(file)
@@ -652,7 +522,6 @@ def delete_file(
 def delete_items(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     file_ids: Iterable[str],
     folder_ids: Iterable[str],
@@ -665,7 +534,6 @@ def delete_items(
     if selected_folder_ids:
         folders_to_delete, files_to_delete = _lock_tree_delete_scope(
             db,
-            workspace_id=workspace.id,
             selected_folder_ids=selected_folder_ids,
             selected_file_ids=selected_file_ids,
         )
@@ -673,19 +541,15 @@ def delete_items(
         folders_to_delete = []
         files_to_delete = _lock_leaf_files_for_delete(
             db,
-            workspace_id=workspace.id,
             selected_file_ids=selected_file_ids,
         )
 
-    _require_current_mutation_context(db, user_id=user.id, workspace_id=workspace.id)
-    is_admin = _is_current_workspace_admin(
+    _require_current_mutation_context(
         db,
         user_id=user.id,
-        workspace_id=workspace.id,
     )
-    if not is_admin and (
-        any(folder.owner_id != user.id for folder in folders_to_delete)
-        or any(file.owner_id != user.id for file in files_to_delete)
+    if any(folder.owner_id != user.id for folder in folders_to_delete) or any(
+        file.owner_id != user.id for file in files_to_delete
     ):
         raise localized_http_exception(status_code=403, code="files.delete_access_required")
 
@@ -714,14 +578,12 @@ def purge_file_retrieval_artifact(file: FileManagerFile) -> None:
 def build_archive(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     file_ids: Iterable[str],
     folder_ids: Iterable[str],
 ) -> SpooledTemporaryFile[bytes]:
     entries = list_archive_entries(
         db,
-        workspace=workspace,
         user=user,
         file_ids=file_ids,
         folder_ids=folder_ids,
@@ -756,7 +618,6 @@ def build_archive(
 def list_archive_entries(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     file_ids: Iterable[str],
     folder_ids: Iterable[str],
@@ -766,7 +627,7 @@ def list_archive_entries(
     if not selected_file_ids and not selected_folder_ids:
         raise localized_http_exception(status_code=422, code="files.selection_required")
 
-    accessible_folders = list_accessible_folders(db, workspace=workspace, user=user)
+    accessible_folders = list_accessible_folders(db, user=user)
     accessible_folder_by_id = {folder.id: folder for folder in accessible_folders}
     for folder_id in selected_folder_ids:
         if folder_id not in accessible_folder_by_id:
@@ -782,7 +643,6 @@ def list_archive_entries(
     if selected_folder_ids:
         accessible_files = list_accessible_files(
             db,
-            workspace=workspace,
             user=user,
             accessible_folder_ids=set(accessible_folder_by_id),
         )
@@ -793,7 +653,7 @@ def list_archive_entries(
 
     selected_files: list[FileManagerFile] = []
     for file_id in selected_file_ids:
-        file = require_file_access(db, workspace=workspace, user=user, file_id=file_id)
+        file = require_file_access(db, user=user, file_id=file_id)
         selected_files.append(file)
 
     file_by_id = {file.id: file for file in selected_files}
@@ -884,7 +744,6 @@ def enqueue_storage_cleanup_job(db: Session, storage_key: str, *, error: str | N
 def require_file_access(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     file_id: str,
 ) -> FileManagerFile:
@@ -902,9 +761,7 @@ def require_file_access(
         corpus = db.get(FileManagerCorpus, file.corpus_id)
         if corpus is None:
             raise localized_http_exception(status_code=403, code="files.file_access_required")
-        scope_allowed = corpus.access_scope_kind == "company" or (
-            corpus.access_scope_kind == "workspace" and corpus.managed_workspace_id == workspace.id
-        )
+        scope_allowed = corpus.access_scope_kind == "company"
         if not scope_allowed:
             raise localized_http_exception(status_code=403, code="files.file_access_required")
         if corpus.authorization_mode == "explicit_grants" and file.id not in (
@@ -912,20 +769,15 @@ def require_file_access(
                 db,
                 file_ids=(file.id,),
                 user_id=user.id,
-                workspace_id=workspace.id,
             )
         ):
             raise localized_http_exception(status_code=403, code="files.file_access_required")
         return file
-    if file.workspace_id != workspace.id:
-        raise localized_http_exception(status_code=404, code="files.file_not_found")
-    is_admin = is_workspace_admin(db, workspace=workspace, user=user)
+    is_admin = is_corpus_admin(db, user=user)
     if not _record_visible(file.visibility, file.owner_id, user=user, is_admin=is_admin):
         raise localized_http_exception(status_code=403, code="files.file_access_required")
     if file.folder_id is not None:
-        accessible_folder_ids = {
-            folder.id for folder in list_accessible_folders(db, workspace=workspace, user=user)
-        }
+        accessible_folder_ids = {folder.id for folder in list_accessible_folders(db, user=user)}
         if file.folder_id not in accessible_folder_ids:
             raise localized_http_exception(status_code=403, code="files.file_access_required")
     return file
@@ -934,7 +786,6 @@ def require_file_access(
 def _resolve_file_corpus_for_ingest(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     requested_corpus_id: str | None,
     parent: FileManagerFolder | None,
@@ -950,7 +801,7 @@ def _resolve_file_corpus_for_ingest(
     if effective_corpus_id is None:
         return None
     corpus = locked_corpora.get(effective_corpus_id)
-    if corpus is None or corpus.managed_workspace_id != workspace.id:
+    if corpus is None:
         raise FileCorpusNotFound(effective_corpus_id)
     partition = db.scalar(
         select(RetrievalPartition)
@@ -969,7 +820,6 @@ def _resolve_file_corpus_for_ingest(
     _validate_operator_managed_ingress(
         db,
         corpus=corpus,
-        workspace_id=workspace.id,
         operator_ingest_run_id=operator_ingest_run_id,
     )
     if parent is not None and parent.retrieval_partition_id != corpus.retrieval_partition_id:
@@ -980,106 +830,77 @@ def _resolve_file_corpus_for_ingest(
 def _prepare_file_corpus_ingress(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     requested_corpus_id: str | None,
     parent_id: str | None,
     operator_ingest_run_id: str | None = None,
 ) -> tuple[FileManagerFolder | None, FileManagerCorpus | None, str]:
-    """Lock ingress gates before reloading and authorizing the prospective parent."""
-
-    normalized_requested_id = str(requested_corpus_id or "").strip() or None
-    discovered_parent_corpus_id = None
-    discovered_parent_partition_id = None
-    parent_binding = None
-    if parent_id is not None:
-        parent_binding = db.execute(
-            select(
-                FileManagerFolder.corpus_id,
-                FileManagerFolder.retrieval_partition_id,
-            ).where(
-                FileManagerFolder.id == parent_id,
-                FileManagerFolder.workspace_id == workspace.id,
-                FileManagerFolder.deleted_at.is_(None),
+    """Lock aggregate gates before the parent row, matching tree deletion lock order."""
+    _require_current_mutation_context(db, user_id=user.id)
+    requested = str(requested_corpus_id or "").strip() or None
+    parent_binding = (
+        db.execute(
+            select(FileManagerFolder.corpus_id, FileManagerFolder.retrieval_partition_id).where(
+                FileManagerFolder.id == parent_id, FileManagerFolder.deleted_at.is_(None)
             )
         ).one_or_none()
-        if parent_binding is not None:
-            discovered_parent_corpus_id = parent_binding.corpus_id
-            discovered_parent_partition_id = parent_binding.retrieval_partition_id
-
+        if parent_id
+        else None
+    )
+    if parent_id and parent_binding is None:
+        raise localized_http_exception(status_code=404, code="files.folder_not_found")
     locked_corpora = _lock_file_corpora(
-        db,
-        (normalized_requested_id, discovered_parent_corpus_id),
-        lock_mode="shared",
+        db, (requested, parent_binding.corpus_id if parent_binding else None), lock_mode="shared"
     )
-    legacy_bindings: list[tuple[str | None, str | None, str]] = []
-    if parent_binding is not None and discovered_parent_corpus_id is None:
-        legacy_bindings.append(
-            (
-                None,
-                discovered_parent_partition_id,
-                workspace.id,
-            )
+    standalone_partition = None
+    if not requested and (parent_binding is None or parent_binding.corpus_id is None):
+        standalone_partition = ensure_default_partition(
+            db, source_namespace="files", candidate_scope_kind="company"
         )
-    elif parent_id is None and normalized_requested_id is None:
-        legacy_bindings.append((None, None, workspace.id))
-    legacy_partition_ids = _resolve_legacy_partition_gate_ids(db, legacy_bindings)
-    locked_legacy_partitions = _lock_retrieval_partitions(
-        db,
-        legacy_partition_ids,
-        lock_mode="shared",
+    gate_ids = (
+        [parent_binding.retrieval_partition_id]
+        if parent_binding and parent_binding.corpus_id is None
+        else ([standalone_partition.id] if standalone_partition else [])
     )
-
+    locked_partitions = _lock_retrieval_partitions(db, gate_ids, lock_mode="shared")
     parent = None
-    if parent_id is not None:
-        _load_folder_for_workspace(
+    if parent_id:
+        parent = _load_folder(db, folder_id=parent_id, lock_mode="shared")
+        _ensure_can_manage_record(
             db,
-            workspace=workspace,
-            folder_id=parent_id,
-            lock_mode="shared",
-        )
-    _require_current_mutation_context(db, user_id=user.id, workspace_id=workspace.id)
-    if parent_id is not None:
-        parent = require_folder_access(
-            db,
-            workspace=workspace,
             user=user,
-            folder_id=parent_id,
+            owner_id=parent.owner_id,
+            error_code="files.parent_manage_access_required",
         )
-        if parent.corpus_id is not None and parent.corpus_id not in locked_corpora:
-            raise FileCorpusConflict("parent folder corpus changed during authorization")
         _validate_locked_child_corpus(
-            parent,
-            locked_corpora,
-            locked_legacy_partitions=locked_legacy_partitions,
+            parent, locked_corpora, locked_standalone_partitions=locked_partitions
         )
-
     corpus = _resolve_file_corpus_for_ingest(
         db,
-        workspace=workspace,
         user=user,
-        requested_corpus_id=normalized_requested_id,
+        requested_corpus_id=requested,
         parent=parent,
         locked_corpora=locked_corpora,
         operator_ingest_run_id=operator_ingest_run_id,
     )
-    if corpus is not None:
-        retrieval_partition_id = corpus.retrieval_partition_id
-    else:
-        bound_partition_id = parent.retrieval_partition_id if parent is not None else None
-        retrieval_partition_id = _require_locked_default_file_partition(
-            locked_legacy_partitions,
-            workspace_id=workspace.id,
-            bound_partition_id=bound_partition_id,
-        ).id
-    return parent, corpus, retrieval_partition_id
+    if corpus:
+        return parent, corpus, corpus.retrieval_partition_id
+    bound_id = (
+        parent.retrieval_partition_id
+        if parent
+        else (standalone_partition.id if standalone_partition else None)
+    )
+    return (
+        parent,
+        None,
+        _require_locked_default_file_partition(locked_partitions, bound_partition_id=bound_id).id,
+    )
 
 
 def _validate_operator_managed_ingress(
     db: Session,
     *,
     corpus: FileManagerCorpus,
-    workspace_id: str,
     operator_ingest_run_id: str | None,
 ) -> None:
     normalized_run_id = str(operator_ingest_run_id or "").strip() or None
@@ -1093,7 +914,6 @@ def _validate_operator_managed_ingress(
         select(FileManagerBulkIngestRun).where(
             FileManagerBulkIngestRun.id == normalized_run_id,
             FileManagerBulkIngestRun.corpus_id == corpus.id,
-            FileManagerBulkIngestRun.workspace_id == workspace_id,
         )
     )
     if run is None:
@@ -1153,82 +973,43 @@ def _lock_retrieval_partitions(
     return locked
 
 
-def _resolve_legacy_partition_gate_ids(
-    db: Session,
-    bindings: Iterable[tuple[str | None, str | None, str]],
+def _resolve_standalone_partition_gate_ids(
+    db: Session, bindings: Iterable[tuple[str | None, str | None]]
 ) -> list[str]:
-    """Resolve logical default gates for legacy rows without writing their bindings."""
-
     partition_ids: list[str] = []
-    for corpus_id, partition_id, workspace_id in bindings:
+    for corpus_id, partition_id in bindings:
         if corpus_id is not None:
             continue
-        default_partition = ensure_default_partition(
-            db,
-            source_namespace="files",
-            candidate_scope_kind="workspace",
-            workspace_id=workspace_id,
-        )
-        normalized_partition_id = str(partition_id or "").strip()
-        if normalized_partition_id and normalized_partition_id != default_partition.id:
-            raise FileCorpusConflict(
-                "legacy file partition binding does not match its workspace default"
-            )
-        partition_ids.append(default_partition.id)
+        if not partition_id:
+            raise FileCorpusConflict("standalone file partition binding is missing")
+        partition_ids.append(partition_id)
     return partition_ids
 
 
-def _validate_default_file_partition(
-    partition: RetrievalPartition,
-    *,
-    workspace_id: str,
-) -> None:
+def _validate_default_file_partition(partition: RetrievalPartition) -> None:
     if (
         partition.source_namespace != "files"
         or not partition.is_default_ingest
         or partition.state != RetrievalPartitionState.ACTIVE.value
-        or partition.managed_workspace_id != workspace_id
-        or partition.candidate_scope_kind != "workspace"
-        or partition.candidate_workspace_id != workspace_id
+        or partition.candidate_scope_kind != "company"
         or partition.candidate_user_id is not None
     ):
-        raise FileCorpusConflict("legacy file partition gate does not match its workspace")
+        raise FileCorpusConflict("invalid standalone Files partition")
 
 
 def _require_locked_default_file_partition(
-    locked_partitions: dict[str, RetrievalPartition],
-    *,
-    workspace_id: str,
-    bound_partition_id: str | None,
+    locked_partitions: dict[str, RetrievalPartition], *, bound_partition_id: str | None
 ) -> RetrievalPartition:
-    normalized_bound_id = str(bound_partition_id or "").strip()
-    if normalized_bound_id:
-        partition = locked_partitions.get(normalized_bound_id)
-        if partition is None:
-            raise FileCorpusConflict("legacy file partition gate was not locked")
-        _validate_default_file_partition(partition, workspace_id=workspace_id)
-        return partition
-
-    matches = [
-        partition
-        for partition in locked_partitions.values()
-        if partition.source_namespace == "files"
-        and partition.is_default_ingest
-        and partition.state == RetrievalPartitionState.ACTIVE.value
-        and partition.managed_workspace_id == workspace_id
-        and partition.candidate_scope_kind == "workspace"
-        and partition.candidate_workspace_id == workspace_id
-        and partition.candidate_user_id is None
-    ]
-    if len(matches) != 1:
-        raise FileCorpusConflict("legacy file default partition gate was not locked")
-    return matches[0]
+    if not bound_partition_id or bound_partition_id not in locked_partitions:
+        raise FileCorpusConflict("standalone Files partition was not locked")
+    partition = locked_partitions[bound_partition_id]
+    _validate_default_file_partition(partition)
+    return partition
 
 
 def _lock_corpora_for_children(
     db: Session,
     *,
-    workspace_id: str,
     folder_ids: Iterable[str] = (),
     file_ids: Iterable[str] = (),
     lock_mode: FileCorpusLockMode,
@@ -1237,17 +1018,15 @@ def _lock_corpora_for_children(
 
     normalized_folder_ids = tuple(sorted(set(folder_ids)))
     normalized_file_ids = tuple(sorted(set(file_ids)))
-    bindings: list[tuple[str | None, str | None, str]] = []
+    bindings: list[tuple[str | None, str | None]] = []
     if normalized_folder_ids:
         bindings.extend(
             db.execute(
                 select(
                     FileManagerFolder.corpus_id,
                     FileManagerFolder.retrieval_partition_id,
-                    FileManagerFolder.workspace_id,
                 ).where(
                     FileManagerFolder.id.in_(normalized_folder_ids),
-                    FileManagerFolder.workspace_id == workspace_id,
                     FileManagerFolder.deleted_at.is_(None),
                 )
             ).all()
@@ -1258,37 +1037,34 @@ def _lock_corpora_for_children(
                 select(
                     FileManagerFile.corpus_id,
                     FileManagerFile.retrieval_partition_id,
-                    FileManagerFile.workspace_id,
                 ).where(
                     FileManagerFile.id.in_(normalized_file_ids),
-                    FileManagerFile.workspace_id == workspace_id,
                     FileManagerFile.deleted_at.is_(None),
                 )
             ).all()
         )
-    corpus_ids = [corpus_id for corpus_id, _partition_id, _workspace_id in bindings if corpus_id]
+    corpus_ids = [corpus_id for corpus_id, _partition_id in bindings if corpus_id]
     locked_corpora = _lock_file_corpora(db, corpus_ids, lock_mode=lock_mode)
-    legacy_partition_ids = _resolve_legacy_partition_gate_ids(db, bindings)
-    locked_legacy_partitions = _lock_retrieval_partitions(
+    standalone_partition_ids = _resolve_standalone_partition_gate_ids(db, bindings)
+    locked_standalone_partitions = _lock_retrieval_partitions(
         db,
-        legacy_partition_ids,
+        standalone_partition_ids,
         lock_mode=lock_mode,
     )
-    return locked_corpora, locked_legacy_partitions
+    return locked_corpora, locked_standalone_partitions
 
 
 def _validate_locked_child_corpus(
     child: FileManagerFolder | FileManagerFile,
     locked_corpora: dict[str, FileManagerCorpus],
     *,
-    locked_legacy_partitions: dict[str, RetrievalPartition] | None = None,
+    locked_standalone_partitions: dict[str, RetrievalPartition] | None = None,
 ) -> None:
     if child.corpus_id is None:
-        if locked_legacy_partitions is None:
+        if locked_standalone_partitions is None:
             raise FileCorpusConflict("legacy file partition gates were not provided")
         _require_locked_default_file_partition(
-            locked_legacy_partitions,
-            workspace_id=child.workspace_id,
+            locked_standalone_partitions,
             bound_partition_id=child.retrieval_partition_id,
         )
         return
@@ -1299,30 +1075,23 @@ def _validate_locked_child_corpus(
         raise FileCorpusAccessDenied(
             "source-managed file corpus requires the external source lifecycle"
         )
-    if (
-        child.workspace_id != corpus.managed_workspace_id
-        or child.retrieval_partition_id != corpus.retrieval_partition_id
-    ):
+    if child.retrieval_partition_id != corpus.retrieval_partition_id:
         raise FileCorpusConflict("file child does not match its current corpus metadata")
 
 
 def _validate_file_corpus_partition(
-    corpus: FileManagerCorpus,
-    partition: RetrievalPartition,
+    corpus: FileManagerCorpus, partition: RetrievalPartition
 ) -> None:
-    expected_workspace_id = (
-        corpus.managed_workspace_id if corpus.access_scope_kind == "workspace" else None
-    )
     if (
         partition.source_namespace != "files"
         or partition.is_default_ingest
         or partition.state != RetrievalPartitionState.ACTIVE.value
-        or partition.managed_workspace_id != corpus.managed_workspace_id
-        or partition.candidate_scope_kind != corpus.access_scope_kind
-        or partition.candidate_workspace_id != expected_workspace_id
+        or corpus.access_scope_kind != "company"
+        or partition.candidate_scope_kind != "company"
         or partition.candidate_user_id is not None
+        or partition.metadata_version != corpus.metadata_version
     ):
-        raise FileCorpusConflict("file corpus partition metadata does not match source ACL")
+        raise FileCorpusConflict("file corpus partition metadata does not match its source")
 
 
 def _is_current_active_user(db: Session, user_id: str) -> bool:
@@ -1343,58 +1112,15 @@ def _require_current_active_user(db: Session, user_id: str) -> None:
         raise FileCorpusAccessDenied("active, unblocked file actor is required")
 
 
-def _is_current_active_workspace(db: Session, workspace_id: str) -> bool:
-    return (
-        db.scalar(
-            select(Workspace.id).where(
-                Workspace.id == workspace_id,
-                Workspace.active.is_(True),
-            )
-        )
-        is not None
-    )
-
-
-def _require_current_mutation_context(
-    db: Session,
-    *,
-    user_id: str,
-    workspace_id: str,
-) -> None:
+def _require_current_mutation_context(db: Session, *, user_id: str) -> None:
     _require_current_active_user(db, user_id)
-    if not _is_current_active_workspace(db, workspace_id):
-        raise FileCorpusAccessDenied("active file workspace is required")
-    has_workspace_membership = workspace_role_allows(
-        _current_workspace_role(db, user_id=user_id, workspace_id=workspace_id),
-        "member",
-    )
-    if not has_workspace_membership and not _is_current_platform_admin(db, user_id):
-        raise FileCorpusAccessDenied("current file workspace membership is required")
+    if not can_use_app(db, user_id=user_id, app_id="files"):
+        raise FileCorpusAccessDenied("current Files app access is required")
 
 
-def _current_workspace_role(
-    db: Session,
-    *,
-    user_id: str,
-    workspace_id: str,
-) -> str | None:
-    return db.scalar(
-        select(WorkspaceUserBinding.role).where(
-            WorkspaceUserBinding.user_id == user_id,
-            WorkspaceUserBinding.workspace_id == workspace_id,
-        )
-    )
-
-
-def _is_current_workspace_admin(
-    db: Session,
-    *,
-    user_id: str,
-    workspace_id: str,
-) -> bool:
-    return workspace_role_allows(
-        _current_workspace_role(db, user_id=user_id, workspace_id=workspace_id),
-        "admin",
+def _is_current_corpus_admin(db: Session, *, user_id: str) -> bool:
+    return is_current_platform_admin(db, user_id) and can_use_app(
+        db, user_id=user_id, app_id="files"
     )
 
 
@@ -1402,64 +1128,9 @@ def _is_current_platform_admin(db: Session, user_id: str) -> bool:
     return is_current_platform_admin(db, user_id)
 
 
-def _authorize_file_corpus_transition(
+def _load_folder(
     db: Session,
     *,
-    corpus: FileManagerCorpus,
-    actor: User,
-    source_workspace: Workspace,
-    target_workspace: Workspace,
-    target_scope: str,
-) -> None:
-    touches_company_scope = corpus.access_scope_kind == "company" or target_scope == "company"
-    if touches_company_scope and not _is_current_platform_admin(db, actor.id):
-        raise FileCorpusAccessDenied("company corpus transition requires platform admin")
-    if source_workspace.id != target_workspace.id:
-        if not is_workspace_admin(db, workspace=source_workspace, user=actor):
-            raise FileCorpusAccessDenied("file corpus transfer requires source workspace admin")
-        if not is_workspace_admin(db, workspace=target_workspace, user=actor):
-            raise FileCorpusAccessDenied("file corpus transfer requires target workspace admin")
-        return
-    if not touches_company_scope and not is_workspace_admin(
-        db,
-        workspace=source_workspace,
-        user=actor,
-    ):
-        raise FileCorpusAccessDenied("file corpus transition requires workspace admin")
-
-
-def _load_active_workspace(db: Session, workspace_id: str) -> Workspace:
-    workspace = db.scalar(
-        select(Workspace)
-        .where(
-            Workspace.id == workspace_id,
-            Workspace.active.is_(True),
-        )
-        .execution_options(populate_existing=True)
-    )
-    if workspace is None:
-        raise FileCorpusNotFound(f"workspace:{workspace_id}")
-    return workspace
-
-
-def _normalize_corpus_access_scope(value: str) -> str:
-    normalized = str(value).strip().lower()
-    if normalized not in FILE_CORPUS_ACCESS_SCOPE_KINDS:
-        raise FileCorpusConflict(f"unsupported file corpus access scope: {value}")
-    return normalized
-
-
-def _normalize_corpus_transition_reason(value: str) -> str:
-    normalized = str(value).strip()
-    if not normalized:
-        raise FileCorpusConflict("file corpus transition requires reason")
-    return normalized[:2000]
-
-
-def _load_folder_for_workspace(
-    db: Session,
-    *,
-    workspace: Workspace,
     folder_id: str,
     lock_mode: FileChildLockMode | None = None,
 ) -> FileManagerFolder:
@@ -1467,7 +1138,6 @@ def _load_folder_for_workspace(
     if lock_mode is None:
         statement = statement.options(joinedload(FileManagerFolder.owner))
     statement = statement.where(
-        FileManagerFolder.workspace_id == workspace.id,
         FileManagerFolder.id == folder_id,
         FileManagerFolder.deleted_at.is_(None),
     )
@@ -1481,10 +1151,9 @@ def _load_folder_for_workspace(
     return folder
 
 
-def _load_file_for_workspace(
+def _load_file(
     db: Session,
     *,
-    workspace: Workspace,
     file_id: str,
     lock_mode: FileChildLockMode | None = None,
 ) -> FileManagerFile:
@@ -1492,7 +1161,6 @@ def _load_file_for_workspace(
     if lock_mode is None:
         statement = statement.options(joinedload(FileManagerFile.owner))
     statement = statement.where(
-        FileManagerFile.workspace_id == workspace.id,
         FileManagerFile.id == file_id,
         FileManagerFile.deleted_at.is_(None),
     )
@@ -1509,7 +1177,6 @@ def _load_file_for_workspace(
 def _discover_file_delete_scope(
     db: Session,
     *,
-    workspace_id: str,
     selected_folder_ids: Iterable[str],
     selected_file_ids: Iterable[str],
 ) -> _FileDeleteScope:
@@ -1519,12 +1186,10 @@ def _discover_file_delete_scope(
         db.execute(
             select(
                 FileManagerFolder.id,
-                FileManagerFolder.workspace_id,
                 FileManagerFolder.corpus_id,
                 FileManagerFolder.retrieval_partition_id,
             )
             .where(
-                FileManagerFolder.workspace_id == workspace_id,
                 FileManagerFolder.id.in_(requested_folder_ids),
                 FileManagerFolder.deleted_at.is_(None),
             )
@@ -1538,26 +1203,22 @@ def _discover_file_delete_scope(
 
     discovered_folder_ids = {row.id for row in root_rows}
     corpus_ids = {row.corpus_id for row in root_rows if row.corpus_id is not None}
-    legacy_partition_ids: set[str] = set()
-    legacy_workspace_ids: set[str] = set()
+    standalone_partition_ids: set[str] = set()
     for row in root_rows:
         if row.corpus_id is not None:
             continue
-        legacy_workspace_ids.add(row.workspace_id)
         if row.retrieval_partition_id is None:
             continue
-        legacy_partition_ids.add(row.retrieval_partition_id)
+        standalone_partition_ids.add(row.retrieval_partition_id)
     frontier = set(discovered_folder_ids)
     while frontier:
         child_rows = db.execute(
             select(
                 FileManagerFolder.id,
-                FileManagerFolder.workspace_id,
                 FileManagerFolder.corpus_id,
                 FileManagerFolder.retrieval_partition_id,
             )
             .where(
-                FileManagerFolder.workspace_id == workspace_id,
                 FileManagerFolder.parent_id.in_(frontier),
                 FileManagerFolder.deleted_at.is_(None),
             )
@@ -1568,10 +1229,9 @@ def _discover_file_delete_scope(
         for row in child_rows:
             if row.corpus_id is not None:
                 continue
-            legacy_workspace_ids.add(row.workspace_id)
             if row.retrieval_partition_id is None:
                 continue
-            legacy_partition_ids.add(row.retrieval_partition_id)
+            standalone_partition_ids.add(row.retrieval_partition_id)
         discovered_folder_ids.update(next_frontier)
         frontier = next_frontier
 
@@ -1584,12 +1244,10 @@ def _discover_file_delete_scope(
         db.execute(
             select(
                 FileManagerFile.id,
-                FileManagerFile.workspace_id,
                 FileManagerFile.corpus_id,
                 FileManagerFile.retrieval_partition_id,
             )
             .where(
-                FileManagerFile.workspace_id == workspace_id,
                 FileManagerFile.deleted_at.is_(None),
                 or_(*file_predicates),
             )
@@ -1605,23 +1263,20 @@ def _discover_file_delete_scope(
     for row in file_rows:
         if row.corpus_id is not None:
             continue
-        legacy_workspace_ids.add(row.workspace_id)
         if row.retrieval_partition_id is None:
             continue
-        legacy_partition_ids.add(row.retrieval_partition_id)
+        standalone_partition_ids.add(row.retrieval_partition_id)
     return _FileDeleteScope(
         folder_ids=tuple(sorted(discovered_folder_ids)),
         file_ids=tuple(sorted(discovered_file_ids)),
         corpus_ids=tuple(sorted(corpus_ids)),
-        legacy_partition_ids=tuple(sorted(legacy_partition_ids)),
-        legacy_workspace_ids=tuple(sorted(legacy_workspace_ids)),
+        standalone_partition_ids=tuple(sorted(standalone_partition_ids)),
     )
 
 
 def _lock_tree_delete_scope(
     db: Session,
     *,
-    workspace_id: str,
     selected_folder_ids: Iterable[str],
     selected_file_ids: Iterable[str],
 ) -> tuple[list[FileManagerFolder], list[FileManagerFile]]:
@@ -1629,7 +1284,6 @@ def _lock_tree_delete_scope(
 
     initial_scope = _discover_file_delete_scope(
         db,
-        workspace_id=workspace_id,
         selected_folder_ids=selected_folder_ids,
         selected_file_ids=selected_file_ids,
     )
@@ -1638,49 +1292,31 @@ def _lock_tree_delete_scope(
         initial_scope.corpus_ids,
         lock_mode="exclusive",
     )
-    initial_legacy_partition_ids = _resolve_legacy_partition_gate_ids(
+    initial_standalone_partition_ids = initial_scope.standalone_partition_ids
+    locked_standalone_partitions = _lock_retrieval_partitions(
         db,
-        (
-            (None, None, legacy_workspace_id)
-            for legacy_workspace_id in initial_scope.legacy_workspace_ids
-        ),
-    )
-    if set(initial_scope.legacy_partition_ids) - set(initial_legacy_partition_ids):
-        raise FileCorpusConflict(
-            "legacy file partition binding does not match its workspace default"
-        )
-    locked_legacy_partitions = _lock_retrieval_partitions(
-        db,
-        initial_legacy_partition_ids,
+        initial_standalone_partition_ids,
         lock_mode="exclusive",
     )
     current_scope = _discover_file_delete_scope(
         db,
-        workspace_id=workspace_id,
         selected_folder_ids=selected_folder_ids,
         selected_file_ids=selected_file_ids,
     )
     unlocked_corpus_ids = set(current_scope.corpus_ids) - set(locked_corpora)
     if unlocked_corpus_ids:
         raise FileCorpusConflict("file delete scope gained an unlocked corpus")
-    current_legacy_partition_ids = set(current_scope.legacy_partition_ids)
-    for legacy_workspace_id in current_scope.legacy_workspace_ids:
-        current_legacy_partition_ids.add(
-            _require_locked_default_file_partition(
-                locked_legacy_partitions,
-                workspace_id=legacy_workspace_id,
-                bound_partition_id=None,
-            ).id
-        )
-    unlocked_legacy_partition_ids = current_legacy_partition_ids - set(locked_legacy_partitions)
-    if unlocked_legacy_partition_ids:
+    current_standalone_partition_ids = set(current_scope.standalone_partition_ids)
+    unlocked_standalone_partition_ids = current_standalone_partition_ids - set(
+        locked_standalone_partitions
+    )
+    if unlocked_standalone_partition_ids:
         raise FileCorpusConflict("file delete scope gained an unlocked legacy partition")
 
     folders = list(
         db.scalars(
             select(FileManagerFolder)
             .where(
-                FileManagerFolder.workspace_id == workspace_id,
                 FileManagerFolder.id.in_(current_scope.folder_ids),
                 FileManagerFolder.deleted_at.is_(None),
             )
@@ -1696,7 +1332,6 @@ def _lock_tree_delete_scope(
         db.scalars(
             select(FileManagerFile)
             .where(
-                FileManagerFile.workspace_id == workspace_id,
                 FileManagerFile.id.in_(current_scope.file_ids),
                 FileManagerFile.deleted_at.is_(None),
             )
@@ -1712,7 +1347,7 @@ def _lock_tree_delete_scope(
         _validate_locked_child_corpus(
             child,
             locked_corpora,
-            locked_legacy_partitions=locked_legacy_partitions,
+            locked_standalone_partitions=locked_standalone_partitions,
         )
     return folders, files
 
@@ -1720,14 +1355,12 @@ def _lock_tree_delete_scope(
 def _lock_leaf_files_for_delete(
     db: Session,
     *,
-    workspace_id: str,
     selected_file_ids: Iterable[str],
 ) -> list[FileManagerFile]:
     """Use shared corpus locks for leaf-only deletes and sorted exclusive row locks."""
 
     initial_scope = _discover_file_delete_scope(
         db,
-        workspace_id=workspace_id,
         selected_folder_ids=(),
         selected_file_ids=selected_file_ids,
     )
@@ -1736,27 +1369,16 @@ def _lock_leaf_files_for_delete(
         initial_scope.corpus_ids,
         lock_mode="shared",
     )
-    initial_legacy_partition_ids = _resolve_legacy_partition_gate_ids(
+    initial_standalone_partition_ids = initial_scope.standalone_partition_ids
+    locked_standalone_partitions = _lock_retrieval_partitions(
         db,
-        (
-            (None, None, legacy_workspace_id)
-            for legacy_workspace_id in initial_scope.legacy_workspace_ids
-        ),
-    )
-    if set(initial_scope.legacy_partition_ids) - set(initial_legacy_partition_ids):
-        raise FileCorpusConflict(
-            "legacy file partition binding does not match its workspace default"
-        )
-    locked_legacy_partitions = _lock_retrieval_partitions(
-        db,
-        initial_legacy_partition_ids,
+        initial_standalone_partition_ids,
         lock_mode="shared",
     )
     files = list(
         db.scalars(
             select(FileManagerFile)
             .where(
-                FileManagerFile.workspace_id == workspace_id,
                 FileManagerFile.id.in_(initial_scope.file_ids),
                 FileManagerFile.deleted_at.is_(None),
             )
@@ -1771,7 +1393,7 @@ def _lock_leaf_files_for_delete(
         _validate_locked_child_corpus(
             file,
             locked_corpora,
-            locked_legacy_partitions=locked_legacy_partitions,
+            locked_standalone_partitions=locked_standalone_partitions,
         )
     return files
 
@@ -1783,19 +1405,21 @@ def _record_visible(
     user: User,
     is_admin: bool,
 ) -> bool:
-    return is_admin or owner_id == user.id or visibility == "workspace"
+    return owner_id == user.id or visibility == "company"
 
 
 def _ensure_can_manage_record(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     owner_id: str,
     error_code: str = "files.delete_access_required",
 ) -> None:
-    _require_current_mutation_context(db, user_id=user.id, workspace_id=workspace.id)
-    if owner_id == user.id or is_workspace_admin(db, workspace=workspace, user=user):
+    _require_current_mutation_context(
+        db,
+        user_id=user.id,
+    )
+    if owner_id == user.id:
         return
     raise localized_http_exception(status_code=403, code=error_code)
 

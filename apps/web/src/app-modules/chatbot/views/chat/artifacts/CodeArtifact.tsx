@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
 import hljs from 'highlight.js';
+import { useEffect, useRef } from 'react';
 
 export interface CodeArtifactProps {
   content: string;
@@ -29,9 +29,7 @@ export function CodeArtifact({ content, language }: CodeArtifactProps) {
     }
   }, [content, language]);
 
-  const className = language
-    ? `language-${language.toLowerCase()}`
-    : undefined;
+  const className = language ? `language-${language.toLowerCase()}` : undefined;
 
   return (
     <div className="artifact-code h-full">

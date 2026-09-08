@@ -1,5 +1,5 @@
-import { useTranslation } from 'react-i18next';
 import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
+import { useTranslation } from 'react-i18next';
 
 export function AccessDeniedView({
   title,

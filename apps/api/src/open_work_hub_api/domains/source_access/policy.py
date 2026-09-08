@@ -2,18 +2,16 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import false, select
+from sqlalchemy import false
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.domains.auth.access import get_current_workspace, resolve_workspace_role
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
-    is_company_app_enabled_for_user_context,
+from open_work_hub_api.domains.auth.app_gate import (
+    can_use_app,
 )
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.search.backend_contracts import (
     KeywordAclBranch,
     KeywordAclClause,
@@ -39,53 +37,17 @@ from open_work_hub_api.domains.source_access.resource_types import (
 @dataclass(frozen=True)
 class SourceAclPolicy:
     db: Session
-    workspace: Workspace | None
     user: User
-    workspace_role: str | None
-    execution_scope_kind: str = "workspace"
+
+    @property
+    def is_platform_admin(self) -> bool:
+        from open_work_hub_api.domains.auth.access import is_platform_admin_user
+
+        return is_platform_admin_user(self.user, self.db)
 
     @classmethod
-    def for_workspace(
-        cls,
-        db: Session,
-        *,
-        workspace: Workspace,
-        user: User,
-    ) -> SourceAclPolicy:
-        return cls(
-            db=db,
-            workspace=workspace,
-            user=user,
-            workspace_role=resolve_workspace_role(db, user, workspace.id),
-            execution_scope_kind="workspace",
-        )
-
-    @classmethod
-    def for_company(cls, db: Session, *, user: User) -> SourceAclPolicy:
-        """Build an authenticated company caller without inventing a workspace."""
-
-        return cls(
-            db=db,
-            workspace=None,
-            user=user,
-            workspace_role=None,
-            execution_scope_kind="company",
-        )
-
-    @classmethod
-    def for_workspace_id(
-        cls,
-        db: Session,
-        *,
-        workspace_id: str,
-        user: User,
-    ) -> SourceAclPolicy:
-        workspace = db.scalar(
-            select(Workspace).where(Workspace.id == workspace_id, Workspace.active.is_(True))
-        )
-        if workspace is None:
-            raise ValueError(f"Workspace not found: {workspace_id}")
-        return cls.for_workspace(db, workspace=workspace, user=user)
+    def for_user(cls, db: Session, *, user: User) -> SourceAclPolicy:
+        return cls(db=db, user=user)
 
     def can_read_resource(self, resource_type: str, resource_id: str) -> bool:
         ensure_builtin_source_access_adapters_registered()
@@ -177,61 +139,17 @@ class SourceAclPolicy:
         return allowed
 
     def _authorized_policy(self, resource_type: str) -> SourceAclPolicy | None:
-        """Recheck execution before dispatch; a saved policy is never a grant."""
+        """Current app admission precedes every owner adapter, including saved policies."""
         adapter = get_source_access_adapter(resource_type)
         app_id = getattr(adapter, "app_id", None)
-        if not app_id or not self._adapter_allows_execution_scope(resource_type):
-            return None
-        if self.execution_scope_kind == "workspace":
-            if self.workspace is None:
-                return None
-            role = resolve_workspace_role(self.db, self.user, self.workspace.id)
-            if role is None or not is_app_enabled_for_user_context(
-                self.db,
-                app_id=app_id,
-                user_id=self.user.id,
-                workspace_id=self.workspace.id,
-            ):
-                return None
-            return replace(self, workspace_role=role)
-        if self.execution_scope_kind != "company" or self.workspace is not None:
-            return None
-        if not is_company_app_enabled_for_user_context(
-            self.db,
-            app_id=app_id,
-            user_id=self.user.id,
-        ):
-            return None
-        return self
-
-    def _adapter_allows_execution_scope(self, resource_type: str) -> bool:
-        if self.execution_scope_kind == "workspace":
-            return True
-        from open_work_hub_api.domains.retrieval.default_partition_adapters import (
-            ensure_retrieval_partition_adapters_registered,
-        )
-        from open_work_hub_api.domains.retrieval.partition_adapter_registry import (
-            get_retrieval_partition_adapter_for_resource,
-        )
-
-        ensure_retrieval_partition_adapters_registered()
-        partition_adapter = get_retrieval_partition_adapter_for_resource(resource_type)
-        return bool(
-            partition_adapter is not None
-            and self.execution_scope_kind in partition_adapter.allowed_candidate_scopes
+        return (
+            self if app_id and can_use_app(self.db, app_id=app_id, user_id=self.user.id) else None
         )
 
     def build_rag_post_filter(self) -> Callable[[Any], bool]:
-        def _filter(hit: Any) -> bool:
-            projection = hit.projection
-            if self.workspace is None or projection.workspace_id != self.workspace.id:
-                return False
-            return self.can_read_rag_resource(
-                projection.resource_type,
-                projection.resource_id,
-            )
-
-        return _filter
+        return lambda hit: self.can_read_rag_resource(
+            hit.projection.resource_type, hit.projection.resource_id
+        )
 
     def build_keyword_acl_filter(self) -> KeywordAclFilter:
         ensure_builtin_source_access_adapters_registered()
@@ -312,18 +230,18 @@ class SourceAclPolicy:
         return keyword_acl_clause(field, value)
 
     def _access_scope_policy(self) -> AccessScopePolicy:
-        return AccessScopePolicy(
-            db=self.db,
-            workspace_id=self.workspace.id,
-            workspace_role=self.workspace_role,
-            user_id=self.user.id,
-        )
+        return AccessScopePolicy(db=self.db, user_id=self.user.id)
 
     def _active_team_ids_query(self):
         return self._access_scope_policy().active_team_ids_query()
 
     def _accessible_team_ids(self) -> list[str]:
         return self._access_scope_policy().accessible_team_ids()
+
+    def _current_group_ids(self) -> list[str]:
+        from open_work_hub_api.domains.groups.service import current_group_ids
+
+        return list(current_group_ids(self.db, self.user.id))
 
     def can_access_scope(self, scope_kind: str | None, scope_id: str | None) -> bool:
         return self._access_scope_policy().can_access(scope_kind, scope_id)
@@ -371,35 +289,26 @@ def can_read_resource(
     db: Session,
     *,
     user: User,
-    workspace_id: str,
     resource_type: str,
     resource_id: str,
 ) -> bool:
-    policy = _policy_for_workspace_id(db, workspace_id=workspace_id, user=user)
-    return policy is not None and policy.can_read_resource(resource_type, resource_id)
+    return SourceAclPolicy.for_user(db, user=user).can_read_resource(resource_type, resource_id)
 
 
 def can_read_native_doc(db: Session, *, user: User, doc_id: str) -> bool:
-    from open_work_hub_api.domains.docs import source_access
 
-    doc_workspace_id = source_access.resolve_native_doc_workspace_id(db, doc_id=doc_id)
-    return _can_read_in_resource_workspace(
+    return can_read_resource(
         db,
         user=user,
-        workspace_id=doc_workspace_id,
         resource_type=NATIVE_DOC_RESOURCE_TYPE,
         resource_id=doc_id,
     )
 
 
 def can_read_pms_task(db: Session, *, user: User, task_id: str) -> bool:
-    from open_work_hub_api.domains.pms import source_access
-
-    workspace_id = source_access.resolve_pms_task_workspace_id(db, task_id=task_id)
-    return _can_read_in_resource_workspace(
+    return can_read_resource(
         db,
         user=user,
-        workspace_id=workspace_id,
         resource_type=PMS_TASK_RESOURCE_TYPE,
         resource_id=task_id,
     )
@@ -409,13 +318,11 @@ def can_read_meeting(
     db: Session,
     *,
     user: User,
-    workspace_id: str,
     meeting_id: str,
 ) -> bool:
     return can_read_resource(
         db,
         user=user,
-        workspace_id=workspace_id,
         resource_type=MEETING_RESOURCE_TYPE,
         resource_id=meeting_id,
     )
@@ -425,49 +332,11 @@ def can_read_planner_event(
     db: Session,
     *,
     user: User,
-    workspace_id: str,
     event_id: str,
 ) -> bool:
     return can_read_resource(
         db,
         user=user,
-        workspace_id=workspace_id,
         resource_type=PLANNER_EVENT_RESOURCE_TYPE,
         resource_id=event_id,
     )
-
-
-def _can_read_in_resource_workspace(
-    db: Session,
-    *,
-    user: User,
-    workspace_id: str | None,
-    resource_type: str,
-    resource_id: str,
-) -> bool:
-    if workspace_id is None:
-        return False
-    current_workspace = get_current_workspace(db)
-    if current_workspace is not None and current_workspace.id != workspace_id:
-        return False
-    return can_read_resource(
-        db,
-        user=user,
-        workspace_id=workspace_id,
-        resource_type=resource_type,
-        resource_id=resource_id,
-    )
-
-
-def _policy_for_workspace_id(
-    db: Session,
-    *,
-    workspace_id: str,
-    user: User,
-) -> SourceAclPolicy | None:
-    workspace = db.scalar(
-        select(Workspace).where(Workspace.id == workspace_id, Workspace.active.is_(True))
-    )
-    if workspace is None:
-        return None
-    return SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)

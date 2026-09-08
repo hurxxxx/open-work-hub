@@ -1,5 +1,5 @@
 import type { AppBarItem } from '@/src/app/shell/navigation-types';
-import type { WorkspaceBootstrapApp } from '@/src/platform/workspaces/workspaces-api';
+import type { BootstrapApp } from '@/src/platform/apps/apps-api';
 
 type TranslateSubSidebarTitle = (
   key: string,
@@ -10,12 +10,12 @@ export function resolveSubSidebarTitle({
   activeAppId,
   appBarItems,
   t,
-  workspaceAppRegistry,
+  appRegistry,
 }: {
   activeAppId: string;
   appBarItems: readonly AppBarItem[];
   t: TranslateSubSidebarTitle;
-  workspaceAppRegistry: ReadonlyMap<string, WorkspaceBootstrapApp>;
+  appRegistry: ReadonlyMap<string, BootstrapApp>;
 }): string {
   if (activeAppId === 'settings') {
     return t('sidebar.allSettings');
@@ -24,7 +24,7 @@ export function resolveSubSidebarTitle({
   const appBarItemById = new Map(appBarItems.map((item) => [item.id, item]));
   return t(`apps.${activeAppId}`, {
     defaultValue:
-      workspaceAppRegistry.get(activeAppId)?.title ??
+      appRegistry.get(activeAppId)?.title ??
       appBarItemById.get(activeAppId as AppBarItem['id'])?.title ??
       activeAppId,
   });

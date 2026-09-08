@@ -2,18 +2,18 @@ import type { UnifiedCalendarHandle } from '@/src/components/calendar/UnifiedCal
 import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
 
 import {
+  closePicker,
+  pickDate,
+  type PlannerCalendarSession,
+  type PlannerCalendarSessionResult,
+} from './planner-calendar-session';
+import {
   addDays,
   buildInitialPlannerRange,
   type PlannerSurfaceMode,
   type PlannerViewMode,
   type TimelineRangeDays,
 } from './planner-calendar-view-model';
-import {
-  closePicker,
-  pickDate,
-  type PlannerCalendarSession,
-  type PlannerCalendarSessionResult,
-} from './planner-calendar-session';
 
 export type PlannerCalendarPeriodDirection = 'previous' | 'next' | 'today';
 
@@ -32,12 +32,11 @@ export interface PlannerCalendarControllerResult {
 export type PlannerCalendarEventClickAction =
   | { type: 'ignore' }
   | { type: 'openPlannerEvent'; eventId: string }
-  | { type: 'previewMeeting'; meetingId: string; workspaceSlug: string }
+  | { type: 'previewMeeting'; meetingId: string }
   | {
       type: 'openTask';
       taskId: string;
       taskListId: string;
-      workspaceSlug: string;
     }
   | { type: 'missingTaskList' };
 
@@ -151,15 +150,11 @@ export function resolvePlannerCalendarEventClick(
   if (event.sourceType === 'planner_event') {
     return { type: 'openPlannerEvent', eventId: event.sourceId };
   }
-  const workspaceSlug = event.workspace?.slug;
-  if (!workspaceSlug) {
-    return { type: 'ignore' };
-  }
+
   if (event.sourceType === 'meeting') {
     return {
       type: 'previewMeeting',
       meetingId: event.sourceId,
-      workspaceSlug,
     };
   }
 
@@ -171,6 +166,5 @@ export function resolvePlannerCalendarEventClick(
     type: 'openTask',
     taskId: event.sourceId,
     taskListId: listId,
-    workspaceSlug,
   };
 }

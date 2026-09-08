@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import { ArrowLeft, X, type LucideIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
 import {
   getPmsHelpGuideSrc,
@@ -10,10 +10,10 @@ import {
 import { NotFoundView } from '@/src/platform/auth/settings-pages';
 
 import {
-  type FeatureGuideToolIds,
   getAiFeatureGuideSrc,
   getAiFeatureGuideTitleKey,
   hasAiFeatureGuide,
+  type FeatureGuideToolIds,
 } from './ai-feature-guides';
 
 type HelpGuide = {

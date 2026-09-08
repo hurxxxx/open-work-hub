@@ -7,6 +7,9 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
+from open_work_hub_api.domains.auth.app_gate import (
+    can_use_app,
+)
 from open_work_hub_api.domains.hermes.client import HermesClientError, HermesRuntimeClient
 from open_work_hub_api.domains.hermes.models import (
     HermesProfileBinding,
@@ -18,9 +21,6 @@ from open_work_hub_api.domains.hermes.repository import (
     HermesRunNotFoundError,
     HermesRunRepository,
 )
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
-)
 
 
 class HermesExecutionConfigurationError(RuntimeError):
@@ -28,11 +28,10 @@ class HermesExecutionConfigurationError(RuntimeError):
 
 
 def hermes_run_access_allowed(db: Session, run: Any) -> bool:
-    return is_app_enabled_for_user_context(
+    return can_use_app(
         db,
         app_id="chatbot",
         user_id=run.user_id,
-        workspace_id=run.workspace_id,
     )
 
 
@@ -236,8 +235,10 @@ async def execute_hermes_run(
                     if isinstance(item, HermesClientError):
                         stream_error = item
                     else:
-                        raise item if isinstance(item, Exception) else RuntimeError(
-                            "Hermes event stream failed."
+                        raise (
+                            item
+                            if isinstance(item, Exception)
+                            else RuntimeError("Hermes event stream failed.")
                         )
                     break
                 if item_kind == "closed":

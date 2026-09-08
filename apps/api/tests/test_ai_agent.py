@@ -6,7 +6,12 @@ from typing import Any
 
 import pytest
 
-from open_work_hub_api.core.llm import LlmPoolConfig, LlmTaskContext, PolicyDecision, ResolvedLlmExecution
+from open_work_hub_api.core.llm import (
+    LlmPoolConfig,
+    LlmTaskContext,
+    PolicyDecision,
+    ResolvedLlmExecution,
+)
 from open_work_hub_api.core.llm_errors import LlmProviderError
 from open_work_hub_api.core.principal import user_principal
 from open_work_hub_api.core.llm_adapters import StreamChunk
@@ -25,7 +30,6 @@ def _ctx() -> LlmTaskContext:
         actor_user_id="user-1",
         principal_kind="user",
         principal_id="user-1",
-        workspace_id="ws-1",
         task_kind="chatbot",
         app_id="chatbot",
         workload_id="chatbot",
@@ -202,9 +206,7 @@ async def _collect_events(
             context=_ctx(),
             execution=_execution(),
             db=SimpleNamespace(commit=lambda: None),
-            workspace=SimpleNamespace(id="ws-1"),
             principal=user_principal(
-                workspace_id="ws-1",
                 user_id="user-1",
                 source="test.agent",
             ),

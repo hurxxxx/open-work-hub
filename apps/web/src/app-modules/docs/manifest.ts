@@ -1,5 +1,5 @@
-import { Files, History, Lock, Mic, Share2, User } from 'lucide-react';
 import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
+import { Files, History, Lock, Mic, Share2, User } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -9,14 +9,6 @@ export const docsManifest: AppModuleManifest = {
     owner: 'docs-platform',
     permissions: [],
     apiDomain: 'docs',
-    workspaceApiPrefixes: ['/api/v1/docs'],
-    workspaceApiPublicPrefixes: ['/api/v1/docs/shared-links/'],
-    workspaceApiPublicQueryBypasses: [
-      {
-        pathPrefixes: ['/api/v1/docs/items/', '/api/v1/docs/pages/'],
-        queryParam: 'share_token',
-      },
-    ],
     aiCapabilities: [
       'docs.list_hub',
       'docs.get_item',
@@ -87,7 +79,7 @@ export const docsManifest: AppModuleManifest = {
       pathSuffix: '?view=archived',
     },
   ],
-  workspaceRoutePaths: [
+  appRoutePaths: [
     getAppRoutePattern('docs.root'),
     getAppRoutePattern('docs.document'),
     getAppRoutePattern('docs.document-html'),

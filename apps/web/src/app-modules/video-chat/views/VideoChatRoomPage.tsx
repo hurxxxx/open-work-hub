@@ -1,14 +1,26 @@
 import {
-  type FormEvent,
-  type KeyboardEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+  ConnectionQualityIndicator,
+  ConnectionStateToast,
+  ControlBar,
+  formatChatMessageLinks,
+  GridLayout,
+  isTrackReference,
+  LiveKitRoom,
+  ParticipantName,
+  ParticipantTile,
+  RoomAudioRenderer,
+  TrackMutedIndicator,
+  useChat,
+  useLocalParticipant,
+  useMaybeTrackRefContext,
+  useParticipants,
+  useTracks,
+  VideoTrack,
+  type ReceivedChatMessage,
+  type TrackReferenceOrPlaceholder,
+} from '@livekit/components-react';
+import '@livekit/components-styles';
+import { MediaDeviceFailure, RoomEvent, Track } from 'livekit-client';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -31,32 +43,20 @@ import {
   X,
 } from 'lucide-react';
 import {
-  ConnectionQualityIndicator,
-  ConnectionStateToast,
-  ControlBar,
-  formatChatMessageLinks,
-  GridLayout,
-  isTrackReference,
-  LiveKitRoom,
-  ParticipantName,
-  ParticipantTile,
-  RoomAudioRenderer,
-  TrackMutedIndicator,
-  useChat,
-  useLocalParticipant,
-  useMaybeTrackRefContext,
-  useParticipants,
-  useTracks,
-  VideoTrack,
-  type ReceivedChatMessage,
-  type TrackReferenceOrPlaceholder,
-} from '@livekit/components-react';
-import { MediaDeviceFailure, RoomEvent, Track } from 'livekit-client';
-import '@livekit/components-styles';
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
+import { buildAppPath } from '@/src/platform/apps/app-links';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import {
   createVideoChatJoinToken,
   endVideoChatSession,
@@ -71,7 +71,7 @@ import {
 export function VideoChatRoomPage() {
   const { t } = useTranslation(['apps', 'common']);
   const { token, user } = useAuth();
-  const { sessionId, workspaceSlug } = useParams();
+  const { sessionId } = useParams();
   const navigate = useNavigate();
 
   const [join, setJoin] = useState<VideoChatJoinTokenResponse | null>(null);
@@ -84,23 +84,15 @@ export function VideoChatRoomPage() {
     'participants' | 'chat' | null
   >(null);
 
-  const roomsPath = useMemo(
-    () =>
-      workspaceSlug ? buildWorkspaceAppPath(workspaceSlug, 'video-chat') : '/',
-    [workspaceSlug],
-  );
+  const roomsPath = useMemo(() => buildAppPath('video-chat'), []);
 
   const loadJoinToken = useCallback(async () => {
-    if (!workspaceSlug || !sessionId) return;
+    if (!sessionId) return;
     setLoading(true);
     setError(null);
     setDeviceWarning(null);
     try {
-      const response = await createVideoChatJoinToken(
-        token,
-        workspaceSlug,
-        sessionId,
-      );
+      const response = await createVideoChatJoinToken(token, sessionId);
       setJoin(response);
       setSession(response.session);
     } catch (loadError) {
@@ -112,13 +104,13 @@ export function VideoChatRoomPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId, t, token, workspaceSlug]);
+  }, [sessionId, t, token]);
 
   useEffect(() => {
     void loadJoinToken();
   }, [loadJoinToken]);
 
-  if (!workspaceSlug || !sessionId) {
+  if (!sessionId) {
     return null;
   }
 
@@ -156,14 +148,13 @@ export function VideoChatRoomPage() {
     activeSession?.started_by_id === user?.id;
 
   function handleEndRoom() {
-    if (!workspaceSlug || !sessionId) return;
+    if (!sessionId) return;
     if (!window.confirm(t('apps:videoChat.endRoomConfirm'))) return;
 
-    const roomWorkspaceSlug = workspaceSlug;
     const roomSessionId = sessionId;
     void runSessionAction(
       'end',
-      () => endVideoChatSession(token, roomWorkspaceSlug, roomSessionId),
+      () => endVideoChatSession(token, roomSessionId),
       t('apps:videoChat.errors.endFailed'),
     );
   }
@@ -245,8 +236,8 @@ export function VideoChatRoomPage() {
                 'recording',
                 () =>
                   recordingActive
-                    ? stopVideoChatRecording(token, workspaceSlug, sessionId)
-                    : startVideoChatRecording(token, workspaceSlug, sessionId),
+                    ? stopVideoChatRecording(token, sessionId)
+                    : startVideoChatRecording(token, sessionId),
                 t('apps:videoChat.errors.recordingFailed'),
               )
             }
@@ -271,8 +262,8 @@ export function VideoChatRoomPage() {
                 'captions',
                 () =>
                   captionsActive
-                    ? stopVideoChatCaptions(token, workspaceSlug, sessionId)
-                    : startVideoChatCaptions(token, workspaceSlug, sessionId),
+                    ? stopVideoChatCaptions(token, sessionId)
+                    : startVideoChatCaptions(token, sessionId),
                 t('apps:videoChat.errors.captionsFailed'),
               )
             }

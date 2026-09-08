@@ -38,7 +38,6 @@ class RetrievalHit(BaseModel):
     source_kind: str | None = None
     resource_type: str
     resource_id: str
-    workspace_id: str | None = None
     title: str | None = None
     summary: str | None = None
     excerpt: str | None = None

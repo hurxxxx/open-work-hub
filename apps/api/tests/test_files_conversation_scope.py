@@ -29,7 +29,6 @@ from open_work_hub_api.domains.files.conversation_scope import (
 def _scope_inputs() -> dict:
     return {
         "db": SimpleNamespace(),
-        "workspace": SimpleNamespace(id="workspace-1", key="workspace"),
         "principal": SimpleNamespace(
             kind="user",
             principal_id="user-1",
@@ -62,7 +61,6 @@ def test_files_conversation_scope_rejects_non_workspace_resource() -> None:
     with pytest.raises(ValueError, match="unsupported files conversation resource"):
         FilesConversationScopeAdapter().validate(
             db=SimpleNamespace(),
-            workspace=SimpleNamespace(id="workspace-1"),
             principal=SimpleNamespace(),
             user=SimpleNamespace(),
             scope_resource_id="folder-1",

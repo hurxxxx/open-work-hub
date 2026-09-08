@@ -17,20 +17,15 @@ type E2EUser = {
   theme_preference: string;
   locale: 'ko-KR' | 'en-US';
   time_zone: string;
-  workspaces: Array<{
-    id: string;
-    slug: string;
-    name: string;
-    role: string;
-  }>;
-  workspace_roles: string[];
   system_roles: string[];
   group_ids: string[];
-  group_slugs: string[];
+  managed_organization_unit_ids: string[];
+  is_department_head: boolean;
+  login_id: string;
   must_change_password: boolean;
 };
 
-type WorkspaceBootstrapNavFixture = {
+type AppBootstrapNavFixture = {
   id: string;
   app_id: string;
   title: string;
@@ -42,7 +37,7 @@ type WorkspaceBootstrapNavFixture = {
   coming_soon?: boolean | null;
 };
 
-type WorkspaceBootstrapAppBarCategoryItemFixture = {
+type AppBootstrapAppBarCategoryItemFixture = {
   app_id: string;
   title: string;
   route_base: string;
@@ -51,16 +46,16 @@ type WorkspaceBootstrapAppBarCategoryItemFixture = {
   coming_soon?: boolean | null;
 };
 
-type WorkspaceBootstrapAppBarCategoryFixture = {
+type AppBootstrapAppBarCategoryFixture = {
   id: string;
   key: string;
   title: string;
   icon_key: string;
   position: number;
-  items: WorkspaceBootstrapAppBarCategoryItemFixture[];
+  items: AppBootstrapAppBarCategoryItemFixture[];
 };
 
-type WorkspaceBootstrapKeywordSearchEntityTypeFixture = {
+type AppBootstrapKeywordSearchEntityTypeFixture = {
   value: string;
   label: string;
   label_key: string;
@@ -68,7 +63,7 @@ type WorkspaceBootstrapKeywordSearchEntityTypeFixture = {
 
 // Fake user payload matching AuthUser. Returned by the /auth/me mock so the
 // provider treats the seeded token as a live session.
-export const FAKE_WORKSPACE_USER: E2EUser = {
+export const FAKE_COMPANY_USER: E2EUser = {
   id: 'user-e2e',
   email: 'e2e@open-work-hub.local',
   full_name: 'E2E Tester',
@@ -77,18 +72,16 @@ export const FAKE_WORKSPACE_USER: E2EUser = {
   theme_preference: 'system',
   locale: 'ko-KR',
   time_zone: 'Asia/Seoul',
-  workspaces: [
-    { id: 'workspace-hq', slug: 'hq', name: 'Open Work Hub HQ', role: 'admin' },
-  ],
-  workspace_roles: [],
   system_roles: [],
   group_ids: [],
-  group_slugs: [],
+  managed_organization_unit_ids: [],
+  is_department_head: false,
+  login_id: 'e2e',
   must_change_password: false,
 };
 
 export const FAKE_PLATFORM_ADMIN_USER: E2EUser = {
-  ...FAKE_WORKSPACE_USER,
+  ...FAKE_COMPANY_USER,
   email: 'platform-admin@open-work-hub.local',
   full_name: 'Platform Admin',
   display_name: 'Platform Admin',
@@ -103,16 +96,16 @@ const BOOTSTRAP_STATUS = {
 
 function navItem(
   item: Omit<
-    WorkspaceBootstrapNavFixture,
+    AppBootstrapNavFixture,
     'link_app_id' | 'path_suffix' | 'absolute_path'
   > &
     Partial<
       Pick<
-        WorkspaceBootstrapNavFixture,
+        AppBootstrapNavFixture,
         'link_app_id' | 'path_suffix' | 'absolute_path'
       >
     >,
-): WorkspaceBootstrapNavFixture {
+): AppBootstrapNavFixture {
   return {
     link_app_id: null,
     path_suffix: null,
@@ -122,17 +115,17 @@ function navItem(
 }
 
 function categoryItem(
-  item: Omit<WorkspaceBootstrapAppBarCategoryItemFixture, 'enabled'>,
-): WorkspaceBootstrapAppBarCategoryItemFixture {
+  item: Omit<AppBootstrapAppBarCategoryItemFixture, 'enabled'>,
+): AppBootstrapAppBarCategoryItemFixture {
   return {
     enabled: true,
     ...item,
   };
 }
 
-// Full WorkspaceBootstrapResponse nav payload. It mirrors the app manifests
+// Full AppBootstrapResponse nav payload. It mirrors the app manifests
 // closely enough for shell/AppBar/SubSidebar E2E smoke tests to stay hermetic.
-const NAV_ITEMS_BY_APP: Record<string, WorkspaceBootstrapNavFixture[]> = {
+const NAV_ITEMS_BY_APP: Record<string, AppBootstrapNavFixture[]> = {
   pms: [
     navItem({
       id: 'pms-inbox',
@@ -261,7 +254,7 @@ const NAV_ITEMS_BY_APP: Record<string, WorkspaceBootstrapNavFixture[]> = {
   ],
 };
 
-const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategoryFixture[] = [
+const APP_BAR_CATEGORIES: AppBootstrapAppBarCategoryFixture[] = [
   {
     id: 'category-ai-tools',
     key: 'ai-tools',
@@ -318,23 +311,13 @@ const APP_BAR_CATEGORIES: WorkspaceBootstrapAppBarCategoryFixture[] = [
   },
 ];
 
-const APP_FIXTURES = APP_CONTRACTS.map((app) => ({
-  app_id: app.app_id,
-  title: app.title,
-  icon_key: app.icon_key,
-}));
-
 const DEFAULT_ENABLED_APP_IDS = APP_CONTRACTS.filter(
   (app) => app.app_id !== 'agent-terminal',
 ).map((app) => app.app_id);
 
-function findAppContract(appId: string) {
-  return APP_CONTRACTS.find((app) => app.app_id === appId);
-}
-
 const KEYWORD_SEARCH_ENTITY_TYPES_BY_APP: Record<
   string,
-  WorkspaceBootstrapKeywordSearchEntityTypeFixture
+  AppBootstrapKeywordSearchEntityTypeFixture
 > = {
   docs: {
     value: 'doc',
@@ -353,142 +336,51 @@ const KEYWORD_SEARCH_ENTITY_TYPES_BY_APP: Record<
   },
 };
 
-function buildApp(
-  app_id: string,
-  title: string,
-  icon_key: string,
-  enabledAppIds: readonly string[],
-) {
-  const enabled = enabledAppIds.includes(app_id);
-  return {
-    app_id,
-    title,
-    route_base: findAppContract(app_id)?.route_base ?? `/apps/${app_id}`,
-    icon_key,
-    enabled,
-    coming_soon: false,
-    nav_items: enabled ? (NAV_ITEMS_BY_APP[app_id] ?? []) : [],
-  };
-}
-
-function buildWorkspaceBootstrap(
-  enabledAppIds: readonly string[] = DEFAULT_ENABLED_APP_IDS,
-) {
-  const enabledAppIdSet = new Set(enabledAppIds);
-  const apps = APP_FIXTURES.filter(
-    (app) =>
-      enabledAppIdSet.has(app.app_id) &&
-      findAppContract(app.app_id)?.availability_scope === 'workspace',
-  ).map((app) => buildApp(app.app_id, app.title, app.icon_key, enabledAppIds));
-  const app_bar_categories = APP_BAR_CATEGORIES.map((category) => ({
-    ...category,
-    items: category.items
-      .filter((item) => enabledAppIdSet.has(item.app_id))
-      .map((item) => ({ ...item, enabled: true })),
-  })).filter((category) => category.items.length > 0);
-  return {
-    workspace: {
-      id: 'workspace-hq',
-      slug: 'hq',
-      name: 'Open Work Hub HQ',
-      role: 'admin',
-    },
-    apps,
-    app_bar_categories,
-    nav: apps.flatMap((app) => app.nav_items),
-    keyword_search: {
-      entity_types: enabledAppIds.flatMap((appId) => {
-        const descriptor = KEYWORD_SEARCH_ENTITY_TYPES_BY_APP[appId];
-        return descriptor ? [descriptor] : [];
-      }),
-    },
-  };
-}
-
 function buildAppsBootstrap(enabledAppIds: readonly string[], user: E2EUser) {
-  const enabledAppIdSet = new Set(enabledAppIds);
-  const eligibleWorkspaces = user.workspaces.map((workspace) => ({
-    id: workspace.id,
-    slug: workspace.slug,
-    name: workspace.name,
+  const apps = APP_CONTRACTS.filter((app) =>
+    enabledAppIds.includes(app.app_id),
+  ).map((app) => ({
+    app_id: app.app_id,
+    title: app.title,
+    route_base: app.route_base,
+    entry_route_id: app.entry_route_id,
+    icon_key: app.icon_key,
+    execution_context_kind: app.execution_context_kind,
+    resource_scope: app.resource_scope,
+    enabled: true,
+    coming_soon: false,
+    nav_items: NAV_ITEMS_BY_APP[app.app_id] ?? [],
   }));
-  const apps = APP_CONTRACTS.flatMap((app) => {
-    if (!enabledAppIdSet.has(app.app_id)) return [];
-    if (
-      app.availability_scope === 'workspace' &&
-      eligibleWorkspaces.length === 0
-    ) {
-      return [];
-    }
-    const singleEligibleWorkspace =
-      app.availability_scope === 'workspace' && eligibleWorkspaces.length === 1
-        ? eligibleWorkspaces[0]
-        : null;
-    return [
-      {
-        app_id: app.app_id,
-        title: app.title,
-        route_base: app.route_base,
-        entry_route_id: app.entry_route_id,
-        icon_key: app.icon_key,
-        availability_scope: app.availability_scope,
-        execution_context_kind: app.execution_context_kind,
-        resource_scope: app.resource_scope,
-        coming_soon: false,
-        eligible_workspace_count:
-          app.availability_scope === 'workspace'
-            ? eligibleWorkspaces.length
-            : 0,
-        preferred_workspace: singleEligibleWorkspace,
-        single_eligible_workspace: singleEligibleWorkspace,
-      },
-    ];
-  });
-  const executableAppIds = new Set<string>(apps.map((app) => app.app_id));
   return {
     apps,
-    global_route_app_ids: apps.map((app) => app.app_id),
+    nav: apps.flatMap((app) => app.nav_items),
     app_bar_categories: APP_BAR_CATEGORIES.map((category) => ({
       ...category,
-      items: category.items
-        .filter((item) => executableAppIds.has(item.app_id))
-        .map((item, position) => ({
-          ...item,
-          availability_scope:
-            findAppContract(item.app_id)?.availability_scope ?? 'workspace',
-          enabled: true,
-          position,
-        })),
+      items: category.items.filter((item) =>
+        enabledAppIds.includes(item.app_id),
+      ),
     })).filter((category) => category.items.length > 0),
     personal_tool_app_ids: APP_CONTRACTS.filter(
       (app) =>
-        executableAppIds.has(app.app_id) &&
+        enabledAppIds.includes(app.app_id) &&
         app.launcher.placement === 'personal_tools',
     ).map((app) => app.app_id),
+    keyword_search: {
+      entity_types: enabledAppIds.flatMap((appId) =>
+        KEYWORD_SEARCH_ENTITY_TYPES_BY_APP[appId]
+          ? [KEYWORD_SEARCH_ENTITY_TYPES_BY_APP[appId]]
+          : [],
+      ),
+    },
     principal: {
       kind: 'user',
       scope: 'personal',
-      workspace_id: null,
-      source: 'e2e.apps_bootstrap',
+      source: 'e2e',
       user_id: user.id,
       session_id: null,
     },
   };
 }
-
-const WORKSPACE_FIXTURE = {
-  id: 'workspace-hq',
-  key: 'hq',
-  name: 'Open Work Hub HQ',
-  description: 'E2E workspace',
-  active: true,
-  team_count: 0,
-  member_count: 1,
-  meeting_count: 0,
-  doc_count: 0,
-  created_at: '2026-04-30T00:00:00Z',
-  updated_at: '2026-04-30T00:00:00Z',
-};
 
 const EMPTY_PAGE = {
   items: [],
@@ -546,15 +438,15 @@ const EMPTY_PERSONAL_MEMO = {
  * not feature coverage; it prevents route smoke tests from relying on a live
  * API while keeping each app's empty state renderable.
  */
-export async function stubWorkspaceAppDataBackend(page: Page): Promise<void> {
-  await page.route('**/api/v1/workspaces/*/calendar/events**', (route: Route) =>
+export async function stubAppDataBackend(page: Page): Promise<void> {
+  await page.route('**/api/v1/calendar/events**', (route: Route) =>
     route.fulfill({ json: { items: [] } }),
   );
   await page.route('**/api/v1/calendar/events**', (route: Route) =>
     route.fulfill({ json: { items: [] } }),
   );
 
-  await page.route('**/api/v1/workspaces/*/planner/events**', (route: Route) =>
+  await page.route('**/api/v1/planner/events**', (route: Route) =>
     route.fulfill({ json: { items: [] } }),
   );
   await page.route('**/api/v1/planner/events**', (route: Route) =>
@@ -565,118 +457,88 @@ export async function stubWorkspaceAppDataBackend(page: Page): Promise<void> {
     (route: Route) => route.fulfill({ json: EMPTY_PAGE }),
   );
 
-  await page.route('**/api/v1/workspaces/*/meeting/users**', (route: Route) =>
+  await page.route('**/api/v1/meeting/users**', (route: Route) =>
     route.fulfill({ json: [] }),
   );
-  await page.route(
-    '**/api/v1/workspaces/*/meeting/availability**',
-    (route: Route) => route.fulfill({ json: { items: [] } }),
-  );
-  await page.route(
-    '**/api/v1/workspaces/*/meeting/meetings**',
-    (route: Route) => {
-      if (route.request().url().includes('/recordings/staging')) {
-        return route.fulfill({ json: [] });
-      }
-      return route.fulfill({ json: { items: [], total: 0 } });
-    },
-  );
-
-  await page.route(
-    '**/api/v1/workspaces/*/pms/notifications**',
-    (route: Route) => route.fulfill({ json: EMPTY_PAGE }),
-  );
-  await page.route(
-    '**/api/v1/workspaces/*/pms/notifications/unread-count',
-    (route: Route) => route.fulfill({ json: { count: 0 } }),
-  );
-  await page.route('**/api/v1/workspaces/*/pms/spaces**', (route: Route) =>
-    route.fulfill({ json: [] }),
-  );
-  await page.route('**/api/v1/workspaces/*/pms/lists**', (route: Route) =>
-    route.fulfill({ json: EMPTY_PAGE }),
-  );
-  await page.route(
-    '**/api/v1/workspaces/*/pms/tasks/assigned**',
-    (route: Route) => route.fulfill({ json: EMPTY_PAGE }),
-  );
-  await page.route(
-    '**/api/v1/workspaces/*/pms/dashboard/summary**',
-    (route: Route) => route.fulfill({ json: EMPTY_PMS_DASHBOARD }),
-  );
-  await page.route('**/api/v1/workspaces/*/pms/folders**', (route: Route) =>
+  await page.route('**/api/v1/meeting/availability**', (route: Route) =>
     route.fulfill({ json: { items: [] } }),
   );
-  await page.route('**/api/v1/workspaces/*/pms/users**', (route: Route) =>
+  await page.route('**/api/v1/meeting/meetings**', (route: Route) => {
+    if (route.request().url().includes('/recordings/staging')) {
+      return route.fulfill({ json: [] });
+    }
+    return route.fulfill({ json: { items: [], total: 0 } });
+  });
+
+  await page.route('**/api/v1/pms/notifications**', (route: Route) =>
+    route.fulfill({ json: EMPTY_PAGE }),
+  );
+  await page.route('**/api/v1/pms/notifications/unread-count', (route: Route) =>
+    route.fulfill({ json: { count: 0 } }),
+  );
+  await page.route('**/api/v1/pms/spaces**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/pms/lists**', (route: Route) =>
+    route.fulfill({ json: EMPTY_PAGE }),
+  );
+  await page.route('**/api/v1/pms/tasks/assigned**', (route: Route) =>
+    route.fulfill({ json: EMPTY_PAGE }),
+  );
+  await page.route('**/api/v1/pms/dashboard/summary**', (route: Route) =>
+    route.fulfill({ json: EMPTY_PMS_DASHBOARD }),
+  );
+  await page.route('**/api/v1/pms/folders**', (route: Route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  await page.route('**/api/v1/pms/users**', (route: Route) =>
     route.fulfill({ json: [] }),
   );
 
-  await page.route('**/api/v1/workspaces/*/docs/hub**', (route: Route) =>
+  await page.route('**/api/v1/docs/hub**', (route: Route) =>
     route.fulfill({ json: EMPTY_PAGE }),
-  );
-  await page.route(
-    '**/api/v1/workspaces/*/docs/recent-pages**',
-    (route: Route) => route.fulfill({ json: [] }),
   );
   await page.route('**/api/v1/docs/recent-pages**', (route: Route) =>
     route.fulfill({ json: [] }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/favorites**', (route: Route) =>
+  await page.route('**/api/v1/docs/recent-pages**', (route: Route) =>
     route.fulfill({ json: [] }),
   );
   await page.route('**/api/v1/docs/favorites**', (route: Route) =>
     route.fulfill({ json: [] }),
   );
-  await page.route(
-    '**/api/v1/workspaces/*/docs/shareable-users**',
-    (route: Route) => route.fulfill({ json: [] }),
+  await page.route('**/api/v1/docs/favorites**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/docs/shareable-users**', (route: Route) =>
+    route.fulfill({ json: [] }),
   );
 
-  await page.route('**/api/v1/workspaces/*/search/query**', (route: Route) =>
+  await page.route('**/api/v1/search/query**', (route: Route) =>
     route.fulfill({ json: EMPTY_KEYWORD_SEARCH_RESPONSE }),
   );
-  await page.route('**/api/v1/workspaces/*/rag/sources**', (route: Route) =>
+  await page.route('**/api/v1/rag/sources**', (route: Route) =>
     route.fulfill({ json: { sources: [] } }),
   );
-  await page.route('**/api/v1/workspaces/*/rag/query**', (route: Route) =>
+  await page.route('**/api/v1/rag/query**', (route: Route) =>
     route.fulfill({ json: EMPTY_RAG_QUERY_RESPONSE }),
   );
-  await page.route(
-    '**/api/v1/workspaces/*/retrieval/sources**',
-    (route: Route) => route.fulfill({ json: { sources: [] } }),
+  await page.route('**/api/v1/retrieval/sources**', (route: Route) =>
+    route.fulfill({ json: { sources: [] } }),
   );
 
-  await page.route(
-    '**/api/v1/workspaces/*/images/generations**',
-    (route: Route) => route.fulfill({ json: { items: [], next_cursor: null } }),
+  await page.route('**/api/v1/images/generations**', (route: Route) =>
+    route.fulfill({ json: { items: [], next_cursor: null } }),
   );
 
-  await page.route('**/api/v1/admin/workspaces**', (route: Route) =>
-    route.fulfill({ json: [WORKSPACE_FIXTURE] }),
-  );
   await page.route('**/api/v1/admin/groups**', (route: Route) =>
-    route.fulfill({ json: [] }),
-  );
-  await page.route('**/api/v1/admin/teams**', (route: Route) =>
-    route.fulfill({ json: [] }),
+    route.fulfill({ json: EMPTY_PAGE }),
   );
   await page.route('**/api/v1/admin/audit-logs**', (route: Route) =>
     route.fulfill({ json: [] }),
   );
   await page.route('**/api/v1/admin/users**', (route: Route) =>
     route.fulfill({ json: { ...EMPTY_PAGE, page_size: 20 } }),
-  );
-  await page.route('**/api/v1/admin/workspaces/*/members**', (route: Route) =>
-    route.fulfill({
-      json: {
-        ...EMPTY_PAGE,
-        page_size: 20,
-        role_counts: { admin: 0, member: 0 },
-        user_count: 0,
-        group_count: 0,
-        pending_count: 0,
-      },
-    }),
   );
 }
 
@@ -714,15 +576,14 @@ export async function stubShellBackend(
   options: ShellBackendOptions = {},
 ): Promise<void> {
   let user: E2EUser = {
-    ...(options.user ?? FAKE_WORKSPACE_USER),
-    workspaces: [...(options.user ?? FAKE_WORKSPACE_USER).workspaces],
-    workspace_roles: [...(options.user ?? FAKE_WORKSPACE_USER).workspace_roles],
-    system_roles: [...(options.user ?? FAKE_WORKSPACE_USER).system_roles],
-    group_ids: [...(options.user ?? FAKE_WORKSPACE_USER).group_ids],
-    group_slugs: [...(options.user ?? FAKE_WORKSPACE_USER).group_slugs],
+    ...(options.user ?? FAKE_COMPANY_USER),
+    system_roles: [...(options.user ?? FAKE_COMPANY_USER).system_roles],
+    group_ids: [...(options.user ?? FAKE_COMPANY_USER).group_ids],
+    managed_organization_unit_ids: [
+      ...(options.user ?? FAKE_COMPANY_USER).managed_organization_unit_ids,
+    ],
   };
   const enabledAppIds = options.enabledAppIds ?? DEFAULT_ENABLED_APP_IDS;
-  const workspaceBootstrap = buildWorkspaceBootstrap(enabledAppIds);
   const appsBootstrap = buildAppsBootstrap(enabledAppIds, user);
 
   await page.routeWebSocket('**/api/v1/realtime/ws', (webSocket) => {
@@ -768,75 +629,11 @@ export async function stubShellBackend(
     await route.fulfill({ json: user });
   });
 
-  // Workspace bootstrap: gates routes + feeds the slash command palette.
-  await page.route('**/api/v1/workspaces/*/bootstrap', (route: Route) =>
-    route.fulfill({ json: workspaceBootstrap }),
-  );
   await page.route('**/api/v1/apps/bootstrap', (route: Route) =>
     route.fulfill({ json: appsBootstrap }),
   );
-  await page.route('**/api/v1/apps/*/eligible-workspaces**', (route: Route) => {
-    const url = new URL(route.request().url());
-    const segments = url.pathname.split('/');
-    const appId = decodeURIComponent(segments.at(-2) ?? '');
-    const app = findAppContract(appId);
-    const pageNumber = Number(url.searchParams.get('page') ?? '1');
-    const pageSize = Number(url.searchParams.get('page_size') ?? '50');
-    const slug = url.searchParams.get('slug')?.trim().toLocaleLowerCase();
-    const query = url.searchParams.get('q')?.trim().toLocaleLowerCase();
-    let items =
-      app?.availability_scope === 'workspace' && enabledAppIds.includes(appId)
-        ? user.workspaces.map((workspace) => ({
-            id: workspace.id,
-            slug: workspace.slug,
-            name: workspace.name,
-          }))
-        : [];
-    if (slug) {
-      items = items.filter(
-        (workspace) => workspace.slug.toLocaleLowerCase() === slug,
-      );
-    }
-    if (query) {
-      items = items.filter((workspace) =>
-        `${workspace.name}\n${workspace.slug}`
-          .toLocaleLowerCase()
-          .includes(query),
-      );
-    }
-    const total = items.length;
-    const offset = (pageNumber - 1) * pageSize;
-    return route.fulfill({
-      json: {
-        app_id: appId,
-        items: items.slice(offset, offset + pageSize),
-        total,
-        page: pageNumber,
-        page_size: pageSize,
-      },
-    });
-  });
-  await page.route(
-    '**/api/v1/apps/*/workspace-preference',
-    async (route: Route) => {
-      const url = new URL(route.request().url());
-      const appId = decodeURIComponent(url.pathname.split('/').at(-2) ?? '');
-      const payload = route.request().postDataJSON() as {
-        workspace_id: string;
-      };
-      await route.fulfill({
-        json: {
-          app_id: appId,
-          workspace_id: payload.workspace_id,
-          updated_at: '2026-08-28T00:00:00Z',
-        },
-      });
-    },
-  );
 
   // Chatbot health: drives the ChatTopBar model pill and shield icon. The frontend
-  // rewrites /api/v1/chatbot/* to /api/v1/workspaces/:slug/chatbot/* via
-  // rewriteWorkspaceApiPath, so match both shapes.
   await page.route('**/chatbot/health', (route: Route) =>
     route.fulfill({ json: LLM_HEALTH }),
   );

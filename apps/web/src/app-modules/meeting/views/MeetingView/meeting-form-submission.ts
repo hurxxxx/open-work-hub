@@ -15,18 +15,15 @@ import {
 export interface MeetingFormSubmissionPorts {
   createMeeting: (
     token: string,
-    workspaceSlug: string,
     payload: MeetingCreateInput,
   ) => Promise<MeetingDetail>;
   updateMeeting: (
     token: string,
-    workspaceSlug: string,
     meetingId: string,
     payload: MeetingUpdateInput,
   ) => Promise<MeetingDetail>;
   uploadMeetingFile: (
     token: string,
-    workspaceSlug: string,
     meetingId: string,
     file: File,
   ) => Promise<MeetingDetail>;
@@ -64,15 +61,17 @@ function errorMessage(error: unknown, fallback: string): string {
 
 export async function submitMeetingCreateForm({
   token,
-  workspaceSlug,
   state,
   ports,
   messages,
 }: {
   token: string;
-  workspaceSlug: string;
+
   state: MeetingCreateState;
-  ports: Pick<MeetingFormSubmissionPorts, 'createMeeting' | 'uploadMeetingFile'>;
+  ports: Pick<
+    MeetingFormSubmissionPorts,
+    'createMeeting' | 'uploadMeetingFile'
+  >;
   messages: MeetingFormSubmissionMessages;
 }): Promise<MeetingCreateSubmissionResult> {
   if (!isEndAfterStart(state.startAt, state.endAt)) {
@@ -82,14 +81,13 @@ export async function submitMeetingCreateForm({
   try {
     const meeting = await ports.createMeeting(
       token,
-      workspaceSlug,
       buildCreateMeetingPayload(state),
     );
 
     const uploadResults = await Promise.all(
       state.pickedFiles.map(async (file) => {
         try {
-          await ports.uploadMeetingFile(token, workspaceSlug, meeting.id, file);
+          await ports.uploadMeetingFile(token, meeting.id, file);
           return { file, failure: null };
         } catch (error) {
           return {
@@ -119,20 +117,22 @@ export async function submitMeetingCreateForm({
 
     return { status: 'created', meeting };
   } catch (error) {
-    return { status: 'failed', error: errorMessage(error, messages.createFailed) };
+    return {
+      status: 'failed',
+      error: errorMessage(error, messages.createFailed),
+    };
   }
 }
 
 export async function submitMeetingEditForm({
   token,
-  workspaceSlug,
   meetingId,
   state,
   ports,
   messages,
 }: {
   token: string;
-  workspaceSlug: string;
+
   meetingId: string;
   state: MeetingEditState;
   ports: Pick<MeetingFormSubmissionPorts, 'updateMeeting'>;
@@ -145,12 +145,14 @@ export async function submitMeetingEditForm({
   try {
     const meeting = await ports.updateMeeting(
       token,
-      workspaceSlug,
       meetingId,
       buildUpdateMeetingPayload(state),
     );
     return { status: 'saved', meeting };
   } catch (error) {
-    return { status: 'failed', error: errorMessage(error, messages.editFailed) };
+    return {
+      status: 'failed',
+      error: errorMessage(error, messages.editFailed),
+    };
   }
 }

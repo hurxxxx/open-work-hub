@@ -8,13 +8,12 @@ describe('AppBarMobileHeader', () => {
   it('exposes the mobile app bar as named primary navigation', () => {
     render(
       <AppBarMobileHeader
-        activeContextLabel="Personal scope"
         activeAppTitle="Planner"
-        canOpenWorkspaceSearch={false}
+        canOpenSearch={false}
         currentUser={
           {
             display_name: 'Member',
-            full_name: 'Workspace Member',
+            full_name: 'Company Member',
           } as AuthUser
         }
         labels={{
@@ -30,7 +29,7 @@ describe('AppBarMobileHeader', () => {
         notificationsEnabled={false}
         onOpenAccount={vi.fn()}
         onOpenMobileNavigation={vi.fn()}
-        onOpenWorkspaceSearch={vi.fn()}
+        onOpenSearch={vi.fn()}
         onToggleNotifications={vi.fn()}
         unreadCount={0}
       />,
@@ -39,6 +38,7 @@ describe('AppBarMobileHeader', () => {
     expect(
       screen.getByRole('navigation', { name: 'Primary apps' }),
     ).toBeTruthy();
-    expect(screen.getByText('Personal scope')).toBeTruthy();
+    expect(screen.getByText('Planner')).toBeTruthy();
+    expect(screen.queryByText(/Personal scope|Company scope/)).toBeNull();
   });
 });

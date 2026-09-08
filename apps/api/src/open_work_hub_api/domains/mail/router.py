@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
+from open_work_hub_api.domains.auth.app_gate import require_app_access
 from open_work_hub_api.domains.auth.dependencies import require_current_user
 from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.auth.workspace_app_gate import require_platform_app_enabled
 from open_work_hub_api.domains.mail import service
-from open_work_hub_api.domains.mail.app_catalog import MAIL_WORKSPACE_APP
+from open_work_hub_api.domains.mail.app_catalog import MAIL_APP
 from open_work_hub_api.domains.mail.schemas import (
     MailAccountConnectionRequest,
     MailAccountOut,
@@ -25,9 +25,8 @@ from open_work_hub_api.domains.mail.schemas import (
     MailSyncResponse,
 )
 
-
-require_mail_app_enabled = require_platform_app_enabled(
-    MAIL_WORKSPACE_APP.app_id,
+require_mail_app_enabled = require_app_access(
+    MAIL_APP.app_id,
     error_code="platform.app_disabled",
 )
 

@@ -3,6 +3,7 @@ import {
   REALTIME_CLIENT_EVENT_TYPES,
   REALTIME_SERVER_EVENT_TYPES,
   createDocsPagesRealtimeSubscriptionMessage,
+  createWhiteboardAccessRealtimeSubscriptionMessage,
 } from '@open-work-hub/contracts/realtime';
 
 import {
@@ -114,7 +115,6 @@ describe('createRealtimeRuntime', () => {
     const { runtime, sockets } = createHarness();
     const subscription = createDocsPagesRealtimeSubscriptionMessage({
       key: 'doc-1',
-      workspaceSlug: 'hq',
     });
 
     const unsubscribeOne = runtime.subscribe(subscription);
@@ -146,6 +146,7 @@ describe('createRealtimeRuntime', () => {
         type: REALTIME_CLIENT_EVENT_TYPES.unsubscribe,
         topic: subscription.topic,
         key: subscription.key,
+        share_token: null,
       },
     ]);
   });
@@ -161,6 +162,88 @@ describe('createRealtimeRuntime', () => {
 
     expect(events).toEqual([]);
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('keeps direct and distinct link authorities independently subscribed and replayed', () => {
+    const { runtime, sockets } = createHarness();
+    const direct = createDocsPagesRealtimeSubscriptionMessage({ key: 'doc-1' });
+    const firstLink = createDocsPagesRealtimeSubscriptionMessage({
+      key: 'doc-1',
+      shareToken: 'first-link',
+    });
+    const otherLink = createDocsPagesRealtimeSubscriptionMessage({
+      key: 'doc-1',
+      shareToken: 'other-link',
+    });
+    const removeDirect = runtime.subscribe(direct);
+    const removeFirst = runtime.subscribe(firstLink);
+    const removeDuplicate = runtime.subscribe(firstLink);
+    runtime.subscribe(otherLink);
+    runtime.connect();
+    sockets[0].open();
+    sockets[0].receive({ type: REALTIME_SERVER_EVENT_TYPES.authOk });
+    expect(
+      sentPayloads(sockets[0]).filter(
+        (message) => message.type === REALTIME_CLIENT_EVENT_TYPES.subscribe,
+      ),
+    ).toEqual([direct, firstLink, otherLink]);
+    removeFirst();
+    expect(
+      sentPayloads(sockets[0]).filter(
+        (message) => message.type === REALTIME_CLIENT_EVENT_TYPES.unsubscribe,
+      ),
+    ).toEqual([]);
+    removeDuplicate();
+    removeDirect();
+    expect(
+      sentPayloads(sockets[0]).filter(
+        (message) => message.type === REALTIME_CLIENT_EVENT_TYPES.unsubscribe,
+      ),
+    ).toEqual([
+      { ...firstLink, type: REALTIME_CLIENT_EVENT_TYPES.unsubscribe },
+      { ...direct, type: REALTIME_CLIENT_EVENT_TYPES.unsubscribe },
+    ]);
+    sockets[0].close(1006);
+    vi.advanceTimersByTime(2500);
+    sockets[1].open();
+    sockets[1].receive({ type: REALTIME_SERVER_EVENT_TYPES.authOk });
+    expect(
+      sentPayloads(sockets[1]).filter(
+        (message) => message.type === REALTIME_CLIENT_EVENT_TYPES.subscribe,
+      ),
+    ).toEqual([otherLink]);
+  });
+
+  it('keeps Docs and Whiteboard subscriptions independent for matching resource IDs', () => {
+    const { runtime, sockets } = createHarness();
+    const docs = createDocsPagesRealtimeSubscriptionMessage({
+      key: 'resource-1',
+    });
+    const whiteboard = createWhiteboardAccessRealtimeSubscriptionMessage({
+      key: 'resource-1',
+      shareToken: 'shared-board',
+    });
+    const unsubscribeDocs = runtime.subscribe(docs);
+    runtime.subscribe(whiteboard);
+    runtime.connect();
+    sockets[0].open();
+    sockets[0].receive({ type: REALTIME_SERVER_EVENT_TYPES.authOk });
+    expect(
+      sentPayloads(sockets[0]).filter(
+        (message) => message.type === REALTIME_CLIENT_EVENT_TYPES.subscribe,
+      ),
+    ).toEqual([docs, whiteboard]);
+
+    unsubscribeDocs();
+    sockets[0].close(1006);
+    vi.advanceTimersByTime(2500);
+    sockets[1].open();
+    sockets[1].receive({ type: REALTIME_SERVER_EVENT_TYPES.authOk });
+    expect(
+      sentPayloads(sockets[1]).filter(
+        (message) => message.type === REALTIME_CLIENT_EVENT_TYPES.subscribe,
+      ),
+    ).toEqual([whiteboard]);
   });
 
   it.each([1008, 4401, 4403, 4409])(
@@ -192,7 +275,6 @@ describe('createRealtimeRuntime', () => {
     const { runtime, sockets } = createHarness();
     const subscription = createDocsPagesRealtimeSubscriptionMessage({
       key: 'doc-1',
-      workspaceSlug: 'hq',
     });
     runtime.subscribe(subscription);
 

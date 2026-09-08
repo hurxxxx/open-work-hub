@@ -4,7 +4,7 @@ import {
   addCancellingBackgroundWorkKey,
   backgroundWorkItemKey,
   buildBackgroundWorkSessionSnapshot,
-  filterBackgroundWorkSourcesForWorkspace,
+  filterBackgroundWorkSourcesForApps,
   mergeBackgroundWorkSourceListResults,
   removeCancellingBackgroundWorkKey,
   resolveBackgroundWorkCadence,
@@ -75,7 +75,7 @@ describe('background-work-session', () => {
     ];
 
     expect(
-      filterBackgroundWorkSourcesForWorkspace(sources, {
+      filterBackgroundWorkSourcesForApps(sources, {
         enabledAppIds: ['reports'],
         enabledNavItemIds: ['report-export'],
       }).map((source) => source.id),

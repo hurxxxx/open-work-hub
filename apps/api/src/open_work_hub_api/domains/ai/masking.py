@@ -26,7 +26,6 @@ from open_work_hub_api.domains.ai.security_policy import (
     normalize_external_transfer_blockers,
 )
 
-
 EXTERNAL_PAYLOAD_MASKED_REASON = "external_payload_masked"
 HARD_EXTERNAL_TRANSFER_BLOCKER_REASON = "hard_external_transfer_blocker"
 MASKING_UNSUPPORTED_BLOCKER_REASON = "masking_unsupported_blocker"

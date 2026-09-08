@@ -4,34 +4,17 @@ import pytest
 
 from open_work_hub_api.domains.auth.roles import (
     SYSTEM_PLATFORM_ADMIN,
-    _higher_team_role,
-    _higher_workspace_role,
     _sorted_system_roles,
-    is_valid_workspace_role,
     normalize_system_role,
-    normalize_workspace_role,
-    team_role_allows,
-    workspace_role_allows,
 )
-
-
-def test_workspace_role_aliases_collapse_to_supported_roles() -> None:
-    assert normalize_workspace_role("viewer") is None
-    assert normalize_workspace_role("owner") == "admin"
-    assert not is_valid_workspace_role("viewer")
-    assert not workspace_role_allows("viewer", "member")
-    assert is_valid_workspace_role("owner")
+from open_work_hub_api.domains.pms.roles import _higher_team_role, team_role_allows
 
 
 def test_unknown_current_role_returns_false() -> None:
-    assert workspace_role_allows("unknown", "member") is False
     assert team_role_allows("unknown", "viewer") is False
 
 
 def test_unknown_minimum_role_raises() -> None:
-    with pytest.raises(ValueError, match="Unknown workspace role: superuser"):
-        workspace_role_allows("admin", "superuser")
-
     with pytest.raises(ValueError, match="Unknown team role: superuser"):
         team_role_allows("owner", "superuser")
 
@@ -44,12 +27,9 @@ def test_team_role_rank_order() -> None:
     assert not team_role_allows("admin", "owner")
 
 
-def test_system_role_spelling_alias_preserves_platform_admin() -> None:
-    for role in (
-        "platform_admin",
-        "platform-admin",
-    ):
-        assert normalize_system_role(role) == SYSTEM_PLATFORM_ADMIN
+def test_only_canonical_platform_role_grants_authority() -> None:
+    assert normalize_system_role("platform_admin") == SYSTEM_PLATFORM_ADMIN
+    assert normalize_system_role("platform-admin") is None
 
 
 def test_legacy_narrow_system_roles_never_grant_platform_admin() -> None:
@@ -68,14 +48,6 @@ def test_sorted_system_roles_are_deterministic() -> None:
         "a_custom",
         "z_custom",
     ]
-
-
-def test_higher_workspace_role_merges_aliases_and_unknowns() -> None:
-    assert _higher_workspace_role("member", "admin") == "admin"
-    assert _higher_workspace_role("owner", "member") == "admin"
-    assert _higher_workspace_role(None, "viewer") is None
-    assert _higher_workspace_role("unknown", "viewer") is None
-    assert _higher_workspace_role("member", "unknown") == "member"
 
 
 def test_higher_team_role_merges_by_rank_and_ignores_unknowns() -> None:

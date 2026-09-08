@@ -2,107 +2,123 @@
 
 ## Source Of Truth
 
-- [ADR 0011](../../../adr/0011-app-first-workspace-context.md) owns app-first workspace context and runtime control policy.
-- [ADR 0007](../../../adr/0007-company-tenant-workspace-scope.md) owns company-account and explicit workspace-membership lifecycle.
-- `packages/contracts/app-contracts.json` owns executable leaf identity, route context, execution context, resource scope, and launcher placement.
-- `packages/contracts/app-contracts.schema.json` validates the source contract.
-- `scripts/generate-app-contracts.mjs` generates:
-  - `packages/contracts/src/app-contracts.generated.ts`
-  - `apps/api/src/open_work_hub_api/core/app_contracts_generated.py`
-- Generated files are never hand-edited. Run `pnpm generate:app-contracts` after changing the source contract.
+[ADR 0012](../../../adr/0012-company-app-access-without-workspaces.md) owns the breaking
+company/users/groups design. One deployment serves one company. There is no product workspace,
+workspace membership, implicit default container, workspace route, or workspace override.
+Filesystem working directories and package-manager workspaces are unrelated.
 
-`ai`, `collaboration`, and `business` are display categories only. Do not register them as executable apps, route owners, API owners, runtime availability targets, or AI capability scopes.
+`packages/contracts/app-contracts.json` owns app identity, routes, execution context, resource scope,
+and launcher placement; its schema validates the source and `pnpm generate:app-contracts` generates
+both TypeScript and Python projections. Generated files are never edited manually. Display categories
+such as `ai`, `collaboration`, and `business` are not executable app identities.
 
-## Route Contract
+## Routes And Bootstrap
 
-| Context          | Canonical form                               | Workspace bootstrap          |
-| ---------------- | -------------------------------------------- | ---------------------------- |
-| neutral launcher | `/`                                          | no                           |
-| app entry        | `/apps/:appId`                               | no; resolves app-local entry |
-| workspace        | `/apps/:appId/workspaces/:workspaceSlug/...` | yes                          |
-| global/shared    | `/apps/:appId/...`                           | no                           |
+Browser routes are `/apps/:appId/...`; the neutral launcher is `/`. APIs are `/api/v1/...`, with one
+account bootstrap at `GET /api/v1/apps/bootstrap`. Old paths and route redirects are unsupported.
+Use `buildAppHref` / `build_app_href` and generated routes. A URL or app pin never authorizes access.
 
-- Use `buildAppHref` in TypeScript and `build_app_href` in Python for internal browser links.
-- No legacy aliases, redirects, fallback parsing, or independently assembled browser paths.
-- Route scope does not grant access. Server gates recheck membership, role, availability, resource ACL, and AI approval.
-- API paths remain under `/api/v1`; they are not browser route aliases.
+## Core And App Authorization
 
-## Authorization Roles And Shared Routes
+Core owns accounts, organization metadata, live company groups, app admission and directory selectors.
+[Organization](../organization/README.md) owns group derivation and lifecycle. Apps own business
+containers, roles, sharing tables, approval and ownership transitions. PMS spaces and memberships
+are PMS resources; group binding delegates a PMS role without making the group a space.
 
-- Supported workspace roles are `member` and `admin`. The legacy `owner` spelling maps down to
-  `admin`; `viewer` is unsupported and never silently becomes a writing member. Team `viewer`
-  remains a supported read-only team role.
-- Only `platform_admin` (or the equivalent `platform-admin` spelling) grants the system role.
-  Legacy `workspace_admin` and `audit_viewer` system-role names, including hyphenated spellings,
-  grant nothing. Existing canonical `platform_admin` assignments and the explicit `is_admin`
-  compatibility flag retain their authority until explicitly replaced; runtime cannot infer how
-  an old assignment arose. An explicit system-role replacement clears the independent legacy
-  flag and replaces the role rows in the same transaction, so removing administrator rights
-  cannot leave authority behind through `is_admin`.
-- Impersonated sessions require the initiating account to remain active, unblocked, and a
-  platform administrator on every authentication check. Explicit administrator demotion revokes
-  sessions issued through that account's impersonation in the same transaction; restoring the
-  role does not revive them. The target user's independently issued sessions remain independent.
-  Account deletion revokes delegated sessions before the initiating-account foreign key is cleared;
-  deletion must never convert an impersonated session into an independent one.
-  Reused authentication sessions reload the current user graph instead of trusting cached roles
-  or account state.
-- Authorization resolves workspace role from current PostgreSQL membership, active workspace,
-  and active/unblocked user state. Retained team memberships cannot bypass a revoked workspace
-  membership. Platform administrators retain their explicit tenant administration endpoints;
-  a workspace role does not grant blanket access to private PMS tasks or meeting participation.
-- HTTP, queued execution, and batched app visibility reject unknown/unsupported workspace roles.
-  Team-based list/source predicates likewise require a supported team role; membership-row
-  existence alone is insufficient. Team viewers retain read access and cannot modify resources.
-- Docs and Whiteboard services require an explicitly bound workspace for workspace operations;
-  they never select a user's first workspace. Global sharing uses an explicit active link instead.
-- Docs and Whiteboard shared routes authenticate the user, require company app enablement, and
-  validate the exact active link for the requested resource. A supplied invalid/revoked link
-  cannot fall back to ownership, direct shares, or target rights. The link's `read`/`edit` level
-  bounds access even for a former owner/editor; it never grants sharing or management authority.
-  Valid links can be used by company users without workspace membership. Inactive workspaces
-  do not serve shared resources.
-- Restoring unsupported historical roles requires an administrator's explicit assignment of a
-  supported role through existing management APIs. Do not auto-promote legacy rows or rewrite
-  them in a migration based only on their names.
+`platform_admin` authorizes platform administration and company business read access. It does not
+implicitly grant business writes, PMS ownership, or access to personal mail, calendars, messages,
+AI sessions/artifacts and personal authoring. The account impersonation endpoint is removed. The
+last active platform administrator cannot be demoted, blocked, deactivated or deleted.
 
-## Runtime Availability
+Personal-content restrictions govern application authorization. Account administrators still control
+credential recovery, and database/storage operators remain trusted infrastructure administrators;
+this model does not provide cryptographic confidentiality against those authorities. Password resets
+are audited and revoke existing sessions. Temporary-password accounts may only inspect their account,
+change the password, or log out until the password change succeeds; app APIs, WebSockets and queued
+user work enforce this restriction on the server.
 
-The compiled leaf catalog provides metadata only. PostgreSQL controls execution and missing rows fail closed.
+PMS owners are explicit users; groups may be viewer, member or admin. Parent-row locking serializes
+member/group changes and owner checks. Group membership or organization-head metadata cannot create
+an owner. Each app resolves resource rights from current source state after checking app admission.
 
-```text
-company enabled
-  ├─ platform app -> enabled
-  └─ workspace app
-       └─ workspace override when present
-            otherwise workspace default
-```
+## App Admission
 
-- `company_app_controls`: required company switch for every app.
-- `workspace_app_defaults`: required fallback for workspace apps.
-- `workspace_app_overrides`: optional workspace-specific enable/disable; delete the row to inherit.
-- Static feature flags and required system roles remain additional gates.
-- Catalog defaults, launcher placement, UI hiding, and local storage never authorize execution.
-- Committed company controls, workspace defaults/overrides, workspace metadata/active-state, and
-  membership changes publish `auth.access.changed` invalidations. Open sessions refresh canonical
-  user, app, and workspace projections; server authorization remains fail-closed if delivery is
-  delayed or lost.
-- Admin writes are audited through:
-  - `GET/PATCH /api/v1/admin/apps/company-controls`
-  - `GET/PATCH /api/v1/admin/apps/workspace-defaults`
-  - `GET/PATCH /api/v1/admin/workspaces/{workspace_id}/app-overrides`
+An active, unblocked account must satisfy company app enablement, registered feature/system-role
+requirements, and the app audience. Policy is `all` or `selected`; selected direct users and live
+organization/manual groups are combined with OR. Missing configuration and an empty selected audience
+deny ordinary users. Platform administrators bypass only audience selection; master disablement and
+feature requirements still apply. No resource share or public link bypasses this gate.
 
-## Launch And Workspace Choice
+`/admin/apps/access` edits `/api/v1/admin/apps/{app_id}/access-policy` atomically. Account, organization,
+group and policy changes record audit evidence and invalidate principal projections. Inactive assignment
+records may be retained for review and later reactivation; they confer no current authority.
+Group membership changes invalidate users gaining or losing membership, and group activation changes
+invalidate its members. Group creation and descriptive edits do not invalidate unrelated user sessions.
 
-- `GET /api/v1/apps/bootstrap` returns only executable apps for the current user.
-- `global_route_app_ids` separately authorizes an app's global/shared routes when its company and role gates pass; it does not make the app launcher-visible without an executable context.
-- Platform apps require company enablement and any role/feature gates.
-- Workspace apps require at least one active membership where the app is enabled.
-- `GET /api/v1/apps/{app_id}/eligible-workspaces` is the app-local chooser source.
-- `PUT /api/v1/apps/{app_id}/workspace-preference` persists `(user_id, app_id) -> workspace_id` only after membership and availability checks.
-- One eligible workspace auto-selects. Multiple eligible workspaces use an eligible saved preference or show the chooser.
-- The global App Bar never stores or implies current workspace. Workspace selection renders in the current workspace app submenu.
-- Launcher categories, fixed placement, personal tools, and pins affect presentation only.
+App admission applies to registered executable apps. Core personal communication (DM), company
+announcements, directory selectors, notifications and calendar aggregation remain authenticated
+platform capabilities rather than independently selectable apps. Each retains its source-owned
+permissions: DM participation, administrator-only announcement writes, and source-filtered calendar
+and notification projections. Their core placement does not grant access to a disabled source app.
+
+## Content Ownership And Sharing
+
+Standalone Docs, Whiteboard, Bento, Diagrams and uploaded files begin personal. User/group sharing
+preserves personal ownership. Publishing to a company or PMS context requires source sharing authority,
+explicit company-admin-read acknowledgment and a same-transaction audit record. Company ownership is
+irreversible; unlinking or revoking an audience does not restore personal ownership.
+
+Docs/Whiteboard `company_visible` separately grants read access to everyone admitted to that app.
+Project publication alone leaves this flag false. Removing company-wide visibility preserves project,
+user/group grants and company ownership; the UI must not imply that all those grants were removed.
+Company administrators retain read access, while mutations require app-owned resource rights.
+
+A supplied shared-link token bounds access to that exact active link and its read/edit level, including
+for the owner. Invalid links cannot fall back to stronger owner/group/target rights, and links never
+permit sharing administration. Current source ACL is required before REST, search, RAG, notification,
+media or collaboration disclosure; partitions and saved projections only narrow candidates.
+
+## Realtime Authorization
+
+The common WebSocket checks the current account and session before each incoming or outgoing
+message. Resource subscriptions additionally check current app admission and source rights at
+subscription and immediately before sending content. Queued authorization is not reusable authority.
+A supplied link remains bound to the exact current token and its access level.
+Bindings are keyed by topic, resource ID and the exact share token (or direct-access null),
+including client reference counts and unsubscribe. A second lens cannot replace the first binding.
+
+Docs uses its existing `docs.pages` subscription for `docs.access.changed` with only `doc_id`;
+Whiteboard uses `whiteboard.access` for `whiteboard.access.changed` with only `whiteboard_id`.
+User/group/company/link/target changes and deletion publish after commit to that resource's existing
+observers. They do not broadcast account invalidation to unrelated users. A revoked observer receives
+one ID-only invalidation and loses the server subscription, including already queued source frames.
+No title, content, token or actor is included. Rejected known-resource subscriptions return the same
+requested-ID-only invalidation so a read followed by a raced subscription denial cannot retain a
+stale open view.
+
+Views discard the previous resource/editor state and ignore obsolete in-flight responses before
+refetching current rights. Reconnects refetch canonical HTTP state because Redis live events are
+at-most-once. Server source checks remain authoritative if a client ignores invalidation. Docs and
+Whiteboard Yjs transport checks the current session, app and source edit rights on every received
+frame before room mutation and every outgoing frame after acquiring the send lock; the periodic
+monitor also closes idle revoked connections.
+
+Common and collaborative WebSockets authenticate with the first `auth` message. URL `token`
+authentication is rejected, including a valid or empty query token. Session credentials must not
+appear in socket URLs. Docs and Whiteboard share `createAuthenticatedCollabProvider` in the UI
+editor package. It uses the [official y-websocket provider API](https://docs.yjs.dev/ecosystem/connection-provider/y-websocket):
+`connect: false`, a `status` listener registered before connecting, and the public `ws` socket.
+Pinned y-websocket 3.0.0 emits `connected` synchronously before initial sync (`src/y-websocket.js`,
+lines 196–210), so each connection/reconnection sends authentication before binary Yjs frames.
+An installed-provider regression checks this order. Reassess that ordering when upgrading the
+provider; no WebSocket monkey patch or second reconnect lifecycle is used. `disableBc: true`
+prevents BroadcastChannel from bypassing server authorization between browser tabs.
+
+Per-user events also retain source authorization: DM rebuilds conversations/messages from current
+participation and the current join-history window. A removed participant receives only the existing
+conversation-removed ID; rejoining cannot recover queued pre-join messages. Notifications rebuild
+the recipient/source-visible row and unread count at delivery. If the row is no longer visible,
+the event contains `notification: null` and the current count, without the old title/body/action URL.
 
 ## App Bar Presentation
 
@@ -121,8 +137,8 @@ company enabled
 
 - A domain exports one immutable leaf registration from
   `apps/api/src/open_work_hub_api/domains/<domain>/app_catalog.py`.
-- `apps/api/src/open_work_hub_api/domains/auth/workspace_apps.py` is the explicit composition root.
-- `compile_workspace_app_registry()` rejects duplicate identity/routes/nav, invalid ownership, and inconsistent route metadata.
+- `apps/api/src/open_work_hub_api/domains/auth/app_catalog.py` is the explicit composition root.
+- `compile_app_registry()` rejects duplicate identity/routes/nav, invalid ownership, and inconsistent route metadata.
 - Bootstrap, route/API gates, admin controls, AI discovery/execution, search, and background work consume compiled identity plus runtime availability.
 - Executable app-owned user work rechecks availability after claiming the job and before resolving
   providers or mutating app data. A disabled job pauses or cancels according to that queue's
@@ -137,14 +153,14 @@ company enabled
 - An app with no submenu entries returns an empty navigation projection; the platform never invents a root item.
 - Settings/admin is a shell-owned navigation surface, not an executable app identity or availability target.
 - The shell composition root imports leaf registrations explicitly and derives route, App Bar, document title, mobile navigation, and background projections.
-- A workspace app uses the route workspace slug as context. Global/shared routes must not call workspace bootstrap.
+- All app routes consume the same current account bootstrap. App-owned resource identifiers remain in app paths.
 - User-facing copy keeps `ko-KR` and `en-US` catalogs aligned.
 
 Cross-app authenticated byte delivery follows [Content Access](../content-access/README.md). Global
 source events follow [Notifications](../notifications/README.md); notification rows never replace
 source authorization.
 
-## Workspace Keyword Search
+## Keyword Search
 
 Participating apps provide an app-owned `SearchEntityAdapter`, explicit composition in
 `apps/api/src/open_work_hub_api/domains/search/default_entity_adapters.py`, lifecycle projection
@@ -155,11 +171,11 @@ browser route and recheck source access. Retrieval partition is candidate scope,
 
 - update the source app contract and regenerate both language projections
 - update backend leaf registration, route/API gate, admin/runtime availability, and focused tests
-- update frontend manifest, app-first routes, submenu selector, launcher projection, and i18n
+- update frontend manifest, app-first routes, submenu, launcher projection, and i18n
 - update search, notification, share, worker, and AI links/capabilities owned by the app
 - regenerate OpenAPI/client when the API contract changes
 - add Alembic migration for persisted schema changes
-- verify zero/missing-control, disabled, unauthorized, global/shared, one-workspace, multi-workspace, and stale-preference cases
+- verify missing/disabled configuration, selected user/group audiences, inactive principals, private/shared/company resources, and revocation cases
 
 ## Checks
 
@@ -172,5 +188,5 @@ pnpm check:api-contract
 pnpm check:i18n
 pnpm check:alembic-graph
 pnpm test:alembic-graph
-(cd apps/api && uv run --python 3.12 --group dev python -m pytest tests/test_app_routes.py tests/test_app_availability.py tests/test_apps_launch_catalog.py tests/test_workspace_app_registry.py tests/test_workspace_bootstrap.py tests/test_admin_workspaces.py -q)
+(cd apps/api && uv run --python 3.12 --group dev python -m pytest tests/test_app_routes.py tests/test_app_availability.py tests/test_apps_launch_catalog.py tests/test_app_registry.py tests/test_company_groups.py tests/test_company_content_boundaries.py -q)
 ```

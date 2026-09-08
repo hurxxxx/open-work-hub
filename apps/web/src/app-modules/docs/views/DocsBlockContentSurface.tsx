@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Pencil } from 'lucide-react';
 import {
   BlockEditor,
   BlockViewer,
   CollaborativeBlockEditor,
   type BlockContent,
 } from '@open-work-hub/ui';
+import { Pencil } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   getDocsCollabSession,
@@ -20,7 +20,7 @@ interface DocsBlockContentSurfaceProps {
   page: DocsPageItem;
   canEdit: boolean;
   token?: string | null;
-  workspaceSlug?: string | null;
+
   shareToken?: string | null;
   contentEditorVersion?: number;
   uploadFile?: (file: File) => Promise<string>;
@@ -39,7 +39,6 @@ export function DocsBlockContentSurface({
   page,
   canEdit,
   token,
-  workspaceSlug,
   shareToken,
   contentEditorVersion = 0,
   uploadFile,
@@ -57,7 +56,6 @@ export function DocsBlockContentSurface({
   );
   const { queueSnapshotSave } = useDocsCollabSnapshotSaveController({
     token,
-    workspaceSlug,
     saveSnapshot: saveDocsCollabSnapshot,
   });
 
@@ -74,7 +72,7 @@ export function DocsBlockContentSurface({
     if (!token) {
       throw new Error(t('apps:docs.collab.startFailed'));
     }
-    const session = await getDocsCollabSession(token, pageRef, workspaceSlug);
+    const session = await getDocsCollabSession(token, pageRef);
     return {
       roomKey: session.room_key,
       wsPath: session.ws_path,
@@ -87,12 +85,12 @@ export function DocsBlockContentSurface({
       snapshotContent: (session.snapshot_content_blocks ?? []) as never,
       yjsState: session.yjs_state,
     };
-  }, [pageRef, t, token, workspaceSlug]);
+  }, [pageRef, t, token]);
 
   if (canStartRealtimeEditing && token && editingCollabPageId === page.id) {
     return (
       <CollaborativeBlockEditor
-        sessionKey={`${workspaceSlug ?? 'current'}:${surfaceKey}`}
+        sessionKey={surfaceKey}
         authToken={token}
         loadSession={loadCollabSession}
         messages={{

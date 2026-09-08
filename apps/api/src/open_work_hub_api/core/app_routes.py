@@ -13,7 +13,6 @@ from open_work_hub_api.core.app_contracts_generated import (
 @dataclass(frozen=True)
 class InternalAppLocation:
     route_id: str
-    workspace_slug: str | None = None
     path_params: Mapping[str, str] = field(default_factory=dict)
     query_params: Mapping[str, str | tuple[str, ...] | None] = field(default_factory=dict)
     fragment: str | None = None
@@ -23,9 +22,7 @@ def app_route_pattern(route_id: str) -> str:
     route = APP_ROUTE_BY_ID.get(route_id)
     if route is None:
         raise ValueError(f"Unknown app route: {route_id}")
-    if route["context_scope"] == "workspace":
-        return f'{route["route_base"]}/workspaces/:workspaceSlug{route["suffix"]}'
-    return f'{route["route_base"]}{route["suffix"]}'
+    return f"{route['route_base']}{route['suffix']}"
 
 
 def build_app_href(location: InternalAppLocation) -> str:
@@ -33,13 +30,6 @@ def build_app_href(location: InternalAppLocation) -> str:
     if route is None:
         raise ValueError(f"Unknown app route: {location.route_id}")
     params = dict(location.path_params)
-    if route["context_scope"] == "workspace":
-        if not location.workspace_slug:
-            raise ValueError(f"Workspace route requires workspace_slug: {location.route_id}")
-        params["workspaceSlug"] = location.workspace_slug
-    elif location.workspace_slug is not None:
-        raise ValueError(f"Global route cannot carry workspace_slug: {location.route_id}")
-
     pathname = app_route_pattern(location.route_id)
     for key, value in params.items():
         placeholder = f":{key}"

@@ -9,6 +9,9 @@ from uuid import uuid4
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session, selectinload
 
+from open_work_hub_api.domains.auth.access import record_audit_log
+from open_work_hub_api.domains.content_access.ownership import record_ownership_transition
+
 from open_work_hub_api.domains.ai_artifacts.contracts import (
     AiArtifactCreate,
     AiArtifactIndexGenerationCreate,
@@ -102,17 +105,17 @@ class AiArtifactRepository:
         if request.supersedes_artifact_id is not None:
             superseded = self.require(request.supersedes_artifact_id)
             if (
-                superseded.workspace_id != request.workspace_id
-                or superseded.artifact_type != request.artifact_type
+                superseded.artifact_type != request.artifact_type
                 or superseded.status != "completed"
+                or superseded.owner_user_id != request.owner_user_id
+                or superseded.app_id != request.app_id
             ):
                 raise ValueError(
-                    "superseded artifact must be a completed artifact of the same workspace/type"
+                    "superseded artifact must be a completed artifact of the same owner/app/type"
                 )
         artifact = AiArtifact(
             id=str(uuid4()),
             artifact_number=self._allocate_number(request.artifact_type),
-            workspace_id=request.workspace_id,
             owner_user_id=request.owner_user_id,
             graph_run_id=request.graph_run_id,
             conversation_id=request.conversation_id,
@@ -129,6 +132,20 @@ class AiArtifactRepository:
             status="building",
         )
         self.db.add(artifact)
+        if request.visibility == "company":
+            record_audit_log(
+                self.db,
+                actor_user_id=request.owner_user_id,
+                action="content.publish_to_company",
+                entity_kind="ai_artifact",
+                entity_id=artifact.id,
+                summary="Published AI artifact to company ownership",
+                payload={
+                    "previous_ownership": "personal",
+                    "ownership": "company",
+                    "company_admin_read_acknowledged": True,
+                },
+            )
         self.db.flush()
         return artifact
 
@@ -198,17 +215,15 @@ class AiArtifactRepository:
         self,
         identifier: str,
         *,
-        workspace_id: str,
         user_id: str,
         enabled_app_ids: frozenset[str],
         eager: bool = False,
     ) -> AiArtifact | None:
         predicates = [
             or_(AiArtifact.id == identifier, AiArtifact.artifact_number == identifier),
-            AiArtifact.workspace_id == workspace_id,
             or_(
                 AiArtifact.owner_user_id == user_id,
-                AiArtifact.visibility == "workspace",
+                AiArtifact.visibility == "company",
             ),
         ]
         predicates.append(AiArtifact.app_id.in_(enabled_app_ids))
@@ -224,7 +239,6 @@ class AiArtifactRepository:
     def list_visible(
         self,
         *,
-        workspace_id: str,
         user_id: str,
         artifact_type: str | None = None,
         status: str | None = "completed",
@@ -236,10 +250,9 @@ class AiArtifactRepository:
         offset: int = 0,
     ) -> tuple[list[AiArtifact], int]:
         predicates = [
-            AiArtifact.workspace_id == workspace_id,
             or_(
                 AiArtifact.owner_user_id == user_id,
-                AiArtifact.visibility == "workspace",
+                AiArtifact.visibility == "company",
             ),
         ]
         predicates.append(AiArtifact.app_id.in_(enabled_app_ids))
@@ -271,22 +284,21 @@ class AiArtifactRepository:
         self,
         identifier: str,
         *,
-        workspace_id: str,
         owner_user_id: str,
         visibility: ArtifactVisibility,
+        company_admin_read_acknowledged: bool = False,
         expected_app_id: str | None = None,
         expected_artifact_type: str | None = None,
     ) -> tuple[AiArtifact, bool]:
         """Change only the access scope of an owned, completed artifact."""
 
-        if visibility not in {"private", "workspace"}:
-            raise ValueError("artifact visibility must be private or workspace")
+        if visibility not in {"private", "company"}:
+            raise ValueError("artifact visibility must be private or company")
         predicates = [
             or_(
                 AiArtifact.id == identifier,
                 AiArtifact.artifact_number == identifier,
             ),
-            AiArtifact.workspace_id == workspace_id,
             AiArtifact.owner_user_id == owner_user_id,
             AiArtifact.status == "completed",
         ]
@@ -294,15 +306,20 @@ class AiArtifactRepository:
             predicates.append(AiArtifact.app_id == expected_app_id)
         if expected_artifact_type is not None:
             predicates.append(AiArtifact.artifact_type == expected_artifact_type)
-        artifact = self.db.scalar(
-            select(AiArtifact)
-            .where(*predicates)
-            .with_for_update()
-        )
+        artifact = self.db.scalar(select(AiArtifact).where(*predicates).with_for_update())
         if artifact is None:
             raise AiArtifactNotFoundError(identifier)
         if artifact.visibility == visibility:
             return artifact, False
+        record_ownership_transition(
+            self.db,
+            actor_user_id=owner_user_id,
+            resource_kind="ai_artifact",
+            resource_id=artifact.id,
+            current_kind="company" if artifact.visibility == "company" else "personal",
+            next_kind="company" if visibility == "company" else "personal",
+            company_admin_read_acknowledged=company_admin_read_acknowledged,
+        )
         artifact.visibility = visibility
         self.db.add(artifact)
         self.db.flush()
@@ -438,7 +455,6 @@ class AiIndexGenerationRepository:
     def create_staging(self, request: AiIndexGenerationCreate) -> AiIndexGeneration:
         generation = AiIndexGeneration(
             id=str(uuid4()),
-            workspace_id=request.workspace_id,
             app_id=request.app_id,
             generation_key=request.generation_key,
             status="staging",
@@ -492,7 +508,6 @@ class AiIndexGenerationRepository:
         current = self.db.scalar(
             select(AiIndexGeneration)
             .where(
-                AiIndexGeneration.workspace_id == generation.workspace_id,
                 AiIndexGeneration.app_id == generation.app_id,
                 AiIndexGeneration.backend == generation.backend,
                 AiIndexGeneration.source_namespace == generation.source_namespace,

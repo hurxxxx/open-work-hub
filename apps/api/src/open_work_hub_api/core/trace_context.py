@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import urllib.parse
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-import urllib.parse
 
 from opentelemetry import propagate
 from opentelemetry.baggage.propagation import W3CBaggagePropagator

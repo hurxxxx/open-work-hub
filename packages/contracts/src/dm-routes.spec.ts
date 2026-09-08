@@ -7,7 +7,6 @@ import {
   isDmAttachmentUploadFileAllowed,
   isDmRouteId,
   normalizeDmLimit,
-  resolveDmAttachmentUrl,
 } from './dm-routes';
 
 describe('DM route contract helpers', () => {
@@ -54,39 +53,14 @@ describe('DM route contract helpers', () => {
 });
 
 describe('DM attachment policy helpers', () => {
-  it('resolves only same-origin DM attachment URLs without fragments', () => {
-    expect(
-      resolveDmAttachmentUrl(
-        '/api/v1/dm/attachments/a/content?expires=1&signature=s',
-        'https://workspace.example.test',
-      ),
-    ).toBe(
-      'https://workspace.example.test/api/v1/dm/attachments/a/content?expires=1&signature=s',
+  it('uses authenticated grant issuance endpoints instead of public content routes', () => {
+    expect(dmRoutes.attachmentPreview('a')).toBe(
+      '/api/v1/dm/attachments/a/preview',
     );
-    expect(
-      resolveDmAttachmentUrl(
-        'https://workspace.example.test/api/v1/dm/attachments/a/download',
-        'https://workspace.example.test',
-      ),
-    ).toBe('https://workspace.example.test/api/v1/dm/attachments/a/download');
-    expect(
-      resolveDmAttachmentUrl(
-        'https://cdn.example.test/api/v1/dm/attachments/a/download',
-        'https://workspace.example.test',
-      ),
-    ).toBeNull();
-    expect(
-      resolveDmAttachmentUrl(
-        'https://workspace.example.test/api/v1/dm/attachments/a/edit',
-        'https://workspace.example.test',
-      ),
-    ).toBeNull();
-    expect(
-      resolveDmAttachmentUrl(
-        '/api/v1/dm/attachments/a/preview#fragment',
-        'https://workspace.example.test',
-      ),
-    ).toBeNull();
+    expect(dmRoutes.attachmentDownload('a')).toBe(
+      '/api/v1/dm/attachments/a/download',
+    );
+    expect(dmRoutes).not.toHaveProperty('attachmentContent');
   });
 
   it('exposes the attachment upload size contract', () => {

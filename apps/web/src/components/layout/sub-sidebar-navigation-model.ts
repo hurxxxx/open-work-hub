@@ -4,7 +4,7 @@ import {
   hasConfiguredAdminSectionAccess,
   type AdminSectionAccessResolver,
 } from '@/src/platform/admin/admin-permissions';
-import type { WorkspaceBootstrapNavItem } from '@/src/platform/workspaces/workspaces-api';
+import type { BootstrapNavItem } from '@/src/platform/apps/apps-api';
 
 import { buildSidebarCategories } from './sub-sidebar-categories';
 export {
@@ -26,18 +26,17 @@ export interface SubSidebarNavigationProjection {
 
 export interface BuildSubSidebarNavigationProjectionInput {
   activeAppId: string;
-  canReadWorkspace: boolean;
+  canReadApp: boolean;
   extendCategories?: AppSidebarConfig['extendCategories'];
   globalAppIds?: readonly string[];
   hasAdminSectionAccess?: AdminSectionAccessResolver;
   navItems: readonly NavItem[];
   systemRoles: readonly string[];
   translate: TranslateSidebarLabel;
-  workspaceNavItems: readonly WorkspaceBootstrapNavItem[];
+  appNavItems: readonly BootstrapNavItem[];
 }
 
 const ADMIN_SECTION_ALIASES: Record<string, string> = {
-  teams: 'workspaces',
   users: 'people',
 };
 
@@ -54,25 +53,25 @@ function translateNavItem(
   };
 }
 
-function buildWorkspaceNavItems({
+function buildAppNavItems({
   activeAppId,
   navItems,
   translate,
-  workspaceNavItems,
+  appNavItems,
 }: Pick<
   BuildSubSidebarNavigationProjectionInput,
-  'activeAppId' | 'navItems' | 'translate' | 'workspaceNavItems'
+  'activeAppId' | 'navItems' | 'translate' | 'appNavItems'
 >): NavItem[] {
   const navItemRegistry = new Map(navItems.map((item) => [item.id, item]));
   const items: NavItem[] = [];
-  for (const item of workspaceNavItems) {
+  for (const item of appNavItems) {
     if (item.app_id !== activeAppId) {
       continue;
     }
     const localItem = navItemRegistry.get(item.id);
     if (!localItem) {
       throw new Error(
-        `Workspace nav item ${item.id} for ${item.app_id} is missing from the web app registry`,
+        `App nav item ${item.id} for ${item.app_id} is missing from the web app registry`,
       );
     }
     const nextItem: NavItem = {
@@ -136,14 +135,14 @@ function resolveSettingsSectionId(item: NavItem): string | null {
 
 export function buildSubSidebarNavigationProjection({
   activeAppId,
-  canReadWorkspace,
+  canReadApp,
   extendCategories,
   globalAppIds = [],
   hasAdminSectionAccess,
   navItems,
   systemRoles,
   translate,
-  workspaceNavItems,
+  appNavItems,
 }: BuildSubSidebarNavigationProjectionInput): SubSidebarNavigationProjection {
   const filteredItems =
     activeAppId === 'settings'
@@ -158,18 +157,18 @@ export function buildSubSidebarNavigationProjection({
         ? navItems
             .filter((item) => item.appId === activeAppId)
             .map((item) => translateNavItem(item, translate))
-        : buildWorkspaceNavItems({
+        : buildAppNavItems({
             activeAppId,
             navItems,
             translate,
-            workspaceNavItems,
+            appNavItems,
           });
   const baseCategories = buildSidebarCategories(
     filteredItems.map((item) => item.category),
   );
   const categories =
     extendCategories?.(baseCategories, {
-      canReadWorkspace,
+      canReadApp,
     }) ?? baseCategories;
   return { categories, filteredItems };
 }

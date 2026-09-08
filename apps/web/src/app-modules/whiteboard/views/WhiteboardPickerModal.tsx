@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from 'react';
 import { PencilRuler } from 'lucide-react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ResourcePickerDialog } from '@/src/components/picker/ResourcePickerDialog';
@@ -8,7 +8,10 @@ import {
   useResourcePickerLoad,
   useResourcePickerSession,
 } from '@/src/platform/pickers/resource-picker-session';
-import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
+import {
+  formatDateTime,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 import {
   listWhiteboardHub,
   type WhiteboardHubItem,
@@ -22,7 +25,7 @@ import {
 
 export interface WhiteboardPickerModalProps {
   isOpen: boolean;
-  workspaceSlug?: string | null;
+
   excludeWhiteboardIds?: string[];
   onClose: () => void;
   onPick: (item: WhiteboardHubItem) => Promise<void> | void;
@@ -32,7 +35,6 @@ const EMPTY_EXCLUDED_WHITEBOARD_IDS: string[] = [];
 
 export function WhiteboardPickerModal({
   isOpen,
-  workspaceSlug,
   excludeWhiteboardIds = EMPTY_EXCLUDED_WHITEBOARD_IDS,
   onClose,
   onPick,
@@ -63,13 +65,14 @@ export function WhiteboardPickerModal({
 
   const loadWhiteboards = useCallback(async () => {
     if (!token) return [];
-    const response = await listWhiteboardHub(
-      token,
-      { view: 'all', sort_by: 'updated_at', sort_dir: 'desc', page_size: 100 },
-      workspaceSlug,
-    );
+    const response = await listWhiteboardHub(token, {
+      view: 'all',
+      sort_by: 'updated_at',
+      sort_dir: 'desc',
+      page_size: 100,
+    });
     return response.items;
-  }, [token, workspaceSlug]);
+  }, [token]);
 
   useResourcePickerLoad<WhiteboardHubItem, WhiteboardPickerAction>({
     actions: {
@@ -112,9 +115,12 @@ export function WhiteboardPickerModal({
         <>
           <PencilRuler size={16} className="shrink-0 text-app-accent" />
           <div className="min-w-0">
-            <p className="app-text-body line-clamp-1 text-app-ink">{item.title}</p>
+            <p className="app-text-body line-clamp-1 text-app-ink">
+              {item.title}
+            </p>
             <p className="app-text-caption text-app-ink/45">
-              {item.location_label} · {formatDateTime(item.updated_at, {
+              {item.location_label} ·{' '}
+              {formatDateTime(item.updated_at, {
                 day: 'numeric',
                 locale: i18n.language,
                 month: 'short',

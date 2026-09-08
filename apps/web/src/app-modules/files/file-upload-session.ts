@@ -1,7 +1,4 @@
-import type {
-  FileUploadProgress,
-  FileVisibility,
-} from './api/files-api';
+import type { FileUploadProgress, FileVisibility } from './api/files-api';
 
 export const FILES_CHANGED_EVENT = 'files:changed';
 export const FILES_UPLOAD_COMPLETED_EVENT = 'files:upload-completed';
@@ -25,8 +22,8 @@ export interface StartFileUploadInput {
   files: File[];
   folderId: string | null;
   token: string;
+  companyAdminReadAcknowledged?: boolean;
   uploadVisibility: FileVisibility;
-  workspaceSlug: string;
 }
 
 export type FileUploadProgressSnapshot = {
@@ -39,7 +36,6 @@ export type FileUploadProgressSnapshot = {
 export type FileUploadEventDescriptor = {
   detail: {
     folderId: string | null;
-    workspaceSlug: string;
   };
   name: typeof FILES_CHANGED_EVENT | typeof FILES_UPLOAD_COMPLETED_EVENT;
 };
@@ -50,8 +46,8 @@ export type FileUploadFileAdapter = (input: {
   onProgress: (progress: FileUploadProgress) => void;
   signal: AbortSignal;
   token: string;
+  company_admin_read_acknowledged?: boolean;
   visibility: FileVisibility;
-  workspaceSlug: string;
 }) => Promise<unknown>;
 
 export type FileUploadBatchResult =
@@ -163,12 +159,10 @@ export function failFileUploadRecord({
 
 export function getFileUploadSuccessEvents({
   folderId,
-  workspaceSlug,
 }: {
   folderId: string | null;
-  workspaceSlug: string;
 }): FileUploadEventDescriptor[] {
-  const detail = { folderId, workspaceSlug };
+  const detail = { folderId };
   return [
     { detail, name: FILES_UPLOAD_COMPLETED_EVENT },
     { detail, name: FILES_CHANGED_EVENT },
@@ -184,7 +178,7 @@ export async function runFileUploadBatch({
   token,
   uploadFile,
   uploadVisibility,
-  workspaceSlug,
+  companyAdminReadAcknowledged = false,
 }: {
   fallbackErrorMessage: string;
   files: File[];
@@ -193,8 +187,8 @@ export async function runFileUploadBatch({
   signal: AbortSignal;
   token: string;
   uploadFile: FileUploadFileAdapter;
+  companyAdminReadAcknowledged?: boolean;
   uploadVisibility: FileVisibility;
-  workspaceSlug: string;
 }): Promise<FileUploadBatchResult> {
   const totalBytes = getTotalUploadBytes(files);
   let completedBytes = 0;
@@ -219,7 +213,7 @@ export async function runFileUploadBatch({
         signal,
         token,
         visibility: uploadVisibility,
-        workspaceSlug,
+        company_admin_read_acknowledged: companyAdminReadAcknowledged,
       });
       completedBytes += file.size;
       onProgress({

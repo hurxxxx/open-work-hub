@@ -1,4 +1,4 @@
-import type { WorkspaceBootstrapApp } from '@/src/platform/workspaces/workspaces-api';
+import type { BootstrapApp } from '@/src/platform/apps/apps-api';
 
 import type { AppBarItem } from './navigation-types';
 
@@ -7,30 +7,22 @@ type ShellDocumentTitleTranslator = (
   options?: Record<string, unknown>,
 ) => string;
 
-type ShellDocumentTitleWorkspace =
-  | {
-      name: string;
-    }
-  | null
-  | undefined;
-
 export interface ResolveShellDocumentTitleInput {
   activeAppId: string;
   appBarItems?: readonly Pick<AppBarItem, 'id' | 'title'>[];
-  routeWorkspaceSlug: string | null;
+
   t: ShellDocumentTitleTranslator;
-  workspace: ShellDocumentTitleWorkspace;
-  workspaceApps: readonly Pick<WorkspaceBootstrapApp, 'app_id' | 'title'>[];
+  apps: readonly Pick<BootstrapApp, 'app_id' | 'title'>[];
 }
 
 function resolveDocumentAppTitle({
   activeAppId,
   appBarItems = [],
   t,
-  workspaceApps,
+  apps,
 }: Pick<
   ResolveShellDocumentTitleInput,
-  'activeAppId' | 'appBarItems' | 't' | 'workspaceApps'
+  'activeAppId' | 'appBarItems' | 't' | 'apps'
 >): string {
   if (activeAppId === 'profile') {
     return t('documentTitle.profile');
@@ -46,7 +38,7 @@ function resolveDocumentAppTitle({
   }
   return t(`apps.${activeAppId}`, {
     defaultValue:
-      workspaceApps.find((item) => item.app_id === activeAppId)?.title ??
+      apps.find((item) => item.app_id === activeAppId)?.title ??
       appBarItems.find((item) => item.id === activeAppId)?.title ??
       activeAppId,
   });
@@ -55,22 +47,14 @@ function resolveDocumentAppTitle({
 export function resolveShellDocumentTitle({
   activeAppId,
   appBarItems,
-  routeWorkspaceSlug,
   t,
-  workspace,
-  workspaceApps,
+  apps,
 }: ResolveShellDocumentTitleInput): string {
   const app = resolveDocumentAppTitle({
     activeAppId,
     appBarItems,
     t,
-    workspaceApps,
+    apps,
   });
-  if (workspace && routeWorkspaceSlug) {
-    return t('documentTitle.workspaceApp', {
-      app,
-      workspace: workspace.name,
-    });
-  }
   return t('documentTitle.app', { app });
 }

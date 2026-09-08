@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import type { LlmHealthResponse } from '../../api/chatbot-api';
 import {
   listHermesJobs,
   listHermesRuns,
@@ -18,7 +19,6 @@ import {
   type HermesJob,
   type HermesRun,
 } from '../../api/hermes-agent-api';
-import type { LlmHealthResponse } from '../../api/chatbot-api';
 
 const ACTIVE_RUN_STATUSES = new Set([
   'pending',
@@ -32,13 +32,11 @@ const ACTIVE_RUN_STATUSES = new Set([
 interface AgentControlMenuProps {
   health: LlmHealthResponse | null;
   healthError: string | null;
-  workspaceSlug?: string | null;
 }
 
 export function AgentControlMenu({
   health,
   healthError,
-  workspaceSlug,
 }: AgentControlMenuProps) {
   const { t } = useTranslation('apps');
   const { token } = useAuth();
@@ -51,12 +49,12 @@ export function AgentControlMenu({
   const [actionKey, setActionKey] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!token || !workspaceSlug) return;
+    if (!token) return;
     setLoading(true);
     try {
       const [runPage, jobPage] = await Promise.all([
-        listHermesRuns(token, { limit: 10, workspaceSlug }),
-        listHermesJobs(token, workspaceSlug),
+        listHermesRuns(token, { limit: 10 }),
+        listHermesJobs(token),
       ]);
       setRuns(runPage.data);
       setJobs(jobPage.data);
@@ -70,7 +68,7 @@ export function AgentControlMenu({
     } finally {
       setLoading(false);
     }
-  }, [t, token, workspaceSlug]);
+  }, [t, token]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,10 +96,10 @@ export function AgentControlMenu({
   }, [open]);
 
   const stopRun = async (run: HermesRun) => {
-    if (!token || !workspaceSlug) return;
+    if (!token) return;
     setActionKey(`run:${run.id}`);
     try {
-      await stopHermesRun(token, run.id, workspaceSlug);
+      await stopHermesRun(token, run.id);
       await refresh();
     } catch (caughtError) {
       setError(
@@ -118,10 +116,10 @@ export function AgentControlMenu({
     job: HermesJob,
     action: 'pause' | 'resume' | 'run',
   ) => {
-    if (!token || !workspaceSlug) return;
+    if (!token) return;
     setActionKey(`job:${job.id}:${action}`);
     try {
-      await runHermesJobAction(token, job.id, action, workspaceSlug);
+      await runHermesJobAction(token, job.id, action);
       await refresh();
     } catch (caughtError) {
       setError(
@@ -173,10 +171,7 @@ export function AgentControlMenu({
               onClick={() => void refresh()}
               className="rounded-md p-2 text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink disabled:opacity-50"
             >
-              <RefreshCcw
-                size={15}
-                className={loading ? 'animate-spin' : ''}
-              />
+              <RefreshCcw size={15} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>
 
@@ -222,7 +217,9 @@ export function AgentControlMenu({
                       <div className="mt-2 h-1 overflow-hidden rounded-full bg-app-border">
                         <div
                           className="h-full rounded-full bg-app-accent transition-[width]"
-                          style={{ width: `${Math.max(0, Math.min(100, run.progress_percent))}%` }}
+                          style={{
+                            width: `${Math.max(0, Math.min(100, run.progress_percent))}%`,
+                          }}
                         />
                       </div>
                     </div>

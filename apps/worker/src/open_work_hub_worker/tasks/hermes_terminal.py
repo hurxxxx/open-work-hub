@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
-from open_work_hub_worker.celery_app import celery_app
-from open_work_hub_worker.queue_contract import HERMES_TERMINAL_MAINTENANCE_TASK_NAME
-
 from open_work_hub_api.domains.hermes_terminal.maintenance import (
     maintain_hermes_terminal_once,
 )
+
+from open_work_hub_worker.celery_app import celery_app
+from open_work_hub_worker.queue_contract import HERMES_TERMINAL_MAINTENANCE_TASK_NAME
 
 
 @celery_app.task(

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-from functools import lru_cache
 import logging
 import sys
+from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 
 from sqlalchemy import create_engine, select
@@ -34,23 +34,21 @@ def _ensure_api_src_on_path() -> None:
 
 _ensure_api_src_on_path()
 
-from open_work_hub_api.domains.search.indexing import (  # noqa: E402
-    SearchProjectionIdentityError,
-    UnsupportedSearchEntityError,
-    process_search_index_job,
-)
-from open_work_hub_api.domains.search.backend_contracts import KeywordSearchClient  # noqa: E402
-from open_work_hub_api.domains.search.backend_factory import build_keyword_search_client  # noqa: E402
-from open_work_hub_api.domains.search.backend_factory import (  # noqa: E402
-    build_partitioned_keyword_search_client,
-)
-from open_work_hub_api.domains.search.models import SearchIndexJob  # noqa: E402
 from open_work_hub_api.domains.auth.app_availability import (  # noqa: E402
     AppAvailabilitySnapshot,
     load_app_availability_snapshot,
 )
-from open_work_hub_api.domains.auth.workspace_apps import (  # noqa: E402
-    get_workspace_app_catalog_item,
+from open_work_hub_api.domains.auth.app_catalog import (  # noqa: E402
+    get_app_catalog_item,
+)
+from open_work_hub_api.domains.retrieval.runtime_binding import (  # noqa: E402
+    PartitionedRetrievalRuntimeUnavailable,
+    resolve_active_partitioned_generation_pair,
+)
+from open_work_hub_api.domains.search.backend_contracts import KeywordSearchClient  # noqa: E402
+from open_work_hub_api.domains.search.backend_factory import (  # noqa: E402
+    build_keyword_search_client,  # noqa: E402
+    build_partitioned_keyword_search_client,
 )
 from open_work_hub_api.domains.search.default_entity_adapters import (  # noqa: E402
     ensure_search_entity_adapters_registered,
@@ -58,15 +56,16 @@ from open_work_hub_api.domains.search.default_entity_adapters import (  # noqa: 
 from open_work_hub_api.domains.search.entity_adapter_registry import (  # noqa: E402
     get_search_entity_adapter,
 )
-from open_work_hub_api.domains.search.schemas import SearchEntityType  # noqa: E402
-from open_work_hub_api.domains.retrieval.runtime_binding import (  # noqa: E402
-    PartitionedRetrievalRuntimeUnavailable,
-    resolve_active_partitioned_generation_pair,
+from open_work_hub_api.domains.search.indexing import (  # noqa: E402
+    SearchProjectionIdentityError,
+    UnsupportedSearchEntityError,
+    process_search_index_job,
 )
+from open_work_hub_api.domains.search.models import SearchIndexJob  # noqa: E402
+from open_work_hub_api.domains.search.schemas import SearchEntityType  # noqa: E402
 from open_work_hub_api.domains.source_access.resource_types import (  # noqa: E402
     FILE_MANAGER_FILE_RESOURCE_TYPE,
 )
-
 
 logger = logging.getLogger(__name__)
 OUTBOX_REPUBLISH_BATCH_SIZE = 100
@@ -127,14 +126,15 @@ def _search_job_app_enabled(
     if adapter is None:
         # The indexing core owns unsupported-entity terminal handling.
         return True
-    app = get_workspace_app_catalog_item(adapter.owner_app_id)
+    app = get_app_catalog_item(adapter.owner_app_id)
     if app is None:
         return False
     resolved_snapshot = snapshot or load_app_availability_snapshot(
         session,
-        workspace_ids=(job.workspace_id,),
     )
-    return resolved_snapshot.enabled(app, workspace_id=job.workspace_id)
+    return resolved_snapshot.company_enabled(
+        app,
+    )
 
 
 def _pause_search_job_for_disabled_app(session: Session, job: SearchIndexJob) -> str:
@@ -324,7 +324,6 @@ def _has_superseding_pending_job(session: Session, *, job: SearchIndexJob) -> bo
             select(SearchIndexJob.id)
             .where(
                 SearchIndexJob.id != job.id,
-                SearchIndexJob.workspace_id == job.workspace_id,
                 SearchIndexJob.entity_type == job.entity_type,
                 SearchIndexJob.entity_id == job.entity_id,
                 SearchIndexJob.created_at > job.created_at,
@@ -341,7 +340,6 @@ def _cancel_older_pending_search_index_jobs(session: Session, *, job: SearchInde
         session.scalars(
             select(SearchIndexJob).where(
                 SearchIndexJob.id != job.id,
-                SearchIndexJob.workspace_id == job.workspace_id,
                 SearchIndexJob.entity_type == job.entity_type,
                 SearchIndexJob.entity_id == job.entity_id,
                 SearchIndexJob.created_at <= job.created_at,
@@ -376,12 +374,9 @@ def _due_pending_search_job_ids(session: Session, *, limit: int) -> list[str]:
     )
     snapshot = load_app_availability_snapshot(
         session,
-        workspace_ids=(job.workspace_id for job in candidates),
     )
     return [
-        job.id
-        for job in candidates
-        if _search_job_app_enabled(session, job, snapshot=snapshot)
+        job.id for job in candidates if _search_job_app_enabled(session, job, snapshot=snapshot)
     ][:resolved_limit]
 
 

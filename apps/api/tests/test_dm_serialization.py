@@ -114,13 +114,7 @@ def test_serialize_message_hides_reply_summary_before_viewer_join() -> None:
     assert item.reply_to is None
 
 
-def test_serialize_attachment_adds_preview_url_for_images(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        serialization.attachment_links,
-        "build_dm_attachment_content_url",
-        lambda attachment, *, disposition: f"/content/{attachment.id}/{disposition}",
-    )
-
+def test_serialize_attachment_contains_no_credentials_or_byte_urls() -> None:
     item = serialization.serialize_attachment(
         SimpleNamespace(
             id="attachment-1",
@@ -134,8 +128,11 @@ def test_serialize_attachment_adds_preview_url_for_images(monkeypatch: pytest.Mo
     )
 
     assert item.is_image is True
-    assert item.download_url == "/content/attachment-1/attachment"
-    assert item.preview_url == "/content/attachment-1/inline"
+    payload = item.model_dump()
+    assert "download_url" not in payload
+    assert "preview_url" not in payload
+    assert "grant" not in str(payload)
+    assert "storage_key" not in payload
 
 
 def test_serialize_conversation_builds_direct_conversation_item(

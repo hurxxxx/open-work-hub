@@ -10,7 +10,6 @@ from open_work_hub_api.domains.ai.runtime.contracts import (
 )
 from open_work_hub_api.domains.ai.runtime.graph_projection_values import graph_string_list
 
-
 _SCHEDULE_STATE_KEYS = ("state", "execution_enabled", "step_count")
 
 
@@ -50,11 +49,7 @@ class GraphScheduleSummaryView:
         return sorted(normalized, key=lambda item: int(item["invocation_seq"]))
 
     def public_state(self) -> dict[str, Any]:
-        return {
-            key: self.raw.get(key)
-            for key in _SCHEDULE_STATE_KEYS
-            if key in self.raw
-        }
+        return {key: self.raw.get(key) for key in _SCHEDULE_STATE_KEYS if key in self.raw}
 
     def with_execution_enabled(self) -> dict[str, Any]:
         updated = dict(self.raw)
@@ -65,9 +60,7 @@ class GraphScheduleSummaryView:
         descriptions: list[str] = []
         for step in self.ordered_steps:
             agent_id = step["agent_id"]
-            depends_on = ", ".join(
-                graph_string_list(step.get("depends_on_agent_ids"))
-            )
+            depends_on = ", ".join(graph_string_list(step.get("depends_on_agent_ids")))
             suffix = f" after [{depends_on}]" if depends_on else ""
             descriptions.append(f"{agent_id}{suffix}")
         return descriptions or self.planned_agent_ids

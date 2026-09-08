@@ -1,6 +1,5 @@
 import { jsonHeaders } from '@/src/platform/api/client';
 import { i18n } from '@/src/platform/i18n';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export interface WebSearchCitation {
   url: string;
@@ -67,7 +66,7 @@ function resolveErrorMessage(payload: unknown, fallback: string): string {
 
 export async function streamWebSearch(args: {
   token: string;
-  workspaceSlug: string | null;
+
   question: string;
   conversationId?: string | null;
   apiPrefix?: string;
@@ -79,24 +78,21 @@ export async function streamWebSearch(args: {
   const errorI18nKey = args.errorI18nKey ?? 'ai.webSearch';
   let response: Response;
   try {
-    response = await fetch(
-      rewriteWorkspaceApiPath(`${apiPrefix}/ask/stream`, args.workspaceSlug),
-      {
-        method: 'POST',
-        signal: args.signal,
-        cache: 'no-store',
-        headers: {
-          ...jsonHeaders(args.token),
-          Accept: 'text/event-stream',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question: args.question,
-          max_uses: args.maxUses ?? 5,
-          conversation_id: args.conversationId || undefined,
-        }),
+    response = await fetch(`${apiPrefix}/ask/stream`, {
+      method: 'POST',
+      signal: args.signal,
+      cache: 'no-store',
+      headers: {
+        ...jsonHeaders(args.token),
+        Accept: 'text/event-stream',
+        'Content-Type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        question: args.question,
+        max_uses: args.maxUses ?? 5,
+        conversation_id: args.conversationId || undefined,
+      }),
+    });
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
       throw error;

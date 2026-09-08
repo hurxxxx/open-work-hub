@@ -1,10 +1,9 @@
-import type { Dispatch, FormEvent } from 'react';
-import { Button } from '@open-work-hub/ui/primitives/button';
 import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
+import { Button } from '@open-work-hub/ui/primitives/button';
+import type { Dispatch, FormEvent } from 'react';
 
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
-import { SettingsFieldRow } from './SettingsFieldRow';
-import { SettingsSectionHeader } from './SettingsSectionHeader';
+import type { AuthUser } from './auth-api';
 import { SessionCard } from './SessionCard';
 import {
   fieldClassName,
@@ -13,13 +12,15 @@ import {
   type ProfilePageState,
   type SettingsTranslator,
 } from './settings-page-model';
-import type { AuthUser } from './auth-api';
+import { SettingsFieldRow } from './SettingsFieldRow';
+import { SettingsSectionHeader } from './SettingsSectionHeader';
 
 export function SecuritySettingsSection({
   dispatch,
   i18nLanguage,
   onPasswordSubmit,
   onRevoke,
+  showSessions = true,
   state,
   t,
   user,
@@ -28,6 +29,7 @@ export function SecuritySettingsSection({
   i18nLanguage: string;
   onPasswordSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onRevoke: (sessionId: string) => Promise<void>;
+  showSessions?: boolean;
   state: ProfilePageState;
   t: SettingsTranslator;
   user: AuthUser;
@@ -113,46 +115,48 @@ export function SecuritySettingsSection({
           </SettingsFieldRow>
 
           <div className="py-4">
-            <Button variant="primary" type="submit">
+            <Button variant="primary" type="submit" disabled={state.submitting}>
               {t('auth:settings.updatePassword')}
             </Button>
           </div>
         </form>
       </div>
 
-      <div className="mt-8">
-        <h3 className="app-text-title-md mb-1 text-app-ink">
-          {t('auth:settings.activeSessions')}
-        </h3>
-        <p className="app-text-caption mb-4 text-app-ink/55">
-          {t('auth:settings.reviewSessions')}
-        </p>
-        {state.loadingSessions ? (
-          <p className="app-text-body text-app-ink/55">
-            {t('common:feedback.loading')}
+      {showSessions ? (
+        <div className="mt-8">
+          <h3 className="app-text-title-md mb-1 text-app-ink">
+            {t('auth:settings.activeSessions')}
+          </h3>
+          <p className="app-text-caption mb-4 text-app-ink/55">
+            {t('auth:settings.reviewSessions')}
           </p>
-        ) : (
-          <div className="grid gap-2">
-            {shownSessions.map((session) => (
-              <SessionCard
-                key={session.id}
-                onRevoke={onRevoke}
-                session={session}
-                locale={i18nLanguage}
-                timeZone={normalizeTimeZone(user.time_zone)}
-                t={t}
-              />
-            ))}
-            {hiddenCount > 0 ? (
-              <p className="app-text-caption py-2 text-center text-app-ink/55">
-                {t('auth:settings.sessionsMore', {
-                  count: hiddenCount,
-                })}
-              </p>
-            ) : null}
-          </div>
-        )}
-      </div>
+          {state.loadingSessions ? (
+            <p className="app-text-body text-app-ink/55">
+              {t('common:feedback.loading')}
+            </p>
+          ) : (
+            <div className="grid gap-2">
+              {shownSessions.map((session) => (
+                <SessionCard
+                  key={session.id}
+                  onRevoke={onRevoke}
+                  session={session}
+                  locale={i18nLanguage}
+                  timeZone={normalizeTimeZone(user.time_zone)}
+                  t={t}
+                />
+              ))}
+              {hiddenCount > 0 ? (
+                <p className="app-text-caption py-2 text-center text-app-ink/55">
+                  {t('auth:settings.sessionsMore', {
+                    count: hiddenCount,
+                  })}
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

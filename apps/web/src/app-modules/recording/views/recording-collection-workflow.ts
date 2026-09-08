@@ -32,7 +32,7 @@ export interface RecordingCollectionClient {
 
 export interface RecordingCollectionWorkflowOptions {
   token: string | null | undefined;
-  workspaceSlug: string | null | undefined;
+
   scope: RecordingCollectionScope;
   messages: RecordingCollectionMessages;
   client?: RecordingCollectionClient;
@@ -56,7 +56,10 @@ type RecordingCollectionAction =
 export interface RecordingCollectionWorkflow extends RecordingCollectionState {
   refresh(): Promise<void>;
   retry(recordingId: string): Promise<void>;
-  remove(recordingId: string, confirmDelete?: () => Promise<boolean>): Promise<void>;
+  remove(
+    recordingId: string,
+    confirmDelete?: () => Promise<boolean>,
+  ): Promise<void>;
   setError(error: unknown, fallback?: string): void;
 }
 
@@ -97,26 +100,17 @@ function messageFromError(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-function scopeDeps(scope: RecordingCollectionScope): readonly [
-  string,
-  string,
-  string,
-  string,
-] {
+function scopeDeps(
+  scope: RecordingCollectionScope,
+): readonly [string, string, string, string] {
   if (scope.kind === 'view') {
     return [scope.kind, scope.view, '', ''];
   }
-  return [
-    scope.kind,
-    scope.targetApp,
-    scope.targetType,
-    scope.targetId,
-  ];
+  return [scope.kind, scope.targetApp, scope.targetType, scope.targetId];
 }
 
 export function useRecordingCollectionWorkflow({
   token,
-  workspaceSlug,
   scope,
   messages,
   client = recordingCollectionClient,
@@ -125,18 +119,13 @@ export function useRecordingCollectionWorkflow({
     recordingCollectionReducer,
     INITIAL_RECORDING_COLLECTION_STATE,
   );
-  const [
-    scopeKind,
-    scopeFirst,
-    scopeSecond,
-    scopeThird,
-  ] = scopeDeps(scope);
+  const [scopeKind, scopeFirst, scopeSecond, scopeThird] = scopeDeps(scope);
 
   const refresh = useCallback(async () => {
-    if (!token || !workspaceSlug) return;
+    if (!token) return;
     dispatch({ type: 'loadStarted' });
     try {
-      const options: Parameters<typeof listRecordings>[2] =
+      const options: Parameters<typeof listRecordings>[1] =
         scopeKind === 'view'
           ? { view: scopeFirst as RecordingViewFilter }
           : {
@@ -146,7 +135,6 @@ export function useRecordingCollectionWorkflow({
             };
       const response: RecordingListResponse = await client.listRecordings(
         token,
-        workspaceSlug,
         options,
       );
       dispatch({ type: 'loadSucceeded', items: response.items });
@@ -164,37 +152,39 @@ export function useRecordingCollectionWorkflow({
     scopeSecond,
     scopeThird,
     token,
-    workspaceSlug,
   ]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
-  const retry = useCallback(async (recordingId: string) => {
-    if (!token || !workspaceSlug) {
-      dispatch({ type: 'errorSet', message: messages.retryFailed });
-      return;
-    }
-    dispatch({ type: 'busyStarted', id: recordingId });
-    try {
-      await client.retryRecording(token, workspaceSlug, recordingId);
-      await refresh();
-    } catch (error) {
-      const message = messageFromError(error, messages.retryFailed);
-      dispatch({ type: 'errorSet', message });
-    } finally {
-      dispatch({ type: 'busyFinished' });
-    }
-  }, [client, messages.retryFailed, refresh, token, workspaceSlug]);
+  const retry = useCallback(
+    async (recordingId: string) => {
+      if (!token) {
+        dispatch({ type: 'errorSet', message: messages.retryFailed });
+        return;
+      }
+      dispatch({ type: 'busyStarted', id: recordingId });
+      try {
+        await client.retryRecording(token, recordingId);
+        await refresh();
+      } catch (error) {
+        const message = messageFromError(error, messages.retryFailed);
+        dispatch({ type: 'errorSet', message });
+      } finally {
+        dispatch({ type: 'busyFinished' });
+      }
+    },
+    [client, messages.retryFailed, refresh, token],
+  );
 
   const remove = useCallback(
     async (recordingId: string, confirmDelete?: () => Promise<boolean>) => {
-      if (!token || !workspaceSlug) return;
+      if (!token) return;
       if (confirmDelete && !(await confirmDelete())) return;
       dispatch({ type: 'busyStarted', id: recordingId });
       try {
-        await client.deleteRecording(token, workspaceSlug, recordingId);
+        await client.deleteRecording(token, recordingId);
         await refresh();
       } catch (error) {
         dispatch({
@@ -205,7 +195,7 @@ export function useRecordingCollectionWorkflow({
         dispatch({ type: 'busyFinished' });
       }
     },
-    [client, messages.deleteFailed, refresh, token, workspaceSlug],
+    [client, messages.deleteFailed, refresh, token],
   );
 
   const setError = useCallback(

@@ -2,12 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from open_work_hub_api.domains.ai.runtime.graph_schedule_summary import (
-    graph_schedule_step_descriptions,
-)
-from open_work_hub_api.domains.ai.runtime.graph_execution_fallback_policy import (
-    GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID,
-)
 from open_work_hub_api.domains.ai.runtime.graph_evidence_packet import (
     GRAPH_VERIFIER_AGENT_ID,
     GRAPH_WRITER_AGENT_ID,
@@ -16,11 +10,17 @@ from open_work_hub_api.domains.ai.runtime.graph_evidence_packet import (
     materialize_graph_evidence_packet,
     render_evidence_packet,
 )
+from open_work_hub_api.domains.ai.runtime.graph_execution_fallback_policy import (
+    GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID,
+)
 from open_work_hub_api.domains.ai.runtime.graph_node_output import GraphNodeOutput
 from open_work_hub_api.domains.ai.runtime.graph_projection_values import (
     graph_candidate_string,
     graph_latest_user_text,
     graph_string_list,
+)
+from open_work_hub_api.domains.ai.runtime.graph_schedule_summary import (
+    graph_schedule_step_descriptions,
 )
 from open_work_hub_api.domains.ai.runtime.routing import RuntimeRoutingDecision
 
@@ -39,7 +39,7 @@ def build_graph_execution_system_prompt(decision: RuntimeRoutingDecision) -> str
     return (
         f"Graph execution adapter: {adapter_id}.\n"
         "Follow the accepted execution graph as the control plan for this turn. "
-        "Use only the tools exposed in this request and do not invent workspace facts. "
+        "Use only the tools exposed in this request and do not invent company or personal facts. "
         "Treat domain/search nodes as evidence collection work, verifier nodes as coverage "
         "checks, and writer nodes as final response rendering.\n"
         f"Intent: {candidate_summary.get('intent') or 'unknown'}\n"
@@ -160,22 +160,14 @@ def graph_writer_scope_prompt(
             messages=messages,
             node_outputs=node_outputs,
             candidate_summary=runtime_routing.graph_candidate_summary,
-            external_planner_execution_summary=(
-                runtime_routing.external_planner_execution_summary
-            ),
-            external_search_execution_summary=(
-                runtime_routing.external_search_execution_summary
-            ),
+            external_planner_execution_summary=(runtime_routing.external_planner_execution_summary),
+            external_search_execution_summary=(runtime_routing.external_search_execution_summary),
         ),
     )
 
 
 def merge_system_prompts(*prompts: str | None) -> str | None:
-    parts = [
-        prompt.strip()
-        for prompt in prompts
-        if isinstance(prompt, str) and prompt.strip()
-    ]
+    parts = [prompt.strip() for prompt in prompts if isinstance(prompt, str) and prompt.strip()]
     return "\n\n".join(parts) if parts else None
 
 

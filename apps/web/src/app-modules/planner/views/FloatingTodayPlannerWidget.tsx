@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import { Button, InlineNotice } from '@open-work-hub/ui';
 import {
   CalendarDays,
   CalendarPlus,
@@ -8,33 +7,28 @@ import {
   Loader2,
   MapPin,
 } from 'lucide-react';
-import { Button, InlineNotice } from '@open-work-hub/ui';
-import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { listCalendarEvents } from '@/src/platform/calendar/calendar-api';
 import type {
   CalendarEvent,
   CalendarSourceFilter,
   CalendarSourceType,
 } from '@/src/platform/calendar/calendar-types';
-import { listCalendarEvents } from '@/src/platform/calendar/calendar-api';
 import { useCalendarEvents } from '@/src/platform/calendar/use-calendar-events';
-import { useAuth } from '@/src/platform/auth/auth-provider';
+import { dispatchFloatingPmsOpen } from '@/src/platform/personal-widgets/floating-panel-events';
 import {
   formatDateOnly,
   formatDateTime,
   normalizeTimeZone,
   parseApiDateTime,
 } from '@/src/platform/time/time-utils';
-import { dispatchFloatingPmsOpen } from '@/src/platform/personal-widgets/floating-panel-events';
 
 import { MeetingPreviewModal } from './calendar/MeetingPreviewModal';
-import { PlannerEventModal } from './PlannerEventModal';
-import { resolvePlannerCalendarEventClick } from './planner-calendar-controller';
-import {
-  plannerCalendarEventId,
-  plannerEventToCalendarEvent,
-} from './planner-calendar-event-projection';
 import {
   addDateKeyDays,
   buildCreateRangeForDateKey,
@@ -44,6 +38,12 @@ import {
   type TodayPlannerDayId,
   type TodayPlannerEntry,
 } from './floating-today-planner-model';
+import { resolvePlannerCalendarEventClick } from './planner-calendar-controller';
+import {
+  plannerCalendarEventId,
+  plannerEventToCalendarEvent,
+} from './planner-calendar-event-projection';
+import { PlannerEventModal } from './PlannerEventModal';
 
 const CLOCK_TICK_MS = 60_000;
 
@@ -102,8 +102,6 @@ export function FloatingTodayPlannerWidget({
     typeof buildCreateRangeForDateKey
   > | null>(null);
   const [previewMeetingId, setPreviewMeetingId] = useState<string | null>(null);
-  const [previewMeetingWorkspaceSlug, setPreviewMeetingWorkspaceSlug] =
-    useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const previousReloadSeq = useRef(reloadSeq);
   const now = useMemo(() => new Date(clockTick), [clockTick]);
@@ -206,7 +204,6 @@ export function FloatingTodayPlannerWidget({
       }
       if (action.type === 'previewMeeting') {
         setPreviewMeetingId(action.meetingId);
-        setPreviewMeetingWorkspaceSlug(action.workspaceSlug);
         return;
       }
       if (action.type === 'openTask') {
@@ -214,7 +211,6 @@ export function FloatingTodayPlannerWidget({
           mode: 'openTask',
           taskId: action.taskId,
           taskListId: action.taskListId,
-          workspaceSlug: action.workspaceSlug,
         });
         return;
       }
@@ -340,10 +336,8 @@ export function FloatingTodayPlannerWidget({
         }}
         onClose={() => {
           setPreviewMeetingId(null);
-          setPreviewMeetingWorkspaceSlug(null);
         }}
         overlayClassName="z-[119]"
-        workspaceSlug={previewMeetingWorkspaceSlug ?? undefined}
       />
       <PlannerEventModal
         contentClassName="z-[120]"
@@ -413,14 +407,6 @@ function TodayPlannerEntryRow({
               >
                 {t(SOURCE_LABEL_KEYS[event.sourceType])}
               </span>
-              {event.workspace ? (
-                <span
-                  className="app-text-micro max-w-36 truncate rounded-full bg-app-surface-sidebar px-2 py-0.5 text-app-ink/50"
-                  title={event.workspace.name}
-                >
-                  {event.workspace.name}
-                </span>
-              ) : null}
               {location ? (
                 <span className="app-text-micro inline-flex min-w-0 items-center gap-1 text-app-ink/45">
                   <MapPin aria-hidden="true" size={12} />

@@ -39,9 +39,7 @@ class DmRecipientRules:
         return recipient
 
     def active_users_by_id(self, db: Session, user_ids: list[str]) -> dict[str, User]:
-        users = db.scalars(
-            select(User).where(User.id.in_(user_ids), User.status == "active")
-        )
+        users = db.scalars(select(User).where(User.id.in_(user_ids), User.status == "active"))
         return {user.id: user for user in users}
 
     def direct_conversation_key(self, left_user_id: str, right_user_id: str) -> str:

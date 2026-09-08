@@ -1,4 +1,3 @@
-import type { AiChatResponse, AiChatUsage } from './chatbot-api';
 import type {
   ApprovalRequiredEvent,
   ApprovalResolvedEvent,
@@ -21,6 +20,7 @@ import type {
   ToolResultEvent,
   UsageEvent,
 } from './agent-events';
+import type { AiChatResponse, AiChatUsage } from './chatbot-api';
 
 export type ChatTransport = 'stream' | 'sync' | null;
 

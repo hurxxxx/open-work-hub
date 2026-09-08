@@ -16,12 +16,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery_publisher
 from open_work_hub_api.core.worker_queue_contract import MEETING_TRANSCRIBE_QUEUE
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
+from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery_publisher
+from open_work_hub_api.domains.auth.app_gate import (
+    can_use_app,
 )
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.docs.minutes import build_minutes_blocks
 from open_work_hub_api.domains.docs.models import NativeDoc
@@ -29,10 +29,25 @@ from open_work_hub_api.domains.docs.service import create_native_doc_for_user
 from open_work_hub_api.domains.meeting.models import Meeting
 from open_work_hub_api.domains.recording import blob_store
 from open_work_hub_api.domains.recording.chunk_sequence import plan_chunk_assembly
-from open_work_hub_api.domains.recording.target_plan import (
-    RecordingTargetRef,
-    plan_recording_ingest_targets,
-    recording_target_ref,
+from open_work_hub_api.domains.recording.initial_target import resolve_initial_recording_target
+from open_work_hub_api.domains.recording.models import (
+    Recording,
+    RecordingPublication,
+    RecordingResult,
+    RecordingStaging,
+    RecordingTarget,
+)
+from open_work_hub_api.domains.recording.schemas import (
+    RecordingDetailOut,
+    RecordingListResponse,
+    RecordingPlaybackResponse,
+    RecordingPublicationOut,
+    RecordingTargetCreateRequest,
+    RecordingUpdateRequest,
+    RecordingUploadChunkAck,
+    RecordingUploadCompleteRequest,
+    RecordingUploadInitRequest,
+    RecordingUploadOut,
 )
 from open_work_hub_api.domains.recording.target_access import (
     can_attach_recording_target,
@@ -40,38 +55,26 @@ from open_work_hub_api.domains.recording.target_access import (
     can_view_recording_target,
     recording_access_allowed,
 )
+from open_work_hub_api.domains.recording.target_plan import (
+    RecordingTargetRef,
+    plan_recording_ingest_targets,
+    recording_target_ref,
+)
 from open_work_hub_api.domains.recording.target_projection import (
     serialize_recording_with_target_titles as _serialize_recording,
+)
+from open_work_hub_api.domains.recording.target_projection import (
     serialize_recordings_with_target_titles as _serialize_recordings,
-)
-from open_work_hub_api.domains.recording.initial_target import resolve_initial_recording_target
-from open_work_hub_api.domains.recording.models import (
-    Recording,
-    RecordingPublication,
-    RecordingResult,
-    RecordingTarget,
-    RecordingStaging,
-)
-from open_work_hub_api.domains.recording.schemas import (
-    RecordingDetailOut,
-    RecordingPublicationOut,
-    RecordingTargetCreateRequest,
-    RecordingListResponse,
-    RecordingPlaybackResponse,
-    RecordingUpdateRequest,
-    RecordingUploadChunkAck,
-    RecordingUploadCompleteRequest,
-    RecordingUploadInitRequest,
-    RecordingUploadOut,
 )
 from open_work_hub_api.domains.recording.tus_protocol import (
     parse_checksum,
     parse_upload_metadata,
-    response_headers as tus_response_headers,
     upload_length_from_meta,
     with_upload_length,
 )
-
+from open_work_hub_api.domains.recording.tus_protocol import (
+    response_headers as tus_response_headers,
+)
 
 _AUDIO_EXTENSIONS = {
     "audio/webm": ".webm",
@@ -141,10 +144,8 @@ def _load_recording_for_update_or_404(db: Session, recording_id: str) -> Recordi
     return recording
 
 
-def _ensure_recording_access(
-    db: Session, *, workspace: Workspace, user: User, recording: Recording
-) -> None:
-    if not recording_access_allowed(db, workspace=workspace, user=user, recording=recording):
+def _ensure_recording_access(db: Session, *, user: User, recording: Recording) -> None:
+    if not recording_access_allowed(db, user=user, recording=recording):
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
             code="recording.access_required",
@@ -329,7 +330,6 @@ def _staging_tus_upload_length(staging: RecordingStaging) -> int | None:
 def _serialize_staging(staging: RecordingStaging) -> RecordingUploadOut:
     return RecordingUploadOut(
         id=staging.id,
-        workspace_id=staging.workspace_id,
         uploaded_by_id=staging.uploaded_by_id,
         idempotency_key=staging.idempotency_key,
         status=staging.status,
@@ -355,11 +355,10 @@ def staging_is_stale(staging: RecordingStaging, *, now: datetime | None = None) 
     return staging.last_chunk_at < threshold
 
 
-def _load_staging_or_404(db: Session, *, workspace: Workspace, staging_id: str) -> RecordingStaging:
+def _load_staging_or_404(db: Session, *, staging_id: str) -> RecordingStaging:
     staging = db.scalar(
         select(RecordingStaging).where(
             RecordingStaging.id == staging_id,
-            RecordingStaging.workspace_id == workspace.id,
         )
     )
     if staging is None:
@@ -370,8 +369,8 @@ def _load_staging_or_404(db: Session, *, workspace: Workspace, staging_id: str) 
     return staging
 
 
-def load_staging_or_404(db: Session, *, workspace: Workspace, staging_id: str) -> RecordingStaging:
-    return _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+def load_staging_or_404(db: Session, *, staging_id: str) -> RecordingStaging:
+    return _load_staging_or_404(db, staging_id=staging_id)
 
 
 def assemble_staging_chunks(staging: RecordingStaging) -> Path:
@@ -433,7 +432,6 @@ def _target_for_recording(
 def _new_saved_recording(
     *,
     recording_id: str,
-    workspace_id: str,
     owner_id: str,
     title: str,
     started_at: datetime,
@@ -446,7 +444,6 @@ def _new_saved_recording(
 ) -> Recording:
     return Recording(
         id=recording_id,
-        workspace_id=workspace_id,
         owner_id=owner_id,
         title=title,
         started_at=started_at,
@@ -496,14 +493,12 @@ def _add_initial_recording_targets(
 def init_staging(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     payload: RecordingUploadInitRequest,
 ) -> RecordingUploadOut:
     mime_type = _require_allowed_mime(payload.mime_type)
     initial_resolution = resolve_initial_recording_target(
         db,
-        workspace=workspace,
         user=user,
         target_app=payload.initial_target_app,
         target_type=payload.initial_target_type,
@@ -515,7 +510,6 @@ def init_staging(
 
     existing = db.scalar(
         select(RecordingStaging).where(
-            RecordingStaging.workspace_id == workspace.id,
             RecordingStaging.uploaded_by_id == user.id,
             RecordingStaging.idempotency_key == payload.idempotency_key,
             RecordingStaging.completed_at.is_(None),
@@ -536,7 +530,6 @@ def init_staging(
             select(RecordingStaging)
             .options(selectinload(RecordingStaging.uploaded_by))
             .where(
-                RecordingStaging.workspace_id == workspace.id,
                 RecordingStaging.initial_target_app == "meeting",
                 RecordingStaging.initial_target_type == "meeting",
                 RecordingStaging.initial_target_id == meeting_id,
@@ -572,13 +565,11 @@ def init_staging(
         meta[_STAGING_META_TITLE] = title
     staging = RecordingStaging(
         id=staging_id,
-        workspace_id=workspace.id,
         uploaded_by_id=user.id,
         idempotency_key=payload.idempotency_key,
         status="recording",
         spool_path=str(spool_dir),
         storage_key=blob_store.build_recording_storage_key(
-            workspace_id=workspace.id,
             user_id=user.id,
             recording_id=staging_id,
             started_at=started_at,
@@ -601,7 +592,6 @@ def init_staging(
 def init_tus_staging(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     upload_metadata: str | None,
     upload_length: int | None,
@@ -617,7 +607,6 @@ def init_tus_staging(
         )
     staging = init_staging(
         db,
-        workspace=workspace,
         user=user,
         payload=RecordingUploadInitRequest(
             idempotency_key=idempotency_key,
@@ -636,7 +625,7 @@ def init_tus_staging(
         ),
     )
     if upload_length is not None:
-        current = _load_staging_or_404(db, workspace=workspace, staging_id=staging.id)
+        current = _load_staging_or_404(db, staging_id=staging.id)
         current.chunks_meta = with_upload_length(current.chunks_meta, upload_length)
         db.add(current)
         db.commit()
@@ -739,14 +728,13 @@ def _store_chunk_bytes(
 async def upload_chunk(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     staging_id: str,
     seq: int,
     upload: UploadFile,
     chunk_sha256: str | None,
 ) -> RecordingUploadChunkAck:
-    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    staging = _load_staging_or_404(db, staging_id=staging_id)
     _ensure_staging_writable(staging, user=user)
     data = await upload.read()
     return _store_chunk_bytes(
@@ -761,11 +749,10 @@ async def upload_chunk(
 def read_tus_upload(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     staging_id: str,
 ) -> RecordingStaging:
-    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    staging = _load_staging_or_404(db, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -778,7 +765,6 @@ def read_tus_upload(
 def upload_tus_chunk(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     staging_id: str,
     upload_offset: int,
@@ -786,7 +772,7 @@ def upload_tus_chunk(
     upload_checksum: str | None,
     upload_length: int | None,
 ) -> RecordingStaging:
-    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    staging = _load_staging_or_404(db, staging_id=staging_id)
     _ensure_staging_writable(staging, user=user)
     if upload_offset != staging.bytes_received:
         raise localized_http_exception(
@@ -819,13 +805,12 @@ def upload_tus_chunk(
         data=data,
         chunk_sha256=checksum,
     )
-    return _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    return _load_staging_or_404(db, staging_id=staging_id)
 
 
 def list_my_staging(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     initial_target_app: str | None = None,
     initial_target_type: str | None = None,
@@ -833,7 +818,6 @@ def list_my_staging(
 ) -> list[RecordingUploadOut]:
     cutoff = _utcnow() - timedelta(hours=get_settings().recording_staging_retention_hours)
     query = select(RecordingStaging).where(
-        RecordingStaging.workspace_id == workspace.id,
         RecordingStaging.uploaded_by_id == user.id,
         RecordingStaging.completed_at.is_(None),
         RecordingStaging.started_at >= cutoff,
@@ -851,11 +835,10 @@ def list_my_staging(
 def discard_staging(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     staging_id: str,
 ) -> None:
-    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    staging = _load_staging_or_404(db, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -892,12 +875,11 @@ def _assert_contiguous_chunks(staging: RecordingStaging) -> list[int]:
 def complete_staging(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     staging_id: str,
     payload: RecordingUploadCompleteRequest,
 ) -> RecordingDetailOut:
-    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    staging = _load_staging_or_404(db, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -917,7 +899,7 @@ def complete_staging(
         sequences=_assert_contiguous_chunks(staging),
     )
 
-    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    staging = _load_staging_or_404(db, staging_id=staging_id)
     if staging.promoted_recording_id:
         recording = _load_recording_or_404(db, staging.promoted_recording_id)
         return _serialize_recording(db, recording)
@@ -935,7 +917,6 @@ def complete_staging(
     title = (payload.title or _staging_title(staging) or "").strip()
     recording = _new_saved_recording(
         recording_id=staging.id,
-        workspace_id=workspace.id,
         owner_id=user.id,
         title=title or _default_title(staging.started_at),
         started_at=staging.started_at,
@@ -980,7 +961,6 @@ def complete_staging(
 def list_recordings(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     view: str = "mine",
     from_: datetime | None = None,
@@ -989,11 +969,7 @@ def list_recordings(
     target_type: str | None = None,
     target_id: str | None = None,
 ) -> RecordingListResponse:
-    query = (
-        select(Recording)
-        .options(selectinload(Recording.targets))
-        .where(Recording.workspace_id == workspace.id)
-    )
+    query = select(Recording).options(selectinload(Recording.targets)).where()
     if view != "archived":
         query = query.where(Recording.trashed_at.is_(None))
     else:
@@ -1009,7 +985,6 @@ def list_recordings(
         if not can_view_recording_target(
             db,
             user=user,
-            workspace=workspace,
             target_app=target_app,
             target_type=target_type,
             target_id=target_id,
@@ -1049,29 +1024,22 @@ def list_recordings(
 def get_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     recording_id: str,
 ) -> RecordingDetailOut:
     recording = _load_recording_for_update_or_404(db, recording_id)
-    _ensure_recording_access(db, workspace=workspace, user=user, recording=recording)
+    _ensure_recording_access(db, user=user, recording=recording)
     return _serialize_recording(db, recording)
 
 
 def publish_recording_to_docs(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     recording_id: str,
 ) -> RecordingPublicationOut:
     recording = _load_recording_for_update_or_404(db, recording_id)
-    if recording.workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="recording.not_found",
-        )
-    _ensure_recording_access(db, workspace=workspace, user=user, recording=recording)
+    _ensure_recording_access(db, user=user, recording=recording)
     result = recording.result
     if (
         result is None
@@ -1082,15 +1050,14 @@ def publish_recording_to_docs(
             status_code=status.HTTP_409_CONFLICT,
             code="recording.result_not_ready",
         )
-    if not is_app_enabled_for_user_context(
+    if not can_use_app(
         db,
         app_id="docs",
         user_id=user.id,
-        workspace_id=workspace.id,
     ):
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="workspace.app_disabled",
+            code="app.access_required",
         )
 
     existing = db.scalar(
@@ -1108,7 +1075,6 @@ def publish_recording_to_docs(
 
     doc, _page = create_native_doc_for_user(
         db,
-        workspace_id=workspace.id,
         owner_id=user.id,
         title=_recording_publication_title(recording.title, result.version),
         first_page_title=recording.title,
@@ -1122,16 +1088,15 @@ def publish_recording_to_docs(
         generation_kind="system_ai",
         doc_type="meeting_notes",
     )
-    if not is_app_enabled_for_user_context(
+    if not can_use_app(
         db,
         app_id="docs",
         user_id=user.id,
-        workspace_id=workspace.id,
     ):
         db.rollback()
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="workspace.app_disabled",
+            code="app.access_required",
         )
     publication = RecordingPublication(
         id=new_id(),
@@ -1173,16 +1138,11 @@ def _recording_publication_title(title: str, version: int) -> str:
 def update_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     recording_id: str,
     payload: RecordingUpdateRequest,
 ) -> RecordingDetailOut:
     recording = _load_recording_or_404(db, recording_id)
-    if recording.workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_404_NOT_FOUND, code="recording.not_found"
-        )
     _ensure_recording_owner(user=user, recording=recording)
     if payload.title is not None:
         recording.title = payload.title.strip()
@@ -1196,15 +1156,10 @@ def update_recording(
 def delete_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     recording_id: str,
 ) -> Response:
     recording = _load_recording_or_404(db, recording_id)
-    if recording.workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_404_NOT_FOUND, code="recording.not_found"
-        )
     _ensure_recording_owner(user=user, recording=recording)
     if recording.celery_task_id:
         revoke_recording_task(recording.celery_task_id)
@@ -1218,7 +1173,6 @@ def delete_recording(
 def import_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     upload: UploadFile,
     title: str | None,
@@ -1256,7 +1210,6 @@ def import_recording(
         )
     initial_resolution = resolve_initial_recording_target(
         db,
-        workspace=workspace,
         user=user,
         target_app=initial_target_app,
         target_type=initial_target_type,
@@ -1268,7 +1221,6 @@ def import_recording(
 
     recording_id = new_id()
     storage_key = blob_store.build_recording_storage_key(
-        workspace_id=workspace.id,
         user_id=user.id,
         recording_id=recording_id,
         started_at=resolved_started_at,
@@ -1284,7 +1236,6 @@ def import_recording(
     trimmed_title = title.strip() if title else ""
     recording = _new_saved_recording(
         recording_id=recording_id,
-        workspace_id=workspace.id,
         owner_id=user.id,
         title=trimmed_title or _default_title(resolved_started_at),
         started_at=resolved_started_at,
@@ -1315,15 +1266,10 @@ def import_recording(
 def retry_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     recording_id: str,
 ) -> RecordingDetailOut:
     recording = _load_recording_or_404(db, recording_id)
-    if recording.workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_404_NOT_FOUND, code="recording.not_found"
-        )
     _ensure_recording_owner(user=user, recording=recording)
     if recording.audio_status != "saved" or not recording.storage_key:
         raise localized_http_exception(
@@ -1370,22 +1316,16 @@ def retry_recording(
 def create_target(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     recording_id: str,
     payload: RecordingTargetCreateRequest,
 ) -> RecordingDetailOut:
     recording = _load_recording_for_update_or_404(db, recording_id)
-    if recording.workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_404_NOT_FOUND, code="recording.not_found"
-        )
     _ensure_recording_owner(user=user, recording=recording)
     recording_pk = recording.id
     if not can_attach_recording_target(
         db,
         user=user,
-        workspace=workspace,
         target_app=payload.target_app,
         target_type=payload.target_type,
         target_id=payload.target_id,
@@ -1462,18 +1402,13 @@ def create_target(
 def delete_target(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     recording_id: str,
     target_id: str,
 ) -> RecordingDetailOut:
     recording = _load_recording_or_404(db, recording_id)
-    if recording.workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_404_NOT_FOUND, code="recording.not_found"
-        )
     if recording.owner_id != user.id:
-        _ensure_recording_access(db, workspace=workspace, user=user, recording=recording)
+        _ensure_recording_access(db, user=user, recording=recording)
     target = next((item for item in recording.targets if item.id == target_id), None)
     if target is None:
         raise localized_http_exception(
@@ -1482,7 +1417,6 @@ def delete_target(
     if recording.owner_id != user.id and not can_detach_recording_target(
         db,
         user=user,
-        workspace=workspace,
         target=target,
     ):
         raise localized_http_exception(
@@ -1549,7 +1483,6 @@ def list_meeting_recording_outs(db: Session, *, meeting: Meeting) -> list:
                 selectinload(Recording.publications),
             )
             .where(
-                Recording.workspace_id == meeting.workspace_id,
                 Recording.trashed_at.is_(None),
                 RecordingTarget.target_app == "meeting",
                 RecordingTarget.target_type == "meeting",
@@ -1604,7 +1537,6 @@ def resolve_active_recording_lock(db: Session, *, meeting: Meeting):
         select(RecordingStaging)
         .options(selectinload(RecordingStaging.uploaded_by))
         .where(
-            RecordingStaging.workspace_id == meeting.workspace_id,
             RecordingStaging.initial_target_app == "meeting",
             RecordingStaging.initial_target_type == "meeting",
             RecordingStaging.initial_target_id == meeting.id,
@@ -1628,7 +1560,6 @@ def resolve_active_recording_lock(db: Session, *, meeting: Meeting):
 def load_meeting_recording_or_404(
     db: Session,
     *,
-    workspace: Workspace,
     meeting_id: str,
     recording_id: str,
     for_update: bool = False,
@@ -1639,7 +1570,6 @@ def load_meeting_recording_or_404(
         .options(selectinload(Recording.targets), selectinload(Recording.result))
         .where(
             Recording.id == recording_id,
-            Recording.workspace_id == workspace.id,
             Recording.trashed_at.is_(None),
             RecordingTarget.target_app == "meeting",
             RecordingTarget.target_type == "meeting",
@@ -1660,7 +1590,6 @@ def load_meeting_recording_or_404(
 def latest_meeting_recording(
     db: Session,
     *,
-    workspace_id: str,
     meeting_id: str,
     require_transcript: bool = False,
 ) -> Recording | None:
@@ -1669,7 +1598,6 @@ def latest_meeting_recording(
         .join(RecordingTarget)
         .options(selectinload(Recording.targets))
         .where(
-            Recording.workspace_id == workspace_id,
             Recording.trashed_at.is_(None),
             RecordingTarget.target_app == "meeting",
             RecordingTarget.target_type == "meeting",
@@ -1685,14 +1613,12 @@ def latest_meeting_recording(
 def retry_meeting_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting: Meeting,
     recording_id: str,
 ) -> RecordingDetailOut:
     recording = load_meeting_recording_or_404(
         db,
-        workspace=workspace,
         meeting_id=meeting.id,
         recording_id=recording_id,
         for_update=True,
@@ -1741,14 +1667,12 @@ def retry_meeting_recording(
 def archive_meeting_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting: Meeting,
     recording_id: str,
 ) -> None:
     recording = load_meeting_recording_or_404(
         db,
-        workspace=workspace,
         meeting_id=meeting.id,
         recording_id=recording_id,
     )
@@ -1768,21 +1692,17 @@ def archive_meeting_recording(
 def get_recording_playback(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     recording_id: str,
 ) -> RecordingPlaybackResponse:
     recording = _load_recording_or_404(db, recording_id)
-    _ensure_recording_access(db, workspace=workspace, user=user, recording=recording)
+    _ensure_recording_access(db, user=user, recording=recording)
     if not recording.storage_key or recording.audio_status != "saved":
         raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND, code="recording.audio_unavailable"
         )
     expires_at = _utcnow() + timedelta(hours=1)
-    url = (
-        f"{get_settings().api_prefix}/workspaces/{workspace.key}/recording"
-        f"/recordings/{recording.id}/media"
-    )
+    url = f"{get_settings().api_prefix}/recording/recordings/{recording.id}/media"
     return RecordingPlaybackResponse(url=url, expires_at=expires_at)
 
 
@@ -1797,12 +1717,11 @@ def _download_filename(recording: Recording) -> str:
 def stream_recording_media(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     recording_id: str,
 ) -> StreamingResponse:
     recording = _load_recording_or_404(db, recording_id)
-    _ensure_recording_access(db, workspace=workspace, user=user, recording=recording)
+    _ensure_recording_access(db, user=user, recording=recording)
     if not recording.storage_key or recording.audio_status != "saved":
         raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND, code="recording.audio_unavailable"

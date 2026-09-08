@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { DropdownMenu, type DropdownItem } from '@open-work-hub/ui';
 import {
   Archive,
   ArrowLeft,
@@ -18,7 +16,9 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { DropdownMenu, type DropdownItem } from '@open-work-hub/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -47,27 +47,22 @@ import {
   buildBentoPresentationPath,
 } from '../bento-route-paths';
 import {
+  BentoImportError,
   buildBentoExportMessage,
   buildBentoLoadMessage,
   buildBentoSaveRequestMessage,
-  BentoImportError,
   currentBentoEmbedConfig,
   isBentoMessageOriginAllowed,
   parseBentoBridgeMessage,
   parseBentoHtmlDocument,
 } from './bento-embed-protocol';
 
-function hubPath(workspaceSlug: string | undefined): string {
-  return workspaceSlug ? buildBentoHubPath(workspaceSlug) : '/';
+function hubPath(): string {
+  return buildBentoHubPath();
 }
 
-function documentPath(
-  workspaceSlug: string | undefined,
-  documentId: string,
-): string {
-  return workspaceSlug
-    ? buildBentoPresentationPath(workspaceSlug, documentId)
-    : '/';
+function documentPath(documentId: string): string {
+  return buildBentoPresentationPath(documentId);
 }
 
 function viewFromSearch(value: string | null): BentoHubView {
@@ -82,7 +77,7 @@ export function BentoView() {
 function BentoHub() {
   const { t, i18n } = useTranslation(['apps', 'shell']);
   const { token, user } = useAuth();
-  const { workspaceSlug } = useParams();
+
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -104,7 +99,7 @@ function BentoHub() {
     [items],
   );
   const workspaceItems = useMemo(
-    () => items.filter((item) => item.visibility === 'workspace'),
+    () => items.filter((item) => item.visibility === 'company'),
     [items],
   );
 
@@ -113,11 +108,7 @@ function BentoHub() {
     setLoading(true);
     setError(null);
     try {
-      const response = await listBentoDocuments(
-        token,
-        { view, q: query },
-        workspaceSlug,
-      );
+      const response = await listBentoDocuments(token, { view, q: query });
       setItems(response.items);
     } catch (caught) {
       setError(
@@ -126,7 +117,7 @@ function BentoHub() {
     } finally {
       setLoading(false);
     }
-  }, [query, t, token, view, workspaceSlug]);
+  }, [query, t, token, view]);
 
   useEffect(() => {
     void load();
@@ -135,14 +126,19 @@ function BentoHub() {
   const handleCreate = useCallback(
     async (visibility: BentoVisibility) => {
       if (!token) return;
+      if (
+        visibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
       setError(null);
       try {
-        const created = await createBentoDocument(
-          token,
-          { title: t('apps:bento.untitled'), visibility },
-          workspaceSlug,
-        );
-        navigate(documentPath(workspaceSlug, created.id));
+        const created = await createBentoDocument(token, {
+          title: t('apps:bento.untitled'),
+          visibility,
+          company_admin_read_acknowledged: visibility === 'company',
+        });
+        navigate(documentPath(created.id));
       } catch (caught) {
         setError(
           caught instanceof Error
@@ -151,7 +147,7 @@ function BentoHub() {
         );
       }
     },
-    [navigate, t, token, workspaceSlug],
+    [navigate, t, token],
   );
 
   const handleImport = useCallback(
@@ -160,16 +156,12 @@ function BentoHub() {
       setError(null);
       try {
         const parsed = parseBentoHtmlDocument(await file.text());
-        const created = await createBentoDocument(
-          token,
-          {
-            title: parsed.title,
-            visibility: 'personal',
-            document_json: parsed.documentJson,
-          },
-          workspaceSlug,
-        );
-        navigate(documentPath(workspaceSlug, created.id));
+        const created = await createBentoDocument(token, {
+          title: parsed.title,
+          visibility: 'personal',
+          document_json: parsed.documentJson,
+        });
+        navigate(documentPath(created.id));
       } catch (caught) {
         setError(
           caught instanceof BentoImportError
@@ -182,7 +174,7 @@ function BentoHub() {
         if (importInputRef.current) importInputRef.current.value = '';
       }
     },
-    [navigate, t, token, workspaceSlug],
+    [navigate, t, token],
   );
 
   const handleAiGenerate = useCallback(async () => {
@@ -191,16 +183,12 @@ function BentoHub() {
     setAiGenerating(true);
     setAiError(null);
     try {
-      await generateBentoDocument(
-        token,
-        {
-          prompt,
-          slide_count: aiSlideCount,
-          language: i18n.language.startsWith('ko') ? 'ko' : 'en',
-          visibility: aiVisibility,
-        },
-        workspaceSlug,
-      );
+      await generateBentoDocument(token, {
+        prompt,
+        slide_count: aiSlideCount,
+        language: i18n.language.startsWith('ko') ? 'ko' : 'en',
+        visibility: aiVisibility,
+      });
       setAiPrompt('');
       setAiDialogOpen(false);
     } catch (caught) {
@@ -220,7 +208,6 @@ function BentoHub() {
     i18n.language,
     t,
     token,
-    workspaceSlug,
   ]);
 
   const updateItem = useCallback((updated: BentoDocumentItem) => {
@@ -238,12 +225,10 @@ function BentoHub() {
       if (!title || title === item.title) return;
       try {
         updateItem(
-          await updateBentoDocument(
-            token,
-            item.id,
-            { version: item.version, title },
-            workspaceSlug,
-          ),
+          await updateBentoDocument(token, item.id, {
+            version: item.version,
+            title,
+          }),
         );
       } catch (caught) {
         setError(
@@ -253,20 +238,24 @@ function BentoHub() {
         );
       }
     },
-    [t, token, updateItem, workspaceSlug],
+    [t, token, updateItem],
   );
 
   const changeVisibility = useCallback(
     async (item: BentoDocumentItem, visibility: BentoVisibility) => {
       if (!token || visibility === item.visibility) return;
+      if (
+        visibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
       try {
         updateItem(
-          await updateBentoDocument(
-            token,
-            item.id,
-            { version: item.version, visibility },
-            workspaceSlug,
-          ),
+          await updateBentoDocument(token, item.id, {
+            version: item.version,
+            visibility,
+            company_admin_read_acknowledged: visibility === 'company',
+          }),
         );
       } catch (caught) {
         setError(
@@ -276,14 +265,14 @@ function BentoHub() {
         );
       }
     },
-    [t, token, updateItem, workspaceSlug],
+    [t, token, updateItem],
   );
 
   const archiveItem = useCallback(
     async (item: BentoDocumentItem) => {
       if (!token) return;
       try {
-        await archiveBentoDocument(token, item.id, workspaceSlug);
+        await archiveBentoDocument(token, item.id);
         setItems((current) => current.filter((entry) => entry.id !== item.id));
       } catch (caught) {
         setError(
@@ -293,14 +282,14 @@ function BentoHub() {
         );
       }
     },
-    [t, token, workspaceSlug],
+    [t, token],
   );
 
   const restoreItem = useCallback(
     async (item: BentoDocumentItem) => {
       if (!token) return;
       try {
-        await restoreBentoDocument(token, item.id, workspaceSlug);
+        await restoreBentoDocument(token, item.id);
         setItems((current) => current.filter((entry) => entry.id !== item.id));
       } catch (caught) {
         setError(
@@ -310,14 +299,14 @@ function BentoHub() {
         );
       }
     },
-    [t, token, workspaceSlug],
+    [t, token],
   );
 
   const deleteItem = useCallback(
     async (item: BentoDocumentItem) => {
       if (!token || !window.confirm(t('apps:bento.deleteConfirm'))) return;
       try {
-        await permanentlyDeleteBentoDocument(token, item.id, workspaceSlug);
+        await permanentlyDeleteBentoDocument(token, item.id);
         setItems((current) => current.filter((entry) => entry.id !== item.id));
       } catch (caught) {
         setError(
@@ -327,7 +316,7 @@ function BentoHub() {
         );
       }
     },
-    [t, token, workspaceSlug],
+    [t, token],
   );
 
   const viewTitle =
@@ -429,7 +418,7 @@ function BentoHub() {
               timeZone={timeZone}
               locale={i18n.language}
               onCreate={() => void handleCreate('personal')}
-              onOpen={(item) => navigate(documentPath(workspaceSlug, item.id))}
+              onOpen={(item) => navigate(documentPath(item.id))}
               onRename={(item) => void renameItem(item)}
               onVisibilityChange={(item, visibility) =>
                 void changeVisibility(item, visibility)
@@ -450,8 +439,8 @@ function BentoHub() {
               archived={archived}
               timeZone={timeZone}
               locale={i18n.language}
-              onCreate={() => void handleCreate('workspace')}
-              onOpen={(item) => navigate(documentPath(workspaceSlug, item.id))}
+              onCreate={() => void handleCreate('company')}
+              onOpen={(item) => navigate(documentPath(item.id))}
               onRename={(item) => void renameItem(item)}
               onVisibilityChange={(item, visibility) =>
                 void changeVisibility(item, visibility)
@@ -558,7 +547,7 @@ function BentoHub() {
                   <option value="personal">
                     {t('apps:bento.visibilityPersonal')}
                   </option>
-                  <option value="workspace">
+                  <option value="company">
                     {t('apps:bento.visibilityWorkspace')}
                   </option>
                 </select>
@@ -749,10 +738,10 @@ function BentoCard({
           onSelect: () => onVisibilityChange('personal'),
         },
         {
-          id: 'workspace',
+          id: 'company',
           label: t('bento.changeToWorkspace'),
-          disabled: !item.can_manage || item.visibility === 'workspace',
-          onSelect: () => onVisibilityChange('workspace'),
+          disabled: !item.can_manage || item.visibility === 'company',
+          onSelect: () => onVisibilityChange('company'),
         },
         {
           id: 'archive',
@@ -816,13 +805,13 @@ function BentoCard({
           })}
         </p>
         <div className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-app-border px-2 py-1 text-xs text-app-ink/55">
-          {item.visibility === 'workspace' ? (
+          {item.visibility === 'company' ? (
             <Users size={13} className="text-app-success" />
           ) : (
             <Lock size={13} />
           )}
           {t(
-            item.visibility === 'workspace'
+            item.visibility === 'company'
               ? 'bento.visibilityWorkspace'
               : 'bento.visibilityPersonal',
           )}
@@ -835,7 +824,7 @@ function BentoCard({
 function BentoEditor() {
   const { t, i18n } = useTranslation('apps');
   const { token } = useAuth();
-  const { workspaceSlug, documentId } = useParams();
+  const { documentId } = useParams();
   const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const detailRef = useRef<BentoDocumentDetail | null>(null);
@@ -882,7 +871,11 @@ function BentoEditor() {
   );
 
   const enqueuePatch = useCallback(
-    (patch: { document_json?: string; visibility?: BentoVisibility }) => {
+    (patch: {
+      document_json?: string;
+      visibility?: BentoVisibility;
+      company_admin_read_acknowledged?: boolean;
+    }) => {
       const operation = operationChainRef.current
         .catch(() => undefined)
         .then(async () => {
@@ -890,12 +883,10 @@ function BentoEditor() {
           if (!token || !documentId || !current) return;
           setSaveStatus('saving');
           setError(null);
-          const updated = await updateBentoDocument(
-            token,
-            documentId,
-            { version: current.version, ...patch },
-            workspaceSlug,
-          );
+          const updated = await updateBentoDocument(token, documentId, {
+            version: current.version,
+            ...patch,
+          });
           applyDetail(updated);
           lastSavedJsonRef.current = updated.document_json;
           setSaveStatus('saved');
@@ -909,7 +900,7 @@ function BentoEditor() {
       operationChainRef.current = operation;
       return operation;
     },
-    [applyDetail, documentId, t, token, workspaceSlug],
+    [applyDetail, documentId, t, token],
   );
 
   const queueDocumentSave = useCallback(
@@ -938,7 +929,7 @@ function BentoEditor() {
     setDetail(null);
     setError(null);
     setSaveStatus('idle');
-    getBentoDocument(token, documentId, workspaceSlug)
+    getBentoDocument(token, documentId)
       .then((loaded) => {
         if (!active) return;
         applyDetail(loaded);
@@ -950,7 +941,7 @@ function BentoEditor() {
     return () => {
       active = false;
     };
-  }, [applyDetail, documentId, t, token, workspaceSlug]);
+  }, [applyDetail, documentId, t, token]);
 
   useEffect(() => {
     if (!iframeReady || !detail || !embedConfig) return;
@@ -966,19 +957,11 @@ function BentoEditor() {
 
     const poll = async () => {
       try {
-        const job = await getBentoAiJob(
-          token,
-          activeAiEditJobId,
-          workspaceSlug,
-        );
+        const job = await getBentoAiJob(token, activeAiEditJobId);
         if (!active) return;
         if (job.status === 'succeeded') {
           if (job.result_document_id === documentId) {
-            const revised = await getBentoDocument(
-              token,
-              documentId,
-              workspaceSlug,
-            );
+            const revised = await getBentoDocument(token, documentId);
             if (!active) return;
             loadedDocumentRef.current = null;
             applyDetail(revised);
@@ -1012,7 +995,7 @@ function BentoEditor() {
       active = false;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [activeAiEditJobId, applyDetail, documentId, t, token, workspaceSlug]);
+  }, [activeAiEditJobId, applyDetail, documentId, t, token]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -1092,29 +1075,37 @@ function BentoEditor() {
   }, [embedConfig, iframeReady, postToBento, t]);
 
   const goBack = useCallback(() => {
-    navigate(hubPath(workspaceSlug));
-  }, [navigate, workspaceSlug]);
+    navigate(hubPath());
+  }, [navigate]);
 
   const handleVisibilityChange = useCallback(
     (visibility: BentoVisibility) => {
       if (!detail || visibility === detail.visibility) return;
-      void enqueuePatch({ visibility });
+      if (
+        visibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
+      void enqueuePatch({
+        visibility,
+        company_admin_read_acknowledged: visibility === 'company',
+      });
     },
-    [detail, enqueuePatch],
+    [detail, enqueuePatch, t],
   );
 
   const handleArchive = useCallback(async () => {
     if (!token || !documentId) return;
     try {
       await operationChainRef.current.catch(() => undefined);
-      await archiveBentoDocument(token, documentId, workspaceSlug);
+      await archiveBentoDocument(token, documentId);
       goBack();
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : t('bento.archiveFailed'),
       );
     }
-  }, [documentId, goBack, t, token, workspaceSlug]);
+  }, [documentId, goBack, t, token]);
 
   const handleAiEdit = useCallback(async () => {
     const prompt = aiEditPrompt.trim();
@@ -1135,28 +1126,21 @@ function BentoEditor() {
 
       if (currentDocumentJson !== lastSavedJsonRef.current) {
         setSaveStatus('saving');
-        const saved = await updateBentoDocument(
-          token,
-          documentId,
-          { version: current.version, document_json: currentDocumentJson },
-          workspaceSlug,
-        );
+        const saved = await updateBentoDocument(token, documentId, {
+          version: current.version,
+          document_json: currentDocumentJson,
+        });
         applyDetail(saved);
         detailRef.current = saved;
         lastSavedJsonRef.current = saved.document_json;
         current = saved;
       }
 
-      const job = await editBentoDocumentWithAi(
-        token,
-        documentId,
-        {
-          version: current.version,
-          prompt,
-          language: i18n.language.startsWith('ko') ? 'ko' : 'en',
-        },
-        workspaceSlug,
-      );
+      const job = await editBentoDocumentWithAi(token, documentId, {
+        version: current.version,
+        prompt,
+        language: i18n.language.startsWith('ko') ? 'ko' : 'en',
+      });
       setActiveAiEditJobId(job.id);
       setSaveStatus('saving');
       setAiEditPrompt('');
@@ -1179,7 +1163,6 @@ function BentoEditor() {
     requestCurrentDocument,
     t,
     token,
-    workspaceSlug,
   ]);
 
   return (
@@ -1263,11 +1246,10 @@ function BentoEditor() {
                 onSelect: () => handleVisibilityChange('personal'),
               },
               {
-                id: 'workspace',
+                id: 'company',
                 label: t('bento.changeToWorkspace'),
-                disabled:
-                  !detail.can_manage || detail.visibility === 'workspace',
-                onSelect: () => handleVisibilityChange('workspace'),
+                disabled: !detail.can_manage || detail.visibility === 'company',
+                onSelect: () => handleVisibilityChange('company'),
               },
             ]}
           />

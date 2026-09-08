@@ -1,5 +1,3 @@
-import { LazyMotion, domAnimation, m } from 'motion/react';
-import { useTranslation } from 'react-i18next';
 import {
   Calendar,
   CheckSquare,
@@ -10,13 +8,15 @@ import {
   MoreHorizontal,
   Plus,
 } from 'lucide-react';
+import { LazyMotion, domAnimation, m } from 'motion/react';
+import { useTranslation } from 'react-i18next';
 import type {
   PmsTask,
   PmsTaskListMember,
   PmsTaskListStatus,
 } from '../api/pms-api';
-import { PRIORITY_COLOR, formatDate } from './pms-constants';
 import { PMS_DEFAULT_LABEL_COLOR } from './pms-color-palettes';
+import { PRIORITY_COLOR, formatDate } from './pms-constants';
 import { StatusIconGlyph } from './StatusIcon';
 import { buildTaskBoardPresentationModel } from './task-list-presentation-model';
 import { TaskAssigneeStack } from './TaskAssigneeStack';

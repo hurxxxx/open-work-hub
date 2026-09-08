@@ -5,26 +5,26 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 import pytest
 
-from dev_accounts import create_workspace_user_session, dev_login
-from sqlalchemy import select
+from dev_accounts import create_company_user_session, dev_login
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.auth.access import load_user_graph
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.docs import service as docs_service
 from open_work_hub_api.domains.docs.access_grants import grant_doc_access
-from open_work_hub_api.domains.docs.models import NativeDocLinkShare, NativeDocPage, NativeDocUserShare
+from open_work_hub_api.domains.docs.models import (
+    NativeDocLinkShare,
+    NativeDocPage,
+    NativeDocUserShare,
+)
 from open_work_hub_api.domains.rag.contracts import RagQueryRequest, RagVectorSearchHit
 from open_work_hub_api.domains.rag.access_filter import build_user_rag_post_filter
 from open_work_hub_api.domains.rag.docs_projection import (
     NATIVE_DOC_RESOURCE_TYPE,
     load_native_doc_projection,
 )
-from open_work_hub_api.domains.rag.providers.fake import (
-    FakeEmbeddingClient,
-    FakeVectorIndexClient,
-)
+from open_work_hub_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
 from open_work_hub_api.domains.rag.query_service import RagQueryService
 from open_work_hub_api.domains.rag.service import RagService
 
@@ -38,9 +38,8 @@ def test_native_doc_projection_preserves_grants_for_query_time_expiry_checks(
 ) -> None:
     session = _dev_login(client, "delivery-hub-admin")
     shared_session = _dev_login(client, "administrator")
-    expired_session = create_workspace_user_session(
+    expired_session = create_company_user_session(
         client,
-        workspace_key="delivery-hub",
         login_id="docsragexpiredprojection",
         email="docs-rag-expired-projection@open-work-hub.local",
         full_name="Docs RAG Expired Projection",
@@ -51,21 +50,17 @@ def test_native_doc_projection_preserves_grants_for_query_time_expiry_checks(
         shared_user = db.get(User, shared_session["user"]["id"])
         expired_user = db.get(User, expired_session["user"]["id"])
         revoked_user = db.get(User, revoked_session["user"]["id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         assert owner is not None
         assert shared_user is not None
         assert expired_user is not None
         assert revoked_user is not None
-        assert workspace is not None
         owner_id = owner.id
         shared_user_id = shared_user.id
         expired_user_id = expired_user.id
         revoked_user_id = revoked_user.id
-        workspace_id = workspace.id
 
         doc, _page = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace_id,
             owner_id=owner_id,
             title="RAG Projection Smoke",
             content_blocks=[
@@ -148,7 +143,8 @@ def test_native_doc_projection_preserves_grants_for_query_time_expiry_checks(
     assert projection.title == "RAG Projection Smoke"
     assert "Launch Plan" in projection.text_content
     assert "Hybrid retrieval with rerank." in projection.text_content
-    assert f"workspace:{workspace_id}" in projection.visibility_refs
+    assert projection.scope_kind.value == "company"
+    assert not any(ref.startswith("workspace:") for ref in projection.visibility_refs)
     assert f"owner:{owner_id}" in projection.visibility_refs
     assert f"share_user:{shared_user_id}" in projection.visibility_refs
     assert f"meeting_grant:{shared_user_id}" in projection.visibility_refs
@@ -164,9 +160,8 @@ def test_native_doc_projection_preserves_grants_for_query_time_expiry_checks(
 
 def test_native_doc_query_post_filter_rejects_expired_grant_hits(client: TestClient) -> None:
     session = _dev_login(client, "delivery-hub-admin")
-    expired_session = create_workspace_user_session(
+    expired_session = create_company_user_session(
         client,
-        workspace_key="delivery-hub",
         login_id="docsragexpiredquery",
         email="docs-rag-expired-query@open-work-hub.local",
         full_name="Docs RAG Expired Query",
@@ -186,14 +181,11 @@ def test_native_doc_query_post_filter_rejects_expired_grant_hits(client: TestCli
     with get_session_factory()() as db:
         owner = load_user_graph(db, session["user"]["id"])
         expired_user = db.get(User, expired_session["user"]["id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         assert owner is not None
         assert expired_user is not None
-        assert workspace is not None
 
         doc, _page = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=owner.id,
             title="Expired Grant Doc",
             content_blocks=[
@@ -223,7 +215,6 @@ def test_native_doc_query_post_filter_rejects_expired_grant_hits(client: TestCli
         response = query_service.query(
             RagQueryRequest(
                 collection="docs-expired-grant-smoke",
-                workspace_id=workspace.id,
                 query="grant expiry query time",
                 filters={"visibility_refs_contains": f"meeting_grant:{expired_user.id}"},
             ),
@@ -234,23 +225,20 @@ def test_native_doc_query_post_filter_rejects_expired_grant_hits(client: TestCli
 
 
 @pytest.mark.slow
-def test_rag_post_filter_keeps_route_workspace_authoritative(client: TestClient) -> None:
+def test_rag_post_filter_keeps_source_identity_authoritative(client: TestClient) -> None:
     session = _dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
         owner = load_user_graph(db, session["user"]["id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         assert owner is not None
-        assert workspace is not None
 
         doc, _page = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=owner.id,
-            title="Workspace Boundary Doc",
+            title="Source Boundary Doc",
             content_blocks=[
                 {
                     "type": "paragraph",
-                    "content": [{"type": "text", "text": "Workspace scoped result."}],
+                    "content": [{"type": "text", "text": "Source authorized result."}],
                 },
             ],
         )
@@ -261,23 +249,22 @@ def test_rag_post_filter_keeps_route_workspace_authoritative(client: TestClient)
         post_filter = build_user_rag_post_filter(
             db,
             user=owner,
-            workspace_id=workspace.id,
         )
-        same_workspace_hit = RagVectorSearchHit(
+        current_source_hit = RagVectorSearchHit(
             chunk_id="chunk-1",
-            text="Workspace scoped result.",
+            text="Source authorized result.",
             score=1.0,
             projection=projection,
         )
-        other_workspace_hit = RagVectorSearchHit(
+        forged_source_hit = RagVectorSearchHit(
             chunk_id="chunk-2",
-            text="Workspace scoped result.",
+            text="Source authorized result.",
             score=1.0,
-            projection=projection.model_copy(update={"workspace_id": "ws-other"}),
+            projection=projection.model_copy(update={"resource_id": "missing-source-doc"}),
         )
 
-        assert post_filter(same_workspace_hit) is True
-        assert post_filter(other_workspace_hit) is False
+        assert post_filter(current_source_hit) is True
+        assert post_filter(forged_source_hit) is False
 
 
 @pytest.mark.slow
@@ -285,13 +272,10 @@ def test_trashed_native_doc_is_not_projected(client: TestClient) -> None:
     session = _dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
         owner = load_user_graph(db, session["user"]["id"])
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         assert owner is not None
-        assert workspace is not None
 
         doc, _page = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=owner.id,
             title="Soon Deleted",
         )

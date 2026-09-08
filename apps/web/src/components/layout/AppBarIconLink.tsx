@@ -1,6 +1,6 @@
+import type { LucideProps } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { Link } from 'react-router-dom';
-import type { LucideProps } from 'lucide-react';
 
 import { cn } from '@/src/lib/utils';
 

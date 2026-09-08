@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from open_work_hub_api.domains.ai.runtime.contracts import RuntimeProfile
 
-
 LONG_DOC_CHAR_THRESHOLD = 12_000
 LONG_DOC_MAX_TOKENS_THRESHOLD = 32_768
 

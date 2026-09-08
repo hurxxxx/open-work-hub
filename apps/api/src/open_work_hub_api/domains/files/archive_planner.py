@@ -94,9 +94,7 @@ def plan_archive_entries(
             ):
                 folder_path = _folder_archive_path(folder_by_id, file.folder_id, sanitize_name)
                 path = f"{folder_path}/{sanitize_name(file.filename)}"
-                entries.append(
-                    PlannedArchiveEntry(_unique_archive_path(used_paths, path), file.id)
-                )
+                entries.append(PlannedArchiveEntry(_unique_archive_path(used_paths, path), file.id))
                 included_file_ids.add(file.id)
 
     for file in selected_files:

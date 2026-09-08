@@ -1,15 +1,15 @@
-import { type ReactElement, type ReactNode, useState } from 'react';
+import { Tooltip } from '@open-work-hub/ui';
+import 'highlight.js/styles/github.css';
+import 'katex/dist/katex.min.css';
 import { Check, Copy } from 'lucide-react';
+import { type ReactElement, type ReactNode, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeKatex from 'rehype-katex';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import { useTranslation } from 'react-i18next';
-import { Tooltip } from '@open-work-hub/ui';
-import 'highlight.js/styles/github.css';
-import 'katex/dist/katex.min.css';
 
 type ReactMarkdownProps = Parameters<typeof ReactMarkdown>[0];
 
@@ -29,7 +29,8 @@ const UNWRAP_MARKDOWN_FENCE =
   /^\s*```(?:markdown|md)\s*\n([\s\S]*?)\n\s*```\s*$/i;
 const DISPLAY_MATH_BRACKET_DELIMITER = /\\\[([\s\S]*?)\\\]/g;
 const INLINE_MATH_PAREN_DELIMITER = /\\\(([\s\S]*?)\\\)/g;
-const FENCED_CODE_BLOCK = /((?:^|\n)(?:```|~~~)[^\n]*\n[\s\S]*?\n(?:```|~~~)(?=\n|$))/g;
+const FENCED_CODE_BLOCK =
+  /((?:^|\n)(?:```|~~~)[^\n]*\n[\s\S]*?\n(?:```|~~~)(?=\n|$))/g;
 const INLINE_CODE_SPAN = /(`+)([^`]*?)\1/g;
 const INLINE_TEXT_MARKUP = /(\*\*|__|~~)([^\n]+?)\1/g;
 

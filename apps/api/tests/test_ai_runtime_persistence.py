@@ -12,18 +12,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from open_work_hub_api.domains.ai import approvals as ai_approvals
-from open_work_hub_api.domains.ai.runtime.models import (
-    AgentInvocation,
-    AgentRun,
-    AgentTraceEvent,
-)
+from open_work_hub_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from open_work_hub_api.domains.ai.runtime.persistence import (
     append_trace_event,
     prepare_trace_payload,
     scrub_trace_payload,
 )
 from open_work_hub_api.domains.ai.runtime.retention import scrub_completed_runtime_records
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.conversations.models import Conversation
 from open_work_hub_api.domains.meeting.models import utcnow_naive
@@ -55,14 +51,8 @@ def runtime_session_factory(
         get_settings.cache_clear()
 
 
-def _seed_scope(db: Session) -> tuple[Workspace, User, Conversation]:
+def _seed_scope(db: Session) -> tuple[User, Conversation]:
     suffix = new_id()[:8]
-    workspace = Workspace(
-        id=new_id(),
-        key=f"runtime-{suffix}",
-        name="Runtime Test",
-        description="",
-    )
     user = User(
         id=new_id(),
         login_id=f"runtime-{suffix}",
@@ -70,29 +60,26 @@ def _seed_scope(db: Session) -> tuple[Workspace, User, Conversation]:
         full_name="Runtime Test User",
         password_hash="test",
     )
-    db.add_all([workspace, user])
+    db.add_all([user])
     db.flush()
     conversation = Conversation(
         id=new_id(),
-        workspace_id=workspace.id,
         user_id=user.id,
         title="Runtime persistence",
     )
     db.add(conversation)
     db.commit()
-    return workspace, user, conversation
+    return user, conversation
 
 
 def _runtime_run(
     *,
-    workspace: Workspace,
     user: User,
     conversation: Conversation,
     status: str = "running",
 ) -> AgentRun:
     return AgentRun(
         id=new_id(),
-        workspace_id=workspace.id,
         conversation_id=conversation.id,
         requested_by_user_id=user.id,
         status=status,
@@ -115,19 +102,18 @@ def test_agent_run_allows_only_one_live_run_per_conversation(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
     with runtime_session_factory() as db:
-        workspace, user, conversation = _seed_scope(db)
+        user, conversation = _seed_scope(db)
 
-        db.add(_runtime_run(workspace=workspace, user=user, conversation=conversation))
+        db.add(_runtime_run(user=user, conversation=conversation))
         db.commit()
 
-        db.add(_runtime_run(workspace=workspace, user=user, conversation=conversation))
+        db.add(_runtime_run(user=user, conversation=conversation))
         with pytest.raises(IntegrityError):
             db.commit()
 
         db.rollback()
         db.add(
             _runtime_run(
-                workspace=workspace,
                 user=user,
                 conversation=conversation,
                 status="completed",
@@ -140,8 +126,8 @@ def test_agent_invocation_allows_only_one_awaiting_approval_per_run(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
     with runtime_session_factory() as db:
-        workspace, user, conversation = _seed_scope(db)
-        run = _runtime_run(workspace=workspace, user=user, conversation=conversation)
+        user, conversation = _seed_scope(db)
+        run = _runtime_run(user=user, conversation=conversation)
         db.add(run)
         db.commit()
 
@@ -149,7 +135,6 @@ def test_agent_invocation_allows_only_one_awaiting_approval_per_run(
             AgentInvocation(
                 id=new_id(),
                 agent_run_id=run.id,
-                workspace_id=workspace.id,
                 conversation_id=conversation.id,
                 invocation_seq=0,
                 agent_id="approval.proposal_preview",
@@ -163,7 +148,6 @@ def test_agent_invocation_allows_only_one_awaiting_approval_per_run(
             AgentInvocation(
                 id=new_id(),
                 agent_run_id=run.id,
-                workspace_id=workspace.id,
                 conversation_id=conversation.id,
                 invocation_seq=1,
                 agent_id="approval.proposal_preview",
@@ -179,8 +163,8 @@ def test_agent_invocation_rejects_negative_invocation_seq(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
     with runtime_session_factory() as db:
-        workspace, user, conversation = _seed_scope(db)
-        run = _runtime_run(workspace=workspace, user=user, conversation=conversation)
+        user, conversation = _seed_scope(db)
+        run = _runtime_run(user=user, conversation=conversation)
         db.add(run)
         db.flush()
 
@@ -188,7 +172,6 @@ def test_agent_invocation_rejects_negative_invocation_seq(
             AgentInvocation(
                 id=new_id(),
                 agent_run_id=run.id,
-                workspace_id=workspace.id,
                 conversation_id=conversation.id,
                 invocation_seq=-1,
                 agent_id="domain.pms",
@@ -204,11 +187,10 @@ def test_legacy_approval_allows_only_one_pending_approval_per_snapshot(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
     with runtime_session_factory() as db:
-        workspace, user, conversation = _seed_scope(db)
+        user, conversation = _seed_scope(db)
         snapshot = ai_approvals.AgentRunSnapshot(
             id=new_id(),
             conversation_id=conversation.id,
-            workspace_id=workspace.id,
             requested_by_user_id=user.id,
             status="awaiting_approval",
             messages_json=[{"role": "user", "content": "create issue"}],
@@ -221,7 +203,6 @@ def test_legacy_approval_allows_only_one_pending_approval_per_snapshot(
         db.add(
             ai_approvals.AiToolApproval(
                 id=new_id(),
-                workspace_id=workspace.id,
                 conversation_id=conversation.id,
                 agent_run_id=snapshot.id,
                 tool_call_id="call-1",
@@ -237,7 +218,6 @@ def test_legacy_approval_allows_only_one_pending_approval_per_snapshot(
         db.add(
             ai_approvals.AiToolApproval(
                 id=new_id(),
-                workspace_id=workspace.id,
                 conversation_id=conversation.id,
                 agent_run_id=snapshot.id,
                 tool_call_id="call-2",
@@ -256,15 +236,14 @@ def test_trace_events_are_uniquely_ordered_per_run(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
     with runtime_session_factory() as db:
-        workspace, user, conversation = _seed_scope(db)
-        run = _runtime_run(workspace=workspace, user=user, conversation=conversation)
+        user, conversation = _seed_scope(db)
+        run = _runtime_run(user=user, conversation=conversation)
         db.add(run)
         db.commit()
 
         invocation = AgentInvocation(
             id=new_id(),
             agent_run_id=run.id,
-            workspace_id=workspace.id,
             conversation_id=conversation.id,
             invocation_seq=0,
             agent_id="domain.rag",
@@ -280,7 +259,6 @@ def test_trace_events_are_uniquely_ordered_per_run(
                     id=new_id(),
                     agent_run_id=run.id,
                     agent_invocation_id=invocation.id,
-                    workspace_id=workspace.id,
                     conversation_id=conversation.id,
                     run_seq=0,
                     invocation_seq=0,
@@ -292,7 +270,6 @@ def test_trace_events_are_uniquely_ordered_per_run(
                     id=new_id(),
                     agent_run_id=run.id,
                     agent_invocation_id=invocation.id,
-                    workspace_id=workspace.id,
                     conversation_id=conversation.id,
                     run_seq=0,
                     invocation_seq=0,
@@ -309,7 +286,6 @@ def test_trace_events_are_uniquely_ordered_per_run(
                 id=new_id(),
                 agent_run_id=run.id,
                 agent_invocation_id=invocation.id,
-                workspace_id=workspace.id,
                 conversation_id=conversation.id,
                 run_seq=0,
                 invocation_seq=0,
@@ -367,12 +343,11 @@ def test_trace_event_append_serializes_concurrent_writers(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
     with runtime_session_factory() as db:
-        workspace, user, conversation = _seed_scope(db)
-        run = _runtime_run(workspace=workspace, user=user, conversation=conversation)
+        user, conversation = _seed_scope(db)
+        run = _runtime_run(user=user, conversation=conversation)
         db.add(run)
         db.commit()
         run_id = run.id
-        workspace_id = workspace.id
         conversation_id = conversation.id
 
     first_inserted = Event()
@@ -384,7 +359,6 @@ def test_trace_event_append_serializes_concurrent_writers(
                 event = append_trace_event(
                     db,
                     agent_run_id=run_id,
-                    workspace_id=workspace_id,
                     conversation_id=conversation_id,
                     event_type="first",
                     payload={},
@@ -401,7 +375,6 @@ def test_trace_event_append_serializes_concurrent_writers(
                 event = append_trace_event(
                     db,
                     agent_run_id=run_id,
-                    workspace_id=workspace_id,
                     conversation_id=conversation_id,
                     event_type="second",
                     payload={},
@@ -422,9 +395,8 @@ def test_scrub_completed_runtime_records_removes_payloads_from_old_terminal_runs
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
     with runtime_session_factory() as db:
-        workspace, user, conversation = _seed_scope(db)
+        user, conversation = _seed_scope(db)
         run = _runtime_run(
-            workspace=workspace,
             user=user,
             conversation=conversation,
             status="completed",
@@ -438,7 +410,6 @@ def test_scrub_completed_runtime_records_removes_payloads_from_old_terminal_runs
         invocation = AgentInvocation(
             id=new_id(),
             agent_run_id=run.id,
-            workspace_id=workspace.id,
             conversation_id=conversation.id,
             invocation_seq=0,
             agent_id="domain.rag",
@@ -451,7 +422,6 @@ def test_scrub_completed_runtime_records_removes_payloads_from_old_terminal_runs
             id=new_id(),
             agent_run_id=run.id,
             agent_invocation_id=invocation.id,
-            workspace_id=workspace.id,
             conversation_id=conversation.id,
             run_seq=0,
             invocation_seq=0,
@@ -476,9 +446,8 @@ def test_scrub_completed_runtime_records_keeps_active_and_recent_runs(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
     with runtime_session_factory() as db:
-        workspace, user, conversation = _seed_scope(db)
+        user, conversation = _seed_scope(db)
         active_run = _runtime_run(
-            workspace=workspace,
             user=user,
             conversation=conversation,
             status="running",
@@ -490,14 +459,12 @@ def test_scrub_completed_runtime_records_keeps_active_and_recent_runs(
 
         recent_conversation = Conversation(
             id=new_id(),
-            workspace_id=workspace.id,
             user_id=user.id,
             title="Recent runtime persistence",
         )
         db.add(recent_conversation)
         db.flush()
         recent_run = _runtime_run(
-            workspace=workspace,
             user=user,
             conversation=recent_conversation,
             status="completed",

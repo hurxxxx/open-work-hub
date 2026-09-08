@@ -1,18 +1,18 @@
 import { FileUploadProvider } from './file-upload-provider';
 import { filesManifest } from './manifest';
-import { filesWorkspaceRoutes } from './routes';
+import { filesAppRoutes } from './routes';
 import { filesSidebarConfig } from './sidebar';
 
 export {
-  FileUploadProvider,
+  filesAppRoutes,
   filesManifest,
   filesSidebarConfig,
-  filesWorkspaceRoutes,
+  FileUploadProvider,
 };
 
 export const filesModule = {
   manifest: filesManifest,
   shellProviders: [FileUploadProvider],
   sidebarConfig: filesSidebarConfig,
-  workspaceRoutes: filesWorkspaceRoutes,
+  appRoutes: filesAppRoutes,
 } as const;

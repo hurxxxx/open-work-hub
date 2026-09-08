@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import hashlib
 import hmac
 import re
+from datetime import UTC, datetime
 from time import monotonic
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -11,18 +11,18 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import Settings, get_settings
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.client import (
     HermesClientError,
     HermesManagementClient,
     HermesRuntimeClient,
 )
 from open_work_hub_api.domains.hermes.models import HermesProfileBinding
+from open_work_hub_api.domains.hermes.repository import get_or_create_profile_binding
 from open_work_hub_api.domains.hermes.research_settings import (
     get_research_settings,
 )
 from open_work_hub_api.domains.hermes.research_sources import ResearchSourceId
-from open_work_hub_api.domains.hermes.repository import get_or_create_profile_binding
 
 
 class HermesIntegrationDisabledError(RuntimeError):
@@ -102,9 +102,7 @@ def _mcp_server_names(payload: dict[str, Any]) -> set[str]:
     if not isinstance(rows, list):
         return set()
     return {
-        str(row.get("name")).strip()
-        for row in rows
-        if isinstance(row, dict) and row.get("name")
+        str(row.get("name")).strip() for row in rows if isinstance(row, dict) and row.get("name")
     }
 
 
@@ -250,16 +248,13 @@ async def ensure_job_profile(
             code="hermes.job_profile_mcp_not_empty",
             message="The isolated Hermes job profile still has MCP servers configured.",
         )
-    _job_profile_reconciled_until[reconcile_key] = (
-        monotonic() + _JOB_PROFILE_RECONCILE_TTL_SECONDS
-    )
+    _job_profile_reconciled_until[reconcile_key] = monotonic() + _JOB_PROFILE_RECONCILE_TTL_SECONDS
     return profile_name
 
 
 async def ensure_profile_binding(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     settings: Settings | None = None,
     client: HermesManagementClient | None = None,
@@ -267,7 +262,7 @@ async def ensure_profile_binding(
     research_policy_revision: int | None = None,
 ) -> HermesProfileBinding:
     resolved = require_hermes_enabled(settings)
-    binding = get_or_create_profile_binding(db, workspace=workspace, user=user)
+    binding = get_or_create_profile_binding(db, user=user)
     db.commit()
     db.refresh(binding)
     if research_sources is None or research_policy_revision is None:
@@ -277,9 +272,7 @@ async def ensure_profile_binding(
     else:
         resolved_research_sources = research_sources
         resolved_research_policy_revision = research_policy_revision
-    reconcile_key = (
-        f"{binding.profile_name}:research:{resolved_research_policy_revision}"
-    )
+    reconcile_key = f"{binding.profile_name}:research:{resolved_research_policy_revision}"
     cache_now = monotonic()
     if binding.status == "active" and _reconcile_cache_hit(
         _profile_reconciled_until,
@@ -381,8 +374,7 @@ async def ensure_profile_binding(
             )
         if (
             resolved.hermes_mcp_server_url
-            and internal_mcp_server_name(binding.profile_name)
-            not in reconciled_server_names
+            and internal_mcp_server_name(binding.profile_name) not in reconciled_server_names
         ):
             raise HermesClientError(
                 operation="reconcile_profile_mcp",
@@ -406,7 +398,5 @@ async def ensure_profile_binding(
     db.add(binding)
     db.commit()
     db.refresh(binding)
-    _profile_reconciled_until[reconcile_key] = (
-        monotonic() + _PROFILE_RECONCILE_TTL_SECONDS
-    )
+    _profile_reconciled_until[reconcile_key] = monotonic() + _PROFILE_RECONCILE_TTL_SECONDS
     return binding

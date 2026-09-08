@@ -31,9 +31,12 @@ docker compose --env-file .env.example -f ops/compose/open-work-hub-dev.infra.ym
 ## Data/Auth
 
 - Runtime availability for app `bento` gates the hub, document API, and editor route.
-- `bento_documents` stores workspace, owner, visibility, version, archive state, normalized JSON.
+- `bento_documents` stores owner, personal/company visibility, version, archive state, normalized JSON.
 - Max document JSON size: 25 MiB.
-- Personal docs are owner-only. Workspace docs are member-editable; owner/workspace admin manages name/visibility/archive.
+- Personal documents are owner-only. Company publication grants admitted users read access; editing,
+  metadata and archive management remain owner-only. Publication requires explicit acknowledgment
+  and an audit record, and company ownership cannot revert to personal under the
+  [App Platform Contract](../../domains/app-platform/README.md).
 - Save uses version compare to avoid overwriting concurrent edits.
 - Delete flow: archive first, permanent delete second.
 - Iframe bridge validates exact origin and `window` sender. No Hub auth token enters iframe.

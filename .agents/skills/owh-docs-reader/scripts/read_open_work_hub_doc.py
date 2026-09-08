@@ -20,7 +20,6 @@ UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
-SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
 MEDIA_RE = re.compile(r"media:([0-9a-fA-F-]{36})")
 COMMAND_TIMEOUT_SECONDS = 30
 MAX_MEDIA_BYTES = 50 * 1024 * 1024
@@ -178,26 +177,19 @@ def validate_uuid(value: str, name: str) -> str:
     return value.lower()
 
 
-def validate_slug(value: str) -> str:
-    if not SLUG_RE.fullmatch(value):
-        raise ValueError(f"workspace slug is invalid: {value}")
-    return value
-
-
 def parse_target(target: str | None) -> dict[str, str]:
     if not target:
         return {}
     if UUID_RE.fullmatch(target):
         return {"doc_id": target.lower()}
     parsed = urlparse(target)
-    match = re.search(r"/w/([^/]+)/docs/([0-9a-fA-F-]{36})", parsed.path or target)
+    match = re.search(r"^/apps/docs/([0-9a-fA-F-]{36})/?$", parsed.path or target)
     if not match:
         raise ValueError(
-            "target must be a /w/{workspace}/docs/{doc_id}?page={page_id} URL/path or doc UUID"
+            "target must be a /apps/docs/{doc_id}?page={page_id} URL/path or doc UUID"
         )
     values = {
-        "workspace": validate_slug(match.group(1)),
-        "doc_id": validate_uuid(match.group(2), "doc_id"),
+        "doc_id": validate_uuid(match.group(1), "doc_id"),
     }
     page_values = parse_qs(parsed.query).get("page")
     if page_values and page_values[0]:
@@ -216,20 +208,18 @@ def psql_json(sql: str) -> list[dict]:
     return json.loads(raw) if raw else []
 
 
-def read_query(workspace: str, doc_id: str, page_id: str | None) -> str:
+def read_query(doc_id: str, page_id: str | None) -> str:
     page_clause = f"and p.id = {sql_literal(page_id)}" if page_id else ""
     return f"""
 select coalesce(json_agg(row_to_json(t)), '[]'::json)
 from (
-  select w.key as workspace, d.id as doc_id, d.title as doc_title,
+  select d.ownership_kind, d.owner_id, d.id as doc_id, d.title as doc_title,
     d.updated_at::text as doc_updated_at, p.id as page_id,
     p.title as page_title, p.content_format, p.content_text, p.content_blocks,
     p.updated_at::text as page_updated_at, p.sort_order
   from docs_native_docs d
   join docs_native_doc_pages p on p.doc_id = d.id
-  join workspaces w on w.id = d.workspace_id
-  where w.key = {sql_literal(workspace)}
-    and d.id = {sql_literal(doc_id)}
+  where d.id = {sql_literal(doc_id)}
     {page_clause}
     and d.trashed_at is null and p.trashed_at is null
   order by p.sort_order, p.created_at
@@ -237,7 +227,7 @@ from (
 """
 
 
-def updates_query(workspace: str, doc_id: str | None, since: str | None, limit: int) -> str:
+def updates_query(doc_id: str | None, since: str | None, limit: int) -> str:
     doc_clause = f"and d.id = {sql_literal(doc_id)}" if doc_id else ""
     since_clause = ""
     if since:
@@ -248,7 +238,7 @@ def updates_query(workspace: str, doc_id: str | None, since: str | None, limit: 
     return f"""
 select coalesce(json_agg(row_to_json(t)), '[]'::json)
 from (
-  select w.key as workspace, d.id as doc_id, d.title as doc_title,
+  select d.ownership_kind, d.owner_id, d.id as doc_id, d.title as doc_title,
     d.updated_at::text as doc_updated_at, p.id as page_id, p.title as page_title,
     p.content_format, p.updated_at::text as page_updated_at,
     greatest(d.updated_at, p.updated_at)::text as latest_updated_at,
@@ -257,8 +247,7 @@ from (
       then json_array_length(p.content_blocks) else 0 end as block_count
   from docs_native_docs d
   join docs_native_doc_pages p on p.doc_id = d.id
-  join workspaces w on w.id = d.workspace_id
-  where w.key = {sql_literal(workspace)} {doc_clause} {since_clause}
+  where d.trashed_at is null {doc_clause} {since_clause}
     and d.trashed_at is null and p.trashed_at is null
   order by greatest(d.updated_at, p.updated_at) desc
   limit {max(1, min(limit, 200))}
@@ -389,7 +378,7 @@ def copy_media(rows: list[dict], destination: Path) -> list[dict]:
 def render_page(page: dict, media_rows: list[dict]) -> str:
     lines = [
         f"# {page['page_title']}", "", "- environment: local",
-        f"- workspace: {page['workspace']}",
+        f"- ownership: {page['ownership_kind']} (owner={page['owner_id']})",
         f"- doc: {page['doc_title']} ({page['doc_id']})",
         f"- page: {page['page_title']} ({page['page_id']})",
         f"- doc_updated_at: {page['doc_updated_at']}",
@@ -414,12 +403,11 @@ def render_page(page: dict, media_rows: list[dict]) -> str:
 
 def read_doc(args: argparse.Namespace) -> int:
     target = parse_target(args.target)
-    workspace = validate_slug(args.workspace or target.get("workspace") or "")
     doc_id = validate_uuid(args.doc_id or target.get("doc_id") or "", "doc_id")
     page_id = args.page_id or target.get("page_id")
     if page_id:
         page_id = validate_uuid(page_id, "page_id")
-    pages = psql_json(read_query(workspace, doc_id, page_id))
+    pages = psql_json(read_query(doc_id, page_id))
     if not pages:
         print("No matching local document/page found.", file=sys.stderr)
         return 1
@@ -436,11 +424,10 @@ def read_doc(args: argparse.Namespace) -> int:
 
 def list_updates(args: argparse.Namespace) -> int:
     target = parse_target(args.target)
-    workspace = validate_slug(args.workspace or target.get("workspace") or "")
     doc_id = args.doc_id or target.get("doc_id")
     if doc_id:
         doc_id = validate_uuid(doc_id, "doc_id")
-    rows = psql_json(updates_query(workspace, doc_id, args.since, args.limit))
+    rows = psql_json(updates_query(doc_id, args.since, args.limit))
     print("# Open Work Hub Docs Updates (local)\n")
     if not rows:
         print("(no matching updates)")
@@ -461,9 +448,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "target", nargs="?",
-        help="/w/{workspace}/docs/{doc_id}?page={page_id}, full URL, or doc UUID",
+        help="/apps/docs/{doc_id}?page={page_id}, full URL, or doc UUID",
     )
-    parser.add_argument("--workspace", help="workspace slug, for example general")
     parser.add_argument("--doc-id", help="doc UUID")
     parser.add_argument("--page-id", help="page UUID")
     parser.add_argument("--updates", action="store_true", help="list updates instead of content")

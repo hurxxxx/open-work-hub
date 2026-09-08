@@ -19,7 +19,7 @@ export function FilesChatView() {
       routeId: 'files.chat',
       conversationScope: {
         ref: 'files',
-        resourceId: 'workspace',
+        resourceId: 'company',
       },
       sidebarEyebrow: t('files.chat.eyebrow'),
       sidebarTitle: t('files.chat.conversationsTitle'),

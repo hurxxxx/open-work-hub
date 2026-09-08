@@ -1,19 +1,5 @@
 from __future__ import annotations
 
-from open_work_hub_api.domains.source_access.targets import (
-    TargetAccessAdapter,
-    TargetAccessProjection,
-    TargetRef,
-    ensure_builtin_target_access_adapters_registered,
-    get_target_access_adapter,
-    has_target_access_adapter,
-    project_target_access,
-    register_target_access_adapter,
-    reset_target_access_adapters,
-    resolve_target_label,
-    target_access_allowed,
-    target_access_app_ids,
-)
 from open_work_hub_api.domains.source_access.policy import (
     SourceAclPolicy,
     can_read_meeting,
@@ -27,6 +13,20 @@ from open_work_hub_api.domains.source_access.registry import (
     get_source_access_adapter,
     get_source_access_adapters,
     register_source_access_adapter,
+)
+from open_work_hub_api.domains.source_access.targets import (
+    TargetAccessAdapter,
+    TargetAccessProjection,
+    TargetRef,
+    ensure_builtin_target_access_adapters_registered,
+    get_target_access_adapter,
+    has_target_access_adapter,
+    project_target_access,
+    register_target_access_adapter,
+    reset_target_access_adapters,
+    resolve_target_label,
+    target_access_allowed,
+    target_access_app_ids,
 )
 
 __all__ = [

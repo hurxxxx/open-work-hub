@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import type {
   AppsBootstrapResponse,
-  WorkspaceBootstrapApp,
-} from '@/src/platform/workspaces/workspaces-api';
+  BootstrapApp,
+} from '@/src/platform/apps/apps-api';
 import {
   PERSONAL_TOOLS_CATEGORY_ID,
   projectShellAppsBootstrap,
 } from './apps-bootstrap-model';
 
-function workspaceApp(appId: string): WorkspaceBootstrapApp {
+function workspaceApp(appId: string): BootstrapApp {
   return {
     app_id: appId,
     title: appId,
@@ -67,7 +67,6 @@ function globalBootstrap(
     principal: {
       kind: 'user',
       scope: 'personal',
-      workspace_id: null,
       source: 'test',
       user_id: 'user-1',
     },
@@ -80,7 +79,7 @@ describe('projectShellAppsBootstrap', () => {
       globalBootstrap: globalBootstrap(),
       personalToolsScope: 'All workspaces',
       personalToolsTitle: 'Personal',
-      workspaceApps: [workspaceApp('home'), workspaceApp('docs')],
+      apps: [workspaceApp('home'), workspaceApp('docs')],
       workspaceCategories: [
         {
           id: 'collaboration',
@@ -122,7 +121,7 @@ describe('projectShellAppsBootstrap', () => {
       globalBootstrap: globalBootstrap([]),
       personalToolsScope: 'All workspaces',
       personalToolsTitle: 'Personal',
-      workspaceApps: [],
+      apps: [],
       workspaceCategories: [],
     });
 
@@ -133,7 +132,7 @@ describe('projectShellAppsBootstrap', () => {
     ).toBe(false);
   });
 
-  it('uses the server global-route projection instead of inferring route access from apps', () => {
+  it('uses the same current app admission projection for every route', () => {
     const projection = projectShellAppsBootstrap({
       globalBootstrap: globalBootstrap(['mail'], ['community']),
       personalToolsScope: 'All workspaces',
@@ -141,6 +140,6 @@ describe('projectShellAppsBootstrap', () => {
     });
 
     expect(projection.enabledAppIds).toEqual(['community', 'mail']);
-    expect(projection.globalRouteAppIds).toEqual(['community']);
+    expect(projection.globalRouteAppIds).toEqual(['community', 'mail']);
   });
 });

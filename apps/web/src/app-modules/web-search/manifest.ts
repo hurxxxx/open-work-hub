@@ -1,5 +1,5 @@
-import { Globe2 } from 'lucide-react';
 import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
+import { Globe2 } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -9,7 +9,6 @@ export const webSearchManifest: AppModuleManifest = {
     owner: 'ai-platform',
     permissions: [],
     apiDomain: 'web_search',
-    workspaceApiPrefixes: ['/api/v1/web-search'],
     aiCapabilities: ['web-search'],
     writeAuditActions: [],
     appLocalTests: ['apps/api/tests/test_web_search_service.py'],
@@ -24,5 +23,5 @@ export const webSearchManifest: AppModuleManifest = {
       appId: 'web-search',
     },
   ],
-  workspaceRoutePaths: [getAppRoutePattern('web-search.root')],
+  appRoutePaths: [getAppRoutePattern('web-search.root')],
 };

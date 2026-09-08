@@ -97,13 +97,12 @@ def test_query_policy_builds_text_opensearch_body_with_scope_acl_and_entity_filt
     acl_filter = _acl_filter(
         KeywordAclBranch(
             entity_type="doc",
-            clauses=(keyword_acl_clause("visibility", "workspace"),),
+            clauses=(keyword_acl_clause("visibility", "company"),),
         )
     )
     request = _request(query="  예산 리스크  ", entity_types=["doc", "pms_task"])
 
     query = build_keyword_search_query(
-        workspace_id="workspace_1",
         acl_filter=acl_filter,
         request=request,
         size=50,
@@ -120,7 +119,6 @@ def test_query_policy_builds_text_opensearch_body_with_scope_acl_and_entity_filt
         "query": {
             "bool": {
                 "filter": [
-                    {"term": {"workspace_id": "workspace_1"}},
                     {"terms": {"entity_type": ["doc", "pms_task"]}},
                     {
                         "bool": {
@@ -128,7 +126,13 @@ def test_query_policy_builds_text_opensearch_body_with_scope_acl_and_entity_filt
                                 {
                                     "bool": {
                                         "filter": [{"term": {"entity_type": "doc"}}],
-                                        "should": [{"term": {"visibility": "workspace"}}],
+                                        "should": [
+                                            {
+                                                "term": {
+                                                    "visibility": "company",
+                                                }
+                                            }
+                                        ],
                                         "minimum_should_match": 1,
                                     }
                                 }
@@ -159,11 +163,10 @@ def test_query_policy_builds_text_opensearch_body_with_scope_acl_and_entity_filt
 
 def test_query_policy_allows_recall_oriented_text_matching() -> None:
     query = build_keyword_search_query(
-        workspace_id="workspace_1",
         acl_filter=_acl_filter(
             KeywordAclBranch(
                 entity_type="file",
-                clauses=(keyword_acl_clause("visibility", "workspace"),),
+                clauses=(keyword_acl_clause("visibility", "company"),),
             )
         ),
         request=_request(query="국제 특허 출원 조사 절차", entity_types=["file"]),
@@ -189,7 +192,6 @@ def test_query_policy_uses_match_all_for_empty_query_and_requested_date_sort() -
 
     body = build_keyword_search_opensearch_body(
         build_keyword_search_query(
-            workspace_id="workspace_1",
             acl_filter=acl_filter,
             request=request,
         )
@@ -198,7 +200,6 @@ def test_query_policy_uses_match_all_for_empty_query_and_requested_date_sort() -
     assert body["query"] == {
         "bool": {
             "filter": [
-                {"term": {"workspace_id": "workspace_1"}},
                 {
                     "bool": {
                         "should": [
@@ -227,14 +228,12 @@ def test_query_policy_uses_match_all_for_empty_query_and_requested_date_sort() -
 def test_query_policy_uses_match_none_for_empty_acl_filter() -> None:
     body = build_keyword_search_opensearch_body(
         build_keyword_search_query(
-            workspace_id="workspace_1",
             acl_filter=KeywordAclFilter(),
             request=_request(query="예산"),
         )
     )
 
     assert body["query"]["bool"]["filter"] == [
-        {"term": {"workspace_id": "workspace_1"}},
         {"match_none": {}},
     ]
 
@@ -243,7 +242,6 @@ def test_partition_query_omits_stale_legacy_acl_hint() -> None:
     partition_id = "11111111-1111-1111-1111-111111111111"
     body = build_keyword_search_opensearch_body(
         build_keyword_search_query(
-            workspace_id="execution-workspace",
             retrieval_partition_ids=(partition_id,),
             acl_filter=None,
             request=_request(query="company handbook", entity_types=["file"]),
@@ -308,7 +306,6 @@ def test_query_policy_includes_exact_midnight_datetime_boundary() -> None:
 
     assert keyword_search_row_matches_request(row, request)
     query = build_keyword_search_query(
-        workspace_id="workspace_1",
         acl_filter=None,
         request=request,
     )
@@ -330,7 +327,6 @@ def test_opensearch_date_filter_uses_the_canonical_backend_field(
 ) -> None:
     body = build_keyword_search_opensearch_body(
         build_keyword_search_query(
-            workspace_id="workspace_1",
             acl_filter=None,
             request=_request(
                 date_filters=[
@@ -379,7 +375,6 @@ def test_all_target_refs_compile_to_independent_backend_filter_groups() -> None:
         target_ref_match="all",
     )
     query = build_keyword_search_query(
-        workspace_id="workspace-1",
         acl_filter=None,
         request=request,
     )
@@ -533,11 +528,10 @@ def test_query_policy_accepts_extension_filter_and_sort_vocabulary() -> None:
 
     body = build_keyword_search_opensearch_body(
         build_keyword_search_query(
-            workspace_id="workspace_1",
             acl_filter=_acl_filter(
                 KeywordAclBranch(
                     entity_type="plugin_record",
-                    clauses=(keyword_acl_clause("visibility", "workspace"),),
+                    clauses=(keyword_acl_clause("visibility", "company"),),
                 )
             ),
             request=request,
@@ -580,24 +574,23 @@ def test_search_access_filter_skips_unregistered_entity_rows() -> None:
 
         def can_read_resource(self, resource_type: str, resource_id: str) -> bool:
             self.calls.append((resource_type, resource_id))
-            return True
+            return resource_id == "doc-1"
 
     policy = _Policy()
     rows = [
-        {"workspace_id": "workspace_1", "entity_type": "plugin_typo", "entity_id": "record-1"},
-        {"workspace_id": "workspace_2", "entity_type": "doc", "entity_id": "doc-2"},
-        {"workspace_id": "workspace_1", "entity_type": "doc", "entity_id": "doc-1"},
+        {"entity_type": "plugin_typo", "entity_id": "record-1"},
+        {"entity_type": "doc", "entity_id": "doc-2"},
+        {"entity_type": "doc", "entity_id": "doc-1"},
     ]
 
     result = _filter_accessible_search_rows(
         rows,
         policy,
-        workspace_id="workspace_1",
         allowed_entity_types=frozenset({"doc"}),
     )
 
-    assert result == [{"workspace_id": "workspace_1", "entity_type": "doc", "entity_id": "doc-1"}]
-    assert policy.calls == [("docs_native_doc", "doc-1")]
+    assert result == [{"entity_type": "doc", "entity_id": "doc-1"}]
+    assert policy.calls == [("docs_native_doc", "doc-2"), ("docs_native_doc", "doc-1")]
 
 
 def test_partition_authorized_search_ignores_stale_workspace_payload() -> None:
@@ -608,7 +601,6 @@ def test_partition_authorized_search_ignores_stale_workspace_payload() -> None:
             return set(resources)
 
     stale_workspace_row = {
-        "workspace_id": "workspace-before-move",
         "retrieval_partition_id": partition_id,
         "entity_type": "doc",
         "entity_id": "doc-1",
@@ -622,7 +614,6 @@ def test_partition_authorized_search_ignores_stale_workspace_payload() -> None:
     result = _filter_accessible_search_rows(
         [stale_workspace_row, wrong_partition_row],
         _Policy(),
-        workspace_id="workspace-after-move",
         allowed_entity_types=frozenset({"doc"}),
         authorized_partition_ids=(partition_id,),
     )
@@ -651,7 +642,6 @@ def test_keyword_acl_refill_uses_pit_and_search_after_until_authorized_hit() -> 
                 hits=(
                     KeywordSearchHit(
                         document={
-                            "workspace_id": "workspace_1",
                             "entity_type": "doc",
                             "entity_id": resource_id,
                         },
@@ -671,7 +661,6 @@ def test_keyword_acl_refill_uses_pit_and_search_after_until_authorized_hit() -> 
 
     client = _Client()
     rows = _load_authorized_ranked_candidates(
-        workspace_id="workspace_1",
         acl_filter=KeywordAclFilter(),
         policy=_Policy(),
         allowed_entity_types=frozenset({"doc"}),

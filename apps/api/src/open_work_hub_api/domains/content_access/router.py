@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
@@ -11,13 +11,13 @@ from open_work_hub_api.domains.auth.dependencies import (
     bearer_scheme,
     resolve_auth_context_from_token,
 )
+from open_work_hub_api.domains.content_access.contracts import ContentStream
 from open_work_hub_api.domains.content_access.grants import (
     ContentGrantClaims,
     InvalidContentGrant,
     decode_content_grant,
     require_matching_issuer,
 )
-from open_work_hub_api.domains.content_access.contracts import ContentStream
 
 router = APIRouter(tags=["content"])
 
@@ -39,6 +39,10 @@ def _open_content(db: Session, claims: ContentGrantClaims) -> ContentStream:
         from open_work_hub_api.domains.meeting.service import open_file_attachment_content_grant
 
         return open_file_attachment_content_grant(db, claims=claims)
+    if claims.resource_kind == "dm.attachment":
+        from open_work_hub_api.domains.dm.attachment_content import open_dm_attachment_content_grant
+
+        return open_dm_attachment_content_grant(db, claims=claims)
     if claims.resource_kind == "media.file":
         from open_work_hub_api.domains.media.content_access import open_media_content_grant
 

@@ -11,6 +11,7 @@ import {
   type PmsTaskListStatus,
   type PmsTaskListStatusesResponse,
 } from '../api/pms-api';
+import { PMS_WORKFLOW_DEFAULT_STATUS_COLOR } from './pms-color-palettes';
 import {
   buildCreateWorkflowStatusCommand,
   buildUpdateWorkflowStatusCommand,
@@ -20,7 +21,6 @@ import {
   type TaskListWorkflowStatusMode,
   type TaskListWorkflowStatusSource,
 } from './task-list-workflow-settings-model';
-import { PMS_WORKFLOW_DEFAULT_STATUS_COLOR } from './pms-color-palettes';
 
 export interface TaskListWorkflowStatusesClient {
   createSpaceStatus: typeof createSpaceStatus;

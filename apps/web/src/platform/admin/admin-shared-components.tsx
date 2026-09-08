@@ -1,10 +1,9 @@
+import { Search } from 'lucide-react';
 import { useEffect, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Shield } from 'lucide-react';
 
 import { Button, InlineNotice } from '@open-work-hub/ui';
 
-import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 
@@ -12,57 +11,14 @@ import { listAdminUsers } from './admin-api';
 import {
   buildPeopleDirectoryPagination,
   buildPeopleDirectoryUserRow,
-  buildUserWorkspaceChipModel,
   INITIAL_PEOPLE_DIRECTORY_GRID_STATE,
   peopleDirectoryGridReducer,
 } from './admin-directory-grid-model';
 import {
   PEOPLE_PAGE_SIZE,
-  getWorkspaceRoleLabel,
   type SelectedSubject,
   type SubjectSelectionState,
 } from './admin-shared-model';
-
-export function UserWorkspaceChips({
-  user,
-}: {
-  user: Pick<AuthUser, 'workspaces'>;
-}) {
-  const { t, i18n: i18next } = useTranslation('apps');
-  const locale = i18next.resolvedLanguage ?? i18next.language;
-  if (user.workspaces.length === 0) {
-    return <span className="text-app-ink/40">-</span>;
-  }
-  const model = buildUserWorkspaceChipModel(user.workspaces, locale);
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      {model.visible.map((workspace) => {
-        return (
-          <span
-            key={workspace.id}
-            className={`app-text-caption inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${
-              workspace.elevated
-                ? 'border-app-accent/30 bg-app-accent/10 text-app-accent'
-                : 'border-app-border bg-app-surface-sidebar text-app-ink/70'
-            }`}
-            title={`${workspace.name} · ${getWorkspaceRoleLabel(workspace.role, t)}`}
-          >
-            <span>{workspace.name}</span>
-            {workspace.elevated ? <span className="opacity-70">🛡</span> : null}
-          </span>
-        );
-      })}
-      {model.hiddenCount > 0 ? (
-        <span
-          className="app-text-caption text-app-ink/50"
-          title={model.hiddenTitle}
-        >
-          +{model.hiddenCount}
-        </span>
-      ) : null}
-    </div>
-  );
-}
 
 export function SurfaceCard({
   title,
@@ -247,23 +203,6 @@ export function FilterChip({
   );
 }
 
-export function MemberRoleBadge({ role }: { role: string }) {
-  const { t } = useTranslation('apps');
-  if (role === 'admin') {
-    return (
-      <span className="app-text-caption inline-flex items-center gap-1 text-app-ink/70">
-        <Shield className="text-app-ink/50" size={12} />
-        {getWorkspaceRoleLabel(role, t)}
-      </span>
-    );
-  }
-  return (
-    <span className="app-text-caption text-app-ink/70">
-      {getWorkspaceRoleLabel(role, t)}
-    </span>
-  );
-}
-
 export function PeopleDirectoryGrid({
   token,
   selection,
@@ -369,7 +308,7 @@ export function PeopleDirectoryGrid({
                 {t('admin.shared.directory.user')}
               </th>
               <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
-                {t('admin.shared.directory.workspace')}
+                {t('admin.shared.directory.groups')}
               </th>
               <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">
                 {t('admin.shared.directory.status')}
@@ -420,7 +359,7 @@ export function PeopleDirectoryGrid({
                       </div>
                     </td>
                     <td className="px-2 py-1">
-                      <UserWorkspaceChips user={row.user} />
+                      <span>{row.user.group_ids.length}</span>
                     </td>
                     <td className="px-2 py-1">
                       {row.statusKind === 'excluded' ? (

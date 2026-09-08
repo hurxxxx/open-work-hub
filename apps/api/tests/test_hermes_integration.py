@@ -12,12 +12,8 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from open_work_hub_api.core.settings import (
-    HERMES_FALLBACK_MODEL,
-    HERMES_MODEL,
-    HERMES_PROVIDER,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.core.settings import HERMES_FALLBACK_MODEL, HERMES_MODEL, HERMES_PROVIDER
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes import mcp_router
 from open_work_hub_api.domains.hermes import maintenance as hermes_maintenance
 from open_work_hub_api.domains.hermes import router as hermes_router
@@ -43,9 +39,7 @@ from open_work_hub_api.domains.hermes.repository import (
     sanitize_event_payload,
     utcnow_naive,
 )
-from open_work_hub_api.domains.hermes.research_sources import (
-    DEFAULT_RESEARCH_SOURCE_POLICY,
-)
+from open_work_hub_api.domains.hermes.research_sources import DEFAULT_RESEARCH_SOURCE_POLICY
 from open_work_hub_api.domains.hermes.schemas import HermesApprovalDecision, HermesRunCreate
 from open_work_hub_api.domains.hermes.service import (
     ensure_job_profile,
@@ -67,11 +61,6 @@ def test_stage_persists_run_before_foreign_key_children(
     try:
         with Session(engine) as db:
             suffix = uuid4().hex
-            workspace = Workspace(
-                id=str(uuid4()),
-                key=f"hermes-stage-{suffix[:16]}",
-                name="Hermes stage test",
-            )
             user = User(
                 id=str(uuid4()),
                 login_id=f"hermes-stage-{suffix[:16]}",
@@ -79,12 +68,11 @@ def test_stage_persists_run_before_foreign_key_children(
                 full_name="Hermes Stage Test",
                 password_hash="not-used",
             )
-            db.add_all([workspace, user])
+            db.add_all([user])
             db.flush()
 
             binding = HermesProfileBinding(
                 id=str(uuid4()),
-                workspace_id=workspace.id,
                 user_id=user.id,
                 profile_name=f"owh-test-{suffix[:32]}",
                 status="active",
@@ -228,7 +216,6 @@ def test_revoked_run_scan_advances_past_authorized_windows(
         SimpleNamespace(
             id=f"00000000-0000-0000-0000-{index:012d}",
             user_id=f"allowed-{index}",
-            workspace_id="workspace-1",
             status="running",
             execution_claim_token=None,
             execution_claim_expires_at=None,
@@ -240,7 +227,6 @@ def test_revoked_run_scan_advances_past_authorized_windows(
     revoked = SimpleNamespace(
         id="00000000-0000-0000-0000-000000000006",
         user_id="revoked-user",
-        workspace_id="workspace-1",
         status="running",
         execution_claim_token=None,
         execution_claim_expires_at=None,
@@ -288,7 +274,7 @@ def test_revoked_run_scan_advances_past_authorized_windows(
     )
     monkeypatch.setattr(
         hermes_maintenance,
-        "is_app_enabled_for_user_context",
+        "can_use_app",
         lambda _db, **kwargs: kwargs["user_id"] != "revoked-user",
     )
     monkeypatch.setattr(
@@ -313,7 +299,6 @@ async def test_revoked_job_scan_advances_past_authorized_windows(
         SimpleNamespace(
             id=f"10000000-0000-0000-0000-{index:012d}",
             user_id=f"allowed-{index}",
-            workspace_id="workspace-1",
             status="active",
             profile_binding_id=f"profile-{index}",
             hermes_job_id=f"remote-job-{index}",
@@ -324,7 +309,6 @@ async def test_revoked_job_scan_advances_past_authorized_windows(
     revoked = SimpleNamespace(
         id="10000000-0000-0000-0000-000000000006",
         user_id="revoked-user",
-        workspace_id="workspace-1",
         status="active",
         profile_binding_id="profile-revoked",
         hermes_job_id="remote-job-revoked",
@@ -374,7 +358,7 @@ async def test_revoked_job_scan_advances_past_authorized_windows(
     )
     monkeypatch.setattr(
         hermes_maintenance,
-        "is_app_enabled_for_user_context",
+        "can_use_app",
         lambda _db, **kwargs: kwargs["user_id"] != "revoked-user",
     )
     monkeypatch.setattr(
@@ -407,11 +391,6 @@ async def test_expired_approval_without_a_remote_run_fails_the_local_run(
         unexpected_runtime_client,
     )
     suffix = uuid4().hex
-    workspace = Workspace(
-        id=str(uuid4()),
-        key=f"hermes-expired-{suffix[:16]}",
-        name="Hermes expired approval",
-    )
     user = User(
         id=str(uuid4()),
         login_id=f"hermes-expired-{suffix[:16]}",
@@ -421,7 +400,6 @@ async def test_expired_approval_without_a_remote_run_fails_the_local_run(
     )
     binding = HermesProfileBinding(
         id=str(uuid4()),
-        workspace_id=workspace.id,
         user_id=user.id,
         profile_name=f"owh-expired-{suffix[:24]}",
         status="active",
@@ -430,7 +408,7 @@ async def test_expired_approval_without_a_remote_run_fails_the_local_run(
     )
     try:
         with Session(engine) as db:
-            db.add_all([workspace, user, binding])
+            db.add_all([user, binding])
             db.flush()
             run = HermesRunRepository(db).stage(
                 binding=binding,
@@ -645,13 +623,11 @@ def test_run_scope_normalizes_app_ids_and_mcp_filters_with_it(monkeypatch) -> No
         scalar=lambda _query: SimpleNamespace(allowed_app_ids=body.allowed_app_ids)
     )
     binding = SimpleNamespace(id="binding-1")
-    workspace = SimpleNamespace(id="workspace-1")
     user = SimpleNamespace(id="user-1")
 
     _principal, tools, active_run = mcp_router._available_tools(
         db,
         binding=binding,
-        workspace=workspace,
         user=user,
     )
 
@@ -676,7 +652,6 @@ def test_mcp_discovery_surface_is_stable_across_run_app_scopes(monkeypatch) -> N
     _mcp_router_principal, tools, resolved_run = mcp_router._available_tools(
         db,
         binding=SimpleNamespace(id="binding-1"),
-        workspace=SimpleNamespace(id="workspace-1"),
         user=SimpleNamespace(id="user-1"),
         apply_run_scope=False,
     )
@@ -698,7 +673,6 @@ def test_mcp_tool_surface_requires_an_active_scoped_run(monkeypatch) -> None:
         mcp_router._available_tools(
             db,
             binding=SimpleNamespace(id="binding-1"),
-            workspace=SimpleNamespace(id="workspace-1"),
             user=SimpleNamespace(id="user-1"),
         )
 
@@ -868,7 +842,6 @@ async def test_approval_is_committed_before_hermes_resumes(monkeypatch) -> None:
         HermesApprovalDecision(request_id="request-1", choice="once"),
         db=FakeDb(),
         current_user=SimpleNamespace(id="user-1"),
-        current_workspace=SimpleNamespace(id="workspace-1"),
     )
 
     assert result is run
@@ -935,7 +908,6 @@ async def test_failed_hermes_resume_restores_unconsumed_approval(monkeypatch) ->
             HermesApprovalDecision(request_id="request-1", choice="once"),
             db=FakeDb(),
             current_user=SimpleNamespace(id="user-1"),
-            current_workspace=SimpleNamespace(id="workspace-1"),
         )
 
     assert error.value.status_code == 502
@@ -1146,7 +1118,6 @@ async def test_profile_reconciliation_replaces_stale_internal_mcp_url(
 
     reconciled = await hermes_service.ensure_profile_binding(
         FakeDb(),
-        workspace=SimpleNamespace(),
         user=SimpleNamespace(),
         settings=settings,
         client=FakeManagementClient(),

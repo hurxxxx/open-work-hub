@@ -1,5 +1,5 @@
-import type { MouseEventHandler } from 'react';
 import { Bell } from 'lucide-react';
+import type { MouseEventHandler } from 'react';
 
 import { cn } from '@/src/lib/utils';
 import { NOTIFICATION_PANEL_ID } from './useNotificationPanelFocus';

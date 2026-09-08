@@ -7,14 +7,12 @@ import {
 
 describe('bento route paths', () => {
   it('builds the workspace hub from the generated route contract', () => {
-    expect(buildBentoHubPath('team alpha')).toBe(
-      '/apps/bento/workspaces/team%20alpha',
-    );
+    expect(buildBentoHubPath()).toBe('/apps/bento');
   });
 
   it('keeps presentation links on the canonical presentations route', () => {
-    expect(buildBentoPresentationPath('team alpha', 'deck/one')).toBe(
-      '/apps/bento/workspaces/team%20alpha/presentations/deck%2Fone',
+    expect(buildBentoPresentationPath('deck/one')).toBe(
+      '/apps/bento/presentations/deck%2Fone',
     );
   });
 });

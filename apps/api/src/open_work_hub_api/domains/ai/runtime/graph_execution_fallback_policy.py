@@ -10,7 +10,6 @@ from open_work_hub_api.domains.ai.runtime.graph_schedule_summary import (
 )
 from open_work_hub_api.domains.ai.runtime.routing import RuntimeRoutingDecision
 
-
 GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID = "graph_instructed_single_loop_v0"
 GRAPH_NODE_RUNNER_ADAPTER_ID = "graph_node_runner_v0"
 

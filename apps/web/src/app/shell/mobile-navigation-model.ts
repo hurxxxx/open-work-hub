@@ -1,17 +1,17 @@
 import type { AppBarItem } from '@/src/app/shell/navigation-types';
+import { appIconForKey } from '@/src/platform/apps/app-icons';
+import type { ShellAppId } from '@/src/platform/apps/app-links';
 import type {
-  WorkspaceBootstrapAppBarCategory,
-  WorkspaceBootstrapApp,
-} from '@/src/platform/workspaces/workspaces-api';
-import { workspaceAppIconForKey } from '@/src/platform/workspaces/workspace-app-icons';
-import type { WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
+  BootstrapApp,
+  BootstrapAppBarCategory,
+} from '@/src/platform/apps/apps-api';
 
 export interface MobileNavigationItem {
   id: string;
-  activeAppIds: readonly WorkspaceAppId[];
+  activeAppIds: readonly ShellAppId[];
   title: string;
   icon: AppBarItem['icon'];
-  linkAppId: WorkspaceAppId;
+  linkAppId: ShellAppId;
   type: 'app';
 }
 
@@ -19,18 +19,18 @@ export function projectMobileNavigationItems({
   appBarCategories,
   fixedAppIds,
   appBarItems,
-  workspaceApps,
+  apps,
 }: {
-  appBarCategories: readonly WorkspaceBootstrapAppBarCategory[];
+  appBarCategories: readonly BootstrapAppBarCategory[];
   fixedAppIds: readonly string[];
   appBarItems: readonly AppBarItem[];
-  workspaceApps: readonly WorkspaceBootstrapApp[];
+  apps: readonly BootstrapApp[];
 }): MobileNavigationItem[] {
   const appBarItemById = new Map(
     appBarItems.map((item) => [item.id, item] as const),
   );
   const workspaceAppById = new Map(
-    workspaceApps.map((item) => [item.app_id, item] as const),
+    apps.map((item) => [item.app_id, item] as const),
   );
   const items: MobileNavigationItem[] = [];
   const projectedAppIds = new Set<string>();
@@ -47,7 +47,7 @@ export function projectMobileNavigationItems({
       title: fixedApp.title,
       icon:
         appBarItemById.get(fixedAppId)?.icon ??
-        workspaceAppIconForKey(fixedApp.icon_key),
+        appIconForKey(fixedApp.icon_key),
       linkAppId: fixedAppId,
       type: 'app',
     });
@@ -72,7 +72,7 @@ export function projectMobileNavigationItems({
         id: app.app_id,
         activeAppIds: [app.app_id],
         title: app.title,
-        icon: workspaceAppIconForKey(app.icon_key),
+        icon: appIconForKey(app.icon_key),
         linkAppId: app.app_id,
         type: 'app',
       });

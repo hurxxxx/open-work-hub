@@ -1,13 +1,13 @@
-import {StrictMode, useEffect} from 'react';
-import {createRoot} from 'react-dom/client';
-import '@open-work-hub/ui/styles.css';
-import { i18n } from '@/src/platform/i18n';
 import { installMatomoTracking } from '@/src/platform/analytics/matomo';
 import { installClientBuildGuards } from '@/src/platform/deployment/client-build-guard';
 import {
   clearStaleAssetReloadMarker,
   installStaleAssetReloadHandler,
 } from '@/src/platform/deployment/stale-asset-reload';
+import { i18n } from '@/src/platform/i18n';
+import '@open-work-hub/ui/styles.css';
+import { StrictMode, useEffect } from 'react';
+import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
 import './styles/fullcalendar-theme.css';

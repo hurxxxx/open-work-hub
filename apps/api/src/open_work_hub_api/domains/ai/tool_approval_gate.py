@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 
-from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.core.i18n import localized_http_exception
+from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.domains.ai import approvals as ai_approvals
 from open_work_hub_api.domains.ai.registry import AiCapabilityDescriptor
 from open_work_hub_api.domains.ai.tool_approval_projection import (
@@ -17,9 +17,6 @@ from open_work_hub_api.domains.ai.tool_approval_projection import (
     build_resource_preview,
     render_approval_preview,
 )
-
-if TYPE_CHECKING:
-    from open_work_hub_api.domains.auth.models import Workspace
 
 
 class ToolRequiresApproval(Exception):
@@ -52,7 +49,6 @@ def build_tool_requires_approval(
     tool_name: str,
     validated_arguments: Mapping[str, Any],
     descriptor: AiCapabilityDescriptor | None,
-    workspace: Workspace,
     principal: CallerPrincipal,
     parsed_args: BaseModel | Mapping[str, Any],
 ) -> ToolRequiresApproval:
@@ -66,7 +62,6 @@ def build_tool_requires_approval(
         ),
         resource_preview=build_resource_preview(
             descriptor=descriptor,
-            workspace=workspace,
             principal=principal,
             parsed_args=parsed_args,
         ),

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from datetime import UTC, datetime
 import json
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, status
@@ -19,46 +19,34 @@ from open_work_hub_api.core.i18n import (
     translate_message,
 )
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.domains.auth.access import (
-    bind_current_workspace,
-    resolve_workspace_role,
+from open_work_hub_api.domains.auth.app_gate import (
+    require_app_access,
 )
 from open_work_hub_api.domains.auth.dependencies import (
     require_current_user,
     resolve_auth_context_from_token,
 )
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    require_company_app_enabled,
-    require_workspace_app_enabled,
-)
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.collaboration.yjs_runtime import (
     CollabConnectionLimitExceeded,
     FastAPIYjsWebsocket,
 )
-from open_work_hub_api.domains.whiteboard.collab import (
-    WhiteboardCollabContext,
-    WhiteboardCollabHub,
-)
-from open_work_hub_api.domains.whiteboard.app_catalog import WHITEBOARD_WORKSPACE_APP
-from open_work_hub_api.domains.whiteboard.item_mutations import (
-    WhiteboardItemUpdateCommand,
-    update_whiteboard_item as update_whiteboard_item_command,
-)
-from open_work_hub_api.domains.whiteboard.models import (
-    Whiteboard,
-    WhiteboardCollabDocument,
-    WhiteboardTarget,
-    WhiteboardLinkShare,
-    WhiteboardUserShare,
-    WhiteboardUserItemPref,
-    empty_scene,
+from open_work_hub_api.domains.usage.service import (
+    USAGE_EVENT_CONTENT_VIEW,
+    record_usage_event,
 )
 from open_work_hub_api.domains.whiteboard.access import (
     WhiteboardAccess,
-    ensure_whiteboard_workspace_access as _ensure_whiteboard_workspace_access,
     load_whiteboard_for_share_token_or_404,
     load_whiteboard_for_user_or_404,
+)
+from open_work_hub_api.domains.whiteboard.access import (
+    ensure_whiteboard_app_access as _ensure_whiteboard_app_access,
+)
+from open_work_hub_api.domains.whiteboard.app_catalog import WHITEBOARD_APP
+from open_work_hub_api.domains.whiteboard.collab import (
+    WhiteboardCollabContext,
+    WhiteboardCollabHub,
 )
 from open_work_hub_api.domains.whiteboard.hub import (
     ResolveWhiteboardSharedLinkResponse,
@@ -81,47 +69,57 @@ from open_work_hub_api.domains.whiteboard.hub import (
     build_whiteboard_hub_response,
     resolve_whiteboard_hub_view,
 )
+from open_work_hub_api.domains.whiteboard.item_mutations import (
+    WhiteboardItemUpdateCommand,
+)
+from open_work_hub_api.domains.whiteboard.item_mutations import (
+    update_whiteboard_item as update_whiteboard_item_command,
+)
+from open_work_hub_api.domains.whiteboard.models import (
+    Whiteboard,
+    WhiteboardCollabDocument,
+    WhiteboardLinkShare,
+    WhiteboardTarget,
+    WhiteboardUserItemPref,
+    WhiteboardUserShare,
+    empty_scene,
+)
 from open_work_hub_api.domains.whiteboard.registry import (
     TargetRef,
     project_target_access,
-)
-from open_work_hub_api.domains.usage.service import (
-    USAGE_EVENT_CONTENT_VIEW,
-    record_usage_event,
-)
-from open_work_hub_api.domains.whiteboard.service import create_whiteboard_for_user
-from open_work_hub_api.domains.whiteboard.sharing import (
-    WhiteboardSharingResponse,
-    delete_whiteboard_user_share as delete_whiteboard_user_share_command,
-    disable_whiteboard_link_share as disable_whiteboard_link_share_command,
-    get_whiteboard_sharing_response,
-    upsert_whiteboard_link_share as upsert_whiteboard_link_share_command,
-    upsert_whiteboard_user_share as upsert_whiteboard_user_share_command,
 )
 from open_work_hub_api.domains.whiteboard.scene_state import (
     apply_collab_snapshot,
     ensure_collab_session_state,
 )
-
-
-require_whiteboard_app_enabled = require_workspace_app_enabled(
-    WHITEBOARD_WORKSPACE_APP.app_id,
-    error_code="workspace.app_disabled",
+from open_work_hub_api.domains.whiteboard.service import create_whiteboard_for_user
+from open_work_hub_api.domains.whiteboard.realtime import publish_whiteboard_access_changed
+from open_work_hub_api.domains.whiteboard.sharing import (
+    WhiteboardSharingResponse,
+    get_whiteboard_sharing_response,
 )
-require_whiteboard_company_app_enabled = require_company_app_enabled(
-    WHITEBOARD_WORKSPACE_APP.app_id,
-    error_code="workspace.app_disabled",
+from open_work_hub_api.domains.whiteboard.sharing import (
+    delete_whiteboard_user_share as delete_whiteboard_user_share_command,
+)
+from open_work_hub_api.domains.whiteboard.sharing import (
+    disable_whiteboard_link_share as disable_whiteboard_link_share_command,
+)
+from open_work_hub_api.domains.whiteboard.sharing import (
+    upsert_whiteboard_link_share as upsert_whiteboard_link_share_command,
+)
+from open_work_hub_api.domains.whiteboard.sharing import (
+    upsert_whiteboard_user_share as upsert_whiteboard_user_share_command,
+)
+
+require_whiteboard_app_enabled = require_app_access(
+    WHITEBOARD_APP.app_id,
+    error_code="app.access_required",
 )
 
 router = APIRouter(
     prefix="/whiteboard",
     tags=["whiteboard"],
     dependencies=[Depends(require_whiteboard_app_enabled)],
-)
-public_router = APIRouter(
-    prefix="/whiteboard",
-    tags=["whiteboard"],
-    dependencies=[Depends(require_whiteboard_company_app_enabled)],
 )
 ws_router = APIRouter(prefix="/whiteboard", tags=["whiteboard"])
 
@@ -131,6 +129,7 @@ def _utcnow() -> datetime:
 
 
 class WhiteboardTargetPayload(BaseModel):
+    company_admin_read_acknowledged: bool = False
     app: str = Field(..., min_length=1, max_length=64)
     type: str = Field(..., min_length=1, max_length=64)
     id: str = Field(..., min_length=1, max_length=128)
@@ -138,6 +137,8 @@ class WhiteboardTargetPayload(BaseModel):
 
 
 class CreateWhiteboardRequest(BaseModel):
+    company_visible: bool = False
+    company_admin_read_acknowledged: bool = False
     title: str = Field(..., min_length=1, max_length=200)
     scene: dict[str, Any] | None = None
     source_app: str = Field(default="whiteboard", min_length=1, max_length=64)
@@ -153,6 +154,7 @@ class UpdateWhiteboardRequest(BaseModel):
 
 
 class UpdateWhiteboardTargetRequest(BaseModel):
+    company_admin_read_acknowledged: bool = False
     app: str = Field(..., min_length=1, max_length=64)
     type: str = Field(..., min_length=1, max_length=64)
     id: str = Field(..., min_length=1, max_length=128)
@@ -180,6 +182,7 @@ class UpsertLinkShareRequest(BaseModel):
 
 
 class WhiteboardContextPayload(BaseModel):
+    company_admin_read_acknowledged: bool = False
     app: str = Field(..., min_length=1, max_length=64)
     type: str = Field(..., min_length=1, max_length=64)
     id: str = Field(..., min_length=1, max_length=128)
@@ -224,30 +227,8 @@ class WhiteboardCollabSnapshotResponse(BaseModel):
     last_snapshot_at: datetime
 
 
-def _require_workspace_slug(request: Request) -> str:
-    workspace_slug = request.path_params.get("workspace_slug")
-    if not workspace_slug:
-        raise localized_http_exception(
-            status_code=400,
-            code="whiteboard.workspace_slug_required",
-        )
-    return workspace_slug
-
-
-def _bind_workspace_slug_for_collab(db: Session, user: User, workspace_slug: str) -> Workspace:
-    workspace = db.scalar(
-        select(Workspace).where(
-            Workspace.key == workspace_slug,
-            Workspace.active.is_(True),
-        )
-    )
-    if workspace is None:
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
-    if resolve_workspace_role(db, user, workspace.id) is None:
-        raise localized_http_exception(status_code=403, code="workspace.access_required")
-    require_whiteboard_app_enabled(db=db, current_workspace=workspace)
-    bind_current_workspace(db, workspace)
-    return workspace
+def _require_collab_app_access(db: Session, user: User) -> None:
+    _ensure_whiteboard_app_access(db, user)
 
 
 def _whiteboard_from_item_or_404(
@@ -318,6 +299,8 @@ async def _receive_collab_auth_frame(websocket: WebSocket) -> str:
         parsed = json.loads(payload)
     except json.JSONDecodeError as exc:
         raise localized_http_exception(status_code=401, code="auth.required") from exc
+    if not isinstance(parsed, dict):
+        raise localized_http_exception(status_code=401, code="auth.required")
     token = parsed.get("token")
     if parsed.get("type") != "auth" or not isinstance(token, str) or not token:
         raise localized_http_exception(status_code=401, code="auth.required")
@@ -325,9 +308,8 @@ async def _receive_collab_auth_frame(websocket: WebSocket) -> str:
 
 
 async def _resolve_collab_ws_token(websocket: WebSocket) -> str:
-    query_token = websocket.query_params.get("token")
-    if query_token:
-        return query_token
+    if "token" in websocket.query_params:
+        raise localized_http_exception(status_code=401, code="auth.required")
     return await _receive_collab_auth_frame(websocket)
 
 
@@ -353,7 +335,7 @@ def _ensure_whiteboard_collab_context(
     user: User,
     item_id: str,
 ) -> tuple[WhiteboardCollabContext, WhiteboardCollabDocument]:
-    _ensure_whiteboard_workspace_access(db, user)
+    _ensure_whiteboard_app_access(db, user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, user)
     scene_state = ensure_collab_session_state(db, whiteboard=whiteboard)
     assert scene_state.collab is not None
@@ -367,36 +349,31 @@ def _ensure_whiteboard_collab_context(
     return context, scene_state.collab
 
 
+async def _authorize_whiteboard_collab_access(*, item_id: str, token: str) -> None:
+    # A connected socket is not a continuing grant. Recheck the live session,
+    # account, app admission and source edit ACL before each Yjs frame.
+    with get_session_factory()() as db:
+        auth_context = resolve_auth_context_from_token(db, token, update_last_seen=False)
+        _require_collab_app_access(db, auth_context.user)
+        _whiteboard, access = _whiteboard_from_item_or_404(db, item_id, auth_context.user)
+        if not access.can_edit:
+            raise localized_http_exception(status_code=403, code="whiteboard.edit_access_required")
+
+
 async def _monitor_whiteboard_collab_access(
     websocket: WebSocket,
     *,
-    workspace_slug: str,
     item_id: str,
     token: str,
 ) -> None:
-    session_factory = get_session_factory()
     settings = get_settings()
     while True:
         await asyncio.sleep(settings.collab_acl_recheck_seconds)
-        db = session_factory()
         try:
-            auth_context = resolve_auth_context_from_token(db, token, update_last_seen=False)
-            _bind_workspace_slug_for_collab(db, auth_context.user, workspace_slug)
-            _whiteboard, access = _whiteboard_from_item_or_404(db, item_id, auth_context.user)
-            if not access.can_edit:
-                await websocket.close(
-                    code=4403,
-                    reason=_websocket_message(
-                        websocket,
-                        "whiteboard.edit_access_required",
-                    ),
-                )
-                return
+            await _authorize_whiteboard_collab_access(item_id=item_id, token=token)
         except HTTPException as exc:
             await _close_websocket_for_http_error(websocket, exc)
             return
-        finally:
-            db.close()
 
 
 @router.get("/hub", response_model=WhiteboardHubResponse)
@@ -442,9 +419,8 @@ def get_whiteboard_context_slot(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardContextSlotResponse:
-    workspace = _ensure_whiteboard_workspace_access(db, current_user)
     ref = TargetRef(app=app, type=type, id=id)
-    projection = project_target_access(db=db, user=current_user, workspace=workspace, ref=ref)
+    projection = project_target_access(db=db, user=current_user, ref=ref)
     if not projection.can_view:
         raise localized_http_exception(
             status_code=403,
@@ -459,76 +435,95 @@ def get_whiteboard_context_slot(
 @router.post("/contexts/slot", response_model=WhiteboardDetail, status_code=status.HTTP_201_CREATED)
 def create_whiteboard_context_slot(
     payload: CreateWhiteboardContextSlotRequest,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
-    workspace = _ensure_whiteboard_workspace_access(db, current_user)
+    changed_board_ids: set[str] = set()
     ref = TargetRef(app=payload.app, type=payload.type, id=payload.id)
-    _require_context_write(db, workspace=workspace, user=current_user, ref=ref)
+    _require_context_write(db, user=current_user, ref=ref)
     if _is_singleton_context(ref):
-        _delete_context_slot(db, ref=ref)
+        changed_board_ids.update(_delete_context_slot(db, ref=ref))
     whiteboard = create_whiteboard_for_user(
         db,
-        workspace_id=workspace.id,
         owner_id=current_user.id,
         title=payload.title,
         source_app=payload.app,
         source_kind="manual",
         source_ref=payload.id,
         primary_target=(ref.app, ref.type, ref.id, 0),
+        company_admin_read_acknowledged=payload.company_admin_read_acknowledged,
     )
     db.commit()
+    for changed_board_id in sorted(changed_board_ids):
+        publish_whiteboard_access_changed(
+            getattr(request.app.state, "app_realtime", None), changed_board_id
+        )
     return _lookup_item(db, whiteboard.id, current_user)
 
 
 @router.put("/contexts/slot", response_model=WhiteboardDetail)
 def attach_whiteboard_context_slot(
     payload: AttachWhiteboardContextSlotRequest,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
-    workspace = _ensure_whiteboard_workspace_access(db, current_user)
+    changed_board_ids: set[str] = set()
     ref = TargetRef(app=payload.app, type=payload.type, id=payload.id)
-    _require_context_write(db, workspace=workspace, user=current_user, ref=ref)
+    _require_context_write(db, user=current_user, ref=ref)
     whiteboard, _access = _whiteboard_from_item_or_404(db, payload.whiteboard_id, current_user)
     if _is_singleton_context(ref):
-        _delete_context_slot(db, ref=ref, except_whiteboard_id=whiteboard.id)
+        changed_board_ids.update(
+            _delete_context_slot(db, ref=ref, except_whiteboard_id=whiteboard.id)
+        )
     _attach_context_slot(
         db,
         whiteboard=whiteboard,
         ref=ref,
         current_user=current_user,
         is_primary=len(whiteboard.targets) == 0,
+        company_admin_read_acknowledged=payload.company_admin_read_acknowledged,
     )
     whiteboard.updated_at = _utcnow()
     db.add(whiteboard)
+    changed_board_ids.add(whiteboard.id)
     db.commit()
+    for changed_board_id in sorted(changed_board_ids):
+        publish_whiteboard_access_changed(
+            getattr(request.app.state, "app_realtime", None), changed_board_id
+        )
     return _lookup_item(db, whiteboard.id, current_user)
 
 
 @router.delete("/contexts/slot", status_code=status.HTTP_204_NO_CONTENT)
 def detach_whiteboard_context_slot(
+    request: Request,
     app: str = Query(..., min_length=1, max_length=64),
     type: str = Query(..., min_length=1, max_length=64),
     id: str = Query(..., min_length=1, max_length=128),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    workspace = _ensure_whiteboard_workspace_access(db, current_user)
     ref = TargetRef(app=app, type=type, id=id)
-    _require_context_write(db, workspace=workspace, user=current_user, ref=ref)
-    _delete_context_slot(db, ref=ref)
+    _require_context_write(db, user=current_user, ref=ref)
+    changed_board_ids = _delete_context_slot(db, ref=ref)
     db.commit()
+    for changed_board_id in sorted(changed_board_ids):
+        publish_whiteboard_access_changed(
+            getattr(request.app.state, "app_realtime", None), changed_board_id
+        )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/items", response_model=WhiteboardDetail, status_code=status.HTTP_201_CREATED)
 def create_whiteboard_item(
     payload: CreateWhiteboardRequest,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
-    workspace = _ensure_whiteboard_workspace_access(db, current_user)
+    changed_board_ids: set[str] = set()
     target_payload = payload.primary_target
     target_ref = (
         TargetRef(
@@ -540,13 +535,12 @@ def create_whiteboard_item(
         else None
     )
     if target_ref is not None:
-        _require_context_write(db, workspace=workspace, user=current_user, ref=target_ref)
+        _require_context_write(db, user=current_user, ref=target_ref)
         if _is_singleton_context(target_ref):
-            _delete_context_slot(db, ref=target_ref)
+            changed_board_ids.update(_delete_context_slot(db, ref=target_ref))
 
     whiteboard = create_whiteboard_for_user(
         db,
-        workspace_id=workspace.id,
         owner_id=current_user.id,
         title=payload.title,
         scene=payload.scene,
@@ -554,6 +548,9 @@ def create_whiteboard_item(
         source_kind=payload.source_kind,
         source_ref=payload.source_ref,
         generation_kind=payload.generation_kind,
+        company_admin_read_acknowledged=(
+            target_payload.company_admin_read_acknowledged if target_payload else False
+        ),
         primary_target=(
             (
                 target_ref.app,
@@ -565,29 +562,51 @@ def create_whiteboard_item(
             else None
         ),
     )
+    if payload.company_visible:
+        from open_work_hub_api.domains.content_access.ownership import record_ownership_transition
+
+        record_ownership_transition(
+            db,
+            actor_user_id=current_user.id,
+            resource_kind="whiteboard",
+            resource_id=whiteboard.id,
+            current_kind=whiteboard.ownership_kind or "personal",
+            next_kind="company",
+            company_admin_read_acknowledged=payload.company_admin_read_acknowledged,
+        )
+        whiteboard.ownership_kind = "company"
+        whiteboard.company_visible = True
     db.commit()
+    for changed_board_id in sorted(changed_board_ids):
+        publish_whiteboard_access_changed(
+            getattr(request.app.state, "app_realtime", None), changed_board_id
+        )
     return _lookup_item(db, whiteboard.id, current_user)
 
 
 @router.get("/items/{item_id}", response_model=WhiteboardDetail)
 def get_whiteboard_item(
     item_id: str,
+    share_token: str | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
-    _ensure_whiteboard_workspace_access(db, current_user)
-    return _lookup_item(db, item_id, current_user)
+    _ensure_whiteboard_app_access(db, current_user)
+    return _lookup_item(db, item_id, current_user, share_token=share_token)
 
 
 @router.patch("/items/{item_id}", response_model=WhiteboardDetail)
 def update_whiteboard_item(
     item_id: str,
     payload: UpdateWhiteboardRequest,
+    share_token: str | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
-    _ensure_whiteboard_workspace_access(db, current_user)
-    whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
+    _ensure_whiteboard_app_access(db, current_user)
+    whiteboard, access = _whiteboard_from_item_or_404(
+        db, item_id, current_user, share_token=share_token
+    )
     update_whiteboard_item_command(
         db,
         WhiteboardItemUpdateCommand(
@@ -598,16 +617,17 @@ def update_whiteboard_item(
             update_scene="scene" in payload.model_fields_set,
         ),
     )
-    return _lookup_item(db, whiteboard.id, current_user)
+    return _lookup_item(db, whiteboard.id, current_user, share_token=share_token)
 
 
 @router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_whiteboard_item(
     item_id: str,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    _ensure_whiteboard_workspace_access(db, current_user)
+    _ensure_whiteboard_app_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
     if not access.can_manage:
         raise localized_http_exception(
@@ -617,16 +637,18 @@ def delete_whiteboard_item(
     whiteboard.trashed_at = _utcnow()
     db.add(whiteboard)
     db.commit()
+    publish_whiteboard_access_changed(getattr(request.app.state, "app_realtime", None), item_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/items/{item_id}/restore", response_model=WhiteboardDetail)
 def restore_whiteboard_item(
     item_id: str,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
-    _ensure_whiteboard_workspace_access(db, current_user)
+    _ensure_whiteboard_app_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
     if not access.can_manage:
         raise localized_http_exception(
@@ -638,16 +660,18 @@ def restore_whiteboard_item(
         whiteboard.updated_at = _utcnow()
         db.add(whiteboard)
         db.commit()
+        publish_whiteboard_access_changed(getattr(request.app.state, "app_realtime", None), item_id)
     return _lookup_item(db, whiteboard.id, current_user)
 
 
 @router.delete("/items/{item_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
 def permanently_delete_whiteboard_item(
     item_id: str,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    _ensure_whiteboard_workspace_access(db, current_user)
+    _ensure_whiteboard_app_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
     if not access.can_manage:
         raise localized_http_exception(
@@ -681,47 +705,57 @@ def permanently_delete_whiteboard_item(
         .execution_options(synchronize_session=False)
     )
     db.commit()
+    publish_whiteboard_access_changed(getattr(request.app.state, "app_realtime", None), item_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.put("/items/{item_id}/target", response_model=WhiteboardDetail)
 def update_whiteboard_target(
     item_id: str,
+    request: Request,
     payload: UpdateWhiteboardTargetRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
-    _ensure_whiteboard_workspace_access(db, current_user)
+    _ensure_whiteboard_app_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
-    if not access.can_edit:
+    if not access.can_share:
         raise localized_http_exception(
             status_code=403,
-            code="whiteboard.edit_access_required",
+            code="whiteboard.share_access_required",
         )
-    _upsert_primary_target(db, whiteboard=whiteboard, payload=payload, current_user=current_user)
+    changed_board_ids = _upsert_primary_target(
+        db, whiteboard=whiteboard, payload=payload, current_user=current_user
+    )
     whiteboard.updated_at = _utcnow()
     db.add(whiteboard)
     db.commit()
+    for changed_board_id in sorted(changed_board_ids):
+        publish_whiteboard_access_changed(
+            getattr(request.app.state, "app_realtime", None), changed_board_id
+        )
     return _lookup_item(db, whiteboard.id, current_user)
 
 
 @router.delete("/items/{item_id}/target", response_model=WhiteboardDetail)
 def delete_whiteboard_target(
     item_id: str,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardDetail:
-    _ensure_whiteboard_workspace_access(db, current_user)
+    _ensure_whiteboard_app_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
-    if not access.can_edit:
+    if not access.can_share:
         raise localized_http_exception(
             status_code=403,
-            code="whiteboard.edit_access_required",
+            code="whiteboard.share_access_required",
         )
     _delete_primary_target(db, whiteboard)
     whiteboard.updated_at = _utcnow()
     db.add(whiteboard)
     db.commit()
+    publish_whiteboard_access_changed(getattr(request.app.state, "app_realtime", None), item_id)
     return _lookup_item(db, whiteboard.id, current_user)
 
 
@@ -731,7 +765,6 @@ def list_whiteboard_shareable_users(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> list[ShareableUserItem]:
-    current_workspace = _ensure_whiteboard_workspace_access(db, current_user)
     query = (
         select(User).where(User.status == "active").order_by(User.full_name.asc(), User.email.asc())
     )
@@ -745,7 +778,6 @@ def list_whiteboard_shareable_users(
         ShareableUserItem(id=user.id, email=user.email, full_name=user.full_name)
         for user in users
         if user.id != current_user.id
-        and resolve_workspace_role(db, user, current_workspace.id) is not None
     ]
 
 
@@ -755,53 +787,60 @@ def get_whiteboard_sharing(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardSharingResponse:
-    _ensure_whiteboard_workspace_access(db, current_user)
+    _ensure_whiteboard_app_access(db, current_user)
     return get_whiteboard_sharing_response(db, item_id=item_id, current_user=current_user)
 
 
 @router.put("/items/{item_id}/sharing/users/{user_id}", response_model=WhiteboardSharingResponse)
 def upsert_whiteboard_user_share(
     item_id: str,
+    request: Request,
     user_id: str,
     payload: UpsertUserShareRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardSharingResponse:
-    _ensure_whiteboard_workspace_access(db, current_user)
-    return upsert_whiteboard_user_share_command(
+    _ensure_whiteboard_app_access(db, current_user)
+    response = upsert_whiteboard_user_share_command(
         db,
         item_id=item_id,
         user_id=user_id,
         access_level=payload.access_level,
         current_user=current_user,
     )
+    publish_whiteboard_access_changed(getattr(request.app.state, "app_realtime", None), item_id)
+    return response
 
 
 @router.delete("/items/{item_id}/sharing/users/{user_id}", response_model=WhiteboardSharingResponse)
 def delete_whiteboard_user_share(
     item_id: str,
+    request: Request,
     user_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardSharingResponse:
-    _ensure_whiteboard_workspace_access(db, current_user)
-    return delete_whiteboard_user_share_command(
+    _ensure_whiteboard_app_access(db, current_user)
+    response = delete_whiteboard_user_share_command(
         db,
         item_id=item_id,
         user_id=user_id,
         current_user=current_user,
     )
+    publish_whiteboard_access_changed(getattr(request.app.state, "app_realtime", None), item_id)
+    return response
 
 
 @router.put("/items/{item_id}/sharing/link", response_model=WhiteboardSharingResponse)
 def upsert_whiteboard_link_share(
     item_id: str,
+    request: Request,
     payload: UpsertLinkShareRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardSharingResponse:
-    _ensure_whiteboard_workspace_access(db, current_user)
-    return upsert_whiteboard_link_share_command(
+    _ensure_whiteboard_app_access(db, current_user)
+    response = upsert_whiteboard_link_share_command(
         db,
         item_id=item_id,
         access_level=payload.access_level,
@@ -809,20 +848,25 @@ def upsert_whiteboard_link_share(
         regenerate_token=payload.regenerate_token,
         current_user=current_user,
     )
+    publish_whiteboard_access_changed(getattr(request.app.state, "app_realtime", None), item_id)
+    return response
 
 
 @router.delete("/items/{item_id}/sharing/link", response_model=WhiteboardSharingResponse)
 def disable_whiteboard_link_share(
     item_id: str,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardSharingResponse:
-    _ensure_whiteboard_workspace_access(db, current_user)
-    return disable_whiteboard_link_share_command(
+    _ensure_whiteboard_app_access(db, current_user)
+    response = disable_whiteboard_link_share_command(
         db,
         item_id=item_id,
         current_user=current_user,
     )
+    publish_whiteboard_access_changed(getattr(request.app.state, "app_realtime", None), item_id)
+    return response
 
 
 @router.get("/collab/items/{item_id}/session", response_model=WhiteboardCollabSessionResponse)
@@ -832,7 +876,6 @@ def get_whiteboard_collab_session(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardCollabSessionResponse:
-    _require_workspace_slug(request)
     context, collab = _ensure_whiteboard_collab_context(db, current_user, item_id)
     db.commit()
     ws_path = request.url.path.removesuffix("/session") + "/ws"
@@ -862,8 +905,7 @@ def save_whiteboard_collab_snapshot(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> WhiteboardCollabSnapshotResponse:
-    _require_workspace_slug(request)
-    _ensure_whiteboard_workspace_access(db, current_user)
+    _ensure_whiteboard_app_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
     if not access.can_edit:
         raise localized_http_exception(
@@ -909,12 +951,6 @@ async def whiteboard_collab_websocket(
 
     try:
         token = await _resolve_collab_ws_token(websocket)
-        workspace_slug = websocket.path_params.get("workspace_slug")
-        if not workspace_slug:
-            raise localized_http_exception(
-                status_code=400,
-                code="whiteboard.workspace_slug_required",
-            )
 
         session_factory = get_session_factory()
         db = session_factory()
@@ -922,7 +958,10 @@ async def whiteboard_collab_websocket(
         try:
             auth_context = resolve_auth_context_from_token(db, token)
             auth_user_id = auth_context.user.id
-            _bind_workspace_slug_for_collab(db, auth_context.user, workspace_slug)
+            _require_collab_app_access(
+                db,
+                auth_context.user,
+            )
             context, collab = _ensure_whiteboard_collab_context(db, auth_context.user, item_id)
             if not context.can_edit:
                 raise localized_http_exception(
@@ -960,16 +999,20 @@ async def whiteboard_collab_websocket(
         monitor_task = asyncio.create_task(
             _monitor_whiteboard_collab_access(
                 websocket,
-                workspace_slug=workspace_slug,
                 item_id=item_id,
                 token=token,
             )
         )
+
+        async def authorize_frame() -> None:
+            await _authorize_whiteboard_collab_access(item_id=item_id, token=token)
+
         yjs_websocket = FastAPIYjsWebsocket(
             websocket,
             room_key,
             runtime,
             auth_user_id,
+            authorize=authorize_frame,
         )
         await runtime.room.serve(yjs_websocket)
     except HTTPException as exc:
@@ -986,9 +1029,7 @@ async def whiteboard_collab_websocket(
             await hub.cleanup_room(room_key)
 
 
-@public_router.get(
-    "/shared-links/{share_token}", response_model=ResolveWhiteboardSharedLinkResponse
-)
+@router.get("/shared-links/{share_token}", response_model=ResolveWhiteboardSharedLinkResponse)
 def resolve_whiteboard_shared_link(
     share_token: str,
     db: Session = Depends(get_db_session),
@@ -1000,11 +1041,12 @@ def resolve_whiteboard_shared_link(
         whiteboard,
         access,
         _get_pref_map(db, current_user.id).get(whiteboard.id),
+        user=current_user,
     )
     return ResolveWhiteboardSharedLinkResponse(item=item)
 
 
-@public_router.get("/shared-links/{share_token}/item", response_model=WhiteboardDetail)
+@router.get("/shared-links/{share_token}/item", response_model=WhiteboardDetail)
 def get_shared_whiteboard_item(
     share_token: str,
     db: Session = Depends(get_db_session),
@@ -1016,10 +1058,11 @@ def get_shared_whiteboard_item(
         whiteboard,
         access,
         _get_pref_map(db, current_user.id).get(whiteboard.id),
+        user=current_user,
     )
 
 
-@public_router.patch("/shared-links/{share_token}/item", response_model=WhiteboardDetail)
+@router.patch("/shared-links/{share_token}/item", response_model=WhiteboardDetail)
 def update_shared_whiteboard_item(
     share_token: str,
     payload: UpdateWhiteboardRequest,
@@ -1042,10 +1085,11 @@ def update_shared_whiteboard_item(
         whiteboard,
         access,
         _get_pref_map(db, current_user.id).get(whiteboard.id),
+        user=current_user,
     )
 
 
-@public_router.post("/shared-links/{share_token}/view", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/shared-links/{share_token}/view", status_code=status.HTTP_204_NO_CONTENT)
 def record_shared_whiteboard_view(
     share_token: str,
     db: Session = Depends(get_db_session),
@@ -1058,7 +1102,6 @@ def record_shared_whiteboard_view(
     record_usage_event(
         db,
         actor_user_id=current_user.id,
-        workspace_id=whiteboard.workspace_id,
         app_id="whiteboard",
         event_type=USAGE_EVENT_CONTENT_VIEW,
         content_kind="whiteboard",
@@ -1076,7 +1119,7 @@ def toggle_whiteboard_favorite(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ToggleFavoriteResponse:
-    _ensure_whiteboard_workspace_access(db, current_user)
+    _ensure_whiteboard_app_access(db, current_user)
     whiteboard, _access = _whiteboard_from_item_or_404(db, item_id, current_user)
     pref = _get_or_create_pref(db, current_user.id, whiteboard.id)
     pref.is_favorite = not pref.is_favorite
@@ -1091,7 +1134,7 @@ def record_whiteboard_view(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    _ensure_whiteboard_workspace_access(db, current_user)
+    _ensure_whiteboard_app_access(db, current_user)
     whiteboard, _access = _whiteboard_from_item_or_404(db, item_id, current_user)
     pref = _get_or_create_pref(db, current_user.id, whiteboard.id)
     pref.last_viewed_at = _utcnow()

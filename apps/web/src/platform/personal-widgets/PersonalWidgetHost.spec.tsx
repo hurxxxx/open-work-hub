@@ -85,6 +85,48 @@ afterEach(() => {
 });
 
 describe('PersonalWidgetHost todo editing', () => {
+  it('restores the selected available dock panel after remount and clears it for Todo', async () => {
+    const dockPanels = [
+      {
+        id: 'planner',
+        renderIcon: () => null,
+        renderPanel: () => <div>Today events</div>,
+        shortTitle: 'Today',
+        title: 'Today Planner',
+      },
+    ];
+    const first = renderTodoWidget({ dockPanels });
+    fireEvent.click(screen.getByRole('button', { name: 'Today Planner' }));
+    expect(await screen.findByText('Today events')).toBeTruthy();
+    first.unmount();
+
+    const second = renderTodoWidget({ dockPanels });
+    expect(await screen.findByText('Today events')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'personalWidgets.todo.open' }),
+    );
+    expect(await screen.findByText('Original todo')).toBeTruthy();
+    second.unmount();
+
+    renderTodoWidget({ dockPanels });
+    expect(await screen.findByText('Original todo')).toBeTruthy();
+    expect(screen.queryByText('Today events')).toBeNull();
+  });
+
+  it('does not mount a stored panel that is no longer available', async () => {
+    window.localStorage.setItem(
+      personalWidgetStorageKey('user-1'),
+      JSON.stringify({
+        activeWidget: 'todo',
+        activeDockPanelId: 'planner',
+        mode: 'panel',
+      }),
+    );
+    renderTodoWidget();
+    expect(await screen.findByText('Original todo')).toBeTruthy();
+    expect(screen.queryByText('Today events')).toBeNull();
+  });
+
   it('renders the open Todo count with the danger contrast token pair', async () => {
     renderTodoWidget();
 

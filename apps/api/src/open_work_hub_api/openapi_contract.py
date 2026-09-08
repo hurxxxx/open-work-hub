@@ -14,7 +14,9 @@ METHOD_ORDER = ("get", "post", "put", "patch", "delete", "options", "head", "tra
 class ErrorResponse(BaseModel):
     detail: str | list[dict[str, Any]] = Field(..., description="Error detail.")
     code: str | None = Field(default=None, description="Stable application error code.")
-    params: dict[str, Any] | None = Field(default=None, description="Error interpolation parameters.")
+    params: dict[str, Any] | None = Field(
+        default=None, description="Error interpolation parameters."
+    )
 
 
 PROTECTED_ERROR_RESPONSES: dict[int, dict[str, Any]] = {

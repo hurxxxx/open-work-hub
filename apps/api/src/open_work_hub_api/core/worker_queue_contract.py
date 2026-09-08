@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 from collections.abc import Mapping
 
-
 DEFAULT_QUEUE = "celery"
 MEETING_TRANSCRIBE_QUEUE = "meeting_transcribe"
 MAIL_SYNC_QUEUE = "mail_sync"

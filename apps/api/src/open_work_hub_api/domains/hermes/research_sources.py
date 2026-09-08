@@ -4,7 +4,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
-
 ResearchSourceId: TypeAlias = Literal[
     "semantic_scholar",
     "arxiv",
@@ -73,14 +72,10 @@ def academic_research_environment_hint(
 ) -> str:
     normalized = normalize_research_source_policy(policy)
     enabled = [
-        source.display_name
-        for source in RESEARCH_SOURCE_DEFINITIONS
-        if normalized[source.id]
+        source.display_name for source in RESEARCH_SOURCE_DEFINITIONS if normalized[source.id]
     ]
     disabled = [
-        source.display_name
-        for source in RESEARCH_SOURCE_DEFINITIONS
-        if not normalized[source.id]
+        source.display_name for source in RESEARCH_SOURCE_DEFINITIONS if not normalized[source.id]
     ]
     if not disabled:
         return ""

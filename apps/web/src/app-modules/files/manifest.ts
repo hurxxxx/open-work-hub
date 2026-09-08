@@ -1,5 +1,5 @@
-import { Bot, FolderOpen, Search } from 'lucide-react';
 import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
+import { Bot, FolderOpen, Search } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -9,7 +9,6 @@ export const filesManifest: AppModuleManifest = {
     owner: 'files-platform',
     permissions: [],
     apiDomain: 'files',
-    workspaceApiPrefixes: ['/api/v1/files'],
     aiCapabilities: ['files.grounded_chat', 'files.rag_query_rewrite'],
     writeAuditActions: [],
     appLocalTests: [
@@ -53,7 +52,7 @@ export const filesManifest: AppModuleManifest = {
       pathSuffix: '/chat',
     },
   ],
-  workspaceRoutePaths: [
+  appRoutePaths: [
     getAppRoutePattern('files.root'),
     getAppRoutePattern('files.chat'),
   ],

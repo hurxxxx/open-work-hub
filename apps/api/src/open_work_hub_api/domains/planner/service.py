@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.principal import CallerPrincipal
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.planner.event_access import (
     ensure_planner_principal_user,
@@ -20,17 +20,16 @@ from open_work_hub_api.domains.planner.event_application import (
     apply_planner_event_update,
     new_planner_event,
 )
-from open_work_hub_api.domains.planner.event_time import utc_iso
 from open_work_hub_api.domains.planner.event_projection import (
     project_deleted_planner_event,
     project_planner_event,
     project_planner_event_for_ai,
 )
+from open_work_hub_api.domains.planner.event_time import utc_iso
 from open_work_hub_api.domains.retrieval.partitioning import assign_default_partition
 
 from .models import PlannerEvent
 from .schemas import PlannerEventOut, PlannerEventsResponse
-
 
 MAX_LIST_RANGE_DAYS = 366
 
@@ -67,9 +66,7 @@ def can_read_planner_event_for_rag(
     *,
     user: User,
     event_id: str,
-    workspace_id: str | None = None,
 ) -> bool:
-    del workspace_id
     return (
         db.scalar(
             select(PlannerEvent.id)
@@ -130,7 +127,6 @@ def create_event(
 def create_event_for_ai(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     title: str,
@@ -141,7 +137,6 @@ def create_event_for_ai(
     description: str = "",
     approved_call_id: str | None = None,
 ) -> dict[str, object]:
-    del workspace
     require_planner_user_write_principal(principal)
     ensure_planner_principal_user(principal=principal, user=user)
     normalized_scope = scope.strip().lower()
@@ -188,7 +183,6 @@ def get_event(
 def update_event_for_ai(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     event_id: str,
@@ -199,7 +193,7 @@ def update_event_for_ai(
     location: str | None = None,
     approved_call_id: str | None = None,
 ) -> dict[str, object]:
-    del approved_call_id, workspace
+    del approved_call_id
     require_planner_user_write_principal(principal)
     ensure_planner_principal_user(principal=principal, user=user)
     if (start_at is None) != (end_at is None):
@@ -222,13 +216,12 @@ def update_event_for_ai(
 def delete_event_for_ai(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     event_id: str,
     approved_call_id: str | None = None,
 ) -> dict[str, object]:
-    del approved_call_id, workspace
+    del approved_call_id
     require_planner_user_write_principal(principal)
     ensure_planner_principal_user(principal=principal, user=user)
     delete_event(db, user=user, event_id=event_id)

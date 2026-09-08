@@ -1,13 +1,15 @@
 import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+  NOTIFICATION_REALTIME_EVENT_TYPES,
+  normalizeNotificationRealtimeEvent,
+} from '@open-work-hub/contracts/notifications';
+import {
+  Button,
+  IconButton,
+  InlineNotice,
+  Input,
+  Select,
+  useConfirm,
+} from '@open-work-hub/ui';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -23,17 +25,15 @@ import {
   X,
 } from 'lucide-react';
 import {
-  Button,
-  IconButton,
-  InlineNotice,
-  Input,
-  Select,
-  useConfirm,
-} from '@open-work-hub/ui';
-import {
-  NOTIFICATION_REALTIME_EVENT_TYPES,
-  normalizeNotificationRealtimeEvent,
-} from '@open-work-hub/contracts/notifications';
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 import { hasAdminConsoleAccess } from '@/src/platform/auth/auth-api';
@@ -42,6 +42,10 @@ import { authenticatedContentObjectUrl } from '@/src/platform/browser/browser-do
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { useRealtimeEvent } from '@/src/platform/realtime/realtime-provider';
 
+import {
+  CommunityMarkdownEditor,
+  CommunityMarkdownViewer,
+} from '@/src/platform/community/CommunityMarkdownEditor';
 import {
   createCommunityComment,
   createCommunityPost,
@@ -60,10 +64,6 @@ import {
   type CommunityPost,
   type CommunityPostDetail,
 } from '../api/community-api';
-import {
-  CommunityMarkdownEditor,
-  CommunityMarkdownViewer,
-} from '@/src/platform/community/CommunityMarkdownEditor';
 import { DEFAULT_COMMUNITY_CHANNEL_KEY } from '../community-constants';
 import { buildCommunityListUrl, buildCommunityPostUrl } from '../community-url';
 

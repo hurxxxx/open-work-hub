@@ -1,6 +1,6 @@
 # Agent Event Envelope
 
-Wire format for `POST /api/v1/workspaces/{workspace_slug}/chatbot/chat/stream`.
+Wire format for `POST /api/v1/chatbot/chat/stream`.
 
 ## Envelope
 

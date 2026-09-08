@@ -31,21 +31,15 @@ describe('docs URL state', () => {
   });
 
   it('appends the selected page query to paths with existing params', () => {
+    expect(appendDocPageQuery('/apps/docs/documents/doc-1', 'page 1')).toBe(
+      '/apps/docs/documents/doc-1?page=page%201',
+    );
     expect(
-      appendDocPageQuery('/apps/docs/workspaces/hq/documents/doc-1', 'page 1'),
-    ).toBe('/apps/docs/workspaces/hq/documents/doc-1?page=page%201');
+      appendDocPageQuery('/apps/docs/documents/doc-1?view=shared', 'page-1'),
+    ).toBe('/apps/docs/documents/doc-1?view=shared&page=page-1');
     expect(
-      appendDocPageQuery(
-        '/apps/docs/workspaces/hq/documents/doc-1?view=shared',
-        'page-1',
-      ),
-    ).toBe('/apps/docs/workspaces/hq/documents/doc-1?view=shared&page=page-1');
-    expect(
-      appendDocPageQuery(
-        '/apps/docs/workspaces/hq/documents/doc-1#comments',
-        'page-1',
-      ),
-    ).toBe('/apps/docs/workspaces/hq/documents/doc-1?page=page-1#comments');
+      appendDocPageQuery('/apps/docs/documents/doc-1#comments', 'page-1'),
+    ).toBe('/apps/docs/documents/doc-1?page=page-1#comments');
   });
 
   it('updates selected page query state without mutating the caller params', () => {

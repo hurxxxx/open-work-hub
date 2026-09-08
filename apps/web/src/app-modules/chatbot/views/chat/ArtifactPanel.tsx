@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Check, Copy, Download, X } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { Tooltip } from '@open-work-hub/ui';
 import 'highlight.js/styles/github.css';
+import { Check, Copy, Download, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { DocumentArtifact } from '@/src/components/artifacts/DocumentArtifact';
 import { downloadBlobAsFile } from '@/src/platform/browser/browser-download';

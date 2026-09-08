@@ -1,3 +1,4 @@
+import { CircleHelp, Search, X } from 'lucide-react';
 import React, {
   type ClipboardEvent,
   type KeyboardEvent,
@@ -9,19 +10,12 @@ import React, {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CircleHelp, Search, X } from 'lucide-react';
 
 import { Tooltip } from '@open-work-hub/ui';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { UserSearchMultiSelect } from '@/src/platform/users/UserSearchMultiSelect';
 
-import {
-  listAdminUsers,
-  type AiSecurityExternalTransferException,
-  type AiSecurityPolicyRule,
-  type WorkspaceItem,
-} from './admin-api';
 import {
   type AiSecurityAppOption,
   type AiSecurityConditionOption,
@@ -31,7 +25,12 @@ import {
   aiSecurityTermsText,
   parseAiSecurityTerms,
 } from './admin-ai-security-model';
-import { Badge, FORM_FIELD_CLASS as fieldClassName } from './admin-shared';
+import {
+  type AiSecurityExternalTransferException,
+  type AiSecurityPolicyRule,
+  listAdminUsers,
+} from './admin-api';
+import { FORM_FIELD_CLASS as fieldClassName } from './admin-shared';
 
 export type AiSecuritySelectedUser = {
   id: string;
@@ -427,74 +426,6 @@ export function AiSecurityFormSection({
       </div>
       {children}
     </section>
-  );
-}
-
-export function AiSecurityWorkspacePicker({
-  allLabel,
-  clearLabel,
-  help,
-  label,
-  noResultsLabel,
-  onChange,
-  searchPlaceholder,
-  value,
-  workspaces,
-}: {
-  allLabel: string;
-  clearLabel: string;
-  help: string;
-  label: string;
-  noResultsLabel: string;
-  onChange: (value: string | null) => void;
-  searchPlaceholder: string;
-  value: string | null | undefined;
-  workspaces: readonly WorkspaceItem[];
-}) {
-  const { t } = useTranslation('apps');
-  return (
-    <AiSecuritySearchSelect
-      allLabel={allLabel}
-      clearLabel={clearLabel}
-      filterItem={(workspace, query) =>
-        workspace.name.toLowerCase().includes(query) ||
-        workspace.key.toLowerCase().includes(query) ||
-        workspace.description.toLowerCase().includes(query)
-      }
-      getItemId={(workspace) => workspace.id}
-      help={help}
-      items={workspaces}
-      label={label}
-      noResultsLabel={noResultsLabel}
-      onChange={onChange}
-      renderOption={(workspace) => (
-        <>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-medium">{workspace.name}</span>
-            <span className="app-text-caption block truncate text-app-ink/45">
-              {workspace.key}
-              {workspace.description ? ` · ${workspace.description}` : ''}
-            </span>
-          </span>
-          <Badge tone={workspace.active ? 'green' : 'amber'}>
-            {t(
-              workspace.active
-                ? 'admin.console.workspaces.statusActive'
-                : 'admin.console.workspaces.statusArchived',
-            )}
-          </Badge>
-        </>
-      )}
-      renderSelected={(workspace) => (
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-          <span className="shrink-0 text-app-ink/45">{workspace.key}</span>
-        </span>
-      )}
-      searchPlaceholder={searchPlaceholder}
-      selectedFallbackLabel={value ?? undefined}
-      value={value}
-    />
   );
 }
 

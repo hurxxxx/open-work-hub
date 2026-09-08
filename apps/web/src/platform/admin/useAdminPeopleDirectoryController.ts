@@ -4,11 +4,9 @@ import type { AuthUser } from '@/src/platform/auth/auth-api';
 import {
   listAdminUsers,
   listOrganizationUnits,
-  listWorkspaces,
   type AdminUsersQuery,
   type AdminUsersResponse,
   type OrganizationUnitItem,
-  type WorkspaceItem,
 } from './admin-api';
 import {
   ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
@@ -18,11 +16,9 @@ import {
 export interface AdminPeopleDirectoryClient {
   listUsers(token: string, query: AdminUsersQuery): Promise<AdminUsersResponse>;
   listOrganizationUnits(token: string): Promise<OrganizationUnitItem[]>;
-  listWorkspaces(token: string): Promise<WorkspaceItem[]>;
 }
 
 export interface AdminPeopleDirectoryMessages {
-  workspaceListLoadFailed: string;
   organizationListLoadFailed: string;
   userListLoadFailed: string;
 }
@@ -47,7 +43,6 @@ export interface AdminPeopleDirectoryController {
     search: string;
     totalUsers: number;
     users: AuthUser[];
-    workspaces: WorkspaceItem[];
   };
   actions: {
     reloadUsers(nextPage: number): Promise<void>;
@@ -94,7 +89,6 @@ export const adminPeopleDirectoryClient: AdminPeopleDirectoryClient = {
   listUsers: listAdminUsers,
   listOrganizationUnits: (token) =>
     listOrganizationUnits(token, { includeInactive: true }),
-  listWorkspaces,
 };
 
 export function useAdminPeopleDirectoryController({
@@ -107,7 +101,6 @@ export function useAdminPeopleDirectoryController({
   const [totalUsers, setTotalUsers] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ADMIN_PEOPLE_DEFAULT_PAGE_SIZE);
-  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [organizationUnits, setOrganizationUnits] = useState<
     OrganizationUnitItem[]
   >([]);
@@ -125,30 +118,6 @@ export function useAdminPeopleDirectoryController({
   includeDescendantsRef.current = includeDescendants;
   const unassignedOnlyRef = useRef(unassignedOnly);
   unassignedOnlyRef.current = unassignedOnly;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const workspaceItems = await client.listWorkspaces(token);
-        if (!cancelled) {
-          setWorkspaces(workspaceItems);
-        }
-      } catch (caughtError) {
-        if (!cancelled) {
-          setError(
-            getErrorMessage(caughtError, messages.workspaceListLoadFailed),
-          );
-        }
-      }
-    }
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [client, messages.workspaceListLoadFailed, token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -291,7 +260,6 @@ export function useAdminPeopleDirectoryController({
       search,
       totalUsers,
       users,
-      workspaces,
     },
     actions: {
       reloadUsers,

@@ -8,20 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import Settings, get_settings
+from open_work_hub_api.domains.auth.app_access import allowed_app_ids
 from open_work_hub_api.domains.auth.app_availability import (
     resolve_company_enabled_app_ids,
-    resolve_workspace_runtime_enabled_app_ids,
 )
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_APP
 from open_work_hub_api.domains.files.retrieval_contract import FILES_RAG_SOURCE_KIND
-from open_work_hub_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
-from open_work_hub_api.domains.rag.providers import (
-    RagProviderConfigurationError,
-    RagProviderError,
-    RagProviderTimeoutError,
-    RagProviderTransientError,
-)
 from open_work_hub_api.domains.rag.access_filter import (
     build_company_rag_post_filter,
     build_user_rag_post_filter,
@@ -37,12 +30,20 @@ from open_work_hub_api.domains.rag.contracts import (
 )
 from open_work_hub_api.domains.rag.default_source_adapters import (
     company_reindex_resource_adapters,
-    list_registered_workspace_rag_sources,
+    list_registered_rag_sources,
     registered_searchable_rag_app_ids,
     resolve_rag_resource_types_for_source_kinds,
-    workspace_reindex_resource_adapters,
+    reindex_resource_adapters,
 )
+from open_work_hub_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
+from open_work_hub_api.domains.rag.models import RagSyncJob
 from open_work_hub_api.domains.rag.outbox import enqueue_rag_sync_job
+from open_work_hub_api.domains.rag.providers import (
+    RagProviderConfigurationError,
+    RagProviderError,
+    RagProviderTimeoutError,
+    RagProviderTransientError,
+)
 from open_work_hub_api.domains.rag.query_service import RagQueryService
 from open_work_hub_api.domains.rag.runtime import (
     build_rag_query_service,
@@ -52,7 +53,6 @@ from open_work_hub_api.domains.rag.runtime import (
     get_rag_query_service,
     resolve_default_collection_name,
 )
-from open_work_hub_api.domains.rag.models import RagSyncJob
 from open_work_hub_api.domains.retrieval.partitioning import (
     flatten_read_scope,
     resolve_resource_read_scope,
@@ -100,7 +100,7 @@ def rag_error_payload(
 
 
 RAG_REINDEX_COOLDOWN = timedelta(minutes=5)
-_DEFAULT_RAG_REQUIRED_APP_IDS = frozenset({CHATBOT_WORKSPACE_APP.app_id})
+_DEFAULT_RAG_REQUIRED_APP_IDS = frozenset({CHATBOT_APP.app_id})
 _RAG_QUERY_PROVIDER_ERRORS = (
     RagProviderConfigurationError,
     RagProviderError,
@@ -117,10 +117,9 @@ def ensure_rag_enabled(settings: Settings | None = None) -> Settings:
     return resolved
 
 
-def query_workspace_rag(
+def query_rag(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     query: str,
     answer_mode,
@@ -144,7 +143,6 @@ def query_workspace_rag(
     resolved_settings = ensure_rag_enabled(settings)
     effective_source_kinds, requested_source_kinds = _resolve_query_source_kinds(
         db=db,
-        workspace=workspace,
         user=user,
         settings=resolved_settings,
         source_kinds=source_kinds,
@@ -162,7 +160,6 @@ def query_workspace_rag(
     retrieval_partition_ids = _resolve_query_partition_ids(
         db,
         source_kinds=effective_source_kinds,
-        workspace_id=workspace.id,
         user_id=user.id,
         partitioned_generation=partitioned_generation,
     )
@@ -181,7 +178,6 @@ def query_workspace_rag(
     )
     request = _project_query_request(
         settings=resolved_settings,
-        workspace_id=workspace.id,
         query=query,
         answer_mode=answer_mode,
         source_kinds=effective_source_kinds,
@@ -197,7 +193,6 @@ def query_workspace_rag(
         post_filter=build_user_rag_post_filter(
             db,
             user=user,
-            workspace_id=workspace.id,
             authorized_partition_ids=request.retrieval_partition_ids,
         ),
         hit_hydrator=_build_files_hit_hydrator(
@@ -207,7 +202,6 @@ def query_workspace_rag(
         ),
         grounded_answer_synthesizer=_build_grounded_answer_synthesizer(
             db=db,
-            workspace=workspace,
             user=user,
             answer_mode=answer_mode,
             source=source,
@@ -236,7 +230,6 @@ def query_company_rag(
     principal_id: str | None = None,
     agent_run_id: str | None = None,
     conversation_id: str | None = None,
-    gateway_workspace_id: str | None = None,
     partitioned_generation: bool = False,
 ) -> RagQueryResponse:
     resolved_settings = ensure_rag_enabled(settings)
@@ -251,7 +244,6 @@ def query_company_rag(
     retrieval_partition_ids = _resolve_query_partition_ids(
         db,
         source_kinds=effective_source_kinds,
-        workspace_id=None,
         user_id=None,
         partitioned_generation=partitioned_generation,
     )
@@ -270,7 +262,6 @@ def query_company_rag(
     request = _project_query_request(
         settings=resolved_settings,
         scope_kind=RagScopeKind.COMPANY,
-        workspace_id=None,
         query=query,
         answer_mode=answer_mode,
         source_kinds=effective_source_kinds,
@@ -293,9 +284,8 @@ def query_company_rag(
             source_kinds=effective_source_kinds,
             partitioned_generation=partitioned_generation,
         ),
-        grounded_answer_synthesizer=_build_grounded_answer_synthesizer_for_workspace_id(
+        grounded_answer_synthesizer=_build_grounded_answer_synthesizer(
             db=db,
-            gateway_workspace_id=gateway_workspace_id,
             user=user,
             answer_mode=answer_mode,
             source=source,
@@ -310,7 +300,6 @@ def query_company_rag(
 def _resolve_query_source_kinds(
     *,
     db: Session,
-    workspace: Workspace,
     user: User,
     settings: Settings,
     source_kinds: list[str],
@@ -320,14 +309,14 @@ def _resolve_query_source_kinds(
 ) -> tuple[list[str], list[str]]:
     requested_source_kinds = list(dict.fromkeys(source_kinds))
     if allowed_unlisted_source_kinds:
-        enabled_app_ids = _resolve_workspace_rag_enabled_app_ids(
+        enabled_app_ids = _resolve_rag_enabled_app_ids(
             db,
-            workspace.id,
+            user_id=user.id,
             require_searchable_app=require_searchable_app,
             required_app_ids=required_app_ids,
         )
-        policy = SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
-        visible_sources = list_registered_workspace_rag_sources(policy, enabled_app_ids)
+        policy = SourceAclPolicy.for_user(db, user=user)
+        visible_sources = list_registered_rag_sources(policy, enabled_app_ids)
         allowed_source_kinds = {item["source_kind"] for item in visible_sources}
         allowed_source_kinds.update(
             _allowed_unlisted_query_source_kinds(
@@ -337,15 +326,14 @@ def _resolve_query_source_kinds(
             )
         )
     else:
-        _resolve_workspace_rag_enabled_app_ids(
+        _resolve_rag_enabled_app_ids(
             db,
-            workspace.id,
+            user_id=user.id,
             require_searchable_app=require_searchable_app,
             required_app_ids=required_app_ids,
         )
-        visible_sources = list_workspace_rag_sources(
+        visible_sources = list_rag_sources(
             db,
-            workspace=workspace,
             user=user,
             settings=settings,
             require_searchable_app=require_searchable_app,
@@ -411,8 +399,7 @@ def _prepare_query_runtime(
 def _project_query_request(
     *,
     settings: Settings,
-    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE,
-    workspace_id: str | None,
+    scope_kind: RagScopeKind = RagScopeKind.COMPANY,
     query: str,
     answer_mode: RagAnswerMode,
     source_kinds: list[str],
@@ -425,7 +412,6 @@ def _project_query_request(
     return RagQueryRequest(
         collection=collection or resolve_default_collection_name(settings),
         scope_kind=scope_kind,
-        workspace_id=workspace_id,
         retrieval_partition_ids=retrieval_partition_ids,
         query=query,
         answer_mode=answer_mode,
@@ -443,7 +429,6 @@ def _resolve_query_partition_ids(
     db: Session,
     *,
     source_kinds: list[str],
-    workspace_id: str | None,
     user_id: str | None,
     partitioned_generation: bool,
 ) -> list[str] | None:
@@ -453,7 +438,6 @@ def _resolve_query_partition_ids(
     scope = resolve_resource_read_scope(
         db,
         resource_types=list(resource_types),
-        workspace_id=workspace_id,
         user_id=user_id,
     )
     return [str(partition_id) for partition_id in flatten_read_scope(scope)]
@@ -462,7 +446,6 @@ def _resolve_query_partition_ids(
 def _build_grounded_answer_synthesizer(
     *,
     db: Session,
-    workspace: Workspace,
     user: User,
     answer_mode: RagAnswerMode,
     source: str,
@@ -475,33 +458,6 @@ def _build_grounded_answer_synthesizer(
         return None
     return LlmGroundedAnswerSynthesizer(
         db=db,
-        workspace_id=workspace.id,
-        actor_user_id=user.id,
-        principal_kind=principal_kind,
-        principal_id=principal_id or user.id,
-        source=source,
-        agent_run_id=agent_run_id,
-        conversation_id=conversation_id,
-    )
-
-
-def _build_grounded_answer_synthesizer_for_workspace_id(
-    *,
-    db: Session,
-    gateway_workspace_id: str | None,
-    user: User,
-    answer_mode: RagAnswerMode,
-    source: str,
-    principal_kind: str,
-    principal_id: str | None,
-    agent_run_id: str | None,
-    conversation_id: str | None,
-) -> LlmGroundedAnswerSynthesizer | None:
-    if answer_mode != RagAnswerMode.GROUNDED_ANSWER or gateway_workspace_id is None:
-        return None
-    return LlmGroundedAnswerSynthesizer(
-        db=db,
-        workspace_id=gateway_workspace_id,
         actor_user_id=user.id,
         principal_kind=principal_kind,
         principal_id=principal_id or user.id,
@@ -516,9 +472,7 @@ def _query_rag_service(
     request: RagQueryRequest,
     *,
     post_filter: Any,
-    hit_hydrator: (
-        Callable[[Sequence[RagVectorSearchHit]], Sequence[RagVectorSearchHit]] | None
-    ),
+    hit_hydrator: (Callable[[Sequence[RagVectorSearchHit]], Sequence[RagVectorSearchHit]] | None),
     grounded_answer_synthesizer: LlmGroundedAnswerSynthesizer | None,
 ) -> RagQueryResponse:
     try:
@@ -549,37 +503,39 @@ def _build_files_hit_hydrator(
     return lambda hits: hydrate_file_rag_hits_from_source(db, hits=hits)
 
 
-def list_workspace_rag_sources(
+def list_rag_sources(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     settings: Settings | None = None,
     require_searchable_app: bool = True,
     required_app_ids: frozenset[str] = _DEFAULT_RAG_REQUIRED_APP_IDS,
 ) -> list[dict[str, str]]:
     ensure_rag_enabled(settings)
-    enabled_app_ids = _resolve_workspace_rag_enabled_app_ids(
+    enabled_app_ids = _resolve_rag_enabled_app_ids(
         db,
-        workspace.id,
+        user_id=user.id,
         require_searchable_app=require_searchable_app,
         required_app_ids=required_app_ids,
     )
-    policy = SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
-    return list_registered_workspace_rag_sources(policy, enabled_app_ids)
+    policy = SourceAclPolicy.for_user(db, user=user)
+    return list_registered_rag_sources(policy, enabled_app_ids)
 
 
-def enqueue_workspace_rag_reindex(
+def enqueue_rag_reindex(
     db: Session,
     *,
-    workspace: Workspace,
     settings: Settings | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
     resolved_settings = ensure_rag_enabled(settings)
-    enabled_app_ids = _resolve_workspace_rag_enabled_app_ids(db, workspace.id)
+    enabled_app_ids = _resolve_rag_enabled_app_ids(
+        db,
+    )
     if not force:
-        _ensure_workspace_reindex_available(db, workspace=workspace)
+        _ensure_reindex_available(
+            db,
+        )
     try:
         ensure_default_collection_ready(
             resolved_settings,
@@ -589,13 +545,14 @@ def enqueue_workspace_rag_reindex(
     except Exception as error:
         raise RagUnavailableError(str(error), code="rag.runtime_unavailable") from error
     resource_counts: dict[str, int] = {}
-    for adapter in workspace_reindex_resource_adapters(enabled_app_ids):
-        if adapter.workspace_resource_ids is None:
+    for adapter in reindex_resource_adapters(enabled_app_ids):
+        if adapter.company_resource_ids is None:
             continue
-        resource_ids = adapter.workspace_resource_ids(db, workspace)
+        resource_ids = adapter.company_resource_ids(
+            db,
+        )
         resource_counts[adapter.resource_type] = _enqueue_ids(
             db,
-            workspace=workspace,
             resource_type=adapter.resource_type,
             resource_ids=resource_ids,
         )
@@ -606,20 +563,24 @@ def enqueue_workspace_rag_reindex(
     }
 
 
-def count_workspace_rag_reindex_resources(
+def count_rag_reindex_resources(
     db: Session,
     *,
-    workspace: Workspace,
     settings: Settings | None = None,
 ) -> dict[str, int]:
     ensure_rag_enabled(settings)
-    enabled_app_ids = _resolve_workspace_rag_enabled_app_ids(db, workspace.id)
+    enabled_app_ids = _resolve_rag_enabled_app_ids(
+        db,
+    )
     resource_counts: dict[str, int] = {}
-    for adapter in workspace_reindex_resource_adapters(enabled_app_ids):
-        if adapter.workspace_resource_ids is None:
+    for adapter in reindex_resource_adapters(enabled_app_ids):
+        if adapter.company_resource_ids is None:
             continue
         resource_counts[adapter.resource_type] = sum(
-            1 for _resource_id in adapter.workspace_resource_ids(db, workspace)
+            1
+            for _resource_id in adapter.company_resource_ids(
+                db,
+            )
         )
     return resource_counts
 
@@ -689,14 +650,18 @@ def _enabled_company_reindex_resource_adapters(
     )
 
 
-def _resolve_workspace_rag_enabled_app_ids(
+def _resolve_rag_enabled_app_ids(
     db: Session,
-    workspace_id: str,
     *,
+    user_id: str | None = None,
     require_searchable_app: bool = True,
     required_app_ids: frozenset[str] = _DEFAULT_RAG_REQUIRED_APP_IDS,
 ) -> set[str]:
-    enabled_app_ids = set(resolve_workspace_runtime_enabled_app_ids(db, workspace_id))
+    enabled_app_ids = set(
+        allowed_app_ids(db, user_id=user_id)
+        if user_id is not None
+        else resolve_company_enabled_app_ids(db)
+    )
     if required_app_ids and not required_app_ids.intersection(enabled_app_ids):
         raise RagAccessDeniedError(code="rag.access_denied_not_enabled")
     if require_searchable_app and not registered_searchable_rag_app_ids().intersection(
@@ -709,7 +674,6 @@ def _resolve_workspace_rag_enabled_app_ids(
 def _enqueue_ids(
     db: Session,
     *,
-    workspace: Workspace,
     resource_type: str,
     resource_ids: Iterable[str],
 ) -> int:
@@ -717,7 +681,6 @@ def _enqueue_ids(
     for resource_id in resource_ids:
         enqueue_rag_sync_job(
             db,
-            workspace_id=workspace.id,
             resource_type=resource_type,
             resource_id=resource_id,
             lane=RagSyncLane.BACKFILL,
@@ -737,7 +700,6 @@ def _enqueue_company_ids(
         enqueue_rag_sync_job(
             db,
             scope_kind=RagScopeKind.COMPANY,
-            workspace_id=None,
             resource_type=resource_type,
             resource_id=resource_id,
             lane=RagSyncLane.BACKFILL,
@@ -782,16 +744,13 @@ def _resolve_query_filters(
     return effective_filters
 
 
-def _ensure_workspace_reindex_available(
+def _ensure_reindex_available(
     db: Session,
-    *,
-    workspace: Workspace,
 ) -> None:
     cutoff = _utcnow() - RAG_REINDEX_COOLDOWN
     existing = db.scalar(
         select(RagSyncJob.id)
         .where(
-            RagSyncJob.workspace_id == workspace.id,
             RagSyncJob.lane == RagSyncLane.BACKFILL.value,
             RagSyncJob.created_at >= cutoff,
             RagSyncJob.status.in_(

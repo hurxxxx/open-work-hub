@@ -5,6 +5,8 @@ from typing import Any
 from open_work_hub_api.domains.rag.contracts import RagSyncOperation, RagTraceContext
 from open_work_hub_api.domains.rag.job_publication import (
     RagJobPublishTarget,
+)
+from open_work_hub_api.domains.rag.job_publication import (
     resolve_publish_target as _resolve_publish_target,
 )
 

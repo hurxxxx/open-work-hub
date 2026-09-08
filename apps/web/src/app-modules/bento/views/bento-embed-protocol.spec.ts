@@ -16,9 +16,7 @@ describe('bento embed protocol', () => {
   it('builds a separate-origin local iframe URL', () => {
     const config = buildBentoEmbedConfig({
       env: { DEV: true, VITE_OPEN_WORK_HUB_BENTO_PORT: '18084' },
-      location: testLocation(
-        'http://127.0.0.1:4200/apps/bento/workspaces/team',
-      ),
+      location: testLocation('http://127.0.0.1:4200/apps/bento'),
     });
     expect(config).toEqual({
       src: 'http://127.0.0.1:18084/?open-work-hub-embed=1',
@@ -30,25 +28,19 @@ describe('bento embed protocol', () => {
     expect(
       buildBentoEmbedConfig({
         env: { VITE_OPEN_WORK_HUB_BENTO_URL: '/bento/' },
-        location: testLocation(
-          'https://hub.example/apps/bento/workspaces/team',
-        ),
+        location: testLocation('https://hub.example/apps/bento'),
       }),
     ).toBeNull();
     expect(
       buildBentoEmbedConfig({
         env: { VITE_OPEN_WORK_HUB_BENTO_URL: 'data:text/html,not-bento' },
-        location: testLocation(
-          'https://hub.example/apps/bento/workspaces/team',
-        ),
+        location: testLocation('https://hub.example/apps/bento'),
       }),
     ).toBeNull();
     expect(
       buildBentoEmbedConfig({
         env: { VITE_OPEN_WORK_HUB_BENTO_URL: 'http://bento.example/' },
-        location: testLocation(
-          'https://hub.example/apps/bento/workspaces/team',
-        ),
+        location: testLocation('https://hub.example/apps/bento'),
       }),
     ).toBeNull();
   });

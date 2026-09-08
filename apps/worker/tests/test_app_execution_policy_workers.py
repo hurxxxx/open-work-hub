@@ -20,7 +20,6 @@ def _rag_sync_job() -> SimpleNamespace:
         resource_id="resource-1",
         resource_type="native_doc",
         trace_context=None,
-        workspace_id="workspace-1",
     )
 
 
@@ -73,7 +72,6 @@ def test_rag_visibility_rechecks_app_before_enqueuing_resources(monkeypatch) -> 
         scope_id="group-1",
         scope_type="group",
         trace_context=None,
-        workspace_id="workspace-1",
     )
     marked: list[tuple[str, str | None]] = []
     monkeypatch.setattr(rag_sync, "record_sync_job_lag", lambda **_kwargs: None)
@@ -117,12 +115,11 @@ def test_recording_worker_marks_stage_failed_before_provider_io(monkeypatch) -> 
         celery_task_id="attempt-1",
         id="recording-1",
         owner_id="user-1",
-        workspace_id="workspace-1",
     )
     marked: list[tuple[str, str, str]] = []
     monkeypatch.setattr(
         recording,
-        "is_app_enabled_for_user_context",
+        "can_use_app",
         lambda *_args, **_kwargs: False,
     )
     monkeypatch.setattr(
@@ -333,13 +330,13 @@ def test_recording_worker_rejects_stale_result_version(monkeypatch) -> None:
 def test_meeting_worker_marks_failed_before_provider_io(monkeypatch) -> None:
     current_recording = SimpleNamespace(
         id="meeting-recording-1",
-        meeting=SimpleNamespace(workspace_id="workspace-1"),
+        meeting=SimpleNamespace(id="meeting-1"),
         uploaded_by_id="user-1",
     )
     marked: list[tuple[str, str]] = []
     monkeypatch.setattr(
         meeting,
-        "is_app_enabled_for_user_context",
+        "can_use_app",
         lambda *_args, **_kwargs: False,
     )
     monkeypatch.setattr(

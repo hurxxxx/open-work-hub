@@ -1,21 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { APP_WORKSPACE_API_ROUTE_POLICY } from '@/src/app/shell/workspace-api-routes';
-import {
-  configureWorkspaceApiRoutePolicy,
-  resetWorkspaceApiRoutePolicy,
-} from '@/src/platform/api/workspace-api-path-policy';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { reorderTaskListTasks } from './pms-api';
 
 describe('PMS task reorder', () => {
-  beforeEach(() => {
-    resetWorkspaceApiRoutePolicy();
-    configureWorkspaceApiRoutePolicy(APP_WORKSPACE_API_ROUTE_POLICY);
-  });
-
   afterEach(() => {
-    resetWorkspaceApiRoutePolicy();
     vi.restoreAllMocks();
   });
 
@@ -27,24 +15,19 @@ describe('PMS task reorder', () => {
       }),
     );
 
-    await reorderTaskListTasks(
-      'token',
-      'list-1',
-      {
-        items: [
-          {
-            board_position: 1000,
-            parent_id: null,
-            task_id: 'task-1',
-          },
-        ],
-      },
-      'hq',
-    );
+    await reorderTaskListTasks('token', 'list-1', {
+      items: [
+        {
+          board_position: 1000,
+          parent_id: null,
+          task_id: 'task-1',
+        },
+      ],
+    });
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(fetchSpy.mock.calls[0]?.[0]).toBe(
-      '/api/v1/workspaces/hq/pms/lists/list-1/tasks/reorder',
+      '/api/v1/pms/lists/list-1/tasks/reorder',
     );
     expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ method: 'PATCH' });
   });

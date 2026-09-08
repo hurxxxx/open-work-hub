@@ -7,21 +7,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.access import (
-    get_current_workspace,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.access import is_platform_admin_user
+from open_work_hub_api.domains.auth.app_access import can_use_app
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.groups.service import user_group_ids_query
 from open_work_hub_api.domains.whiteboard.models import (
     Whiteboard,
-    WhiteboardTarget,
+    WhiteboardGroupShare,
     WhiteboardLinkShare,
+    WhiteboardTarget,
     WhiteboardUserShare,
 )
 from open_work_hub_api.domains.whiteboard.registry import (
     TargetRef,
     project_target_access,
 )
-
 
 TEAM_ACCESS_LEVEL_RANK = {
     "read": 10,
@@ -51,29 +51,9 @@ def max_access_level(*levels: str | None) -> str | None:
     return max(ranked, key=lambda item: TEAM_ACCESS_LEVEL_RANK[item])
 
 
-def ensure_whiteboard_workspace_access(db: Session, user: User) -> Workspace:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is None:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="whiteboard.workspace_context_required",
-        )
-    return current_workspace
-
-
-def workspace_for_whiteboard(db: Session, whiteboard: Whiteboard) -> Workspace:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is not None and current_workspace.id == whiteboard.workspace_id:
-        return current_workspace
-    workspace = db.scalar(
-        select(Workspace).where(
-            Workspace.id == whiteboard.workspace_id,
-            Workspace.active.is_(True),
-        )
-    )
-    if workspace is None:
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
-    return workspace
+def ensure_whiteboard_app_access(db: Session, user: User) -> None:
+    if not can_use_app(db, user_id=user.id, app_id="whiteboard"):
+        raise localized_http_exception(status_code=403, code="platform.app_disabled")
 
 
 def primary_target(whiteboard: Whiteboard) -> WhiteboardTarget | None:
@@ -95,14 +75,14 @@ def target_access_level(
     whiteboard: Whiteboard,
     user: User,
 ) -> tuple[str | None, bool]:
-    workspace = workspace_for_whiteboard(db, whiteboard)
     best_level: str | None = None
     can_manage = False
-    for target in whiteboard.targets:
+    for target in db.scalars(
+        select(WhiteboardTarget).where(WhiteboardTarget.whiteboard_id == whiteboard.id)
+    ):
         projection = project_target_access(
             db=db,
             user=user,
-            workspace=workspace,
             ref=TargetRef(
                 app=target.target_app,
                 type=target.target_type,
@@ -123,67 +103,63 @@ def target_access_level(
 
 
 def resolve_whiteboard_access(
-    db: Session,
-    whiteboard: Whiteboard,
-    user: User,
-    share_token: str | None = None,
+    db: Session, whiteboard: Whiteboard, user: User, share_token: str | None = None
 ) -> WhiteboardAccess:
+    if not can_use_app(db, user_id=user.id, app_id="whiteboard"):
+        return WhiteboardAccess(None, False, False, False, False)
     if share_token is not None:
-        matched_link = next(
-            (item for item in whiteboard.link_shares if item.active and item.token == share_token),
-            None,
+        link = db.scalar(
+            select(WhiteboardLinkShare).where(
+                WhiteboardLinkShare.whiteboard_id == whiteboard.id,
+                WhiteboardLinkShare.active.is_(True),
+                WhiteboardLinkShare.token == share_token,
+            )
         )
-        level = getattr(matched_link, "access_level", None)
+        level = getattr(link, "access_level", None)
         return WhiteboardAccess(
-            access_level=level,
-            can_view=level in TEAM_ACCESS_LEVEL_RANK,
-            can_edit=level == "edit",
-            can_share=False,
-            can_manage=False,
+            level, level in TEAM_ACCESS_LEVEL_RANK, level == "edit", False, False
         )
     if whiteboard.owner_id == user.id:
-        return WhiteboardAccess(
-            access_level="edit",
-            can_view=True,
-            can_edit=True,
-            can_share=True,
-            can_manage=True,
+        return WhiteboardAccess("edit", True, True, True, True)
+    direct = db.scalar(
+        select(WhiteboardUserShare.access_level).where(
+            WhiteboardUserShare.whiteboard_id == whiteboard.id,
+            WhiteboardUserShare.user_id == user.id,
         )
-    direct_share = next((item for item in whiteboard.user_shares if item.user_id == user.id), None)
-    target_level, target_can_manage = target_access_level(db, whiteboard, user)
-    access_level = max_access_level(
-        getattr(direct_share, "access_level", None),
-        target_level,
+    )
+    groups = list(
+        db.scalars(
+            select(WhiteboardGroupShare.access_level).where(
+                WhiteboardGroupShare.whiteboard_id == whiteboard.id,
+                WhiteboardGroupShare.group_id.in_(user_group_ids_query(user.id)),
+            )
+        )
+    )
+    target_level, target_manage = target_access_level(db, whiteboard, user)
+    admin_level = (
+        "read"
+        if whiteboard.ownership_kind == "company" and is_platform_admin_user(user, db)
+        else None
+    )
+    level = max_access_level(
+        direct, target_level, admin_level, "read" if whiteboard.company_visible else None, *groups
     )
     return WhiteboardAccess(
-        access_level=access_level,
-        can_view=access_level in TEAM_ACCESS_LEVEL_RANK,
-        can_edit=access_level == "edit",
-        can_share=target_can_manage,
-        can_manage=target_can_manage,
+        level, level in TEAM_ACCESS_LEVEL_RANK, level == "edit", target_manage, target_manage
     )
 
 
 def whiteboard_query():
-    return (
-        select(Whiteboard)
-        .where(Whiteboard.workspace.has(Workspace.active.is_(True)))
-        .options(
-            selectinload(Whiteboard.owner),
-            selectinload(Whiteboard.targets),
-            selectinload(Whiteboard.user_shares).selectinload(WhiteboardUserShare.user),
-            selectinload(Whiteboard.link_shares),
-        )
+    return select(Whiteboard).options(
+        selectinload(Whiteboard.owner),
+        selectinload(Whiteboard.targets),
+        selectinload(Whiteboard.user_shares).selectinload(WhiteboardUserShare.user),
+        selectinload(Whiteboard.link_shares),
     )
 
 
 def load_accessible_whiteboards(db: Session, user: User) -> list[Whiteboard]:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is None:
-        return []
-    whiteboards = list(
-        db.scalars(whiteboard_query().where(Whiteboard.workspace_id == current_workspace.id))
-    )
+    whiteboards = list(db.scalars(whiteboard_query().where()))
     return [
         whiteboard
         for whiteboard in whiteboards
@@ -192,10 +168,7 @@ def load_accessible_whiteboards(db: Session, user: User) -> list[Whiteboard]:
 
 
 def load_whiteboard_for_access(db: Session, whiteboard_id: str) -> Whiteboard | None:
-    current_workspace = get_current_workspace(db)
     query = whiteboard_query().where(Whiteboard.id == whiteboard_id)
-    if current_workspace is not None:
-        query = query.where(Whiteboard.workspace_id == current_workspace.id)
     return db.scalar(query)
 
 

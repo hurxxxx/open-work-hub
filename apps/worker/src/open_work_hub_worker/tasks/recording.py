@@ -14,11 +14,14 @@ from sqlalchemy.orm import Session, selectinload
 from open_work_hub_worker.celery_app import celery_app
 from open_work_hub_worker.runtime import (
     db_session as _db_session,
+)
+from open_work_hub_worker.runtime import (
     ensure_api_src_on_path as _ensure_api_src_on_path,
+)
+from open_work_hub_worker.runtime import (
     minio_client as _minio_client,
 )
 from open_work_hub_worker.settings import get_settings
-
 
 _ensure_api_src_on_path()
 
@@ -33,11 +36,10 @@ from open_work_hub_api.domains.ai.gateway import (  # noqa: E402
     LlmWorkloadContext,
     execute_llm,
 )
-from open_work_hub_api.domains.auth.workspace_app_gate import (  # noqa: E402
-    is_app_enabled_for_user_context,
+from open_work_hub_api.domains.auth.app_gate import (  # noqa: E402
+    can_use_app,
 )
 from open_work_hub_api.domains.recording.models import Recording, RecordingResult  # noqa: E402
-
 
 logger = logging.getLogger(__name__)
 
@@ -155,11 +157,10 @@ def _ensure_recording_execution_allowed(
     expected_attempt_id: str,
 ) -> None:
     _ensure_current_attempt(recording, expected_attempt_id)
-    if is_app_enabled_for_user_context(
+    if can_use_app(
         session,
         app_id="recording",
         user_id=recording.owner_id,
-        workspace_id=recording.workspace_id,
     ):
         return
     _mark_failed(
@@ -233,14 +234,13 @@ def _complete_local_agent(
     session: Session,
     *,
     source: str,
-    workspace_id: str,
+    actor_user_id: str,
     messages: list[dict[str, str]],
     max_tokens: int,
 ) -> str:
     context = LlmTaskContext(
         source=source,
-        actor_user_id=None,
-        workspace_id=workspace_id,
+        actor_user_id=actor_user_id,
         task_kind="meeting_summary",
         app_id="recording",
     )
@@ -282,6 +282,9 @@ def transcribe_recording(
         if recording is None:
             raise Ignore()
         _ensure_current_attempt(recording, attempt_id)
+        _ensure_recording_execution_allowed(
+            session, recording, stage="transcript", expected_attempt_id=attempt_id
+        )
         if (
             recording.result is not None
             and recording.result.transcript_text
@@ -439,6 +442,9 @@ def analyze_transcript(self, payload: dict[str, Any]) -> dict[str, Any]:
         if recording is None:
             raise Ignore()
         _ensure_current_attempt(recording, attempt_id)
+        _ensure_recording_execution_allowed(
+            session, recording, stage="summary", expected_attempt_id=attempt_id
+        )
         result_row = recording.result
         if result_row is None or not result_row.transcript_text:
             raise PermanentError("Transcript is missing.")
@@ -474,8 +480,8 @@ def analyze_transcript(self, payload: dict[str, Any]) -> dict[str, Any]:
         result_version = result_row.version
         summary = _complete_local_agent(
             session,
+            actor_user_id=recording.owner_id,
             source="worker.recording.agent.domain_meeting",
-            workspace_id=recording.workspace_id,
             messages=_analysis_messages(recording, result_row.transcript_text),
             max_tokens=6000,
         )
@@ -555,6 +561,9 @@ def verify_transcript_summary(self, payload: dict[str, Any]) -> dict[str, Any]:
         if recording is None:
             raise Ignore()
         _ensure_current_attempt(recording, attempt_id)
+        _ensure_recording_execution_allowed(
+            session, recording, stage="summary", expected_attempt_id=attempt_id
+        )
         result_row = recording.result
         transcript = (result_row.transcript_text if result_row is not None else "").strip()
         summary = str(payload.get("summary") or "").strip()
@@ -583,8 +592,8 @@ def verify_transcript_summary(self, payload: dict[str, Any]) -> dict[str, Any]:
 
         verifier_note = _complete_local_agent(
             session,
+            actor_user_id=recording.owner_id,
             source="worker.recording.agent.verifier_grounding",
-            workspace_id=recording.workspace_id,
             messages=_verification_messages(transcript, summary),
             max_tokens=2500,
         )

@@ -1,7 +1,4 @@
-from open_work_hub_api.domains.recording.chunk_sequence import (
-    chunk_sequences,
-    plan_chunk_assembly,
-)
+from open_work_hub_api.domains.recording.chunk_sequence import chunk_sequences, plan_chunk_assembly
 
 
 def test_chunk_sequences_ignores_non_chunk_metadata_and_sorts_numeric_keys() -> None:
@@ -16,9 +13,7 @@ def test_chunk_sequences_ignores_non_chunk_metadata_and_sorts_numeric_keys() -> 
 
 
 def test_plan_chunk_assembly_reports_no_chunks_before_any_upload() -> None:
-    assert plan_chunk_assembly(chunks_meta={}, highest_seq=-1).error == (
-        "no_chunks_to_finalize"
-    )
+    assert plan_chunk_assembly(chunks_meta={}, highest_seq=-1).error == ("no_chunks_to_finalize")
 
 
 def test_plan_chunk_assembly_requires_contiguous_numeric_chunks() -> None:

@@ -8,7 +8,6 @@ import {
 
 export type InternalAppLocation = {
   routeId: AppRouteId;
-  workspaceSlug?: string;
   pathParams?: Readonly<Record<string, string>>;
   queryParams?: Readonly<
     Record<string, string | readonly string[] | null | undefined>
@@ -19,8 +18,6 @@ export type InternalAppLocation = {
 export type MatchedAppRoute = {
   appId: AppId;
   routeId: AppRouteId;
-  contextScope: 'global' | 'workspace';
-  workspaceSlug: string | null;
   pathParams: Readonly<Record<string, string>>;
 };
 
@@ -52,9 +49,7 @@ function renderTemplate(
 export function getAppRoutePattern(routeId: AppRouteId): string {
   const route = APP_ROUTE_BY_ID.get(routeId);
   if (!route) throw new Error(`Unknown app route: ${routeId}`);
-  return route.context_scope === 'workspace'
-    ? `${route.route_base}/workspaces/:workspaceSlug${route.suffix}`
-    : `${route.route_base}${route.suffix}`;
+  return `${route.route_base}${route.suffix}`;
 }
 
 export function getAppRouteChrome(
@@ -69,18 +64,6 @@ export function buildAppHref(location: InternalAppLocation): string {
   const route = APP_ROUTE_BY_ID.get(location.routeId);
   if (!route) throw new Error(`Unknown app route: ${location.routeId}`);
   const params = { ...(location.pathParams ?? {}) };
-  if (route.context_scope === 'workspace') {
-    if (!location.workspaceSlug) {
-      throw new Error(
-        `Workspace route requires workspaceSlug: ${location.routeId}`,
-      );
-    }
-    params.workspaceSlug = location.workspaceSlug;
-  } else if (location.workspaceSlug) {
-    throw new Error(
-      `Global route cannot carry workspaceSlug: ${location.routeId}`,
-    );
-  }
 
   const pathname = renderTemplate(getAppRoutePattern(location.routeId), params);
   const query = new URLSearchParams();
@@ -130,13 +113,9 @@ export function matchAppRoute(pathname: string): MatchedAppRoute | null {
       (key, index) => [key, decodeURIComponent(match[index + 1])] as const,
     );
     const params = Object.fromEntries(values);
-    const workspaceSlug = params.workspaceSlug ?? null;
-    delete params.workspaceSlug;
     return {
       appId: matcher.route.app_id,
       routeId: matcher.routeId,
-      contextScope: matcher.route.context_scope,
-      workspaceSlug,
       pathParams: params,
     };
   }

@@ -57,7 +57,6 @@ describe('PMS space scoped redirects', () => {
         createElement(SpaceDocsView, {
           docId: 'doc-1',
           spaceId: 'space-1',
-          workspaceSlug: 'delivery-hub',
         }),
       ),
     );
@@ -75,7 +74,7 @@ describe('PMS space scoped redirects', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Gantt|간트/ }));
     expect(mocks.navigate).toHaveBeenCalledWith(
-      '/apps/pms/workspaces/delivery-hub/spaces/space-1?tab=gantt',
+      '/apps/pms/spaces/space-1?tab=gantt',
     );
   });
 
@@ -85,10 +84,7 @@ describe('PMS space scoped redirects', () => {
         spaceId: 'space-1',
         user,
         whiteboardId: 'board-1',
-        workspaceSlug: 'delivery-hub',
       }),
-    ).toBe(
-      '/apps/whiteboard/workspaces/delivery-hub/boards/board-1?space_id=space-1',
-    );
+    ).toBe('/apps/whiteboard/boards/board-1?space_id=space-1');
   });
 });

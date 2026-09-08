@@ -21,28 +21,21 @@ function title(
   overrides: {
     activeAppId?: ShellAppId;
     pathname?: string;
-    routeWorkspaceSlug?: string | null;
+
     workspace?: { name: string } | null;
-    workspaceApps?: { app_id: string; title: string }[];
+    apps?: { app_id: string; title: string }[];
   } = {},
 ): string {
-  const hasRouteWorkspaceSlug = Object.prototype.hasOwnProperty.call(
-    overrides,
-    'routeWorkspaceSlug',
-  );
   const hasWorkspace = Object.prototype.hasOwnProperty.call(
     overrides,
     'workspace',
   );
   return resolveShellDocumentTitle({
     activeAppId: overrides.activeAppId ?? 'chatbot',
-    pathname: overrides.pathname ?? '/apps/chatbot/workspaces/hq',
-    routeWorkspaceSlug: hasRouteWorkspaceSlug
-      ? (overrides.routeWorkspaceSlug ?? null)
-      : 'hq',
+    pathname: overrides.pathname ?? '/apps/chatbot',
     t,
     workspace: hasWorkspace ? overrides.workspace : { name: 'HQ' },
-    workspaceApps: overrides.workspaceApps ?? [],
+    apps: overrides.apps ?? [],
   });
 }
 
@@ -51,7 +44,6 @@ describe('document title model', () => {
     expect(
       title({
         activeAppId: 'launcher',
-        routeWorkspaceSlug: null,
         workspace: null,
       }),
     ).toBe('App launcher | Open Work Hub');
@@ -61,8 +53,7 @@ describe('document title model', () => {
     expect(
       title({
         activeAppId: 'settings',
-        pathname: '/admin/workspaces/hq/settings',
-        routeWorkspaceSlug: null,
+        pathname: '/admin/settings',
         workspace: null,
       }),
     ).toBe('Settings | Open Work Hub');
@@ -70,7 +61,6 @@ describe('document title model', () => {
       title({
         activeAppId: 'profile',
         pathname: '/profile',
-        routeWorkspaceSlug: null,
         workspace: null,
       }),
     ).toBe('Profile | Open Work Hub');
@@ -81,7 +71,6 @@ describe('document title model', () => {
       title({
         activeAppId: 'settings',
         pathname: '/admin/users',
-        routeWorkspaceSlug: null,
         workspace: null,
       }),
     ).toBe('Settings | Open Work Hub');
@@ -91,16 +80,16 @@ describe('document title model', () => {
     expect(
       title({
         activeAppId: 'workspace-app',
-        workspaceApps: [{ app_id: 'workspace-app', title: 'Workspace app' }],
+        apps: [{ app_id: 'workspace-app', title: 'Workspace app' }],
       }),
-    ).toBe('HQ - Workspace app | Open Work Hub');
-    expect(title({ activeAppId: 'docs' })).toBe('HQ - docs | Open Work Hub');
+    ).toBe('Workspace app | Open Work Hub');
+    expect(title({ activeAppId: 'docs' })).toBe('docs | Open Work Hub');
   });
 
-  it('includes the workspace name only when the route carries workspace context', () => {
-    expect(
-      title({ pathname: '/apps/retrieval-search', routeWorkspaceSlug: null }),
-    ).toBe('Chatbot | Open Work Hub');
-    expect(title()).toBe('HQ - Chatbot | Open Work Hub');
+  it('uses app titles consistently for direct app routes', () => {
+    expect(title({ pathname: '/apps/retrieval-search' })).toBe(
+      'Chatbot | Open Work Hub',
+    );
+    expect(title()).toBe('Chatbot | Open Work Hub');
   });
 });

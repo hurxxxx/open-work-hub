@@ -1,22 +1,22 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import { type AppBarAppId } from '@/src/platform/auth/auth-api';
+import { EMPTY_LAUNCHER_GLOBAL_PATHS } from '@/src/app/shell/navigation-types';
 import {
   useShellRealtime,
   useShellRealtimeEvent,
 } from '@/src/app/shell/shell-realtime-context';
-import { type WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
-import { EMPTY_LAUNCHER_GLOBAL_PATHS } from '@/src/app/shell/navigation-types';
+import { type ShellAppId } from '@/src/platform/apps/app-links';
+import { type AppBarAppId } from '@/src/platform/auth/auth-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   INITIAL_APP_BAR_STATE,
   appBarReducer,
   buildAppBarItemsProjection,
   buildNotificationIssueHref,
+  buildSearchHref,
   buildVisibleAppBarItems,
-  buildWorkspaceSearchHref,
   resolveDefaultDraftPinnedAppIds,
   resolveEditorDraftPinnedAppIds,
   resolvePinnedAppIds,
@@ -30,7 +30,7 @@ export function useAppBarController({
   appBarFixedAppIds = [],
   appBarItems,
   appBarPinnedByDefaultAppIds = [],
-  canOpenWorkspaceSearch = false,
+  canOpenSearch = false,
   currentPathname,
   currentUser,
   launcherGlobalPaths = EMPTY_LAUNCHER_GLOBAL_PATHS,
@@ -38,9 +38,8 @@ export function useAppBarController({
   notificationRealtimeEventTypes = new Set(),
   notificationUnreadCountLoader = null,
   notificationsEnabled = false,
-  shellWorkspaceSlug,
-  workspaceAppBarCategories,
-  workspaceApps,
+  appBarCategories,
+  apps,
 }: AppBarProps) {
   const { token, updatePreferences } = useAuth();
   const { reconnectSeq } = useShellRealtime();
@@ -68,10 +67,7 @@ export function useAppBarController({
 
     const syncUnreadCount = async () => {
       try {
-        const res = await notificationUnreadCountLoader(
-          token,
-          shellWorkspaceSlug,
-        );
+        const res = await notificationUnreadCountLoader(token);
         if (active) {
           dispatch({ type: 'patch', patch: { unreadCount: res.count } });
         }
@@ -89,7 +85,6 @@ export function useAppBarController({
     notificationUnreadCountLoader,
     notificationsEnabled,
     reconnectSeq,
-    shellWorkspaceSlug,
     token,
   ]);
 
@@ -108,10 +103,7 @@ export function useAppBarController({
         dispatch({
           type: 'patch',
           patch: {
-            notificationRefreshSeq:
-              event.type === 'notification.snapshot'
-                ? state.notificationRefreshSeq
-                : state.notificationRefreshSeq + 1,
+            notificationRefreshSeq: state.notificationRefreshSeq + 1,
             unreadCount:
               typeof data?.unread_count === 'number'
                 ? data.unread_count
@@ -212,19 +204,13 @@ export function useAppBarController({
   const visibleItems = useMemo(
     () =>
       buildVisibleAppBarItems(
-        workspaceApps,
-        workspaceAppBarCategories,
+        apps,
+        appBarCategories,
         translate,
         appBarItems,
         launcherPolicy,
       ),
-    [
-      appBarItems,
-      launcherPolicy,
-      translate,
-      workspaceAppBarCategories,
-      workspaceApps,
-    ],
+    [appBarItems, launcherPolicy, translate, appBarCategories, apps],
   );
   const pinnedAppIds = useMemo(
     () =>
@@ -263,7 +249,7 @@ export function useAppBarController({
     pinnedEligibleAppIds,
     pinnedItems,
   } = itemProjection;
-  const workspaceSearchHref = buildWorkspaceSearchHref(shellWorkspaceSlug);
+  const workspaceSearchHref = buildSearchHref();
   const openAppBarEditor = useCallback(() => {
     dispatch({
       type: 'patch',
@@ -341,7 +327,7 @@ export function useAppBarController({
 
   return {
     activeAppTitle,
-    canOpenWorkspaceSearch,
+    canOpenSearch,
     draftItems,
     fixedItems,
     handleCountChange,
@@ -350,10 +336,10 @@ export function useAppBarController({
     onCloseEditor: () =>
       dispatch({ type: 'patch', patch: { appBarEditorOpen: false } }),
     onCloseLauncherMenus: () => dispatch({ type: 'closeLauncherMenus' }),
-    onMovePinnedApp: (appId: WorkspaceAppId, direction: -1 | 1) =>
+    onMovePinnedApp: (appId: ShellAppId, direction: -1 | 1) =>
       dispatch({ type: 'moveDraftPinned', appId, direction }),
     onOpenEditor: openAppBarEditor,
-    onOpenWorkspaceSearch: () => {
+    onOpenSearch: () => {
       dispatch({
         type: 'patch',
         patch: {
@@ -375,7 +361,7 @@ export function useAppBarController({
         dispatch({ type: 'toggleNotifications' });
       }
     },
-    onTogglePinnedApp: (appId: WorkspaceAppId, checked: boolean) => {
+    onTogglePinnedApp: (appId: ShellAppId, checked: boolean) => {
       dispatch({ type: 'toggleDraftPinned', appId, checked });
     },
     pinnedEligibleAppIds,

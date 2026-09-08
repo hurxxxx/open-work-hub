@@ -11,7 +11,6 @@ def test_search_hit_preserves_canonical_pms_deep_link() -> None:
         {
             "entity_type": "pms_task",
             "entity_id": "task-1",
-            "workspace_id": "workspace-1",
             "title": "Task",
             "summary": "Summary",
             "deep_link": "/apps/pms/workspaces/hq/lists/list-1?task=task-1",
@@ -31,7 +30,6 @@ def test_search_hit_snippet_centers_query_matches_in_body() -> None:
         {
             "entity_type": "file",
             "entity_id": "file-1",
-            "workspace_id": "workspace-1",
             "title": "roadmap.pptx",
             "summary": "generic heater system introduction " * 12,
             "body": (
@@ -58,7 +56,6 @@ def test_search_hit_snippet_uses_utf16_highlight_offsets() -> None:
         {
             "entity_type": "file",
             "entity_id": "file-1",
-            "workspace_id": "workspace-1",
             "title": "emoji.txt",
             "summary": "😀 OPEN Alliance evidence",
             "deep_link": "/apps/files/workspaces/workspace-1?file=file-1",
@@ -79,7 +76,6 @@ def test_search_hit_snippet_offsets_survive_length_changing_casefold() -> None:
         {
             "entity_type": "file",
             "entity_id": "file-1",
-            "workspace_id": "workspace-1",
             "title": "unicode.txt",
             "summary": "ß OPEN evidence",
             "deep_link": "/apps/files/workspaces/workspace-1?file=file-1",

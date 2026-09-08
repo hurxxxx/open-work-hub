@@ -1,19 +1,19 @@
-import type { ComponentType, ReactNode } from 'react';
+import { APP_CONTRACTS } from '@open-work-hub/contracts/app-contracts';
 import {
   createCoreAppModuleRegistry,
   createCoreAppModuleRegistryApi,
   type CoreAppModuleRegistration,
   type CoreAppModuleRegistry,
 } from '@open-work-hub/core-web/app-registry';
-import { APP_CONTRACTS } from '@open-work-hub/contracts/app-contracts';
+import type { ComponentType, ReactNode } from 'react';
 
+import type { BackgroundWorkSource } from '@/src/platform/background-work/background-work-session';
 import {
   DEFAULT_APP_MODULES,
   DEFAULT_FEATURE_MODULES,
   DEFAULT_SHELL_MODULES,
 } from './app-module-manifests';
 import { compileFeatureModuleRegistry } from './feature-module-registry';
-import type { BackgroundWorkSource } from '@/src/platform/background-work/background-work-session';
 import type {
   AppBarItem,
   AppModuleId,
@@ -24,8 +24,8 @@ import type {
   StaticRouteDefinition,
 } from './navigation-types';
 import type {
+  AppRouteDefinition,
   ToolViewRouteDefinition,
-  WorkspaceRouteDefinition,
 } from './route-types';
 import type { AppSidebarConfig } from './sidebar-types';
 
@@ -36,7 +36,7 @@ export type AppModuleRegistration = CoreAppModuleRegistration<
   NavItem,
   AppModuleManifest,
   StaticRouteDefinition,
-  WorkspaceRouteDefinition,
+  AppRouteDefinition,
   ToolViewRouteDefinition,
   BackgroundWorkSource,
   AppSidebarConfig,
@@ -50,7 +50,7 @@ export type AppModuleRegistry = CoreAppModuleRegistry<
   AppModuleManifest,
   AppBarItem,
   StaticRouteDefinition,
-  WorkspaceRouteDefinition,
+  AppRouteDefinition,
   ToolViewRouteDefinition,
   BackgroundWorkSource,
   AppSidebarConfig,
@@ -75,7 +75,7 @@ export function createAppModuleRegistry(
     AppModuleManifest,
     AppBarItem,
     StaticRouteDefinition,
-    WorkspaceRouteDefinition,
+    AppRouteDefinition,
     ToolViewRouteDefinition,
     BackgroundWorkSource,
     AppSidebarConfig,
@@ -93,7 +93,7 @@ export function createAppModuleRegistryApi(
     AppModuleManifest,
     AppBarItem,
     StaticRouteDefinition,
-    WorkspaceRouteDefinition,
+    AppRouteDefinition,
     ToolViewRouteDefinition,
     BackgroundWorkSource,
     AppSidebarConfig,
@@ -141,13 +141,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
   ...APP_MODULE_REGISTRY_API.NAV_ITEMS,
   ...SHELL_MODULE_REGISTRY_API.NAV_ITEMS,
 ];
-export const APP_WORKSPACE_ROUTES: readonly WorkspaceRouteDefinition[] =
-  APP_MODULE_REGISTRY_API.APP_WORKSPACE_ROUTES;
+export const APP_ROUTES: readonly AppRouteDefinition[] =
+  APP_MODULE_REGISTRY_API.APP_ROUTES;
 export const APP_GLOBAL_ROUTES: readonly StaticRouteDefinition[] =
   APP_MODULE_REGISTRY_API.APP_GLOBAL_ROUTES;
 export const APP_TOOL_VIEW_ROUTES: readonly ToolViewRouteDefinition[] =
   APP_MODULE_REGISTRY_API.APP_TOOL_VIEW_ROUTES;
-export const WORKSPACE_AI_TOOL_APP_IDS: readonly string[] =
+export const AI_TOOL_APP_IDS: readonly string[] =
   FEATURE_MODULE_REGISTRY.aiToolAppIds;
 
 function deriveFeatureGuideToolIds(): ReadonlySet<string> {
@@ -176,9 +176,7 @@ function deriveFeatureGuideToolIds(): ReadonlySet<string> {
 export const APP_FEATURE_GUIDE_TOOL_IDS = deriveFeatureGuideToolIds();
 
 export const APP_LAUNCHER_GLOBAL_PATHS: LauncherGlobalPaths = new Map(
-  APP_CONTRACTS.filter((app) => app.availability_scope === 'platform').map(
-    (app) => [app.app_id, app.route_base] as const,
-  ),
+  APP_CONTRACTS.map((app) => [app.app_id, app.route_base] as const),
 );
 export const APP_BAR_FIXED_APP_IDS: readonly AppModuleId[] =
   APP_CONTRACTS.filter((app) => app.launcher.placement === 'fixed').map(
@@ -213,10 +211,10 @@ export const assertAppModuleStaticRouteContract = (
   return registry.assertAppModuleStaticRouteContract(appId, routes);
 };
 export const getToolViewRoute = APP_MODULE_REGISTRY_API.getToolViewRoute;
-export const getAppModuleWorkspaceRoutes = (appId: AppModuleId) =>
-  APP_MODULE_REGISTRY_API.getAppModuleWorkspaceRoutes(appId).length > 0
-    ? APP_MODULE_REGISTRY_API.getAppModuleWorkspaceRoutes(appId)
-    : SHELL_MODULE_REGISTRY_API.getAppModuleWorkspaceRoutes(appId);
+export const getAppModuleAppRoutes = (appId: AppModuleId) =>
+  APP_MODULE_REGISTRY_API.getAppModuleAppRoutes(appId).length > 0
+    ? APP_MODULE_REGISTRY_API.getAppModuleAppRoutes(appId)
+    : SHELL_MODULE_REGISTRY_API.getAppModuleAppRoutes(appId);
 export const getAppModuleGlobalRoutes = (appId: AppModuleId) =>
   APP_MODULE_REGISTRY_API.getAppModuleGlobalRoutes(appId).length > 0
     ? APP_MODULE_REGISTRY_API.getAppModuleGlobalRoutes(appId)

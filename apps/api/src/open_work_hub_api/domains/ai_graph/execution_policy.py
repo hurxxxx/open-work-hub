@@ -7,8 +7,8 @@ from open_work_hub_api.domains.ai_artifacts.models import AiArtifact
 from open_work_hub_api.domains.ai_artifacts.repository import AiArtifactRepository
 from open_work_hub_api.domains.ai_graph.models import AiGraphRun
 from open_work_hub_api.domains.ai_graph.repository import AiGraphRunRepository
-from open_work_hub_api.domains.auth.workspace_app_gate import (
-    is_app_enabled_for_user_context,
+from open_work_hub_api.domains.auth.app_gate import (
+    can_use_app,
 )
 
 
@@ -31,11 +31,10 @@ def enforce_graph_run_app_policy(
         raise LookupError(run_id)
     if run.status in {"completed", "failed", "cancelled"}:
         return run.status != "cancelled"
-    if is_app_enabled_for_user_context(
+    if can_use_app(
         db,
         app_id=run.app_id,
         user_id=run.requested_by_user_id,
-        workspace_id=run.workspace_id,
     ):
         return True
     AiGraphRunRepository(db).transition(

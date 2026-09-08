@@ -74,7 +74,6 @@ describe('ChatbotConversationListPanel', () => {
       <MemoryRouter>
         <ChatbotConversationListPanel
           activeConversationId="conversation-1"
-          currentWorkspaceSlug="research"
           navigationDisabled
           routeAppId="docs"
           routePathSuffix="assistant"
@@ -106,7 +105,6 @@ describe('ChatbotConversationListPanel', () => {
       <MemoryRouter>
         <ChatbotConversationListPanel
           activeConversationId={null}
-          currentWorkspaceSlug="research"
           navigationDisabled
           pendingConversationTitle="권역별 발생 건수를 비교해줘"
           routeAppId="docs"

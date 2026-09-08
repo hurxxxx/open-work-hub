@@ -12,7 +12,7 @@ from open_work_hub_api.domains.ai.runtime.agent_catalog import (
     default_agent_definitions,
 )
 from open_work_hub_api.domains.ai.runtime.registry_validation import RuntimeRegistry
-from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
+from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_APP
 
 
 @dataclass(frozen=True)
@@ -46,16 +46,16 @@ class _AgentResolutionScope:
 
     @property
     def can_resolve(self) -> bool:
-        return CHATBOT_WORKSPACE_APP.app_id in self.enabled_app_ids
+        return CHATBOT_APP.app_id in self.enabled_app_ids
 
     def is_definition_available(self, definition: AgentDefinition) -> bool:
         if definition.requires_non_empty_scope and not self.effective_app_ids:
             return False
-        if not definition.workspace_app_ids:
+        if not definition.owner_app_ids:
             return True
         return (
-            definition.workspace_app_ids <= self.enabled_app_ids
-            and definition.workspace_app_ids <= self.effective_app_ids
+            definition.owner_app_ids <= self.enabled_app_ids
+            and definition.owner_app_ids <= self.effective_app_ids
         )
 
     @staticmethod

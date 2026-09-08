@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 HTTP_METHODS = frozenset({"get", "put", "post", "delete", "patch", "options", "head", "trace"})
-PATH_DERIVED_MARKERS = ("_api_v1_", "__workspace_slug__", "__")
+PATH_DERIVED_MARKERS = ("_api_v1_", "__")
 
 
 @dataclass(frozen=True)

@@ -27,13 +27,12 @@ _WORKSPACE_ID = "workspace-1"
 
 
 def _settings() -> SimpleNamespace:
-    return SimpleNamespace(api_prefix="/api/v1", minio_secret_key="test-secret")
+    return SimpleNamespace(api_prefix="/api/v1", content_grant_signing_key="test-secret")
 
 
 def _file(**overrides: object) -> FileManagerFile:
     values = {
         "id": "file-1",
-        "workspace_id": _WORKSPACE_ID,
         "folder_id": None,
         "owner_id": _USER_ID,
         "filename": "diagram final.png",
@@ -50,7 +49,6 @@ def _corpus(*, scope: str = "company", metadata_version: int = 1) -> FileManager
     return FileManagerCorpus(
         id="corpus-1",
         name="Company handbook",
-        managed_workspace_id=_WORKSPACE_ID,
         access_scope_kind=scope,
         retrieval_partition_id="11111111-1111-1111-1111-111111111111",
         created_by_id=_USER_ID,
@@ -62,7 +60,6 @@ class _FakeDb:
     def __init__(self, file: FileManagerFile | None) -> None:
         self.file = file
         self.user = SimpleNamespace(id=_USER_ID, status="active", login_blocked=False)
-        self.workspace = SimpleNamespace(id=_WORKSPACE_ID, active=True)
 
     def scalar(self, _statement: object) -> FileManagerFile | None:
         return self.file
@@ -70,8 +67,6 @@ class _FakeDb:
     def get(self, model, identity):
         if model is content_access.User and identity == _USER_ID:
             return self.user
-        if model is content_access.Workspace and identity == _WORKSPACE_ID:
-            return self.workspace
         return None
 
 
@@ -96,7 +91,6 @@ def _claims(monkeypatch, file: FileManagerFile, *, disposition="attachment"):
     url = build_file_content_url(
         file,
         issuer=ContentGrantIssuer(user_id=_USER_ID, session_id=_SESSION_ID),
-        execution_workspace_id=_WORKSPACE_ID,
         disposition=disposition,
         now=100,
         expires_seconds=60,
@@ -109,7 +103,7 @@ def _allow_source(monkeypatch, file: FileManagerFile) -> None:
     monkeypatch.setattr(
         content_access.files_service,
         "require_file_access",
-        lambda db, *, workspace, user, file_id: file,
+        lambda db, *, user, file_id: file,
     )
 
 
@@ -121,8 +115,8 @@ def test_file_content_url_uses_single_grant_route_and_bound_claims(monkeypatch) 
     assert claims.resource_kind == "files.file"
     assert claims.owner_app_id == "files"
     assert claims.issuer_session_id == _SESSION_ID
-    assert claims.execution_context_kind == "workspace"
-    assert claims.execution_workspace_id == _WORKSPACE_ID
+    assert claims.execution_context_kind == "company"
+    assert not hasattr(claims, "execution_workspace_id")
     assert claims.disposition == "inline"
     assert claims.expires == 160
 
@@ -139,7 +133,7 @@ def test_open_file_grant_rechecks_workspace_app_and_source_acl(monkeypatch) -> N
     _, claims = _claims(monkeypatch, file, disposition="inline")
     storage_object = _FakeObject([b"\x89PNG\r\n\x1a\n", b"png-bytes"])
     monkeypatch.setattr(content_access, "open_file_object", lambda _key: storage_object)
-    monkeypatch.setattr(content_access, "is_app_enabled_for_user_context", lambda *a, **k: True)
+    monkeypatch.setattr(content_access, "can_use_app", lambda *a, **k: True)
     _allow_source(monkeypatch, file)
 
     stream = open_file_content_grant(_FakeDb(file), claims=claims)
@@ -153,7 +147,7 @@ def test_open_file_grant_rechecks_workspace_app_and_source_acl(monkeypatch) -> N
 def test_workspace_app_revoke_invalidates_grant_before_source_access(monkeypatch) -> None:
     file = _file()
     _, claims = _claims(monkeypatch, file)
-    monkeypatch.setattr(content_access, "is_app_enabled_for_user_context", lambda *a, **k: False)
+    monkeypatch.setattr(content_access, "can_use_app", lambda *a, **k: False)
     monkeypatch.setattr(
         content_access.files_service,
         "require_file_access",
@@ -164,7 +158,7 @@ def test_workspace_app_revoke_invalidates_grant_before_source_access(monkeypatch
         open_file_content_grant(_FakeDb(file), claims=claims)
 
 
-def test_company_corpus_uses_company_gate_without_workspace_membership(monkeypatch) -> None:
+def test_company_corpus_grant_rechecks_user_app_admission(monkeypatch) -> None:
     corpus = _corpus()
     file = _file(corpus_id=corpus.id)
     file.corpus = corpus
@@ -173,16 +167,10 @@ def test_company_corpus_uses_company_gate_without_workspace_membership(monkeypat
     monkeypatch.setattr(content_access, "open_file_object", lambda _key: storage_object)
     monkeypatch.setattr(
         content_access,
-        "is_company_app_enabled_for_user_context",
-        lambda *a, **k: True,
-    )
-    monkeypatch.setattr(
-        content_access,
-        "is_app_enabled_for_user_context",
-        lambda *a, **k: pytest.fail("company corpus must not use workspace membership gate"),
+        "can_use_app",
+        lambda db, *, user_id, app_id: user_id == _USER_ID and app_id == "files",
     )
     _allow_source(monkeypatch, file)
-
     assert list(open_file_content_grant(_FakeDb(file), claims=claims).body) == [b"company"]
 
 
@@ -191,7 +179,6 @@ def test_corpus_transition_and_object_replacement_revoke_existing_grants(monkeyp
     file = _file(corpus_id=corpus.id)
     file.corpus = corpus
     _, transition_claims = _claims(monkeypatch, file)
-    corpus.access_scope_kind = "workspace"
     corpus.metadata_version = 2
     with pytest.raises(InvalidContentGrant, match="binding"):
         open_file_content_grant(_FakeDb(file), claims=transition_claims)
@@ -206,7 +193,7 @@ def test_corpus_transition_and_object_replacement_revoke_existing_grants(monkeyp
 def test_inline_svg_and_spoofed_raster_are_rejected(monkeypatch) -> None:
     svg = _file(content_type="image/svg+xml")
     _, svg_claims = _claims(monkeypatch, svg, disposition="inline")
-    monkeypatch.setattr(content_access, "is_app_enabled_for_user_context", lambda *a, **k: True)
+    monkeypatch.setattr(content_access, "can_use_app", lambda *a, **k: True)
     _allow_source(monkeypatch, svg)
     with pytest.raises(InvalidContentGrant, match="disposition"):
         open_file_content_grant(_FakeDb(svg), claims=svg_claims)

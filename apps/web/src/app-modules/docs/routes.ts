@@ -1,12 +1,12 @@
-import { createElement, lazy } from 'react';
 import {
   getAppRouteChrome,
   getAppRoutePattern,
 } from '@open-work-hub/contracts/app-routes';
+import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
 import type { StaticRouteDefinition } from '@/src/app/shell/navigation-types';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const DocsView = lazy(() =>
   import('./views/DocsView').then((module) => ({ default: module.DocsView })),
@@ -20,7 +20,7 @@ const DocsHtmlRenderPage = lazy(() =>
 export const docsToolElement = lazyRoute(createElement(DocsView));
 const docsHtmlRenderElement = lazyRoute(createElement(DocsHtmlRenderPage));
 
-export const docsWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const docsAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'docs',
     chrome: getAppRouteChrome('docs.root'),

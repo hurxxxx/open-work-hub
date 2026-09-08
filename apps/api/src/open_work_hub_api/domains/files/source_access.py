@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from open_work_hub_api.domains.auth.access import workspace_role_allows
 from open_work_hub_api.domains.files import service as files_service
 from open_work_hub_api.domains.files.external_access import (
     authorize_explicit_file_ids,
-    has_any_explicit_file_access,
 )
 from open_work_hub_api.domains.files.models import FileManagerCorpus, FileManagerFile
 from open_work_hub_api.domains.retrieval.partition_adapter_ids import (
@@ -17,90 +15,16 @@ from open_work_hub_api.domains.source_access.resource_types import FILE_MANAGER_
 
 
 def can_read_file(policy, file_id: str) -> bool:
-    file = policy.db.scalar(
-        select(FileManagerFile).where(
-            FileManagerFile.id == file_id,
-            FileManagerFile.deleted_at.is_(None),
-        )
-    )
-    if file is None:
-        return False
-    if file.corpus_id is not None:
-        corpus = policy.db.get(FileManagerCorpus, file.corpus_id)
-        if corpus is None:
-            return False
-        if not _corpus_scope_allows(policy, corpus):
-            return False
-        if corpus.authorization_mode == "explicit_grants":
-            return file.id in authorize_explicit_file_ids(
-                policy.db,
-                file_ids=(file.id,),
-                user_id=policy.user.id,
-                workspace_id=policy.workspace.id if policy.workspace is not None else None,
-            )
-        # A corpus is one security cohort. Its source-owned ACL intentionally
-        # overrides legacy child visibility and folder ACL fields.
-        return True
-    elif policy.workspace is None or file.workspace_id != policy.workspace.id:
-        return False
-    if workspace_role_allows(policy.workspace_role, "admin"):
-        return True
-    if file.owner_id != policy.user.id and file.visibility != "workspace":
-        return False
-    if file.folder_id is None:
-        return True
-    accessible_folder_ids = {
-        folder.id
-        for folder in files_service.list_accessible_folders(
-            policy.db,
-            workspace=policy.workspace,
-            user=policy.user,
-        )
-    }
-    return file.folder_id in accessible_folder_ids
+    return file_id in authorize_many_files(policy, (file_id,))
 
 
 def has_accessible_file(policy) -> bool:
-    corpus_scope_clause = FileManagerCorpus.access_scope_kind == "company"
-    if policy.workspace is not None:
-        corpus_scope_clause = corpus_scope_clause | (
-            (FileManagerCorpus.access_scope_kind == "workspace")
-            & (FileManagerCorpus.managed_workspace_id == policy.workspace.id)
-        )
-    corpus_file_id = policy.db.scalar(
-        select(FileManagerFile.id)
-        .join(FileManagerCorpus, FileManagerCorpus.id == FileManagerFile.corpus_id)
-        .where(
-            FileManagerCorpus.authorization_mode == "cohort",
-            corpus_scope_clause,
-            FileManagerFile.deleted_at.is_(None),
-        )
-        .limit(1)
-    )
-    if corpus_file_id is not None:
-        return True
-    if has_any_explicit_file_access(
-        policy.db,
-        user_id=policy.user.id,
-        workspace_id=policy.workspace.id if policy.workspace is not None else None,
-    ):
-        return True
-    if policy.workspace is None:
-        return False
     accessible_folder_ids = {
-        folder.id
-        for folder in files_service.list_accessible_folders(
-            policy.db,
-            workspace=policy.workspace,
-            user=policy.user,
-        )
+        folder.id for folder in files_service.list_accessible_folders(policy.db, user=policy.user)
     }
     return bool(
         files_service.list_accessible_files(
-            policy.db,
-            workspace=policy.workspace,
-            user=policy.user,
-            accessible_folder_ids=accessible_folder_ids,
+            policy.db, user=policy.user, accessible_folder_ids=accessible_folder_ids
         )
     )
 
@@ -131,9 +55,6 @@ def authorize_many_files(policy, file_ids) -> set[str]:
         else {}
     )
     accessible_folder_ids: set[str] | None = None
-    is_admin = bool(
-        policy.workspace is not None and workspace_role_allows(policy.workspace_role, "admin")
-    )
     allowed: set[str] = set()
     explicit_file_ids: list[str] = []
     for file in files:
@@ -148,9 +69,7 @@ def authorize_many_files(policy, file_ids) -> set[str]:
             else:
                 allowed.add(file.id)
             continue
-        if policy.workspace is None or file.workspace_id != policy.workspace.id:
-            continue
-        if not is_admin and file.owner_id != policy.user.id and file.visibility != "workspace":
+        if file.owner_id != policy.user.id and file.visibility != "company":
             continue
         if file.folder_id is not None:
             if accessible_folder_ids is None:
@@ -158,7 +77,6 @@ def authorize_many_files(policy, file_ids) -> set[str]:
                     folder.id
                     for folder in files_service.list_accessible_folders(
                         policy.db,
-                        workspace=policy.workspace,
                         user=policy.user,
                     )
                 }
@@ -170,20 +88,13 @@ def authorize_many_files(policy, file_ids) -> set[str]:
             policy.db,
             file_ids=explicit_file_ids,
             user_id=policy.user.id,
-            workspace_id=policy.workspace.id if policy.workspace is not None else None,
         )
     )
     return allowed
 
 
 def _corpus_scope_allows(policy, corpus: FileManagerCorpus) -> bool:
-    if corpus.access_scope_kind == "company":
-        return True
-    return bool(
-        policy.workspace is not None
-        and corpus.access_scope_kind == "workspace"
-        and corpus.managed_workspace_id == policy.workspace.id
-    )
+    return corpus.access_scope_kind == "company"
 
 
 class FileManagerSourceAccessAdapter:
@@ -192,8 +103,8 @@ class FileManagerSourceAccessAdapter:
     partition_adapter_id = FILES_RETRIEVAL_PARTITION_ADAPTER_ID
     source_namespace = "files"
     resource_types = (FILE_MANAGER_FILE_RESOURCE_TYPE,)
-    allowed_candidate_scopes = ("workspace", "company")
-    allowed_transitions = ("corpus_scope_change", "corpus_workspace_transfer")
+    allowed_candidate_scopes = ("company",)
+    allowed_transitions = ()
     transition_mode = "source_owned"
     keyword_acl_entity_types = ("file",)
 
@@ -261,11 +172,10 @@ class FileManagerSourceAccessAdapter:
         return has_accessible_file(policy)
 
     def keyword_acl_branches(self, policy):
-        clauses = [policy._keyword_acl_clause("owner_user_id", policy.user.id)]
-        if workspace_role_allows(policy.workspace_role, "admin"):
-            clauses.append(policy._keyword_acl_clause("visibility", ["private", "workspace"]))
-        elif policy.workspace_role is not None:
-            clauses.append(policy._keyword_acl_clause("visibility", "workspace"))
+        clauses = [
+            policy._keyword_acl_clause("owner_user_id", policy.user.id),
+            policy._keyword_acl_clause("visibility", "company"),
+        ]
         return [policy._keyword_entity_branch("file", clauses)]
 
 

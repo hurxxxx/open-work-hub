@@ -1,4 +1,8 @@
 import {
+  AUTH_REALTIME_EVENT_TYPES,
+  isAuthAccessChangedRealtimeEvent,
+} from '@open-work-hub/contracts/auth';
+import {
   useCallback,
   useEffect,
   useRef,
@@ -6,10 +10,6 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  AUTH_REALTIME_EVENT_TYPES,
-  isAuthAccessChangedRealtimeEvent,
-} from '@open-work-hub/contracts/auth';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { useShellRealtime } from './shell-realtime-context';
@@ -18,8 +18,6 @@ type AccessRefreshInputs = {
   accessProjectionKey: string;
   refreshApps: () => Promise<unknown>;
   refreshUser: () => Promise<AuthUser>;
-  refreshWorkspace: () => Promise<unknown>;
-  workspaceSlug: string | null;
 };
 
 type AccessRefreshState =
@@ -28,10 +26,6 @@ type AccessRefreshState =
   | { status: 'error'; error: string };
 
 const INITIAL_STATE: AccessRefreshState = { status: 'idle', error: null };
-
-function belongsToWorkspace(user: AuthUser, workspaceSlug: string): boolean {
-  return user.workspaces.some((workspace) => workspace.slug === workspaceSlug);
-}
 
 export function AccessRefreshBoundary({
   children,
@@ -47,6 +41,7 @@ export function AccessRefreshBoundary({
   const dirtyRef = useRef(false);
   const runningRef = useRef<Promise<void> | null>(null);
   const retryButtonRef = useRef<HTMLButtonElement>(null);
+  const [revision, setRevision] = useState(0);
   const [state, setState] = useState<AccessRefreshState>(INITIAL_STATE);
 
   useEffect(() => {
@@ -69,17 +64,11 @@ export function AccessRefreshBoundary({
       try {
         while (dirtyRef.current) {
           dirtyRef.current = false;
-          const user = await inputsRef.current.refreshUser();
+          await inputsRef.current.refreshUser();
           await inputsRef.current.refreshApps();
-          const latestInputs = inputsRef.current;
-          if (
-            latestInputs.workspaceSlug &&
-            belongsToWorkspace(user, latestInputs.workspaceSlug)
-          ) {
-            await latestInputs.refreshWorkspace();
-          }
         }
         if (mountedRef.current) {
+          setRevision((value) => value + 1);
           setState(INITIAL_STATE);
         }
       } catch (caughtError) {
@@ -133,7 +122,7 @@ export function AccessRefreshBoundary({
         aria-hidden={masksChildren || undefined}
         className={masksChildren ? 'hidden' : 'contents'}
         inert={masksChildren || undefined}
-        key={inputs.accessProjectionKey}
+        key={`${inputs.accessProjectionKey}:${revision}`}
       >
         {children}
       </div>

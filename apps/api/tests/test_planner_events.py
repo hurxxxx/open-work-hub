@@ -8,22 +8,7 @@ from sqlalchemy import select
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.auth.models import CompanyAppControl
 
-from test_meeting import (
-    _auth_headers,
-    _bootstrap_admin_session,
-    _create_user_with_workspaces,
-    _login,
-)
-
-
-def _workspace_slug_for_key(client: TestClient, token: str, key: str) -> str:
-    response = client.get(
-        "/api/v1/admin/workspaces",
-        headers=_auth_headers(token),
-    )
-    assert response.status_code == 200, response.text
-    workspace = next(item for item in response.json() if item["key"] == key)
-    return workspace.get("slug", key)
+from test_meeting import _auth_headers, _bootstrap_admin_session, _create_company_user, _login
 
 
 def _set_company_app_control(app_id: str, enabled: bool) -> None:
@@ -62,18 +47,17 @@ def _create_planner_event(
     return response.json()
 
 
-def _create_workspace_meeting(
+def _create_company_meeting(
     client: TestClient,
     token: str,
     *,
-    workspace_slug: str,
     title: str = "Sync",
     attendees: list[dict] | None = None,
     start_at: datetime,
     end_at: datetime,
 ) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings",
+        "/api/v1/meeting/meetings",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -167,12 +151,11 @@ def test_planner_event_crud_happy_path(client: TestClient) -> None:
 def test_planner_event_owner_only_access(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    member = _create_user_with_workspaces(
+    member = _create_company_user(
         client,
         admin_token,
         email="planner-member@open-work-hub.local",
         full_name="Planner Member",
-        workspace_keys=["administrator"],
     )
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
@@ -206,12 +189,11 @@ def test_planner_event_owner_only_access(client: TestClient) -> None:
 def test_calendar_events_include_only_current_user_planner_events(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    member = _create_user_with_workspaces(
+    member = _create_company_user(
         client,
         admin_token,
         email="planner-public@open-work-hub.local",
         full_name="Planner Public",
-        workspace_keys=["administrator"],
     )
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
@@ -248,7 +230,7 @@ def test_calendar_events_include_only_current_user_planner_events(client: TestCl
     assert item["sourceType"] == "planner_event"
     assert item["sourceId"] == own_event["id"]
     assert item["metadata"]["plannerEventId"] == own_event["id"]
-    assert item["workspace"] is None
+    assert "workspace" not in item
     assert item["metadata"]["location"] == "판교"
     assert item["metadata"]["plannerAllDay"] is False
     assert item["metadata"]["plannerStartHasTime"] is True
@@ -376,13 +358,11 @@ def test_planner_event_calendar_bounds_use_server_timezone_rules(
 def test_meeting_availability_masks_other_users_personal_events(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    meeting_workspace_slug = _workspace_slug_for_key(client, admin_token, "administrator")
-    attendee = _create_user_with_workspaces(
+    attendee = _create_company_user(
         client,
         admin_token,
         email="availability-user@open-work-hub.local",
         full_name="Availability User",
-        workspace_keys=["administrator"],
     )
     attendee_token = _login(client, attendee["user"]["email"], attendee["temporary_password"])
 
@@ -403,10 +383,9 @@ def test_meeting_availability_masks_other_users_personal_events(client: TestClie
         all_day=True,
         location="부산",
     )
-    _create_workspace_meeting(
+    _create_company_meeting(
         client,
         admin_token,
-        workspace_slug=meeting_workspace_slug,
         title="Sync",
         attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
         start_at=datetime(2026, 5, 18, 8, 0, tzinfo=UTC).replace(tzinfo=None),
@@ -421,7 +400,7 @@ def test_meeting_availability_masks_other_users_personal_events(client: TestClie
     )
 
     response = client.get(
-        f"/api/v1/workspaces/{meeting_workspace_slug}/meeting/availability",
+        "/api/v1/meeting/availability",
         headers=_auth_headers(admin_token),
         params=[
             ("user_ids", attendee["user"]["id"]),
@@ -446,7 +425,7 @@ def test_meeting_availability_masks_other_users_personal_events(client: TestClie
 
     _set_company_app_control("planner", False)
     planner_disabled = client.get(
-        f"/api/v1/workspaces/{meeting_workspace_slug}/meeting/availability",
+        "/api/v1/meeting/availability",
         headers=_auth_headers(admin_token),
         params=[
             ("user_ids", attendee["user"]["id"]),
@@ -459,20 +438,25 @@ def test_meeting_availability_masks_other_users_personal_events(client: TestClie
     assert [block["sourceType"] for block in disabled_blocks] == ["meeting"]
 
 
-def test_meeting_availability_rejects_users_outside_workspace(client: TestClient) -> None:
+def test_meeting_availability_rejects_inactive_company_users(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    meeting_workspace_slug = _workspace_slug_for_key(client, admin_token, "administrator")
-    outsider = _create_user_with_workspaces(
+    outsider = _create_company_user(
         client,
         admin_token,
         email="availability-outsider@open-work-hub.local",
         full_name="Availability Outsider",
-        workspace_keys=[],
     )
 
+    suspended = client.patch(
+        f"/api/v1/admin/users/{outsider['user']['id']}",
+        headers=_auth_headers(admin_token),
+        json={"status": "suspended"},
+    )
+    assert suspended.status_code == 200, suspended.text
+
     response = client.get(
-        f"/api/v1/workspaces/{meeting_workspace_slug}/meeting/availability",
+        "/api/v1/meeting/availability",
         headers=_auth_headers(admin_token),
         params=[
             ("user_ids", outsider["user"]["id"]),
@@ -481,4 +465,4 @@ def test_meeting_availability_rejects_users_outside_workspace(client: TestClient
         ],
     )
     assert response.status_code == 422
-    assert response.json()["code"] == "meeting.requested_users_workspace_required"
+    assert response.json()["code"] == "meeting.requested_users_active_required"

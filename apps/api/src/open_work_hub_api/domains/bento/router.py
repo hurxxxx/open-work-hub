@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import json
-from typing import Any, Literal
 import uuid
+from datetime import UTC, datetime
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field, field_validator
@@ -13,18 +13,6 @@ from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.access import resolve_workspace_role, workspace_role_allows
-from open_work_hub_api.domains.auth.dependencies import (
-    require_current_user,
-    require_current_workspace,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
-from open_work_hub_api.domains.bento.app_catalog import BENTO_WORKSPACE_APP
-from open_work_hub_api.domains.bento.generation import (
-    BENTO_GENERATION_MAX_SLIDES,
-    BentoGenerationLanguage,
-)
 from open_work_hub_api.domains.ai.model_settings_service import (
     AiModelSettingsError,
     resolve_ai_model_workload_route,
@@ -41,20 +29,28 @@ from open_work_hub_api.domains.ai_graph.repository import (
     AiGraphRunInputRepository,
     AiGraphRunRepository,
 )
+from open_work_hub_api.domains.auth.app_gate import require_app_access
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.bento import (
     BENTO_EDIT_WORKLOAD_ID,
     BENTO_GENERATE_WORKLOAD_ID,
 )
+from open_work_hub_api.domains.bento.app_catalog import BENTO_APP
 from open_work_hub_api.domains.bento.execution import (
     BENTO_AGENT_GRAPH_ID,
     BENTO_AGENT_GRAPH_VERSION,
 )
+from open_work_hub_api.domains.bento.generation import (
+    BENTO_GENERATION_MAX_SLIDES,
+    BentoGenerationLanguage,
+)
 from open_work_hub_api.domains.bento.models import BentoAiJob, BentoAiJobInput, BentoDocument
+from open_work_hub_api.domains.content_access.ownership import record_ownership_transition
 
-
-require_bento_app_enabled = require_workspace_app_enabled(
-    BENTO_WORKSPACE_APP.app_id,
-    error_code="workspace.app_disabled",
+require_bento_app_enabled = require_app_access(
+    BENTO_APP.app_id,
+    error_code="app.access_required",
 )
 
 router = APIRouter(
@@ -66,7 +62,7 @@ router = APIRouter(
 BentoHubView = Literal["all", "mine", "archived"]
 BentoSortBy = Literal["updated_at", "created_at", "title"]
 BentoSortDir = Literal["asc", "desc"]
-BentoVisibility = Literal["personal", "workspace"]
+BentoVisibility = Literal["personal", "company"]
 BENTO_DOCUMENT_MAX_BYTES = 25 * 1024 * 1024
 _DEFAULT_FONT_STACK = (
     "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
@@ -133,6 +129,7 @@ def _validated_document_json(value: str) -> tuple[str, dict[str, Any]]:
 
 class CreateBentoDocumentRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
+    company_admin_read_acknowledged: bool = False
     visibility: BentoVisibility = "personal"
     document_json: str | None = Field(default=None, max_length=BENTO_DOCUMENT_MAX_BYTES)
 
@@ -148,6 +145,7 @@ class CreateBentoDocumentRequest(BaseModel):
 class UpdateBentoDocumentRequest(BaseModel):
     version: int = Field(..., ge=1)
     title: str | None = Field(default=None, min_length=1, max_length=200)
+    company_admin_read_acknowledged: bool = False
     visibility: BentoVisibility | None = None
     document_json: str | None = Field(default=None, max_length=BENTO_DOCUMENT_MAX_BYTES)
 
@@ -166,7 +164,8 @@ class GenerateBentoDocumentRequest(BaseModel):
     prompt: str = Field(..., min_length=3, max_length=12_000)
     slide_count: int = Field(default=6, ge=3, le=BENTO_GENERATION_MAX_SLIDES)
     language: BentoGenerationLanguage = "auto"
-    visibility: BentoVisibility = "personal"
+    company_admin_read_acknowledged: bool = False
+    visibility: Literal["personal"] = "personal"
 
     @field_validator("prompt")
     @classmethod
@@ -193,7 +192,6 @@ class EditBentoDocumentWithAiRequest(BaseModel):
 
 class BentoDocumentItem(BaseModel):
     id: str
-    workspace_id: str
     title: str
     visibility: BentoVisibility
     version: int
@@ -238,28 +236,17 @@ class BentoAiJobResponse(BaseModel):
 def _access_clause(current_user: User):
     return or_(
         BentoDocument.owner_id == current_user.id,
-        BentoDocument.visibility == "workspace",
+        BentoDocument.visibility == "company",
     )
 
 
-def _can_manage(
-    document: BentoDocument,
-    *,
-    current_user: User,
-    workspace_role: str | None,
-) -> bool:
-    if document.owner_id == current_user.id:
-        return True
-    return document.visibility == "workspace" and workspace_role_allows(
-        workspace_role,
-        "admin",
-    )
+def _can_manage(document: BentoDocument, *, current_user: User) -> bool:
+    return document.owner_id == current_user.id
 
 
 def _load_or_404(
     db: Session,
     *,
-    workspace_id: str,
     document_id: str,
     current_user: User,
 ) -> BentoDocument:
@@ -268,7 +255,6 @@ def _load_or_404(
         .options(selectinload(BentoDocument.owner))
         .where(
             BentoDocument.id == document_id,
-            BentoDocument.workspace_id == workspace_id,
             _access_clause(current_user),
         )
     )
@@ -281,16 +267,13 @@ def _serialize_item(
     document: BentoDocument,
     *,
     current_user: User,
-    workspace_role: str | None,
 ) -> BentoDocumentItem:
     can_manage = _can_manage(
         document,
         current_user=current_user,
-        workspace_role=workspace_role,
     )
     return BentoDocumentItem(
         id=document.id,
-        workspace_id=document.workspace_id,
         title=document.title,
         visibility=document.visibility,
         version=document.version,
@@ -299,7 +282,7 @@ def _serialize_item(
         created_at=document.created_at,
         updated_at=document.updated_at,
         archived_at=document.archived_at,
-        can_edit=document.archived_at is None,
+        can_edit=document.owner_id == current_user.id and document.archived_at is None,
         can_manage=can_manage,
     )
 
@@ -308,12 +291,10 @@ def _serialize_detail(
     document: BentoDocument,
     *,
     current_user: User,
-    workspace_role: str | None,
 ) -> BentoDocumentDetail:
     item = _serialize_item(
         document,
         current_user=current_user,
-        workspace_role=workspace_role,
     )
     return BentoDocumentDetail(**item.model_dump(), document_json=document.document_json)
 
@@ -321,16 +302,15 @@ def _serialize_detail(
 def _persist_document(
     db: Session,
     *,
-    workspace: Workspace,
     current_user: User,
     title: str,
     visibility: BentoVisibility,
     document_json: str,
+    company_admin_read_acknowledged: bool,
 ) -> BentoDocument:
     now = _utcnow()
     document = BentoDocument(
         id=str(uuid.uuid4()),
-        workspace_id=workspace.id,
         owner_id=current_user.id,
         title=title,
         visibility=visibility,
@@ -339,11 +319,19 @@ def _persist_document(
         created_at=now,
         updated_at=now,
     )
+    record_ownership_transition(
+        db,
+        actor_user_id=current_user.id,
+        resource_kind="bento",
+        resource_id=document.id,
+        current_kind="personal",
+        next_kind=visibility,
+        company_admin_read_acknowledged=company_admin_read_acknowledged,
+    )
     db.add(document)
     db.commit()
     return _load_or_404(
         db,
-        workspace_id=workspace.id,
         document_id=document.id,
         current_user=current_user,
     )
@@ -379,7 +367,6 @@ def _resolve_bento_runtime(db: Session, *, workload_id: str) -> str:
 def _stage_bento_ai_job(
     db: Session,
     *,
-    workspace: Workspace,
     current_user: User,
     kind: Literal["create", "edit"],
     prompt: str,
@@ -392,7 +379,6 @@ def _stage_bento_ai_job(
     if kind == "edit" and target_document is not None:
         existing = db.scalar(
             select(BentoAiJob).where(
-                BentoAiJob.workspace_id == workspace.id,
                 BentoAiJob.target_document_id == target_document.id,
                 BentoAiJob.status.in_(("queued", "running")),
             )
@@ -405,7 +391,6 @@ def _stage_bento_ai_job(
     prepared = stage_graph_dispatch(
         db,
         run_request=AiGraphRunRequest(
-            workspace_id=workspace.id,
             requested_by_user_id=current_user.id,
             app_id="bento",
             graph=AiGraphSpec(
@@ -425,7 +410,6 @@ def _stage_bento_ai_job(
     now = _utcnow()
     job = BentoAiJob(
         id=prepared.graph_run.id,
-        workspace_id=workspace.id,
         requested_by_id=current_user.id,
         kind=kind,
         status="queued",
@@ -474,10 +458,8 @@ def list_bento_hub(
     page_size: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> BentoHubResponse:
     clauses = [
-        BentoDocument.workspace_id == workspace.id,
         _access_clause(current_user),
     ]
     clauses.append(
@@ -505,13 +487,11 @@ def list_bento_hub(
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
     return BentoHubResponse(
         items=[
             _serialize_item(
                 document,
                 current_user=current_user,
-                workspace_role=workspace_role,
             )
             for document in documents
         ],
@@ -531,7 +511,6 @@ def create_bento_document(
     payload: CreateBentoDocumentRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> BentoDocumentDetail:
     title = payload.title.strip()
     raw_document = payload.document_json or _default_document_json(title)
@@ -540,17 +519,15 @@ def create_bento_document(
     document_json = json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
     document = _persist_document(
         db,
-        workspace=workspace,
         current_user=current_user,
         title=title,
         visibility=payload.visibility,
         document_json=document_json,
+        company_admin_read_acknowledged=payload.company_admin_read_acknowledged,
     )
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
     return _serialize_detail(
         document,
         current_user=current_user,
-        workspace_role=workspace_role,
     )
 
 
@@ -563,18 +540,14 @@ def generate_bento_document(
     payload: GenerateBentoDocumentRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> BentoAiJobResponse:
     return _stage_bento_ai_job(
         db,
-        workspace=workspace,
         current_user=current_user,
         kind="create",
         prompt=payload.prompt,
         language=payload.language,
-        runtime_adapter_id=_resolve_bento_runtime(
-            db, workload_id=BENTO_GENERATE_WORKLOAD_ID
-        ),
+        runtime_adapter_id=_resolve_bento_runtime(db, workload_id=BENTO_GENERATE_WORKLOAD_ID),
         visibility=payload.visibility,
         slide_count=payload.slide_count,
     )
@@ -590,14 +563,14 @@ def edit_bento_document_with_ai(
     payload: EditBentoDocumentWithAiRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> BentoAiJobResponse:
     document = _load_or_404(
         db,
-        workspace_id=workspace.id,
         document_id=document_id,
         current_user=current_user,
     )
+    if document.owner_id != current_user.id:
+        raise localized_http_exception(status_code=403, code="bento.manage_access_required")
     if document.archived_at is not None:
         raise localized_http_exception(status_code=409, code="bento.archived")
     if document.version != payload.version:
@@ -605,7 +578,6 @@ def edit_bento_document_with_ai(
 
     return _stage_bento_ai_job(
         db,
-        workspace=workspace,
         current_user=current_user,
         kind="edit",
         prompt=payload.prompt,
@@ -622,13 +594,11 @@ def list_bento_ai_jobs(
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> list[BentoAiJobResponse]:
     rows = db.execute(
         select(BentoAiJob, AiGraphRun)
         .join(AiGraphRun, AiGraphRun.id == BentoAiJob.id)
         .where(
-            BentoAiJob.workspace_id == workspace.id,
             BentoAiJob.requested_by_id == current_user.id,
         )
         .order_by(BentoAiJob.created_at.desc())
@@ -642,14 +612,12 @@ def get_bento_ai_job(
     job_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> BentoAiJobResponse:
     row = db.execute(
         select(BentoAiJob, AiGraphRun)
         .join(AiGraphRun, AiGraphRun.id == BentoAiJob.id)
         .where(
             BentoAiJob.id == job_id,
-            BentoAiJob.workspace_id == workspace.id,
             BentoAiJob.requested_by_id == current_user.id,
         )
     ).one_or_none()
@@ -663,14 +631,12 @@ def cancel_bento_ai_job(
     job_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> BentoAiJobResponse:
     row = db.execute(
         select(BentoAiJob, AiGraphRun)
         .join(AiGraphRun, AiGraphRun.id == BentoAiJob.id)
         .where(
             BentoAiJob.id == job_id,
-            BentoAiJob.workspace_id == workspace.id,
             BentoAiJob.requested_by_id == current_user.id,
         )
         .with_for_update()
@@ -708,19 +674,15 @@ def get_bento_document(
     document_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> BentoDocumentDetail:
     document = _load_or_404(
         db,
-        workspace_id=workspace.id,
         document_id=document_id,
         current_user=current_user,
     )
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
     return _serialize_detail(
         document,
         current_user=current_user,
-        workspace_role=workspace_role,
     )
 
 
@@ -730,21 +692,28 @@ def update_bento_document(
     payload: UpdateBentoDocumentRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> BentoDocumentDetail:
     document = _load_or_404(
         db,
-        workspace_id=workspace.id,
         document_id=document_id,
         current_user=current_user,
     )
+    if document.owner_id != current_user.id:
+        raise localized_http_exception(status_code=403, code="bento.manage_access_required")
+    record_ownership_transition(
+        db,
+        actor_user_id=current_user.id,
+        resource_kind="bento",
+        resource_id=document.id,
+        current_kind=document.visibility,
+        next_kind=payload.visibility or document.visibility,
+        company_admin_read_acknowledged=payload.company_admin_read_acknowledged,
+    )
     if document.archived_at is not None:
         raise localized_http_exception(status_code=409, code="bento.archived")
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
     if payload.visibility is not None and not _can_manage(
         document,
         current_user=current_user,
-        workspace_role=workspace_role,
     ):
         raise localized_http_exception(status_code=403, code="bento.manage_access_required")
 
@@ -774,7 +743,6 @@ def update_bento_document(
         update(BentoDocument)
         .where(
             BentoDocument.id == document.id,
-            BentoDocument.workspace_id == workspace.id,
             BentoDocument.version == payload.version,
         )
         .values(**values)
@@ -788,7 +756,6 @@ def update_bento_document(
         .options(selectinload(BentoDocument.owner))
         .where(
             BentoDocument.id == document_id,
-            BentoDocument.workspace_id == workspace.id,
         )
         .execution_options(populate_existing=True)
     )
@@ -797,7 +764,6 @@ def update_bento_document(
     return _serialize_detail(
         updated_document,
         current_user=current_user,
-        workspace_role=workspace_role,
     )
 
 
@@ -806,16 +772,18 @@ def archive_bento_document(
     document_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     document = _load_or_404(
         db,
-        workspace_id=workspace.id,
         document_id=document_id,
         current_user=current_user,
     )
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
-    if not _can_manage(document, current_user=current_user, workspace_role=workspace_role):
+    if document.owner_id != current_user.id:
+        raise localized_http_exception(status_code=403, code="bento.manage_access_required")
+    if not _can_manage(
+        document,
+        current_user=current_user,
+    ):
         raise localized_http_exception(status_code=403, code="bento.manage_access_required")
     if document.archived_at is None:
         document.archived_at = _utcnow()
@@ -831,16 +799,18 @@ def restore_bento_document(
     document_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> BentoDocumentDetail:
     document = _load_or_404(
         db,
-        workspace_id=workspace.id,
         document_id=document_id,
         current_user=current_user,
     )
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
-    if not _can_manage(document, current_user=current_user, workspace_role=workspace_role):
+    if document.owner_id != current_user.id:
+        raise localized_http_exception(status_code=403, code="bento.manage_access_required")
+    if not _can_manage(
+        document,
+        current_user=current_user,
+    ):
         raise localized_http_exception(status_code=403, code="bento.manage_access_required")
     if document.archived_at is not None:
         document.archived_at = None
@@ -850,14 +820,12 @@ def restore_bento_document(
         db.commit()
     restored = _load_or_404(
         db,
-        workspace_id=workspace.id,
         document_id=document_id,
         current_user=current_user,
     )
     return _serialize_detail(
         restored,
         current_user=current_user,
-        workspace_role=workspace_role,
     )
 
 
@@ -866,16 +834,18 @@ def permanently_delete_bento_document(
     document_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     document = _load_or_404(
         db,
-        workspace_id=workspace.id,
         document_id=document_id,
         current_user=current_user,
     )
-    workspace_role = resolve_workspace_role(db, current_user, workspace.id)
-    if not _can_manage(document, current_user=current_user, workspace_role=workspace_role):
+    if document.owner_id != current_user.id:
+        raise localized_http_exception(status_code=403, code="bento.manage_access_required")
+    if not _can_manage(
+        document,
+        current_user=current_user,
+    ):
         raise localized_http_exception(status_code=403, code="bento.manage_access_required")
     if document.archived_at is None:
         raise localized_http_exception(status_code=409, code="bento.archive_before_delete")

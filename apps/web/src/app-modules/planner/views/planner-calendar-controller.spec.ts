@@ -160,7 +160,6 @@ describe('planner calendar controller', () => {
     ).toEqual({
       type: 'previewMeeting',
       meetingId: 'meeting-1',
-      workspaceSlug: 'hq',
     });
 
     expect(
@@ -175,7 +174,6 @@ describe('planner calendar controller', () => {
       type: 'openTask',
       taskId: 'task 1',
       taskListId: 'list-1',
-      workspaceSlug: 'hq',
     });
 
     expect(

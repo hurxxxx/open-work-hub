@@ -1,4 +1,5 @@
 """Announcement schemas."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -7,8 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-
-AnnouncementScope = Literal["workspace", "company"]
+AnnouncementScope = Literal["company"]
 
 
 def _camel_config() -> ConfigDict:
@@ -24,7 +24,7 @@ class AnnouncementCreateRequest(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=200)
     body: str = Field(default="", max_length=20000)
-    scope: AnnouncementScope = "workspace"
+    scope: AnnouncementScope = "company"
     is_pinned: bool = False
 
 
@@ -40,7 +40,6 @@ class AnnouncementOut(BaseModel):
     model_config = _camel_config()
 
     id: str
-    workspace_id: str
     author_id: str
     author_name: str
     scope: AnnouncementScope

@@ -29,7 +29,7 @@ def test_task_attachment_upload_registers_canonical_storage_and_activity(
     task = _create_issue(client, token, task_list["id"], title="Attachment task")
 
     response = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/attachments",
+        f"/api/v1/pms/tasks/{task['id']}/attachments",
         headers=_auth_headers(token),
         files={"file": ("brief.txt", b"hello", "text/plain")},
     )
@@ -90,7 +90,7 @@ def test_task_attachment_delete_tolerates_missing_storage_and_cleans_local_state
     task_list = _create_task_list(client, token)
     task = _create_issue(client, token, task_list["id"], title="Delete attachment")
     upload = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/attachments",
+        f"/api/v1/pms/tasks/{task['id']}/attachments",
         headers=_auth_headers(token),
         files={"file": ("delete-me.txt", b"payload", "text/plain")},
     )
@@ -98,7 +98,7 @@ def test_task_attachment_delete_tolerates_missing_storage_and_cleans_local_state
     attachment_id = upload.json()["id"]
 
     response = client.delete(
-        f"/api/v1/workspaces/administrator/pms/attachments/{attachment_id}",
+        f"/api/v1/pms/attachments/{attachment_id}",
         headers=_auth_headers(token),
     )
 
@@ -126,7 +126,7 @@ def test_task_attachment_viewer_cannot_upload_or_delete(
     task_list = _create_task_list(client, admin_token)
     task = _create_issue(client, admin_token, task_list["id"], title="Viewer attachment")
     upload = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/attachments",
+        f"/api/v1/pms/tasks/{task['id']}/attachments",
         headers=_auth_headers(admin_token),
         files={"file": ("admin.txt", b"payload", "text/plain")},
     )
@@ -142,12 +142,12 @@ def test_task_attachment_viewer_cannot_upload_or_delete(
     viewer_token = _login(client, viewer["user"]["email"], viewer["temporary_password"])
 
     viewer_upload = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/attachments",
+        f"/api/v1/pms/tasks/{task['id']}/attachments",
         headers=_auth_headers(viewer_token),
         files={"file": ("viewer.txt", b"payload", "text/plain")},
     )
     viewer_delete = client.delete(
-        f"/api/v1/workspaces/administrator/pms/attachments/{upload.json()['id']}",
+        f"/api/v1/pms/attachments/{upload.json()['id']}",
         headers=_auth_headers(viewer_token),
     )
 

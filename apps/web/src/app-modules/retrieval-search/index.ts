@@ -1,13 +1,10 @@
 import { retrievalSearchManifest } from './manifest';
-import { retrievalSearchWorkspaceRoutes } from './routes';
+import { retrievalSearchAppRoutes } from './routes';
 
 export { retrievalSearchManifest } from './manifest';
-export {
-  retrievalSearchElement,
-  retrievalSearchWorkspaceRoutes,
-} from './routes';
+export { retrievalSearchAppRoutes, retrievalSearchElement } from './routes';
 
 export const retrievalSearchModule = {
   manifest: retrievalSearchManifest,
-  workspaceRoutes: retrievalSearchWorkspaceRoutes,
+  appRoutes: retrievalSearchAppRoutes,
 } as const;

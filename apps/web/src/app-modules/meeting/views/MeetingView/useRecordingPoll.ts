@@ -8,11 +8,9 @@ import {
 
 export function useRecordingPoll(
   token: string | null,
-  workspaceSlug: string,
   meetingId: string,
   meeting: MeetingDetail | null,
   onMeetingUpdated: (meeting: MeetingDetail) => void,
-  /** Current authenticated user id — used to gate the lock-watch poll. */
   currentUserId?: string | null,
 ) {
   useEffect(() => {
@@ -34,12 +32,12 @@ export function useRecordingPoll(
     }
     const timer = window.setInterval(async () => {
       try {
-        const nextMeeting = await getMeeting(token, workspaceSlug, meetingId);
+        const nextMeeting = await getMeeting(token, meetingId);
         onMeetingUpdated(nextMeeting);
       } catch {
         // Keep the previous UI state and retry on the next interval.
       }
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [meeting, meetingId, onMeetingUpdated, token, workspaceSlug, currentUserId]);
+  }, [meeting, meetingId, onMeetingUpdated, token, currentUserId]);
 }

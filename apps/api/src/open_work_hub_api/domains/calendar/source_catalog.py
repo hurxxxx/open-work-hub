@@ -9,23 +9,21 @@ from typing import Iterable, Protocol
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from open_work_hub_api.domains.auth.access import (
-    resolve_workspace_enabled_app_ids,
-    resolve_workspaces,
-)
-from open_work_hub_api.domains.auth.models import Team, User
+from open_work_hub_api.domains.auth.app_access import allowed_app_ids
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.meeting.models import Meeting, MeetingAttendee
-from open_work_hub_api.domains.pms.models import Task, TaskAssignee, TaskList
-from open_work_hub_api.domains.planner.models import PlannerEvent
 from open_work_hub_api.domains.planner.event_time import local_date_string
+from open_work_hub_api.domains.planner.models import PlannerEvent
+from open_work_hub_api.domains.pms.access import accessible_space_ids_query
+from open_work_hub_api.domains.pms.models import Task, TaskAssignee, TaskList
+from open_work_hub_api.domains.pms.space_models import Team
 
-from .schemas import CalendarEventOut, CalendarSourceType, CalendarWorkspaceRef
+from .schemas import CalendarEventOut, CalendarSourceType
 from .source_projection import (
     project_meeting_calendar_event,
     project_planner_calendar_event,
     project_pms_task_calendar_events,
 )
-
 
 DEFAULT_CALENDAR_SOURCES: tuple[CalendarSourceType, ...] = (
     "meeting",
@@ -43,11 +41,7 @@ class CalendarSourceContext:
     user: User
     from_at: datetime
     to_at: datetime
-    workspaces_by_id: dict[str, CalendarWorkspaceRef]
-    enabled_workspace_ids_by_app: dict[str, frozenset[str]]
-
-    def workspace_ids_for(self, app_id: str) -> frozenset[str]:
-        return self.enabled_workspace_ids_by_app.get(app_id, frozenset())
+    enabled_app_ids: frozenset[str]
 
 
 class CalendarSourceAdapter(Protocol):
@@ -70,15 +64,13 @@ class MeetingCalendarSource:
         *,
         requested_sources: set[CalendarSourceType],
     ) -> list[CalendarEventOut]:
-        workspace_ids = context.workspace_ids_for("meeting")
-        if "meeting" not in requested_sources or not workspace_ids:
+        if "meeting" not in requested_sources or "meeting" not in context.enabled_app_ids:
             return []
         attendee_meeting_ids = select(MeetingAttendee.meeting_id).where(
             MeetingAttendee.user_id == context.user.id
         )
         meetings = context.db.scalars(
             select(Meeting)
-            .where(Meeting.workspace_id.in_(workspace_ids))
             .where(
                 or_(
                     Meeting.organizer_id == context.user.id,
@@ -93,7 +85,6 @@ class MeetingCalendarSource:
         return [
             project_meeting_calendar_event(
                 meeting,
-                workspace=context.workspaces_by_id[meeting.workspace_id],
             )
             for meeting in meetings
         ]
@@ -110,8 +101,7 @@ class PmsTaskCalendarSource:
     ) -> list[CalendarEventOut]:
         include_due = "pms_due" in requested_sources
         include_block = "pms_block" in requested_sources
-        workspace_ids = context.workspace_ids_for("pms")
-        if (not include_due and not include_block) or not workspace_ids:
+        if (not include_due and not include_block) or "pms" not in context.enabled_app_ids:
             return []
 
         range_start = date.fromisoformat(local_date_string(context.from_at, context.user.time_zone))
@@ -120,10 +110,12 @@ class PmsTaskCalendarSource:
             TaskAssignee.user_id == context.user.id
         )
         stmt = (
-            select(Task, Team.workspace_id)
+            select(
+                Task,
+            )
             .join(TaskList, TaskList.id == Task.list_id)
             .join(Team, Team.id == TaskList.team_id)
-            .where(Team.workspace_id.in_(workspace_ids))
+            .where(Team.id.in_(accessible_space_ids_query(context.db, user_id=context.user.id)))
             .where(Task.archived.is_(False))
             .where(TaskList.archived.is_(False))
             .where(
@@ -150,12 +142,11 @@ class PmsTaskCalendarSource:
         rows = context.db.execute(stmt.where(or_(*or_clauses))).all()
         return [
             event
-            for task, workspace_id in rows
+            for (task,) in rows
             for event in project_pms_task_calendar_events(
                 task,
                 include_due=include_due,
                 include_block=include_block,
-                workspace=context.workspaces_by_id[workspace_id],
             )
         ]
 
@@ -169,7 +160,7 @@ class PlannerCalendarSource:
         *,
         requested_sources: set[CalendarSourceType],
     ) -> list[CalendarEventOut]:
-        if "planner_event" not in requested_sources:
+        if "planner_event" not in requested_sources or "planner" not in context.enabled_app_ids:
             return []
         events = context.db.scalars(
             select(PlannerEvent)
@@ -189,30 +180,6 @@ CALENDAR_SOURCE_ADAPTERS: tuple[CalendarSourceAdapter, ...] = (
 )
 
 
-def _calendar_workspace_context(
-    db: Session,
-    *,
-    user: User,
-) -> tuple[
-    dict[str, CalendarWorkspaceRef],
-    dict[str, frozenset[str]],
-]:
-    accessible = resolve_workspaces(db, user)
-    workspaces_by_id = {
-        item["id"]: CalendarWorkspaceRef(id=item["id"], slug=item["slug"], name=item["name"])
-        for item in accessible
-    }
-    enabled_by_app: dict[str, set[str]] = {"meeting": set(), "pms": set()}
-    for workspace_id in workspaces_by_id:
-        enabled_app_ids = set(resolve_workspace_enabled_app_ids(db, workspace_id))
-        for app_id in enabled_by_app:
-            if app_id in enabled_app_ids:
-                enabled_by_app[app_id].add(workspace_id)
-    return workspaces_by_id, {
-        app_id: frozenset(workspace_ids) for app_id, workspace_ids in enabled_by_app.items()
-    }
-
-
 def collect_calendar_source_events(
     *,
     db: Session,
@@ -222,14 +189,12 @@ def collect_calendar_source_events(
     sources: Iterable[CalendarSourceType],
 ) -> list[CalendarEventOut]:
     requested_sources = set(sources)
-    workspaces_by_id, enabled_workspace_ids_by_app = _calendar_workspace_context(db, user=user)
     context = CalendarSourceContext(
         db=db,
         user=user,
         from_at=from_at,
         to_at=to_at,
-        workspaces_by_id=workspaces_by_id,
-        enabled_workspace_ids_by_app=enabled_workspace_ids_by_app,
+        enabled_app_ids=frozenset(allowed_app_ids(db, user_id=user.id)),
     )
     return [
         event

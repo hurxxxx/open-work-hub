@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     LargeBinary,
     String,
     Text,
@@ -28,6 +28,7 @@ def utcnow_naive() -> datetime:
 class NativeDoc(Base):
     __tablename__ = "docs_native_docs"
     __table_args__ = (
+        CheckConstraint("ownership_kind IN ('personal', 'company')", name="ck_docs_ownership"),
         CheckConstraint(
             "doc_type IN ('general', 'meeting_notes', 'project_brief', 'spec', 'policy', 'guide', 'memo')",
             name="ck_docs_native_docs_doc_type",
@@ -37,14 +38,17 @@ class NativeDoc(Base):
             name="ck_docs_native_docs_rag_scope",
         ),
         Index("ix_docs_native_docs_owner_created", "owner_id", "created_at"),
-        Index("ix_docs_native_docs_workspace_updated", "workspace_id", "updated_at"),
+        Index("ix_docs_native_docs_updated", "updated_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
     retrieval_partition_id: Mapped[str | None] = mapped_column(
         ForeignKey("retrieval_partitions.id", ondelete="RESTRICT"),
         nullable=True,
+    )
+    company_visible: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    ownership_kind: Mapped[str] = mapped_column(
+        String(16), default="personal", nullable=False, index=True
     )
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     collection_id: Mapped[str | None] = mapped_column(
@@ -80,7 +84,6 @@ class NativeDoc(Base):
         nullable=False,
     )
     trashed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
-    workspace = relationship("Workspace")
     owner = relationship("User")
     collection: Mapped["DocsCollection | None"] = relationship(back_populates="docs")
     pages: Mapped[list["NativeDocPage"]] = relationship(
@@ -108,18 +111,16 @@ class NativeDoc(Base):
 class DocsCollection(Base):
     __tablename__ = "docs_collections"
     __table_args__ = (
-        CheckConstraint("scope IN ('workspace', 'private')", name="ck_docs_collections_scope"),
+        CheckConstraint("scope IN ('company', 'private')", name="ck_docs_collections_scope"),
         CheckConstraint("length(trim(name)) > 0", name="ck_docs_collections_name_not_blank"),
         Index(
-            "ix_docs_collections_workspace_scope_owner",
-            "workspace_id",
+            "ix_docs_collections_scope_owner",
             "scope",
             "owner_id",
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
     scope: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(140))
@@ -131,8 +132,6 @@ class DocsCollection(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
-
-    workspace = relationship("Workspace")
     owner = relationship("User")
     docs: Mapped[list[NativeDoc]] = relationship(back_populates="collection")
 
@@ -383,3 +382,19 @@ class DocsCollabDocument(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
+
+
+class NativeDocGroupShare(Base):
+    __tablename__ = "docs_group_shares"
+    __table_args__ = (
+        CheckConstraint("access_level IN ('read', 'edit')", name="ck_docs_group_share_access"),
+    )
+    doc_id: Mapped[str] = mapped_column(
+        ForeignKey("docs_native_docs.id", ondelete="CASCADE"), primary_key=True
+    )
+    group_id: Mapped[str] = mapped_column(
+        ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    access_level: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)

@@ -1,10 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { APP_WORKSPACE_API_ROUTE_POLICY } from '@/src/app/shell/workspace-api-routes';
-import {
-  configureWorkspaceApiRoutePolicy,
-  resetWorkspaceApiRoutePolicy,
-} from '@/src/platform/api/workspace-api-path-policy';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createChecklistItem,
@@ -23,13 +17,7 @@ import {
 } from './pms-api';
 
 describe('PMS task-detail workspace boundary', () => {
-  beforeEach(() => {
-    resetWorkspaceApiRoutePolicy();
-    configureWorkspaceApiRoutePolicy(APP_WORKSPACE_API_ROUTE_POLICY);
-  });
-
   afterEach(() => {
-    resetWorkspaceApiRoutePolicy();
     vi.restoreAllMocks();
   });
 
@@ -42,55 +30,36 @@ describe('PMS task-detail workspace boundary', () => {
         }),
       ),
     );
-    const workspaceSlug = 'target workspace';
 
-    await getTaskDetail('token', 'task-1', workspaceSlug);
-    await listTaskActivityLogs('token', 'task-1', workspaceSlug);
-    await updateTask('token', 'task-1', { title: 'Updated' }, workspaceSlug);
-    await setTaskAssignees('token', 'task-1', ['user-1'], workspaceSlug);
-    await setTaskFollowers('token', 'task-1', ['user-2'], workspaceSlug);
-    await createTaskListTask(
-      'token',
-      'list-1',
-      {
-        assignee_id: null,
-        description: '',
-        due_date: null,
-        milestone_id: null,
-        priority: 'medium',
-        status: 'todo',
-        title: 'Subtask',
-      },
-      workspaceSlug,
-    );
-    await deleteTask('token', 'task-2', workspaceSlug);
-    await createChecklistItem(
-      'token',
-      'task-1',
-      { text: 'Check' },
-      workspaceSlug,
-    );
-    await updateChecklistItem(
-      'token',
-      'check-1',
-      { completed: true },
-      workspaceSlug,
-    );
-    await deleteChecklistItem('token', 'check-1', workspaceSlug);
+    await getTaskDetail('token', 'task-1');
+    await listTaskActivityLogs('token', 'task-1');
+    await updateTask('token', 'task-1', { title: 'Updated' });
+    await setTaskAssignees('token', 'task-1', ['user-1']);
+    await setTaskFollowers('token', 'task-1', ['user-2']);
+    await createTaskListTask('token', 'list-1', {
+      assignee_id: null,
+      description: '',
+      due_date: null,
+      milestone_id: null,
+      priority: 'medium',
+      status: 'todo',
+      title: 'Subtask',
+    });
+    await deleteTask('token', 'task-2');
+    await createChecklistItem('token', 'task-1', { text: 'Check' });
+    await updateChecklistItem('token', 'check-1', { completed: true });
+    await deleteChecklistItem('token', 'check-1');
     await uploadAttachment(
       'token',
       'task-1',
       new File(['content'], 'note.txt', { type: 'text/plain' }),
-      workspaceSlug,
     );
-    await deleteAttachment('token', 'attachment-1', workspaceSlug);
-    await createTaskComment('token', 'task-1', 'Comment', null, workspaceSlug);
+    await deleteAttachment('token', 'attachment-1');
+    await createTaskComment('token', 'task-1', 'Comment', null);
 
     expect(fetchSpy).toHaveBeenCalledTimes(13);
     for (const [input] of fetchSpy.mock.calls) {
-      expect(String(input)).toMatch(
-        /^\/api\/v1\/workspaces\/target%20workspace\/pms\//,
-      );
+      expect(String(input)).toMatch(/^\/api\/v1\/pms\//);
     }
   });
 });

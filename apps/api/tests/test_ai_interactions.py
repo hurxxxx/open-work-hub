@@ -16,7 +16,6 @@ def test_llm_audit_writes_raw_free_ai_interaction(client: TestClient) -> None:
         actor_user_id=None,
         principal_kind="system",
         principal_id=None,
-        workspace_id="workspace-1",
         task_kind="chatbot",
         app_id="test-chatbot",
         policy="local_only",
@@ -64,7 +63,6 @@ def test_external_audit_writes_usage_without_raw_input(client: TestClient) -> No
         actor_user_id=None,
         principal_kind="system",
         principal_id=None,
-        workspace_id="workspace-1",
         task_kind="web_search",
         capability="web_search",
         provider="anthropic",
@@ -103,7 +101,6 @@ def test_external_audit_records_detected_values_for_observability(
         actor_user_id=None,
         principal_kind="system",
         principal_id=None,
-        workspace_id="synthetic-workspace",
         task_kind="web_search",
         capability="web_search",
         provider="anthropic",
@@ -128,7 +125,7 @@ def test_external_audit_records_detected_values_for_observability(
 
     assert audit_log.payload["app_id"] == "web-search"
     assert detected_value.audit_log_id == audit_log.id
-    assert detected_value.workspace_id == "synthetic-workspace"
+    assert not hasattr(detected_value, "workspace_id")
     assert detected_value.app_id == "web-search"
     assert detected_value.detector == "regex"
     assert detected_value.entity_type == "credential"

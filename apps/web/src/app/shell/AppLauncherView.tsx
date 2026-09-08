@@ -1,10 +1,8 @@
-import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 
-import { workspaceAppIconForKey } from '@/src/platform/workspaces/workspace-app-icons';
-import type { AppsBootstrapResponse } from '@/src/platform/workspaces/workspaces-api';
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import { hasAdminConsoleAccess } from '@/src/platform/auth/auth-api';
+import { appIconForKey } from '@/src/platform/apps/app-icons';
+import type { AppsBootstrapResponse } from '@/src/platform/apps/apps-api';
 import {
   resolveAppLaunchDestination,
   translateAppLaunchContext,
@@ -13,7 +11,6 @@ import {
 import { EMPTY_LAUNCHER_GLOBAL_PATHS } from './navigation-types';
 
 const LAUNCHER_SECTIONS = [
-  { id: 'workspace', titleKey: 'launcher.workspaceApp' },
   { id: 'company', titleKey: 'launcher.companyApp' },
   { id: 'personal', titleKey: 'launcher.personalApp' },
 ] as const;
@@ -28,19 +25,11 @@ export function AppLauncherView({
   loading: boolean;
 }) {
   const { t } = useTranslation('shell');
-  const { user } = useAuth();
-  const hasNoWorkspace = user?.workspaces.length === 0;
-  const isPlatformAdmin = hasAdminConsoleAccess(user);
-  const hasNoApps = Boolean(data && data.apps.length === 0);
+  const hasNoApps = Boolean(data && !data.apps.some((app) => app.enabled));
   const sections = LAUNCHER_SECTIONS.map((section) => ({
     ...section,
     apps: (data?.apps ?? []).filter((app) => {
-      if (section.id === 'workspace') {
-        return app.availability_scope === 'workspace';
-      }
-      if (app.availability_scope !== 'platform') {
-        return false;
-      }
+      if (!app.enabled) return false;
       return section.id === 'personal'
         ? app.execution_context_kind === 'personal'
         : app.execution_context_kind === 'company';
@@ -59,30 +48,16 @@ export function AppLauncherView({
       </p>
 
       {loading && !data ? (
-        <div className="mt-8 h-40 animate-pulse rounded-2xl bg-app-surface" />
+        <div
+          role="status"
+          aria-label={t('common:feedback.loading')}
+          className="mt-8 h-40 animate-pulse rounded-2xl bg-app-surface"
+        />
       ) : null}
       {error ? (
         <p className="app-text-body mt-8 rounded-xl border border-app-danger/25 bg-app-danger/10 p-4 text-app-danger">
           {error}
         </p>
-      ) : null}
-      {hasNoWorkspace && !loading ? (
-        <section className="mt-8 rounded-2xl border border-app-accent/25 bg-app-accent/8 p-5">
-          <h2 className="app-text-title-md text-app-ink">
-            {t('launcher.noWorkspaceTitle')}
-          </h2>
-          <p className="app-text-body mt-2 max-w-3xl text-app-ink/65">
-            {t('launcher.noWorkspaceDescription')}
-          </p>
-          {isPlatformAdmin ? (
-            <Link
-              className="app-text-body-sm mt-4 inline-flex rounded-xl bg-app-accent px-4 py-2.5 font-semibold text-app-accent-fg"
-              to="/admin/workspaces"
-            >
-              {t('launcher.manageWorkspaces')}
-            </Link>
-          ) : null}
-        </section>
       ) : null}
       {hasNoApps && !error ? (
         <section className="mt-8 rounded-2xl border border-app-border bg-app-surface p-6 text-center">
@@ -108,15 +83,13 @@ export function AppLauncherView({
           </h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {section.apps.map((app) => {
-              const Icon = workspaceAppIconForKey(app.icon_key);
+              const Icon = appIconForKey(app.icon_key);
               const title = t(`apps.${app.app_id}`, {
                 defaultValue: app.title,
               });
               const destination = resolveAppLaunchDestination({
                 app,
                 appId: app.app_id,
-                currentWorkspace: null,
-                currentWorkspaceAppIds: null,
                 launcherGlobalPaths: EMPTY_LAUNCHER_GLOBAL_PATHS,
               });
               return (
@@ -135,13 +108,6 @@ export function AppLauncherView({
                   <p className="app-text-caption mt-1 text-app-ink/55">
                     {translateAppLaunchContext(destination, t)}
                   </p>
-                  {app.availability_scope === 'workspace' ? (
-                    <p className="app-text-micro mt-1 text-app-ink/45">
-                      {t('launcher.availableWorkspaceCount', {
-                        count: app.eligible_workspace_count,
-                      })}
-                    </p>
-                  ) : null}
                 </Link>
               );
             })}

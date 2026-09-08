@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { WhiteboardScene } from '../api/whiteboard-api';
 import {
   createWhiteboardCollabDocumentState,
+  createWhiteboardCollabProvider,
   encodeWhiteboardCollabDocumentState,
 } from './whiteboard-collab-runtime';
 
@@ -67,5 +68,23 @@ describe('whiteboard collab runtime', () => {
     });
 
     expect(elementIds(restored.initialScene)).toEqual(['encoded']);
+  });
+  it('uses the shared auth-first provider without putting credentials into its URL', () => {
+    const state = createWhiteboardCollabDocumentState({
+      seedScene: scene('seed'),
+      session: { snapshot_scene: null, yjs_state: null },
+    });
+    const provider = createWhiteboardCollabProvider({
+      doc: state.doc,
+      roomKey: 'test-room',
+      token: 'private-test-token',
+      wsPath: '/api/v1/whiteboard/collab',
+    });
+    expect(provider.url).not.toContain('private-test-token');
+    expect(provider.params).toEqual({});
+    expect(provider.shouldConnect).toBe(false);
+    expect(provider.disableBc).toBe(true);
+    provider.destroy();
+    state.doc.destroy();
   });
 });

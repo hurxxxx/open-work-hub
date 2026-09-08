@@ -17,46 +17,54 @@ from open_work_hub_api.core.i18n import (
     select_locale,
     translate_message,
 )
-from open_work_hub_api.core.principal import CallerPrincipal, user_principal
 from open_work_hub_api.core.llm import (
     LlmModelConfigurationError,
-    LlmProviderError,
     LlmPoolConfig,
     LlmPoolName,
+    LlmProviderError,
     LlmTaskContext,
     PolicyDecision,
 )
 from open_work_hub_api.core.llm_execution_adapters import supports_tool_calling
+from open_work_hub_api.core.principal import CallerPrincipal, user_principal
 from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.ai import approvals as ai_approvals
 from open_work_hub_api.domains.ai.agent import (
     AGENT_SYSTEM_PROMPT,
     resume_agent_run,
     run_agent_turn_stream,
 )
-from open_work_hub_api.domains.ai import approvals as ai_approvals
-from open_work_hub_api.domains.ai.audit import log_llm_tool_approval_resolved
-from open_work_hub_api.domains.ai.assistant_turns import (
-    AssistantTurnBuffer,
-    assistant_buffer_from_sync_response,
-    build_assistant_turn_record,
-)
+from open_work_hub_api.domains.ai.artifact_parser import ArtifactStreamParser
 from open_work_hub_api.domains.ai.artifact_stream_envelopes import (
     emit_content_through_parser,
     flush_parser,
     serialize_agent_event_through_artifacts,
 )
-from open_work_hub_api.domains.ai.chat_stream_envelopes import (
-    build_done_meta as _build_done_meta,
-    chunk_to_envelope as _chunk_to_envelope,
+from open_work_hub_api.domains.ai.assistant_turns import (
+    AssistantTurnBuffer,
+    assistant_buffer_from_sync_response,
+    build_assistant_turn_record,
 )
+from open_work_hub_api.domains.ai.audit import log_llm_tool_approval_resolved
 from open_work_hub_api.domains.ai.chat_context_policy import (
     normalize_business_chat_allowed_app_ids,
 )
-from open_work_hub_api.domains.ai.artifact_parser import ArtifactStreamParser
+from open_work_hub_api.domains.ai.chat_stream_envelopes import (
+    build_done_meta as _build_done_meta,
+)
+from open_work_hub_api.domains.ai.chat_stream_envelopes import (
+    chunk_to_envelope as _chunk_to_envelope,
+)
 from open_work_hub_api.domains.ai.conversation_binding import (
     complete_live_conversation_run as _complete_live_conversation_run,
+)
+from open_work_hub_api.domains.ai.conversation_binding import (
     record_user_turn as _record_user_turn,
+)
+from open_work_hub_api.domains.ai.conversation_binding import (
     resolve_requested_conversation as _resolve_requested_conversation,
+)
+from open_work_hub_api.domains.ai.conversation_binding import (
     start_live_conversation_run as _start_live_conversation_run,
 )
 from open_work_hub_api.domains.ai.conversation_scope import (
@@ -71,8 +79,8 @@ from open_work_hub_api.domains.ai.events import (
     serialize_sse,
 )
 from open_work_hub_api.domains.ai.gateway import (
-    AiGatewayRequest,
     AiGatewayPolicyViolation,
+    AiGatewayRequest,
     LlmWorkloadContext,
     build_llm_workload_request,
     complete_gateway_chat,
@@ -85,30 +93,7 @@ from open_work_hub_api.domains.ai.registry import (
     get_chatbot_capable_app_ids,
     resolve_llm_workload,
 )
-from open_work_hub_api.domains.ai.runtime_status import inspect_registered_llm_runtime
-from open_work_hub_api.domains.ai.runtime.metrics import (
-    record_inspection_request,
-)
-from open_work_hub_api.domains.ai.runtime.inspection_projection import (
-    RuntimeRunInspectionResponse,
-    runtime_run_inspection_response,
-)
-from open_work_hub_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
-from open_work_hub_api.domains.ai.runtime.persistence import (
-    persist_graph_execution_runtime_shadow,
-    persist_single_loop_fallback_runtime_shadow,
-)
 from open_work_hub_api.domains.ai.runtime.agent_definitions import resolve_agent_definitions
-from open_work_hub_api.domains.ai.runtime.manager_candidate import (
-    build_deterministic_manager_candidate,
-    summarize_execution_graph,
-)
-from open_work_hub_api.domains.ai.runtime.graph_scheduler import (
-    GraphSchedulerError,
-    build_graph_execution_schedule,
-    summarize_graph_execution_schedule,
-    summarize_graph_schedule_failure,
-)
 from open_work_hub_api.domains.ai.runtime.external_egress import (
     ExternalCapability,
     evaluate_external_egress,
@@ -120,12 +105,34 @@ from open_work_hub_api.domains.ai.runtime.external_trace import (
 from open_work_hub_api.domains.ai.runtime.graph_execution import (
     attach_graph_execution_adapter_decision,
 )
+from open_work_hub_api.domains.ai.runtime.graph_scheduler import (
+    GraphSchedulerError,
+    build_graph_execution_schedule,
+    summarize_graph_execution_schedule,
+    summarize_graph_schedule_failure,
+)
 from open_work_hub_api.domains.ai.runtime.graph_stream import (
     attach_graph_execution_adapter_error_summary,
     run_graph_execution_adapter_stream,
     should_use_graph_execution_adapter,
 )
+from open_work_hub_api.domains.ai.runtime.inspection_projection import (
+    RuntimeRunInspectionResponse,
+    runtime_run_inspection_response,
+)
+from open_work_hub_api.domains.ai.runtime.manager_candidate import (
+    build_deterministic_manager_candidate,
+    summarize_execution_graph,
+)
 from open_work_hub_api.domains.ai.runtime.manager_validation import ManagerGraphValidator
+from open_work_hub_api.domains.ai.runtime.metrics import (
+    record_inspection_request,
+)
+from open_work_hub_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
+from open_work_hub_api.domains.ai.runtime.persistence import (
+    persist_graph_execution_runtime_shadow,
+    persist_single_loop_fallback_runtime_shadow,
+)
 from open_work_hub_api.domains.ai.runtime.routing import (
     RuntimeRoutingDecision,
     attach_manager_graph_validation_result,
@@ -136,43 +143,56 @@ from open_work_hub_api.domains.ai.runtime.routing_metadata import (
     runtime_routing_stream_kwargs,
 )
 from open_work_hub_api.domains.ai.runtime.tool_calling import stream_tool_calling_enabled
-from open_work_hub_api.domains.ai.tool_runtime import ToolCallExecution
+from open_work_hub_api.domains.ai.runtime_status import inspect_registered_llm_runtime
+from open_work_hub_api.domains.ai.tool_contracts import AgentToolSpec
 from open_work_hub_api.domains.ai.tool_pipeline import (
     ToolChatCommand,
     ToolChatCommandError,
     build_tool_chat_response_payload,
-    execute_tool_chat_command as run_tool_chat_command,
     execute_tool_chat_command_sse_events,
     parse_tool_chat_command,
 )
+from open_work_hub_api.domains.ai.tool_pipeline import (
+    execute_tool_chat_command as run_tool_chat_command,
+)
+from open_work_hub_api.domains.ai.tool_runtime import ToolCallExecution
 from open_work_hub_api.domains.ai.tool_service import (
     ToolRequiresApproval,
     approval_required_http_exception,
+)
+from open_work_hub_api.domains.ai.tool_service import (
     execute_tool as execute_ai_tool,
 )
-from open_work_hub_api.domains.ai.tool_contracts import AgentToolSpec
 from open_work_hub_api.domains.ai.tool_surface import (
     AgentToolSurface,
+    owner_app_id_for_tool,
     resolve_agent_tool_surface,
-    workspace_app_id_for_tool,
 )
-from open_work_hub_api.domains.auth.dependencies import require_current_user, require_current_workspace
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.access import resolve_workspace_enabled_app_ids
-from open_work_hub_api.domains.auth.workspace_app_gate import is_workspace_app_enabled
-from open_work_hub_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
+from open_work_hub_api.domains.auth.app_availability import resolve_company_enabled_app_ids
+from open_work_hub_api.domains.auth.app_catalog import get_app_catalog_item
+from open_work_hub_api.domains.auth.app_gate import can_use_app
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_WORKSPACE_APP
 from open_work_hub_api.domains.conversations import service as conversations_service
+from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_APP
 from open_work_hub_api.domains.conversations.default_scope_adapters import (
     ensure_conversation_scope_adapters_registered,
 )
 from open_work_hub_api.domains.conversations.models import Conversation
+from open_work_hub_api.domains.conversations.projections import (
+    conversation_detail_from_row,
+    conversation_summary_from_row,
+)
 from open_work_hub_api.domains.conversations.schemas import (
     ConversationCreateRequest,
     ConversationDetail,
     ConversationListResponse,
     ConversationUpdateRequest,
+)
+from open_work_hub_api.domains.conversations.scope_contract import (
+    SCOPE_REF_MAX_LEN,
+    SCOPE_RESOURCE_ID_MAX_LEN,
 )
 from open_work_hub_api.domains.conversations.scope_registry import (
     ConversationExperience,
@@ -181,15 +201,6 @@ from open_work_hub_api.domains.conversations.scope_registry import (
     conversation_scope_adapters,
     get_conversation_scope_adapter,
 )
-from open_work_hub_api.domains.conversations.projections import (
-    conversation_detail_from_row,
-    conversation_summary_from_row,
-)
-from open_work_hub_api.domains.conversations.scope_contract import (
-    SCOPE_REF_MAX_LEN,
-    SCOPE_RESOURCE_ID_MAX_LEN,
-)
-
 
 LlmRequestBackendMode = Literal["auto", "local"]
 
@@ -318,7 +329,7 @@ class ToolInvokeResponse(BaseModel):
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 
 DEFAULT_CHATBOT_CONVERSATION_EXPERIENCE = ConversationExperience(
-    owner_app_id=CHATBOT_WORKSPACE_APP.app_id,
+    owner_app_id=CHATBOT_APP.app_id,
     chat_workload_id="chatbot",
 )
 
@@ -348,7 +359,7 @@ def _resolve_conversation_experience(
 
 def _require_conversation_experience_enabled(
     db: Session,
-    workspace: Workspace,
+    user: User,
     *,
     scope_ref: str | None,
     allow_retired_scope: bool = False,
@@ -357,11 +368,11 @@ def _require_conversation_experience_enabled(
         scope_ref,
         allow_retired_scope=allow_retired_scope,
     )
-    if is_workspace_app_enabled(db, workspace.id, experience.owner_app_id):
+    if can_use_app(db, user_id=user.id, app_id=experience.owner_app_id):
         return experience
     raise localized_http_exception(
         status_code=status.HTTP_403_FORBIDDEN,
-        code="workspace.app_disabled",
+        code="app.access_required",
     )
 
 
@@ -404,28 +415,28 @@ def _constrain_conversation_tool_app_ids(
 
 def _enabled_conversation_scope_refs(
     db: Session,
-    workspace: Workspace,
+    user: User,
 ) -> frozenset[str]:
     ensure_conversation_scope_adapters_registered()
     return frozenset(
         adapter.scope_ref
         for adapter in conversation_scope_adapters()
-        if is_workspace_app_enabled(db, workspace.id, adapter.experience.owner_app_id)
+        if can_use_app(db, user_id=user.id, app_id=adapter.experience.owner_app_id)
     )
 
 
-def require_requested_workspace_app_enabled(
+def require_requested_app_access(
     app_id: str,
     db: Session = Depends(get_db_session),
-    current_workspace: Workspace = Depends(require_current_workspace),
+    current_user: User = Depends(require_current_user),
 ) -> None:
     """Gate app-scoped capability exports against the requested registry app."""
-    _ensure_known_workspace_app(app_id)
-    if is_workspace_app_enabled(db, current_workspace.id, app_id):
+    _ensure_known_app(app_id)
+    if can_use_app(db, user_id=current_user.id, app_id=app_id):
         return
     raise localized_http_exception(
         status_code=status.HTTP_403_FORBIDDEN,
-        code="workspace.app_disabled",
+        code="app.access_required",
     )
 
 
@@ -452,7 +463,6 @@ def capability_manifest(
     request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> dict[str, Any]:
     _ensure_mcp_bridge_enabled()
     settings = get_settings()
@@ -461,10 +471,8 @@ def capability_manifest(
         request,
         source="api.chatbot.capabilities.manifest",
     )
-    _ = current_workspace
     return AiMcpClient().build_manifest(
         db,
-        workspace=_require_request_workspace(request),
         principal=principal,
         include_meta=True,
         include_approval_required=settings.ai_write_tools_enabled,
@@ -473,27 +481,24 @@ def capability_manifest(
 
 @router.get(
     "/apps/{app_id}/manifest",
-    dependencies=[Depends(require_requested_workspace_app_enabled)],
+    dependencies=[Depends(require_requested_app_access)],
 )
 def app_capability_manifest(
     app_id: str,
     request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> dict[str, Any]:
     _ensure_mcp_bridge_enabled()
-    _ensure_known_workspace_app(app_id)
+    _ensure_known_app(app_id)
     settings = get_settings()
     principal = _build_request_principal(
         current_user,
         request,
         source=f"api.chatbot.apps.{app_id}.manifest",
     )
-    _ = current_workspace
     return AiMcpClient().build_manifest(
         db,
-        workspace=_require_request_workspace(request),
         principal=principal,
         app_id=app_id,
         include_meta=True,
@@ -506,7 +511,6 @@ def capability_openapi_export(
     request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> dict[str, Any]:
     _ensure_mcp_bridge_enabled()
     settings = get_settings()
@@ -515,10 +519,8 @@ def capability_openapi_export(
         request,
         source="api.chatbot.capabilities.openapi",
     )
-    _ = current_workspace
     return AiMcpClient().build_openapi_export(
         db,
-        workspace=_require_request_workspace(request),
         principal=principal,
         include_approval_required=settings.ai_write_tools_enabled,
     )
@@ -526,27 +528,24 @@ def capability_openapi_export(
 
 @router.get(
     "/apps/{app_id}/openapi.json",
-    dependencies=[Depends(require_requested_workspace_app_enabled)],
+    dependencies=[Depends(require_requested_app_access)],
 )
 def app_capability_openapi_export(
     app_id: str,
     request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> dict[str, Any]:
     _ensure_mcp_bridge_enabled()
-    _ensure_known_workspace_app(app_id)
+    _ensure_known_app(app_id)
     settings = get_settings()
     principal = _build_request_principal(
         current_user,
         request,
         source=f"api.chatbot.apps.{app_id}.openapi",
     )
-    _ = current_workspace
     return AiMcpClient().build_openapi_export(
         db,
-        workspace=_require_request_workspace(request),
         principal=principal,
         app_id=app_id,
         include_approval_required=settings.ai_write_tools_enabled,
@@ -582,7 +581,6 @@ def chat(
 ) -> ChatResponse:
     _prepare_business_chat_request(payload)
     _ensure_supported_backend_mode(payload.backend_mode)
-    workspace = _require_request_workspace(request)
     locale = select_locale(
         explicit_locale=request.headers.get("x-open-work-hub-locale"),
         accept_language=request.headers.get("accept-language"),
@@ -590,13 +588,12 @@ def chat(
     principal = _build_request_principal(current_user, request, source="api.chat")
     conversation = _resolve_requested_conversation(
         db=db,
-        workspace=workspace,
         user=current_user,
         conversation_id=payload.conversation_id,
     )
     experience = _require_conversation_experience_enabled(
         db,
-        workspace,
+        current_user,
         scope_ref=conversation.scope_ref if conversation is not None else payload.scope_ref,
         allow_retired_scope=conversation is not None,
     )
@@ -620,7 +617,6 @@ def chat(
         )
     conversation = _apply_conversation_rewrite_if_requested(
         db=db,
-        workspace=workspace,
         user=current_user,
         conversation=conversation,
         payload=payload,
@@ -630,7 +626,6 @@ def chat(
     elif payload.persist:
         validate_requested_conversation_scope(
             db,
-            workspace=workspace,
             principal=principal,
             user=current_user,
             scope_ref=payload.scope_ref,
@@ -638,7 +633,6 @@ def chat(
         )
         conversation = conversations_service.create_conversation(
             db,
-            workspace=workspace,
             user=current_user,
             title="",
             scope_ref=payload.scope_ref,
@@ -646,7 +640,6 @@ def chat(
         )
     live_run_lock = _start_live_conversation_run(
         db=db,
-        workspace=workspace,
         user=current_user,
         conversation=conversation,
     )
@@ -660,7 +653,6 @@ def chat(
             response, tool_execution = _execute_tool_chat_command(
                 payload,
                 db,
-                workspace=workspace,
                 principal=principal,
                 current_user=current_user,
                 command=command,
@@ -669,7 +661,6 @@ def chat(
             raw_messages_dict = [message.model_dump() for message in payload.messages]
             scope_context = conversation_scope_turn_context(
                 db,
-                workspace=workspace,
                 principal=principal,
                 user=current_user,
                 conversation=conversation,
@@ -751,7 +742,6 @@ def chat(
         try:
             response.conversation_id = _persist_sync_chat_response(
                 db=db,
-                workspace=workspace,
                 user=current_user,
                 payload=payload,
                 conversation=conversation,
@@ -790,7 +780,6 @@ class ApprovalAbandonRequest(BaseModel):
 
 class ApprovalStatusResponse(BaseModel):
     id: str
-    workspace_id: str
     conversation_id: str
     agent_run_id: str
     tool_call_id: str
@@ -839,18 +828,16 @@ def list_ai_conversations(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ConversationListResponse:
-    workspace = _require_request_workspace(request)
-    _require_conversation_experience_enabled(db, workspace, scope_ref=scope_ref)
+    _require_conversation_experience_enabled(db, current_user, scope_ref=scope_ref)
     rows, next_cursor = conversations_service.list_conversations(
         db,
-        workspace=workspace,
         user=current_user,
         limit=limit,
         cursor=cursor,
         scope_ref=scope_ref,
         scope_resource_id=scope_resource_id,
         allowed_scope_refs=(
-            _enabled_conversation_scope_refs(db, workspace) if scope_ref is None else None
+            _enabled_conversation_scope_refs(db, current_user) if scope_ref is None else None
         ),
     )
     return ConversationListResponse(
@@ -870,8 +857,7 @@ def create_ai_conversation(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ConversationDetail:
-    workspace = _require_request_workspace(request)
-    _require_conversation_experience_enabled(db, workspace, scope_ref=payload.scope_ref)
+    _require_conversation_experience_enabled(db, current_user, scope_ref=payload.scope_ref)
     principal = _build_request_principal(
         current_user,
         request,
@@ -879,7 +865,6 @@ def create_ai_conversation(
     )
     validate_requested_conversation_scope(
         db,
-        workspace=workspace,
         principal=principal,
         user=current_user,
         scope_ref=payload.scope_ref,
@@ -887,7 +872,6 @@ def create_ai_conversation(
     )
     conversation = conversations_service.create_conversation(
         db,
-        workspace=workspace,
         user=current_user,
         title=payload.title,
         scope_ref=payload.scope_ref,
@@ -906,22 +890,19 @@ def get_ai_conversation(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ConversationDetail:
-    workspace = _require_request_workspace(request)
     conversation = conversations_service.get_conversation(
         db,
-        workspace=workspace,
         user=current_user,
         conversation_id=conversation_id,
     )
     _require_conversation_experience_enabled(
         db,
-        workspace,
+        current_user,
         scope_ref=conversation.scope_ref,
         allow_retired_scope=True,
     )
     live_pending_approval = ai_approvals.get_live_pending_approval(
         db,
-        workspace=workspace,
         user=current_user,
         conversation_id=conversation_id,
     )
@@ -942,22 +923,19 @@ def rename_ai_conversation(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ConversationDetail:
-    workspace = _require_request_workspace(request)
     existing = conversations_service.get_conversation(
         db,
-        workspace=workspace,
         user=current_user,
         conversation_id=conversation_id,
     )
     _require_conversation_experience_enabled(
         db,
-        workspace,
+        current_user,
         scope_ref=existing.scope_ref,
         allow_retired_scope=True,
     )
     conversation = conversations_service.rename_conversation(
         db,
-        workspace=workspace,
         user=current_user,
         conversation_id=conversation_id,
         title=payload.title,
@@ -975,22 +953,19 @@ def delete_ai_conversation(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> None:
-    workspace = _require_request_workspace(request)
     existing = conversations_service.get_conversation(
         db,
-        workspace=workspace,
         user=current_user,
         conversation_id=conversation_id,
     )
     _require_conversation_experience_enabled(
         db,
-        workspace,
+        current_user,
         scope_ref=existing.scope_ref,
         allow_retired_scope=True,
     )
     conversations_service.soft_delete_conversation(
         db,
-        workspace=workspace,
         user=current_user,
         conversation_id=conversation_id,
     )
@@ -1012,12 +987,10 @@ async def chat_stream(
     """
     _prepare_business_chat_request(payload)
     _ensure_supported_backend_mode(payload.backend_mode)
-    workspace = _require_request_workspace(request)
     principal = _build_request_principal(current_user, request, source="api.stream")
     try:
         requested_conversation = _resolve_requested_conversation(
             db=db,
-            workspace=workspace,
             user=current_user,
             conversation_id=payload.conversation_id,
         )
@@ -1029,7 +1002,7 @@ async def chat_stream(
         requested_conversation = None
     experience = _require_conversation_experience_enabled(
         db,
-        workspace,
+        current_user,
         scope_ref=(
             requested_conversation.scope_ref
             if requested_conversation is not None
@@ -1064,7 +1037,6 @@ async def chat_stream(
             payload=payload,
             db=db,
             context=context,
-            workspace=workspace,
             principal=principal,
             current_user=current_user,
             locale=locale,
@@ -1080,10 +1052,8 @@ def get_approval_status(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ApprovalStatusResponse:
-    workspace = _require_request_workspace(request)
     approval = ai_approvals.get_approval(
         db,
-        workspace=workspace,
         user=current_user,
         approval_id=approval_id,
     )
@@ -1101,10 +1071,8 @@ def resolve_approval(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ApprovalStatusResponse:
-    workspace = _require_request_workspace(request)
     approval = ai_approvals.resolve_approval(
         db,
-        workspace=workspace,
         approval_id=approval_id,
         decision=payload.decision,
         reason=payload.reason,
@@ -1118,7 +1086,6 @@ def resolve_approval(
         )
         log_llm_tool_approval_resolved(
             actor_user_id=current_user.id,
-            workspace_id=workspace.id,
             approval_id=approval.id,
             tool_name=approval.tool_name,
             decision=approval.status,
@@ -1139,10 +1106,8 @@ def abandon_approval(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ApprovalStatusResponse:
-    workspace = _require_request_workspace(request)
     approval = ai_approvals.abandon_approval(
         db,
-        workspace=workspace,
         approval_id=approval_id,
         reason=payload.reason,
         resolver_user=current_user,
@@ -1155,7 +1120,6 @@ def abandon_approval(
         )
         log_llm_tool_approval_resolved(
             actor_user_id=current_user.id,
-            workspace_id=workspace.id,
             approval_id=approval.id,
             tool_name=approval.tool_name,
             decision=approval.status,
@@ -1177,11 +1141,9 @@ def inspect_runtime_run(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> RuntimeRunInspectionResponse:
-    workspace = _require_request_workspace(request)
     runtime_run = db.scalar(
         select(AgentRun).where(
             AgentRun.id == run_id,
-            AgentRun.workspace_id == workspace.id,
             AgentRun.requested_by_user_id == current_user.id,
         )
     )
@@ -1220,7 +1182,6 @@ async def chat_resume(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> EventSourceResponse:
-    workspace = _require_request_workspace(request)
     principal = _build_request_principal(
         current_user,
         request,
@@ -1228,20 +1189,18 @@ async def chat_resume(
     )
     approval, snapshot = ai_approvals.get_resume_context(
         db,
-        workspace=workspace,
         user=current_user,
         conversation_id=payload.conversation_id,
         approval_id=payload.approval_id,
     )
     conversation = conversations_service.get_conversation(
         db,
-        workspace=workspace,
         user=current_user,
         conversation_id=payload.conversation_id,
     )
     experience = _require_conversation_experience_enabled(
         db,
-        workspace,
+        current_user,
         scope_ref=conversation.scope_ref,
         allow_retired_scope=True,
     )
@@ -1257,7 +1216,6 @@ async def chat_resume(
     effective_allowed_app_ids = normalize_business_chat_allowed_app_ids(effective_allowed_app_ids)
     filtered_tool_specs, _has_approval_required_tools = _resolve_agent_tool_specs(
         db,
-        workspace=workspace,
         principal=principal,
         allowed_app_ids=effective_allowed_app_ids,
     )
@@ -1265,7 +1223,7 @@ async def chat_resume(
     ai_approvals.ensure_resume_approved_tool_scope(
         approval,
         allowed_app_ids=effective_allowed_app_ids,
-        approved_tool_app_id=workspace_app_id_for_tool(
+        approved_tool_app_id=owner_app_id_for_tool(
             approval.tool_name,
             registry=get_ai_capability_registry(),
         ),
@@ -1277,7 +1235,6 @@ async def chat_resume(
     return EventSourceResponse(
         _chat_resume_publisher(
             db=db,
-            workspace=workspace,
             principal=principal,
             current_user=current_user,
             conversation=conversation,
@@ -1295,11 +1252,9 @@ def invoke_tool(
     request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> ToolInvokeResponse:
     auth_context = getattr(request.state, "auth_context", None)
     principal = user_principal(
-        workspace_id=current_workspace.id,
         user_id=current_user.id,
         source=f"api.chatbot.tool.{tool_name}",
         session_id=getattr(getattr(auth_context, "session", None), "id", None),
@@ -1309,7 +1264,6 @@ def invoke_tool(
         if settings.ai_mcp_bridge_enabled:
             response = AiMcpClient().call_tool(
                 db,
-                workspace=current_workspace,
                 principal=principal,
                 user=current_user,
                 tool_name=tool_name,
@@ -1319,7 +1273,6 @@ def invoke_tool(
         else:
             response = execute_ai_tool(
                 db,
-                workspace=current_workspace,
                 principal=principal,
                 user=current_user,
                 tool_name=tool_name,
@@ -1336,16 +1289,6 @@ def invoke_tool(
 # ---------------------------------------------------------------------------
 
 
-def _require_request_workspace(request: Request) -> Workspace:
-    workspace = getattr(request.state, "current_workspace", None)
-    if workspace is None:
-        raise localized_http_exception(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            code="ai.workspace_context_missing",
-        )
-    return workspace
-
-
 def _ensure_mcp_bridge_enabled() -> None:
     settings = get_settings()
     if settings.ai_mcp_bridge_enabled:
@@ -1356,14 +1299,14 @@ def _ensure_mcp_bridge_enabled() -> None:
     )
 
 
-def _ensure_known_workspace_app(app_id: str) -> None:
-    if get_workspace_app_catalog_item(app_id) is not None:
+def _ensure_known_app(app_id: str) -> None:
+    if get_app_catalog_item(app_id) is not None:
         return
     if app_id in get_chatbot_capable_app_ids():
         return
     raise localized_http_exception(
         status_code=status.HTTP_404_NOT_FOUND,
-        code="ai.unknown_workspace_app",
+        code="ai.unknown_app",
         app_id=app_id,
     )
 
@@ -1397,7 +1340,7 @@ def _ensure_tool_command_allowed_for_business_chat(
     command: ToolChatCommand,
     allowed_app_ids: list[str] | None,
 ) -> None:
-    tool_app_id = workspace_app_id_for_tool(
+    tool_app_id = owner_app_id_for_tool(
         command.tool_name,
         registry=get_ai_capability_registry(),
     )
@@ -1417,10 +1360,8 @@ def _build_request_principal(
     *,
     source: str,
 ) -> CallerPrincipal:
-    workspace = _require_request_workspace(request)
     auth_context = getattr(request.state, "auth_context", None)
     return user_principal(
-        workspace_id=workspace.id,
         user_id=current_user.id,
         source=source,
         session_id=getattr(getattr(auth_context, "session", None), "id", None),
@@ -1430,7 +1371,6 @@ def _build_request_principal(
 async def _chat_resume_publisher(
     *,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     current_user: User,
     conversation: Conversation,
@@ -1439,9 +1379,7 @@ async def _chat_resume_publisher(
 ):
     encoder = EnvelopeEncoder()
     artifact_parser = ArtifactStreamParser(
-        server_owned_artifact_types=conversation_scope_server_owned_artifact_types(
-            conversation
-        )
+        server_owned_artifact_types=conversation_scope_server_owned_artifact_types(conversation)
     )
     buffer = AssistantTurnBuffer()
 
@@ -1449,7 +1387,6 @@ async def _chat_resume_publisher(
         settings = get_settings()
         approval, snapshot = ai_approvals.get_resume_context(
             db,
-            workspace=workspace,
             user=current_user,
             conversation_id=conversation.id,
             approval_id=approval_id,
@@ -1463,14 +1400,13 @@ async def _chat_resume_publisher(
         )
         filtered_tool_specs, _has_approval_required_tools = _resolve_agent_tool_specs(
             db,
-            workspace=workspace,
             principal=principal,
             allowed_app_ids=effective_allowed_app_ids,
         )
         ai_approvals.ensure_resume_approved_tool_scope(
             approval,
             allowed_app_ids=effective_allowed_app_ids,
-            approved_tool_app_id=workspace_app_id_for_tool(
+            approved_tool_app_id=owner_app_id_for_tool(
                 approval.tool_name,
                 registry=get_ai_capability_registry(),
             ),
@@ -1488,7 +1424,6 @@ async def _chat_resume_publisher(
                 ),
             ),
             db=db,
-            workspace=workspace,
             principal=principal,
             user=current_user,
             conversation=conversation,
@@ -1572,7 +1507,6 @@ def _task_context_from_principal(
         actor_user_id=principal.user_id,
         principal_kind=principal.kind,
         principal_id=principal.principal_id,
-        workspace_id=principal.workspace_id,
         task_kind=workload.task_kind,
         app_id=experience.owner_app_id,
         workload_id=workload.workload_id,
@@ -1582,14 +1516,12 @@ def _task_context_from_principal(
 def _resolve_agent_tool_specs(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     messages: list[dict[str, Any]] | None = None,
     allowed_app_ids: list[str] | None = None,
 ) -> tuple[list[AgentToolSpec], bool]:
     surface = _resolve_agent_tool_surface(
         db,
-        workspace=workspace,
         principal=principal,
         messages=messages,
         allowed_app_ids=allowed_app_ids,
@@ -1600,14 +1532,12 @@ def _resolve_agent_tool_specs(
 def _resolve_agent_tool_surface(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     messages: list[dict[str, Any]] | None = None,
     allowed_app_ids: list[str] | None = None,
 ) -> AgentToolSurface:
     surface = resolve_agent_tool_surface(
         db,
-        workspace=workspace,
         principal=principal,
         messages=messages,
         allowed_app_ids=allowed_app_ids,
@@ -1631,7 +1561,6 @@ def _execute_tool_chat_command(
     payload: ChatRequest,
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     current_user: User,
     command: ToolChatCommand,
@@ -1649,7 +1578,6 @@ def _execute_tool_chat_command(
     )
     result = run_tool_chat_command(
         db,
-        workspace=workspace,
         principal=principal,
         user=current_user,
         source="api.chat",
@@ -1894,7 +1822,6 @@ async def _chat_stream_publisher(
     payload: "ChatStreamRequest",
     db: Session,
     context: LlmTaskContext,
-    workspace: Workspace,
     principal: CallerPrincipal,
     current_user: User,
     locale: str,
@@ -1912,7 +1839,6 @@ async def _chat_stream_publisher(
     runtime_routing = _attach_graph_gate_trace_metadata(
         runtime_routing,
         db=db,
-        workspace=workspace,
         allowed_app_ids=payload.allowed_app_ids,
     )
     runtime_routing = attach_graph_execution_adapter_decision(
@@ -1935,7 +1861,6 @@ async def _chat_stream_publisher(
     # cleanly; on success the stream proceeds normally.
     conversation, live_run_lock, terminal_envelopes = _bind_conversation_for_stream(
         db=db,
-        workspace=workspace,
         principal=principal,
         user=current_user,
         payload=payload,
@@ -2006,9 +1931,7 @@ async def _chat_stream_publisher(
     # into artifact_started/delta/completed envelopes so the client renders
     # those bodies in a side panel instead of the chat bubble.
     artifact_parser = ArtifactStreamParser(
-        server_owned_artifact_types=conversation_scope_server_owned_artifact_types(
-            conversation
-        )
+        server_owned_artifact_types=conversation_scope_server_owned_artifact_types(conversation)
     )
     pending_scope_artifacts: list[ConversationScopeArtifact] = []
     fallback_runtime_run_id: str | None = None
@@ -2018,7 +1941,6 @@ async def _chat_stream_publisher(
     try:
         scope_context = conversation_scope_turn_context(
             db,
-            workspace=workspace,
             principal=principal,
             user=current_user,
             conversation=conversation,
@@ -2040,7 +1962,6 @@ async def _chat_stream_publisher(
             for event in _tool_command_events(
                 encoder=encoder,
                 db=db,
-                workspace=workspace,
                 principal=principal,
                 current_user=current_user,
                 command=command,
@@ -2099,7 +2020,6 @@ async def _chat_stream_publisher(
 
         tool_surface = _resolve_agent_tool_surface(
             db,
-            workspace=workspace,
             principal=principal,
             messages=raw_messages_dict,
             allowed_app_ids=payload.allowed_app_ids,
@@ -2118,7 +2038,6 @@ async def _chat_stream_publisher(
                 context=context,
                 execution=execution,
                 db=db,
-                workspace=workspace,
                 principal=principal,
                 user=current_user,
                 messages=raw_messages_dict,
@@ -2158,7 +2077,6 @@ async def _chat_stream_publisher(
                 context=context,
                 execution=execution,
                 db=db,
-                workspace=workspace,
                 principal=principal,
                 user=current_user,
                 messages=raw_messages_dict,
@@ -2338,7 +2256,6 @@ async def _chat_stream_publisher(
                 persist_graph_execution_runtime_shadow(
                     db,
                     agent_run_id=graph_execution_runtime_run_id,
-                    workspace_id=workspace.id,
                     conversation_id=conversation.id,
                     requested_by_user_id=current_user.id,
                     runtime_metadata=done_meta or {},
@@ -2356,7 +2273,6 @@ async def _chat_stream_publisher(
                 persist_single_loop_fallback_runtime_shadow(
                     db,
                     agent_run_id=fallback_runtime_run_id,
-                    workspace_id=workspace.id,
                     conversation_id=conversation.id,
                     requested_by_user_id=current_user.id,
                     runtime_metadata=done_meta or {},
@@ -2370,13 +2286,14 @@ def _attach_graph_gate_trace_metadata(
     runtime_routing: RuntimeRoutingDecision,
     *,
     db: Session,
-    workspace: Workspace,
     allowed_app_ids: list[str] | None,
 ) -> RuntimeRoutingDecision:
     if runtime_routing.graph_gate != "eligible":
         return runtime_routing
     resolved_agents = resolve_agent_definitions(
-        enabled_app_ids=resolve_workspace_enabled_app_ids(db, workspace.id),
+        enabled_app_ids=resolve_company_enabled_app_ids(
+            db,
+        ),
         allowed_app_ids=allowed_app_ids,
     )
     candidate = build_deterministic_manager_candidate(
@@ -2478,7 +2395,6 @@ def _tool_command_events(
     *,
     encoder: EnvelopeEncoder,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     current_user: User,
     command: ToolChatCommand,
@@ -2487,7 +2403,6 @@ def _tool_command_events(
     _ensure_tool_command_allowed_for_business_chat(command, allowed_app_ids)
     yield from execute_tool_chat_command_sse_events(
         db,
-        workspace=workspace,
         principal=principal,
         user=current_user,
         source="api.stream",
@@ -2634,7 +2549,6 @@ def _error_message(error: Exception) -> str:
 def _apply_conversation_rewrite_if_requested(
     *,
     db: Session,
-    workspace: Workspace,
     user: User,
     conversation: Conversation | None,
     payload: ConversationBoundChatRequest,
@@ -2665,7 +2579,6 @@ def _apply_conversation_rewrite_if_requested(
 
     live_pending = ai_approvals.has_live_conversation_run(
         db,
-        workspace=workspace,
         user=user,
         conversation_id=conversation.id,
         for_update=True,
@@ -2688,7 +2601,6 @@ def _apply_conversation_rewrite_if_requested(
 
     return conversations_service.rewrite_turns_from_target(
         db,
-        workspace=workspace,
         user=user,
         conversation_id=conversation.id,
         target_turn_id=payload.replace_from_turn_id,
@@ -2704,7 +2616,6 @@ def _apply_conversation_rewrite_if_requested(
 def _bind_conversation_for_stream(
     *,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     payload: "ChatStreamRequest",
@@ -2769,7 +2680,6 @@ def _bind_conversation_for_stream(
     try:
         conversation = _resolve_requested_conversation(
             db=db,
-            workspace=workspace,
             user=user,
             conversation_id=payload.conversation_id,
         )
@@ -2781,7 +2691,6 @@ def _bind_conversation_for_stream(
     try:
         conversation = _apply_conversation_rewrite_if_requested(
             db=db,
-            workspace=workspace,
             user=user,
             conversation=conversation,
             payload=payload,
@@ -2793,7 +2702,6 @@ def _bind_conversation_for_stream(
         try:
             live_run_lock = _start_live_conversation_run(
                 db=db,
-                workspace=workspace,
                 user=user,
                 conversation=conversation,
             )
@@ -2809,7 +2717,6 @@ def _bind_conversation_for_stream(
     try:
         validate_requested_conversation_scope(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             scope_ref=payload.scope_ref,
@@ -2817,7 +2724,6 @@ def _bind_conversation_for_stream(
         )
         conversation = conversations_service.create_conversation(
             db,
-            workspace=workspace,
             user=user,
             title="",
             scope_ref=payload.scope_ref,
@@ -2828,7 +2734,6 @@ def _bind_conversation_for_stream(
     try:
         live_run_lock = _start_live_conversation_run(
             db=db,
-            workspace=workspace,
             user=user,
             conversation=conversation,
         )
@@ -2856,7 +2761,6 @@ def _ensure_payload_scope_matches_conversation(
 def _persist_sync_chat_response(
     *,
     db: Session,
-    workspace: Workspace,
     user: User,
     payload: ConversationBoundChatRequest,
     conversation: Conversation | None,
@@ -2870,7 +2774,6 @@ def _persist_sync_chat_response(
     if bound_conversation is None:
         bound_conversation = conversations_service.create_conversation(
             db,
-            workspace=workspace,
             user=user,
             title="",
             scope_ref=payload.scope_ref,

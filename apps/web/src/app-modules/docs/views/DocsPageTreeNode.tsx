@@ -1,3 +1,5 @@
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   ChevronDown,
   ChevronRight,
@@ -5,8 +7,6 @@ import {
   FileText,
   Trash2,
 } from 'lucide-react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
 import { cn } from '@/src/lib/utils';
 import type { DocsContentFormat, DocsPageItem } from '../api/docs-api';

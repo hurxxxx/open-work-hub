@@ -7,15 +7,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.domains.ai.tool_context import current_tool_execution_context
 from open_work_hub_api.domains.ai.registry import AiCapabilityRegistry
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.ai.tool_context import current_tool_execution_context
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.rag.contracts import RagAnswerMode
-from open_work_hub_api.domains.rag.filters import RagQueryFilters
 from open_work_hub_api.domains.rag.default_source_adapters import (
     ensure_rag_source_adapters_registered,
     registered_searchable_rag_app_ids,
 )
+from open_work_hub_api.domains.rag.filters import RagQueryFilters
 
 
 class RagQueryToolArgs(BaseModel):
@@ -35,7 +35,6 @@ class RagListSourcesArgs(BaseModel):
 
 def _query(
     db,
-    workspace: Workspace,
     principal,
     user: User,
     arguments: dict[str, Any],
@@ -45,9 +44,8 @@ def _query(
 
     tool_context = current_tool_execution_context()
     try:
-        response = retrieval_application.query_workspace_rag_response(
+        response = retrieval_application.query_rag_response(
             db,
-            workspace=workspace,
             user=user,
             query=str(arguments["query"]),
             answer_mode=RagAnswerMode(arguments.get("answer_mode", RagAnswerMode.SEARCH_ONLY)),
@@ -80,7 +78,6 @@ def _query(
 
 def _list_sources(
     db,
-    workspace: Workspace,
     principal,
     user: User,
     arguments: dict[str, Any],
@@ -90,9 +87,8 @@ def _list_sources(
     from open_work_hub_api.domains.retrieval import application as retrieval_application
 
     try:
-        sources = retrieval_application.list_workspace_rag_sources_response(
+        sources = retrieval_application.list_rag_sources_response(
             db,
-            workspace=workspace,
             user=user,
         )
     except rag_application.RagAccessDeniedError as error:
@@ -112,7 +108,9 @@ def _list_sources(
     return {"sources": sources}
 
 
-def _rag_enabled(_principal, _workspace, entitlements) -> bool:
+def _rag_enabled(principal, entitlements) -> bool:
+    if principal.kind != "user" or principal.user_id is None:
+        return False
     ensure_rag_source_adapters_registered()
     return bool(
         get_settings().rag_enabled
@@ -128,18 +126,18 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     registry.register_llm_task(
         task_kind="rag_grounded_answer",
         default_policy="local_only",
-        description="Grounded answer synthesis for workspace RAG queries.",
+        description="Grounded answer synthesis for authorized RAG queries.",
         app_ids=("retrieval-search",),
     )
     registry.register_tool(
         name="rag.query",
         description=(
-            "Search workspace-readable official Docs sources when the user asks for "
+            "Search accessible official Docs sources when the user asks for "
             "internal document or knowledge evidence. "
-            "Results are limited by the current workspace, app enablement, and ACL."
+            "Results are limited by the current user, app enablement, and ACL."
         ),
         owner_domain="rag",
-        workspace_app_id="retrieval-search",
+        owner_app_id="retrieval-search",
         handler=_query,
         args_model=RagQueryToolArgs,
         discoverability_predicate_id="rag.enabled",
@@ -147,12 +145,12 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     registry.register_tool(
         name="rag.list_sources",
         description=(
-            "List source kinds the current user can search in the current workspace. "
+            "List source kinds the current user can search in the current user. "
             "Use this before RAG search when the user asks what internal document "
             "sources are available."
         ),
         owner_domain="rag",
-        workspace_app_id="retrieval-search",
+        owner_app_id="retrieval-search",
         handler=_list_sources,
         args_model=RagListSourcesArgs,
         discoverability_predicate_id="rag.enabled",

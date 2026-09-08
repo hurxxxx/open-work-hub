@@ -41,8 +41,7 @@ class DesktopUpdateServingPolicy:
 
     def update_dirs(self, configured_dirs: Mapping[str, str]) -> dict[str, Path]:
         return {
-            platform: Path(configured_dirs[platform]).expanduser()
-            for platform in self.platforms
+            platform: Path(configured_dirs[platform]).expanduser() for platform in self.platforms
         }
 
     def is_allowed_file_path(self, platform: str, path: str) -> bool:
@@ -81,8 +80,7 @@ class DesktopUpdateServingPolicy:
         encoded_file_name = quote(file_name, safe="")
         return DesktopUpdateAttachmentHeaders(
             content_disposition=(
-                f'attachment; filename="{safe_file_name}"; '
-                f"filename*=UTF-8''{encoded_file_name}"
+                f"attachment; filename=\"{safe_file_name}\"; filename*=UTF-8''{encoded_file_name}"
             ),
             content_type=content_type,
         )

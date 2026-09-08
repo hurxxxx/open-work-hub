@@ -23,7 +23,6 @@ def enqueue_file_search_index(
         return
     enqueue_search_index_job(
         db,
-        workspace_id=file.workspace_id,
         entity_type=SearchEntityType.FILE,
         entity_id=file.id,
         operation=operation,
@@ -53,19 +52,14 @@ def stage_file_search_reconciliation_job(
     db: Session,
     *,
     projection_event: ProjectionEventRef,
-    workspace_id: str,
 ) -> None:
     """Stage a fenced Files keyword job while the normal producer gate is paused."""
     if projection_event.resource_type != FILE_MANAGER_FILE_RESOURCE_TYPE:
         raise ValueError("Files reconciliation requires a Files projection event")
-    resolved_workspace_id = str(workspace_id or "").strip()
-    if not resolved_workspace_id:
-        raise ValueError("Files reconciliation requires current managed workspace")
     if projection_event.desired_state not in {"active", "deleted"}:
         raise ValueError("Files reconciliation projection state is invalid")
     enqueue_search_index_job(
         db,
-        workspace_id=resolved_workspace_id,
         entity_type=SearchEntityType.FILE,
         entity_id=projection_event.resource_id,
         operation="delete" if projection_event.desired_state == "deleted" else "upsert",

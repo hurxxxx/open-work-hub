@@ -14,7 +14,6 @@ from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.storage import ensure_bucket, get_minio_client
 from open_work_hub_api.domains.hermes_terminal.security import normalize_relative_path
 
-
 STREAM_CHUNK_SIZE = 1024 * 1024
 MAX_ARTIFACT_FILE_BYTES = 64 * 1024 * 1024
 MAX_ARTIFACT_FILES = 10_000
@@ -29,20 +28,15 @@ class WorkspaceArtifactScan:
 
 def profile_storage_key(
     *,
-    workspace_id: str,
     user_id: str,
     session_id: str,
     attempt_id: str,
 ) -> str:
-    return (
-        f"workspaces/{workspace_id}/users/{user_id}/hermes-terminal/"
-        f"profiles/{session_id}/{attempt_id}.tar.gz"
-    )
+    return f"users/{user_id}/hermes-terminal/profiles/{session_id}/{attempt_id}.tar.gz"
 
 
 def artifact_storage_key(
     *,
-    workspace_id: str,
     user_id: str,
     session_id: str,
     attempt_id: str,
@@ -50,7 +44,7 @@ def artifact_storage_key(
 ) -> str:
     path_digest = hashlib.sha256(path.encode()).hexdigest()
     return (
-        f"workspaces/{workspace_id}/users/{user_id}/hermes-terminal/"
+        f"users/{user_id}/hermes-terminal/"
         f"sessions/{session_id}/attempts/{attempt_id}/artifacts/{path_digest}"
     )
 

@@ -50,7 +50,9 @@ def test_require_user_conversation_hides_missing_or_inactive_conversation() -> N
 
     with pytest.raises(HTTPException) as inactive_exc:
         conversation_queries.require_user_conversation(
-            _FakeDb(scalar_result=_conversation(participants=[_participant("current", left_at=NOW)])),
+            _FakeDb(
+                scalar_result=_conversation(participants=[_participant("current", left_at=NOW)])
+            ),
             current_user=current_user,
             conversation_id="conversation-1",
         )
@@ -90,7 +92,10 @@ def test_visible_messages_returns_oldest_first_after_desc_query() -> None:
 def test_latest_message_returns_scalar_result() -> None:
     latest = SimpleNamespace(id="message-2")
 
-    assert conversation_queries.latest_message(_FakeDb(scalar_result=latest), "conversation-1") is latest
+    assert (
+        conversation_queries.latest_message(_FakeDb(scalar_result=latest), "conversation-1")
+        is latest
+    )
 
 
 def _conversation(

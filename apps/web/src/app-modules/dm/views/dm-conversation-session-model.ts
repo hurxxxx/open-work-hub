@@ -56,7 +56,10 @@ export function navigateDmThreadHistoryBack(
     history: {
       back: history.back.slice(0, -1),
       forward: currentThreadId
-        ? [currentThreadId, ...history.forward].slice(0, DM_THREAD_SESSION_LIMIT)
+        ? [currentThreadId, ...history.forward].slice(
+            0,
+            DM_THREAD_SESSION_LIMIT,
+          )
         : history.forward,
     },
     threadId: nextThreadId,

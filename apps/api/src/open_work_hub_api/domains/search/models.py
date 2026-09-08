@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     text,
@@ -19,7 +19,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
-
 
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 
@@ -40,8 +39,7 @@ class SearchIndexJob(Base):
             name="ck_search_index_jobs_desired_state",
         ),
         Index(
-            "ix_search_index_jobs_workspace_status_retry",
-            "workspace_id",
+            "ix_search_index_jobs_status_retry",
             "status",
             "next_retry_at",
         ),
@@ -53,7 +51,6 @@ class SearchIndexJob(Base):
         ),
         Index(
             "ix_search_index_jobs_entity_created_active",
-            "workspace_id",
             "entity_type",
             "entity_id",
             "created_at",
@@ -62,7 +59,6 @@ class SearchIndexJob(Base):
         ),
         Index(
             "uq_search_index_jobs_pending_entity",
-            "workspace_id",
             "entity_type",
             "entity_id",
             unique=True,
@@ -86,11 +82,6 @@ class SearchIndexJob(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
-        nullable=False,
-        index=True,
-    )
     retrieval_partition_id: Mapped[str | None] = mapped_column(
         ForeignKey("retrieval_partitions.id", ondelete="RESTRICT"),
         nullable=True,

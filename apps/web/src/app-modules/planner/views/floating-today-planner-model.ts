@@ -84,11 +84,7 @@ export function buildCreateRangeForDateKey(
   const fallback = new Date();
   const date = parts
     ? new Date(parts.year, parts.month - 1, parts.day)
-    : new Date(
-        fallback.getFullYear(),
-        fallback.getMonth(),
-        fallback.getDate(),
-      );
+    : new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
   const { start, end } = defaultTimedRangeForDate(date, now);
   return { allDay: false, end, start };
 }

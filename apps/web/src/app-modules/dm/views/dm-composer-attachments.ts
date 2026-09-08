@@ -89,7 +89,8 @@ export function dmComposerAttachmentReducer(
       ),
     };
   }
-  if (action.type === 'dragging') return { ...state, draggingFiles: action.dragging };
+  if (action.type === 'dragging')
+    return { ...state, draggingFiles: action.dragging };
   if (action.type === 'action') {
     return { ...state, attachmentActionId: action.attachmentId };
   }

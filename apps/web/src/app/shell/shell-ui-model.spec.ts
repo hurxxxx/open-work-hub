@@ -21,7 +21,7 @@ describe('shell ui model', () => {
   });
 
   it('resolves user-facing app scopes from the executable app contract', () => {
-    expect(resolveAppDisplayScope('docs')).toBe('workspace');
+    expect(resolveAppDisplayScope('docs')).toBe('personal');
     expect(resolveAppDisplayScope('mail')).toBe('personal');
     expect(resolveAppDisplayScope('community')).toBe('company');
   });

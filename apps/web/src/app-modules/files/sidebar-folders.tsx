@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { FolderOpen } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { FileTree, useFileTree } from '@pierre/trees/react';
+import { FolderOpen } from 'lucide-react';
+import type { CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
+import { buildAppPath } from '@/src/platform/apps/app-links';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import { browseFiles, type FileFolderItem } from './api/files-api';
-import { FolderTreeRow } from './folder-tree-row';
+import { FILES_CHANGED_EVENT } from './file-upload-session';
 import {
   buildFolderTreeModel,
   type FolderTreeModel,
 } from './folder-tree-model';
-import { FILES_CHANGED_EVENT } from './file-upload-session';
+import { FolderTreeRow } from './folder-tree-row';
 
 const FILE_TREE_ROW_HEIGHT = 28;
 const FILE_TREE_MAX_HEIGHT = 320;
@@ -49,11 +49,7 @@ function currentFolderFromSearch(search: string): string | null {
   return new URLSearchParams(search).get('folder');
 }
 
-export function FilesSidebarFolders({
-  currentWorkspaceSlug,
-}: {
-  currentWorkspaceSlug: string | null;
-}) {
+export function FilesSidebarFolders(_context: Record<string, never>) {
   const { t } = useTranslation('apps');
   const { token } = useAuth();
   const location = useLocation();
@@ -62,17 +58,17 @@ export function FilesSidebarFolders({
   const activeFolderId = currentFolderFromSearch(location.search);
 
   const load = useCallback(async () => {
-    if (!token || !currentWorkspaceSlug) {
+    if (!token) {
       setFolders([]);
       return;
     }
     try {
-      const response = await browseFiles(token, currentWorkspaceSlug, null);
+      const response = await browseFiles(token, null);
       setFolders(response.all_folders);
     } catch {
       setFolders([]);
     }
-  }, [currentWorkspaceSlug, token]);
+  }, [token]);
 
   useEffect(() => {
     void load();
@@ -90,11 +86,8 @@ export function FilesSidebarFolders({
     () => buildFolderTreeModel(folders),
     [folders],
   );
-  if (!currentWorkspaceSlug) {
-    return null;
-  }
 
-  const rootPath = buildWorkspaceAppPath(currentWorkspaceSlug, 'files');
+  const rootPath = buildAppPath('files');
   const rootActive = location.pathname === rootPath && activeFolderId === null;
 
   return (
@@ -130,7 +123,6 @@ export function FilesSidebarFolders({
                 activeFolderId={activeFolderId}
                 folder={folder}
                 level={0}
-                workspaceSlug={currentWorkspaceSlug}
               />
             ))}
           </div>
