@@ -2,8 +2,34 @@
 
 검토 기준: 2026-09-08, 로컬 `dev`. 이번 작업은 기존 워크스페이스 정책을 확정 정책으로
 간주하지 않고 설계부터 대체하는 변경이다. 기존 라우트·스키마·데이터 호환은 요구하지 않는다.
-**상태: 재설계 및 보안 보완 반영 완료. API·웹 통합 검사와 환경 계약 재검사는 통과했다. 공개
-사용자 검증의 미실행·차단 항목 및 운영 코드 적용 조건은 아래에 별도 기록한다.**
+**상태: 재설계·보안 보완, 커밋·푸시, 개발·운영 배포 완료. 전체 릴리스 CI와 배포 smoke를
+통과했다. 공개 사용자 검증의 미실행·차단 항목은 아래에 별도 기록한다.**
+
+## 최종 릴리스 및 배포 증거
+
+- [전체 CI 53](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/pipelines/53), job 83 성공.
+  검증 소스는 `03507d854bdb2c6b4474ada6c9e8083c5c1c8420`이며 API 2,367개·기존 skip 1개,
+  웹 1,386개, core-web 31개, 계약 60개, 브라우저 19개 및 웹 빌드가 통과했다.
+  환경 계약은 dev/example/prod 253개 키·typed settings 207개, 배포 회귀 검사는 79개 통과했다.
+- [릴리스 MR 22](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/merge_requests/22)를 병합했다.
+  운영 리비전 `2ac0f8da56eae7e74f439d164f6707d240728a3c`의 tree가 CI에서 검증한 merge tree와
+  일치한다. 보호된 `dev` 브랜치는 보존했다.
+- 운영 `pnpm app:prod:build`와 이전 불변 이미지·0600 환경 백업을 지정한
+  `pnpm app:prod:deploy`가 성공했다. 실제 API·Worker·Beat·privacy-filter 이미지 리비전,
+  Hermes 상태, 로컬/공개 health·readiness·리비전·bootstrap·로그인 화면을 검증했다.
+  공개 setup 닫힘, 개발 로그인 비활성화, 비로그인 앱 bootstrap 401도 확인했다.
+- 새 운영 DB는 `company_20260908`, 제품 테이블 161개와 Alembic 테이블 1개이며 workspace
+  테이블은 없다. 활성 관리자 1명의 로그인 정보·비밀번호 해시만 새 ID로 유지했다.
+  기존 세션은 복사하지 않았고 업무 앱은 기본 비활성이다. 운영 비밀번호를 입력하는 실제
+  로그인 검사는 수행하지 않았으며 해시 동일성·계정 상태·역할을 검증했다.
+- 실제 컨테이너의 새 DB·버킷·검색/벡터·Redis·Terminal 네임스페이스 연결을 확인했다.
+  이전 DB·저장소·이미지·환경 백업 및 정지한 Terminal 컨테이너·볼륨은 복구용으로 보존했다.
+- 메모리 확보 후 전체 CI와 운영 이미지 빌드 동안 추가 cgroup OOM kill은 0회였다.
+  일시 정지한 개발 서비스를 복구하고 `pnpm dev:public-smoke`, `pnpm dev:login-smoke`를
+  통과했다. 개발 관리자 로그인 및 회사 앱 bootstrap에서 이전 workspace 상태가 없음을 확인했다.
+
+이 절은 배포 후 실행 결과를 기록한다. 아래 ASR 성공 경로·공개 UAT 미실행 항목과 실제 운영
+장애를 주입하지 않은 복구 검증의 한계는 배포 성공 이후에도 유지된다.
 
 ## 설계 평가와 결정
 
