@@ -56,6 +56,7 @@ test('contract rejects extra or weakened jobs', () => {
     source.replace('node scripts/release-validation.mjs ci', 'pnpm ci:harness'),
     source.replace('      - test-results/\n', ''),
     source.replace("    OPEN_WORK_HUB_API_PYTEST_WORKERS: '2'\n", ''),
+    source.replace("    NODE_OPTIONS: '--max-old-space-size=3072'\n", ''),
     source.replace("    VITEST_MAX_WORKERS: '1'", "    VITEST_MAX_WORKERS: '8'"),
     source.replace("    PLAYWRIGHT_WORKERS: '1'", "    PLAYWRIGHT_WORKERS: '8'"),
     source.replace(

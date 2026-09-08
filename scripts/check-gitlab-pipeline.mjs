@@ -95,6 +95,7 @@ export function expectedGitlabPipelineConfig() {
       environment: { name: 'ci-validation', action: 'access' },
       variables: {
         GIT_DEPTH: '0',
+        NODE_OPTIONS: '--max-old-space-size=3072',
         OPEN_WORK_HUB_API_PYTEST_WORKERS: '2',
         VITEST_MAX_WORKERS: '1',
         PLAYWRIGHT_WORKERS: '1',
