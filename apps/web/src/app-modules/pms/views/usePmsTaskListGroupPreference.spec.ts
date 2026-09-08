@@ -27,7 +27,7 @@ describe('usePmsTaskListGroupPreference', () => {
     );
   });
 
-  it('loads the account preference for the current workspace', async () => {
+  it('loads the account preference for the current user', async () => {
     apiMocks.getPmsViewPreferences.mockResolvedValue({
       task_list_group_by: 'assignee',
     });

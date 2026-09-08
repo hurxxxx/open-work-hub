@@ -1,3 +1,4 @@
+import { createPmsTask } from '../../../../tests/fixtures/pms';
 import {
   fireEvent,
   render,
@@ -11,7 +12,7 @@ import type { PmsTask, PmsTaskListMember } from '../api/pms-api';
 import { ListView } from './ListView';
 
 function task(overrides: Partial<PmsTask> = {}): PmsTask {
-  return {
+  return createPmsTask({
     archived: false,
     assignee_id: null,
     assignee_ids: [],
@@ -41,10 +42,10 @@ function task(overrides: Partial<PmsTask> = {}): PmsTask {
     start_date: null,
     status: 'todo',
     status_label: 'To Do',
-    task_number: 1,
+
     title: 'Task with reporter',
     ...overrides,
-  } as PmsTask;
+  });
 }
 
 function member(overrides: Partial<PmsTaskListMember> = {}): PmsTaskListMember {
@@ -334,21 +335,21 @@ describe('ListView', () => {
             board_position: 1000,
             id: 'task-1',
             reference: 'TASK-1',
-            task_number: 1,
+
             title: 'First',
           }),
           task({
             board_position: 2000,
             id: 'task-2',
             reference: 'TASK-2',
-            task_number: 2,
+
             title: 'Second',
           }),
           task({
             board_position: 3000,
             id: 'task-3',
             reference: 'TASK-3',
-            task_number: 3,
+
             title: 'Third',
           }),
         ]}

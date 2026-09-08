@@ -11,8 +11,6 @@
     "src/app-modules/*/manifest.ts",
     "src/app/shell/app-contract-manifests.ts",
     "src/app/shell/navigation-types.ts",
-    "src/app/shell/workspace-api-routes.ts",
-    "src/platform/api/workspace-api-route-policy.ts",
     "../../packages/contracts/src/api.ts",
     "../../packages/contracts/src/app-contracts.ts",
     "../../packages/contracts/src/app-contracts.generated.ts",

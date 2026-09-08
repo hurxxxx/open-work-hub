@@ -607,7 +607,7 @@ def test_pms_task_user_access_grant_and_revoke_refresh_search_acl_projection(
     )
 
 
-def test_personal_planner_events_do_not_enqueue_workspace_search_jobs(
+def test_personal_planner_events_do_not_enqueue_company_search_jobs(
     client: TestClient,
     monkeypatch,
 ) -> None:

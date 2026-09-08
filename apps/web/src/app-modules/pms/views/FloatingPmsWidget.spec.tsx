@@ -149,7 +149,6 @@ describe('FloatingPmsWidget', () => {
       priority: 'medium',
       status: 'todo',
       title: 'Assigned archive task',
-      workspace: { id: 'workspace-alpha', name: 'Alpha', slug: 'alpha' },
     };
     pmsApiMocks.listPersonalPmsAssignedTasks
       .mockResolvedValueOnce({
@@ -157,14 +156,12 @@ describe('FloatingPmsWidget', () => {
         page: 1,
         page_size: 100,
         total: 1,
-        workspaces: [assignedTask.workspace],
       })
       .mockResolvedValue({
         items: [],
         page: 1,
         page_size: 100,
         total: 0,
-        workspaces: [assignedTask.workspace],
       });
     pmsApiMocks.listAllPmsTaskLists.mockResolvedValue({
       items: [
@@ -212,9 +209,8 @@ describe('FloatingPmsWidget', () => {
     pmsApiMocks.listPersonalPmsAssignedTasks
       .mockResolvedValueOnce({
         items: [{ id: 'task-1' }],
-        workspaces: [{ id: 'workspace-alpha', name: 'Alpha', slug: 'alpha' }],
       })
-      .mockResolvedValue({ items: [], workspaces: [] });
+      .mockResolvedValue({ items: [] });
 
     render(<AssignedSummaryProbe />);
 

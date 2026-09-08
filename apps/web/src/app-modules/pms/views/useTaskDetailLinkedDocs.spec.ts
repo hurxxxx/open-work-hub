@@ -1,3 +1,4 @@
+import type { BlockContent } from '@open-work-hub/ui';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -7,7 +8,19 @@ import {
 
 describe('task detail linked docs helpers', () => {
   it('prefers unsaved editor blocks when promoting a description', () => {
-    const editorBlocks = [{ type: 'paragraph', content: 'Draft' }];
+    const editorBlocks: BlockContent = [
+      {
+        id: 'draft-1',
+        type: 'paragraph',
+        props: {
+          backgroundColor: 'default',
+          textColor: 'default',
+          textAlignment: 'left',
+        },
+        content: [{ type: 'text', text: 'Draft', styles: {} }],
+        children: [],
+      },
+    ];
     const issueBlocks = [{ type: 'paragraph', content: 'Saved' }];
 
     expect(
@@ -29,11 +42,10 @@ describe('task detail linked docs helpers', () => {
     ).toEqual(issueBlocks);
   });
 
-  it('builds workspace docs paths when a workspace slug is present', () => {
+  it('builds Docs document paths for linked resources', () => {
     expect(
       resolveTaskDetailDocPath({
         docId: 'doc-1',
-        user: null,
       }),
     ).toBe('/apps/docs/documents/doc-1');
   });

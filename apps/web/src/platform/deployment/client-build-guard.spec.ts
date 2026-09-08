@@ -16,7 +16,7 @@ function makeRuntime(response: Response) {
   return {
     fetch,
     replace,
-    runtime: {
+    runtime: Object.assign(new EventTarget(), {
       fetch,
       location: {
         href: 'https://app.test/apps/pms',
@@ -31,7 +31,7 @@ function makeRuntime(response: Response) {
         getItem: vi.fn((key: string) => storage.get(key) ?? null),
         setItem: vi.fn((key: string, value: string) => storage.set(key, value)),
       },
-    },
+    }),
   };
 }
 
@@ -145,9 +145,12 @@ describe('client build fetch guard', () => {
   it('clears API classification when an XMLHttpRequest is reused externally', () => {
     class FakeXhr extends EventTarget {
       headers = new Headers();
+      method = '';
+      url = '';
 
-      open() {
-        return undefined;
+      open(method: string, url: string | URL) {
+        this.method = method;
+        this.url = String(url);
       }
 
       send() {
@@ -175,6 +178,8 @@ describe('client build fetch guard', () => {
     request.send();
 
     expect(request.headers.has(CLIENT_BUILD_HEADER)).toBe(false);
+    expect(request.method).toBe('GET');
+    expect(request.url).toBe('https://files.example.test/download');
   });
 
   it('pins same-origin API websockets and reloads on the guard close code', () => {
@@ -201,7 +206,7 @@ describe('client build fetch guard', () => {
     });
 
     const socket = new browserRuntime.WebSocket(
-      'wss://app.test/api/v1/realtime/ws?workspace=hq',
+      'wss://app.test/api/v1/realtime/ws?client_build_id=build-1',
     ) as unknown as FakeWebSocket;
     const socketUrl = new URL(socket.url);
     expect(socketUrl.searchParams.get(CLIENT_BUILD_WEBSOCKET_QUERY_PARAM)).toBe(

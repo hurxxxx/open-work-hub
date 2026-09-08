@@ -47,6 +47,8 @@ const launcherCategories: BootstrapAppBarCategory[] = [
     position: 0,
     items: [
       {
+        coming_soon: false,
+        position: 0,
         app_id: 'chatbot',
         title: '챗봇',
         route_base: '/apps/chatbot',
@@ -54,6 +56,8 @@ const launcherCategories: BootstrapAppBarCategory[] = [
         enabled: true,
       },
       {
+        coming_soon: false,
+        position: 1,
         app_id: 'web-search',
         title: '웹 검색',
         route_base: '/apps/web-search',
@@ -70,6 +74,8 @@ const launcherCategories: BootstrapAppBarCategory[] = [
     position: 1,
     items: [
       {
+        coming_soon: false,
+        position: 0,
         app_id: 'docs',
         title: '문서',
         route_base: '/apps/docs',

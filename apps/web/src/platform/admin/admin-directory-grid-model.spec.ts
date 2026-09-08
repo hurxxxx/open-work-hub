@@ -1,3 +1,4 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
@@ -11,7 +12,7 @@ import {
 import type { SubjectSelectionState } from './admin-shared-model';
 
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
-  return {
+  return createAuthUser({
     id: 'user-1',
     login_id: 'ada',
     email: 'ada@example.test',
@@ -25,13 +26,11 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     system_roles: [],
     group_ids: [],
     managed_organization_unit_ids: [],
-    workspaces: [],
-    workspace_roles: [],
     must_change_password: false,
     last_login_at: null,
     created_at: undefined,
     ...overrides,
-  } as AuthUser;
+  });
 }
 
 describe('admin directory grid model', () => {

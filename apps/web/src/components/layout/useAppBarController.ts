@@ -249,7 +249,7 @@ export function useAppBarController({
     pinnedEligibleAppIds,
     pinnedItems,
   } = itemProjection;
-  const workspaceSearchHref = buildSearchHref();
+  const searchHref = buildSearchHref();
   const openAppBarEditor = useCallback(() => {
     dispatch({
       type: 'patch',
@@ -347,7 +347,7 @@ export function useAppBarController({
           favoritesOpen: false,
         },
       });
-      navigate(workspaceSearchHref);
+      navigate(searchHref);
     },
     onResetDraft: resetDraftPinnedApps,
     onSaveLayout: () => {
@@ -368,6 +368,6 @@ export function useAppBarController({
     pinnedItems,
     state,
     t: translate,
-    workspaceSearchHref,
+    searchHref,
   };
 }

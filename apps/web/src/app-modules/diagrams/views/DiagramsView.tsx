@@ -109,7 +109,7 @@ function DiagramsHub() {
     () => state.items.filter((item) => item.visibility === 'personal'),
     [state.items],
   );
-  const workspaceItems = useMemo(
+  const companyItems = useMemo(
     () => state.items.filter((item) => item.visibility === 'company'),
     [state.items],
   );
@@ -293,7 +293,7 @@ function DiagramsHub() {
             />
             <DiagramSection
               visibility="company"
-              items={workspaceItems}
+              items={companyItems}
               token={token}
               timeZone={timeZone}
               archived={isArchived}
@@ -338,16 +338,16 @@ function DiagramSection({
   const SectionIcon = visibility === 'company' ? Users : Lock;
   const titleKey =
     visibility === 'company'
-      ? 'diagrams.workspaceSectionTitle'
+      ? 'diagrams.companySectionTitle'
       : 'diagrams.personalSectionTitle';
   const emptyKey = archived
     ? 'diagrams.archiveEmpty'
     : visibility === 'company'
-      ? 'diagrams.workspaceSectionEmpty'
+      ? 'diagrams.companySectionEmpty'
       : 'diagrams.personalSectionEmpty';
   const createKey =
     visibility === 'company'
-      ? 'diagrams.createWorkspace'
+      ? 'diagrams.createCompany'
       : 'diagrams.createPersonal';
 
   return (
@@ -428,33 +428,27 @@ function buildDiagramVisibilityMenuItems({
       label: t('diagrams.visibilityCurrent', {
         visibility: t(
           currentVisibility === 'company'
-            ? 'diagrams.visibilityWorkspace'
+            ? 'diagrams.visibilityCompany'
             : 'diagrams.visibilityPersonal',
         ),
       }),
     },
     {
-      id: 'personal',
-      separatorBefore: true,
-      disabled: !canManage || currentVisibility === 'personal',
-      label: (
-        <span className="inline-flex items-center gap-2">
-          <Lock size={14} />
-          {t('diagrams.changeToPersonal')}
-        </span>
-      ),
-      onSelect: () => onChange('personal'),
-    },
-    {
       id: 'company',
+      separatorBefore: true,
       disabled: !canManage || currentVisibility === 'company',
       label: (
         <span className="inline-flex items-center gap-2">
           <Users size={14} />
-          {t('diagrams.changeToWorkspace')}
+          {t('diagrams.changeToCompany')}
         </span>
       ),
       onSelect: () => onChange('company'),
+    },
+    {
+      id: 'ownership-notice',
+      disabled: true,
+      label: t('diagrams.companyOwnershipNotice'),
     },
     {
       id: 'manage-required',
@@ -595,7 +589,7 @@ function DiagramCard({
           <span className="truncate">
             {t(
               item.visibility === 'company'
-                ? 'diagrams.visibilityWorkspace'
+                ? 'diagrams.visibilityCompany'
                 : 'diagrams.visibilityPersonal',
             )}
           </span>
@@ -697,7 +691,7 @@ function DiagramListTable({
                     <span className="truncate">
                       {t(
                         item.visibility === 'company'
-                          ? 'diagrams.visibilityWorkspace'
+                          ? 'diagrams.visibilityCompany'
                           : 'diagrams.visibilityPersonal',
                       )}
                     </span>

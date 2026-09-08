@@ -1,3 +1,4 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import type { ReactNode } from 'react';
 import {
   fireEvent,
@@ -9,7 +10,6 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
-import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { updateAdminUser } from './admin-api';
 import { PeopleSection } from './admin-people-section';
 import { useAdminPeopleDirectoryController } from './useAdminPeopleDirectoryController';
@@ -65,12 +65,12 @@ vi.mock('./useAdminPeopleDirectoryController', () => ({
   useAdminPeopleDirectoryController: vi.fn(),
 }));
 
-const member = {
+const member = createAuthUser({
   app_bar_layout: { pinned_app_ids: [] },
   date_format: 'korean',
   display_name: 'Member',
   email: 'member@example.com',
-  full_name: 'Workspace Member',
+  full_name: 'Company Member',
   id: 'user-1',
   last_login_at: null,
   locale: 'ko-KR',
@@ -82,7 +82,7 @@ const member = {
   managed_organization_unit_ids: [],
   theme_preference: 'system',
   time_zone: 'Asia/Seoul',
-} as AuthUser;
+});
 
 beforeEach(() => {
   vi.mocked(updateAdminUser).mockReset();

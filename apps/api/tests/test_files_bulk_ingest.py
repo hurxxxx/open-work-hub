@@ -34,7 +34,6 @@ from open_work_hub_api.domains.retrieval.models import (
 from open_work_hub_api.domains.search.models import SearchIndexJob
 
 
-WORKSPACE_ID = "workspace-a"
 ADMIN_ID = "admin-a"
 MEMBER_ID = "member-a"
 _SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "manage_files_bulk_ingest.py"

@@ -38,9 +38,11 @@
 Scope 요구사항은 route의 OpenAPI extension에서 선언하고 관리자 문서 화면도 그 schema에서
 operation 목록을 파생한다.
 
-조직 정보는 회사 tenant 전역 metadata다. ADR 0007에 따라 현재 회사 ID는 배포·DB 경계로
-암묵적이며 외부 projection에 별도 tenant ID를 추가하지 않는다. 사용자 주 소속은 접근 권한이
-아니며 조직 기반 RBAC는 이 결정에 포함하지 않는다.
+조직 정보는 회사 전역 metadata다. [ADR 0012](0012-company-app-access-without-workspaces.md)에 따라
+회사는 배포·DB 경계로 구분하며 외부 projection에 별도 tenant ID를 추가하지 않는다.
+디렉터리 조회 scope가 제품 권한을 부여하지 않는다. 현재 조직 그룹의 구성과 앱·자원 권한은
+[Organization](../docs/domains/organization/README.md)과
+[App Platform](../docs/domains/app-platform/README.md)이 소유한다.
 
 ## Consequences
 
@@ -68,8 +70,8 @@ operation 목록을 파생한다.
 - 외부 시스템의 사용자·조직 쓰기 또는 provisioning
 - SCIM, webhook, delta feed와 tombstone
 - customer-defined scope, OAuth client credential, IP allowlist와 rate limiting
-- 조직 단위에 따른 제품 권한 또는 workspace membership 자동 부여
+- 디렉터리 연계 credential을 통한 제품 권한·업무 역할 자동 부여
 
 ## Related Decisions
 
-- [ADR 0007: 회사 tenant와 workspace 범위 계층](0007-company-tenant-workspace-scope.md)
+- [ADR 0012: 회사·그룹·앱별 권한](0012-company-app-access-without-workspaces.md)

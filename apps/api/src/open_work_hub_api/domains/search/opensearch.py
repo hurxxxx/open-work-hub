@@ -257,7 +257,6 @@ class OpenSearchKeywordClient:
                 "size": MAX_BULK_INDEX_DOCUMENTS,
                 "query": {"match_all": {}},
                 "sort": [
-                    {},
                     {"entity_type": "asc"},
                     {"entity_id": "asc"},
                 ],

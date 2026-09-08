@@ -2,11 +2,11 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { Recording } from '../api/recording-api';
+import type { RecordingDetail } from '../api/recording-api';
 import { isRecordingRetryable } from './recording-detail-model';
 import { RecordingDetailView } from './RecordingDetailView';
 
-const state = vi.hoisted(() => ({ recording: null as Recording | null }));
+const state = vi.hoisted(() => ({ recording: null as RecordingDetail | null }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -55,9 +55,24 @@ vi.mock('./useRecordingDetailController', () => ({
   }),
 }));
 
-function showRecording(overrides: Partial<Recording>) {
+function showRecording(overrides: Partial<RecordingDetail>) {
   state.recording = {
     id: 'recording-1',
+    owner_id: 'user-1',
+    ended_at: null,
+    duration_sec: null,
+    source: 'quick_record',
+    storage_key: null,
+    file_size: 0,
+    mime_type: 'audio/webm',
+    meeting_insight_status: 'pending',
+    progress_pct: 0,
+    transcribe_started_at: null,
+    transcribe_completed_at: null,
+    created_at: '2026-09-08T00:00:00Z',
+    updated_at: '2026-09-08T00:00:00Z',
+    trashed_at: null,
+    targets: [],
     title: 'Failed recording',
     started_at: '2026-09-08T00:00:00Z',
     audio_status: 'saved',
@@ -67,7 +82,7 @@ function showRecording(overrides: Partial<Recording>) {
     result: null,
     publications: [],
     ...overrides,
-  } as Recording;
+  };
   render(
     <MemoryRouter>
       <RecordingDetailView />
@@ -101,7 +116,10 @@ describe('RecordingDetailView result feedback', () => {
         version: 1,
         transcript_text: 'Saved transcript',
         summary_text: null,
-      } as NonNullable<Recording['result']>,
+        verifier_note: null,
+        generated_at: null,
+        updated_at: '2026-09-08T00:00:00Z',
+      },
     });
     expect(screen.getByText('Saved transcript')).toBeTruthy();
     expect(screen.getByText('apps:recording.detail.resultFailed')).toBeTruthy();

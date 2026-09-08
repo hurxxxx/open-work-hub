@@ -90,7 +90,7 @@ describe('web DM API client', () => {
     );
   });
 
-  it('scopes user search to a workspace when requested', async () => {
+  it('includes the current user in directory search when requested', async () => {
     mockJsonResponse([]);
 
     await expect(

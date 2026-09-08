@@ -17,17 +17,21 @@ from open_work_hub_api.domains.mail.sync_mailboxes import (
 
 
 def _session() -> Session:
+    from company_admission_fixture import company_authority_tables, seed_company_app_access
+
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(
         engine,
         tables=[
-            User.__table__,
+            *company_authority_tables(),
             MailAccount.__table__,
             MailMailbox.__table__,
             MailSyncState.__table__,
         ],
     )
-    return Session(engine)
+    session = Session(engine)
+    seed_company_app_access(session, app_ids=["mail"])
+    return session
 
 
 def _settings(protocol: str = "imap") -> MailConnectionSettings:

@@ -369,19 +369,22 @@ def test_content_sha256_hashes_canonical_documents_in_stable_order() -> None:
     client = ScriptedKeywordClient(existing_indices={target}, target_index_name=target)
     hits = [
         {
-            "_id": "workspace-1:file:file-1",
+            "_id": canonical_search_document_id(
+                resource_type="file_manager_file", resource_id="file-1"
+            ),
             "_source": {
                 "entity_type": "file",
                 "entity_id": "file-1",
                 "title": "히터 사양",
             },
-            "sort": ["workspace-1", "file", "file-1"],
+            "sort": ["file", "file-1"],
         }
     ]
     original_request = client._request
 
     def request(method: str, path: str, **kwargs: Any) -> _Response:
         if method == "POST" and path.endswith("/_search"):
+            assert kwargs["json"]["sort"] == [{"entity_type": "asc"}, {"entity_id": "asc"}]
             return _Response({"hits": {"hits": hits}})
         return original_request(method, path, **kwargs)
 
@@ -394,6 +397,54 @@ def test_content_sha256_hashes_canonical_documents_in_stable_order() -> None:
     ).encode()
 
     assert client.content_sha256() == hashlib.sha256(canonical + b"\n").hexdigest()
+
+
+def test_content_sha256_paginates_with_the_canonical_two_field_cursor(monkeypatch) -> None:
+    from open_work_hub_api.domains.search import opensearch
+
+    monkeypatch.setattr(opensearch, "MAX_BULK_INDEX_DOCUMENTS", 1)
+    target = keyword_search_versioned_index_name("test", generation="release_20260721")
+    client = ScriptedKeywordClient(existing_indices={target}, target_index_name=target)
+    hits = [
+        {
+            "_id": canonical_search_document_id(
+                resource_type="file_manager_file", resource_id=f"file-{index}"
+            ),
+            "_source": {"entity_type": "file", "entity_id": f"file-{index}"},
+            "sort": ["file", f"file-{index}"],
+        }
+        for index in (1, 2)
+    ]
+    requests: list[dict[str, Any]] = []
+    original_request = client._request
+
+    def request(method: str, path: str, **kwargs: Any) -> _Response:
+        if method == "POST" and path.endswith("/_search"):
+            body = kwargs["json"]
+            assert body["sort"] == [{"entity_type": "asc"}, {"entity_id": "asc"}]
+            requests.append(body)
+            offset = len(requests) - 1
+            return _Response({"hits": {"hits": hits[offset : offset + 1]}})
+        return original_request(method, path, **kwargs)
+
+    client._request = request  # type: ignore[method-assign]
+    canonical = b"".join(
+        json.dumps(
+            {"_id": hit["_id"], "_source": hit["_source"]},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        + b"\n"
+        for hit in hits
+    )
+
+    assert client.content_sha256() == hashlib.sha256(canonical).hexdigest()
+    assert [body.get("search_after") for body in requests] == [
+        None,
+        ["file", "file-1"],
+        ["file", "file-2"],
+    ]
 
 
 def test_versioned_index_activation_rejects_incompatible_schema() -> None:
@@ -489,7 +540,7 @@ def test_existing_index_mapping_update_includes_every_acl_query_field() -> None:
     assert keyword_acl_query_field_names() <= mapping_call[2]["json"]["properties"].keys()
 
 
-def test_workspace_document_count_can_be_scoped_to_entity_types() -> None:
+def test_company_document_count_can_be_scoped_to_entity_types() -> None:
     client = RecordingKeywordClient()
 
     assert (
@@ -648,7 +699,7 @@ def test_bulk_document_chunks_split_by_document_count() -> None:
     ]
 
 
-def test_rebuild_workspace_indexes_documents_before_deleting_stale_documents() -> None:
+def test_rebuild_company_indexes_documents_before_deleting_stale_documents() -> None:
     client = RecordingKeywordClient()
 
     client.rebuild_company_index(

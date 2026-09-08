@@ -90,6 +90,11 @@ from open_work_hub_api.domains.mail.sync_mailboxes import (
     ensure_inbox_mailbox,
     sync_targets_for_account,
 )
+from open_work_hub_api.domains.mail.sync_policy import (
+    MailSyncAccessRevoked,
+    cancel_mail_sync_job,
+    require_mail_sync_access,
+)
 
 logger = logging.getLogger(__name__)
 MAIL_APP_ID = "mail"
@@ -346,6 +351,10 @@ def enqueue_account_sync(
     if not mail_background_sync_enabled(db):
         raise localized_http_exception(status_code=403, code="platform.app_disabled")
     row = _load_account(db, user=user, account_id=account_id, for_update=True)
+    try:
+        require_mail_sync_access(db, account_id=row.id)
+    except MailSyncAccessRevoked as exc:
+        raise localized_http_exception(status_code=403, code="app.access_required") from exc
     mailbox, state = ensure_inbox_mailbox(db, account=row)
     operation = "initial" if not state.cursor_json else "incremental"
     job = _enqueue_sync_job(db, account=row, mailbox=mailbox, operation=operation)
@@ -366,11 +375,10 @@ def sync_account(
     limit: int | None = None,
     operation: str | None = None,
 ) -> MailSyncResult:
-    if not mail_background_sync_enabled(db):
-        return MailSyncResult(new_count=0, updated_count=0, deleted_count=0)
+    require_mail_sync_access(db, account_id=account_id)
     row = db.get(MailAccount, account_id)
     if row is None or row.deleted_at is not None:
-        return MailSyncResult(new_count=0, updated_count=0, deleted_count=0)
+        raise MailSyncAccessRevoked("Mail sync target no longer exists.")
     mail_client = client or _mail_client()
     max_messages = limit or get_settings().mail_sync_max_messages
     row.status = "syncing"
@@ -380,6 +388,7 @@ def sync_account(
     db.commit()
     states: list[MailSyncState] = []
     try:
+        require_mail_sync_access(db, account_id=account_id)
         settings = settings_from_account(row)
         enforce_connection_profile(settings, incoming=True, smtp=False)
         targets = sync_targets_for_account(
@@ -404,12 +413,14 @@ def sync_account(
                 mailbox=mailbox,
                 cursor=dict(state.cursor_json or {}),
             )
+            require_mail_sync_access(db, account_id=account_id)
             batch = mail_client.sync_mailbox(
                 settings,
                 mailbox=mailbox.provider_mailbox_id,
                 cursor=sync_cursor,
                 initial_limit=max_messages,
             )
+            require_mail_sync_access(db, account_id=account_id)
             mailbox_result = apply_sync_batch(
                 db,
                 account=row,
@@ -440,6 +451,7 @@ def sync_account(
         row.last_sync_deleted_count = result.deleted_count
         row.updated_at = now
         db.add(row)
+        require_mail_sync_access(db, account_id=account_id)
         db.commit()
         return result
     except Exception as exc:
@@ -457,7 +469,8 @@ def sync_account(
             db.add(state)
         if row is not None or states:
             db.commit()
-        logger.warning("mail sync failed for account %s", account_id, exc_info=exc)
+        if not isinstance(exc, MailSyncAccessRevoked):
+            logger.warning("mail sync failed for account %s", account_id, exc_info=exc)
         raise
 
 
@@ -810,6 +823,12 @@ def process_mail_sync_job(
         db.add(job)
         db.commit()
         return "cancelled"
+    try:
+        require_mail_sync_access(db, account_id=account.id)
+    except MailSyncAccessRevoked as exc:
+        cancel_mail_sync_job(db, job=job, error=str(exc))
+        db.commit()
+        return "cancelled"
     job.status = "processing"
     job.attempts += 1
     job.last_error = None
@@ -828,6 +847,13 @@ def process_mail_sync_job(
             client=client,
             operation=job.operation,
         )
+    except MailSyncAccessRevoked as exc:
+        db.rollback()
+        job = db.get(MailSyncJob, job_id)
+        if job is not None:
+            cancel_mail_sync_job(db, job=job, error=str(exc))
+            db.commit()
+        return "cancelled"
     except Exception as exc:
         db.rollback()
         job = db.get(MailSyncJob, job_id)
@@ -982,6 +1008,8 @@ def _load_draft(
 
 
 def _public_error(exc: Exception) -> str:
+    if isinstance(exc, MailSyncAccessRevoked):
+        return str(exc)
     if isinstance(exc, MailConnectionPolicyError):
         return str(exc)
     if isinstance(exc, MailCredentialError):

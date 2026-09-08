@@ -84,7 +84,7 @@ describe('app shell navigation model', () => {
     );
   });
 
-  it('resolves workspace app ids from manifest route paths', () => {
+  it('resolves app ids from manifest route paths', () => {
     expect(
       resolveAppRouteAppId({
         manifests: APP_MODULE_MANIFESTS,

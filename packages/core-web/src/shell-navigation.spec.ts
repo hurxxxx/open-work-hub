@@ -93,7 +93,7 @@ describe('core shell navigation model', () => {
     ).toBe('research-all');
   });
 
-  it('resolves app ids from workspace and global manifest route paths', () => {
+  it('resolves app ids from app and global manifest route paths', () => {
     expect(
       resolveCoreAppRouteAppId({
         manifests,
@@ -127,7 +127,7 @@ describe('core shell navigation model', () => {
     ).toBeNull();
   });
 
-  it('matches route path patterns and workspace app relative paths', () => {
+  it('matches route path patterns and app relative paths', () => {
     expect(
       coreRoutePathMatchesPathname(
         '/apps/research/public/:shareId',

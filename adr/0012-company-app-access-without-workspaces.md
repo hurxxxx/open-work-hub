@@ -47,7 +47,12 @@ only to the explicitly authorized development database. Production changes and
 an external HR connector are separate work. Core organization updates provide
 the authoritative integration seam for future HR ingestion.
 
-This decision supersedes the workspace requirements in ADRs 0006, 0007, and
-0011 and the workspace-dependent portions of ADRs 0002, 0005, and 0009.
-Mutable contracts remain in the existing App Platform, Organization, Source
-Access, AI Execution, and Hermes owner documents.
+This decision supersedes ADRs 0006, 0007, and 0011 and the former scope,
+principal, route, and baseline requirements in ADRs 0001, 0002, 0004, 0005,
+and 0009. Their remaining capability, workload, and retrieval safety contracts
+continue to apply.
+Mutable contracts remain in [App Platform](../docs/domains/app-platform/README.md),
+[Organization](../docs/domains/organization/README.md),
+[Source Access](../docs/domains/source-access/README.md),
+[AI Execution](../docs/domains/ai/execution.md), and
+[Hermes](../docs/domains/ai/hermes.md).

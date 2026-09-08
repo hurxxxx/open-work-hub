@@ -133,7 +133,7 @@ The release migration places Hermes Terminal into an existing localized All Apps
 
 The browser renders Hermes' official raw TUI through the shared xterm surface. It does not reimplement the agent loop or tool UI. Desktop places generated files and pending Open Work Hub approvals on the right; narrow screens place the same panel below the terminal. Active files come from the private runner workspace, completed-session artifacts come from object storage, and every download is reauthorized by current account status, app admission, and session ownership.
 
-Creating a session always starts in standard mode. YOLO can be selected only after a fresh acknowledgement in that creation dialog; the browser never remembers it as a default. The broker appends Hermes' official `--yolo` flag only for that session. YOLO disables Hermes-native dangerous-command prompts, but it never bypasses Open Work Hub authentication, membership checks, exact write-tool approval, network isolation, container isolation, the fixed model, or artifact limits.
+Creating a session always starts in standard mode. YOLO can be selected only after a fresh acknowledgement in that creation dialog; the browser never remembers it as a default. The broker appends Hermes' official `--yolo` flag only for that session. YOLO disables Hermes-native dangerous-command prompts, but it never bypasses Open Work Hub authentication, current app admission and source ACL, exact write-tool approval, network isolation, container isolation, the fixed model, or artifact limits.
 
 The broker invokes the pinned image with Hermes' public CLI:
 

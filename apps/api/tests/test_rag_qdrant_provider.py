@@ -84,7 +84,7 @@ def test_qdrant_vector_index_smoke_syncs_queries_and_deletes(qdrant_client) -> N
         summary="Qdrant hybrid retrieval smoke",
         text_content="Budget risk increased after service repricing and approval lag.",
         owner_label="Owner A",
-        visibility_refs=["workspace:ws-1", "owner:user-1"],
+        visibility_refs=["company_public", "owner:user-1"],
         metadata={"team_id": "team-1", "origin_ref": "docs:doc-1"},
     )
 

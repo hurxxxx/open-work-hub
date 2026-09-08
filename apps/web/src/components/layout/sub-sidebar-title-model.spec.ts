@@ -1,3 +1,4 @@
+import { createBootstrapApp } from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 import { FileText } from 'lucide-react';
 
@@ -11,7 +12,7 @@ function t(key: string, options?: Record<string, unknown>): string {
 }
 
 describe('sub sidebar title model', () => {
-  it('uses the active leaf app title from workspace bootstrap', () => {
+  it('uses the active leaf app title from app bootstrap', () => {
     expect(
       resolveSubSidebarTitle({
         activeAppId: 'docs',
@@ -21,6 +22,7 @@ describe('sub sidebar title model', () => {
           [
             'docs',
             {
+              ...createBootstrapApp('docs'),
               app_id: 'docs',
               enabled: true,
               icon_key: 'docs',

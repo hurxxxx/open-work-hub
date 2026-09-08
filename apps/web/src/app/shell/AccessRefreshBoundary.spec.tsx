@@ -1,3 +1,4 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { act } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -28,8 +29,22 @@ function deferred<T>() {
   return { promise, reject, resolve };
 }
 
-function user(workspaces: AuthUser['workspaces'] = []): AuthUser {
-  return { id: 'user-1', workspaces } as AuthUser;
+function user(groupIds: string[] = []): AuthUser {
+  return createAuthUser({
+    id: 'user-1',
+    login_id: 'member',
+    email: 'member@example.test',
+    full_name: 'Member',
+    status: 'active',
+    must_change_password: false,
+    system_roles: [],
+    group_ids: groupIds,
+    managed_organization_unit_ids: [],
+    theme_preference: 'system',
+    locale: 'ko-KR',
+    time_zone: 'Asia/Seoul',
+    date_format: 'korean',
+  });
 }
 
 function realtimeHarness(reconnectSeq = 0) {
@@ -69,10 +84,6 @@ describe('AccessRefreshBoundary', () => {
       calls.push('apps');
       return null;
     });
-    const refreshWorkspace = vi.fn(async () => {
-      calls.push('workspace');
-      return null;
-    });
 
     render(
       <ShellRealtimeProvider value={realtime.value}>
@@ -80,7 +91,6 @@ describe('AccessRefreshBoundary', () => {
           accessProjectionKey="access-1"
           refreshApps={refreshApps}
           refreshUser={refreshUser}
-          refreshWorkspace={refreshWorkspace}
         >
           <p>protected-content</p>
         </AccessRefreshBoundary>
@@ -102,16 +112,7 @@ describe('AccessRefreshBoundary', () => {
     );
 
     await act(async () => {
-      pendingUser.resolve(
-        user([
-          {
-            id: 'workspace-1',
-            name: 'Workspace One',
-            role: 'member',
-            slug: 'workspace-one',
-          },
-        ]),
-      );
+      pendingUser.resolve(user(['group-current']));
       await pendingUser.promise;
     });
 
@@ -125,7 +126,7 @@ describe('AccessRefreshBoundary', () => {
     expect(calls).toEqual(['user', 'apps']);
   });
 
-  it('skips workspace refresh after revocation and performs a trailing refresh for bursts', async () => {
+  it('refreshes current user and app admission after revocation and coalesces bursts', async () => {
     const realtime = realtimeHarness();
     const firstUser = deferred<AuthUser>();
     const refreshUser = vi
@@ -133,7 +134,6 @@ describe('AccessRefreshBoundary', () => {
       .mockImplementationOnce(() => firstUser.promise)
       .mockResolvedValue(user());
     const refreshApps = vi.fn().mockResolvedValue(null);
-    const refreshWorkspace = vi.fn().mockResolvedValue(null);
 
     render(
       <ShellRealtimeProvider value={realtime.value}>
@@ -141,7 +141,6 @@ describe('AccessRefreshBoundary', () => {
           accessProjectionKey="access-1"
           refreshApps={refreshApps}
           refreshUser={refreshUser}
-          refreshWorkspace={refreshWorkspace}
         >
           <p>protected-content</p>
         </AccessRefreshBoundary>
@@ -163,7 +162,6 @@ describe('AccessRefreshBoundary', () => {
 
     await waitFor(() => expect(refreshUser).toHaveBeenCalledTimes(2));
     expect(refreshApps).toHaveBeenCalledTimes(2);
-    expect(refreshWorkspace).not.toHaveBeenCalled();
   });
 
   it('discards protected child caches when the canonical access projection changes', async () => {
@@ -171,14 +169,12 @@ describe('AccessRefreshBoundary', () => {
     const pendingApps = deferred<unknown>();
     const refreshUser = vi.fn().mockResolvedValue(user());
     const refreshApps = vi.fn(() => pendingApps.promise);
-    const refreshWorkspace = vi.fn().mockResolvedValue(null);
     const renderBoundary = (accessProjectionKey: string) => (
       <ShellRealtimeProvider value={realtime.value}>
         <AccessRefreshBoundary
           accessProjectionKey={accessProjectionKey}
           refreshApps={refreshApps}
           refreshUser={refreshUser}
-          refreshWorkspace={refreshWorkspace}
         >
           <input aria-label="cached event" defaultValue="empty" />
         </AccessRefreshBoundary>
@@ -186,7 +182,7 @@ describe('AccessRefreshBoundary', () => {
     );
     const { rerender } = render(renderBoundary('access-1'));
     fireEvent.change(screen.getByLabelText('cached event'), {
-      target: { value: 'stale workspace event' },
+      target: { value: 'stale access event' },
     });
 
     act(() => {
@@ -219,7 +215,6 @@ describe('AccessRefreshBoundary', () => {
       .mockRejectedValueOnce(new Error('network unavailable'))
       .mockResolvedValue(user());
     const refreshApps = vi.fn().mockResolvedValue(null);
-    const refreshWorkspace = vi.fn().mockResolvedValue(null);
 
     render(
       <ShellRealtimeProvider value={realtime.value}>
@@ -227,7 +222,6 @@ describe('AccessRefreshBoundary', () => {
           accessProjectionKey="access-1"
           refreshApps={refreshApps}
           refreshUser={refreshUser}
-          refreshWorkspace={refreshWorkspace}
         >
           <p>protected-content</p>
         </AccessRefreshBoundary>
@@ -270,14 +264,12 @@ describe('AccessRefreshBoundary', () => {
     const pendingUser = deferred<AuthUser>();
     const refreshUser = vi.fn(() => pendingUser.promise);
     const refreshApps = vi.fn().mockResolvedValue(null);
-    const refreshWorkspace = vi.fn().mockResolvedValue(null);
     const { rerender } = render(
       <ShellRealtimeProvider value={initialRealtime.value}>
         <AccessRefreshBoundary
           accessProjectionKey="access-1"
           refreshApps={refreshApps}
           refreshUser={refreshUser}
-          refreshWorkspace={refreshWorkspace}
         >
           <input aria-label="draft" defaultValue="work in progress" />
         </AccessRefreshBoundary>
@@ -290,7 +282,6 @@ describe('AccessRefreshBoundary', () => {
           accessProjectionKey="access-1"
           refreshApps={refreshApps}
           refreshUser={refreshUser}
-          refreshWorkspace={refreshWorkspace}
         >
           <input aria-label="draft" defaultValue="work in progress" />
         </AccessRefreshBoundary>

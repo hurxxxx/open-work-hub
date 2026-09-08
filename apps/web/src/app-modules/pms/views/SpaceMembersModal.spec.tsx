@@ -138,14 +138,21 @@ describe('SpaceMembersModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listSpaceMembers).mockResolvedValue({
+      total: 2,
+      page: 1,
+      page_size: 100,
       items: [
         {
+          is_admin: false,
+          joined_at: '2026-09-08T00:00:00Z',
           email: 'owner@example.test',
           full_name: 'Owner User',
           role: 'owner',
           user_id: 'owner',
         },
         {
+          is_admin: false,
+          joined_at: '2026-09-08T00:00:00Z',
           email: 'target@example.test',
           full_name: 'Target Member',
           role: 'member',

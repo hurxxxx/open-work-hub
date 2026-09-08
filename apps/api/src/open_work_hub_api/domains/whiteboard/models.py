@@ -74,6 +74,10 @@ class Whiteboard(Base):
         back_populates="whiteboard",
         cascade="all, delete-orphan",
     )
+    group_shares: Mapped[list["WhiteboardGroupShare"]] = relationship(
+        back_populates="whiteboard",
+        cascade="all, delete-orphan",
+    )
     link_shares: Mapped[list["WhiteboardLinkShare"]] = relationship(
         back_populates="whiteboard",
         cascade="all, delete-orphan",
@@ -240,3 +244,4 @@ class WhiteboardGroupShare(Base):
     access_level: Mapped[str] = mapped_column(String(16), nullable=False)
     created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    whiteboard: Mapped[Whiteboard] = relationship(back_populates="group_shares")

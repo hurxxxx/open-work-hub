@@ -16,12 +16,12 @@ import {
   uploadAttachment,
 } from './pms-api';
 
-describe('PMS task-detail workspace boundary', () => {
+describe('PMS task-detail API boundary', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('routes every detail read and mutation through the target workspace', async () => {
+  it('routes every detail read and mutation through the PMS API', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
       Promise.resolve(
         new Response(JSON.stringify({ items: [] }), {

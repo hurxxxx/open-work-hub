@@ -11,7 +11,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 describe('FilesChatSidebarLink', () => {
-  it('provides a Files chat fallback when workspace bootstrap nav is stale', () => {
+  it('provides a Files chat fallback when app bootstrap nav is stale', () => {
     const onNavigate = vi.fn();
     render(
       <MemoryRouter initialEntries={['/apps/files/chat']}>

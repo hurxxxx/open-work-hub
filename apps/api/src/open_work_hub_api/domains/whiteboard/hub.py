@@ -267,7 +267,14 @@ def _serialize_whiteboard_item(
         updated_at=whiteboard.updated_at,
         trashed_at=whiteboard.trashed_at,
         is_favorite=bool(pref and pref.is_favorite),
-        is_private=primary_target is None and not whiteboard.company_visible,
+        is_private=(
+            whiteboard.ownership_kind == "personal"
+            and primary_target is None
+            and not whiteboard.company_visible
+            and not whiteboard.user_shares
+            and not whiteboard.group_shares
+            and not any(share.active for share in whiteboard.link_shares)
+        ),
         last_viewed_at=pref.last_viewed_at if pref else None,
         can_view=access.can_view,
         can_edit=access.can_edit,

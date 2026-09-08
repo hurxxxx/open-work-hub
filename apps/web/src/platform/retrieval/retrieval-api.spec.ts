@@ -14,7 +14,7 @@ describe('retrieval-api', () => {
     vi.unstubAllGlobals();
   });
 
-  it('queries the workspace retrieval endpoint through the workspace path policy', async () => {
+  it('queries the retrieval endpoint through the app API policy', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         query: 'release plan',
@@ -44,7 +44,6 @@ describe('retrieval-api', () => {
         top_k: 3,
       },
       'token-1',
-      'delivery-hub',
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -65,11 +64,11 @@ describe('retrieval-api', () => {
     );
   });
 
-  it('lists retrieval sources through the workspace path policy', async () => {
+  it('lists retrieval sources through the app API policy', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ sources: [] }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await listRetrievalSources('token-1', 'delivery-hub');
+    await listRetrievalSources('token-1');
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/retrieval/sources',

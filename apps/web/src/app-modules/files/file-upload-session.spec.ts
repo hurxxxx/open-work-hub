@@ -127,7 +127,7 @@ describe('file upload session', () => {
         signal: new AbortController().signal,
         token: 'token',
         uploadFile,
-        uploadVisibility: 'workspace',
+        uploadVisibility: 'company',
       }),
     ).resolves.toEqual({ ok: true });
 

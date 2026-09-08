@@ -18,7 +18,6 @@ function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     end: '2026-03-10T10:00:00+09:00',
     allDay: false,
     color: '#3b82f6',
-    workspace: { id: 'workspace-1', slug: 'hq', name: 'HQ' },
     metadata: {
       attendeeCount: null,
       location: null,

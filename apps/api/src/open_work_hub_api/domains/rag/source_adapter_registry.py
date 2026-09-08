@@ -7,7 +7,6 @@ from typing import Any
 from open_work_hub_api.domains.rag.contracts import RagSyncLane, RagSyncOperation
 
 RagProjectionLoader = Callable[[Any, str, Any], Any | None]
-RagCompanyResourceIdsLoader = Callable[[Any, Any], Iterable[str]]
 RagCompanyResourceIdsLoader = Callable[[Any], Iterable[str]]
 RagSourceVisibilityPredicate = Callable[[Any, "RagSourceAdapter"], bool]
 RagVisibilityScopeResourceIdsLoader = Callable[[Any, Any], Iterable[str]]
@@ -34,7 +33,6 @@ class RagResourceAdapter:
     app_id: str | None = None
     partition_adapter_id: str | None = None
     load_projection: RagProjectionLoader | None = None
-    company_resource_ids: RagCompanyResourceIdsLoader | None = None
     company_resource_ids: RagCompanyResourceIdsLoader | None = None
     on_projection_deleted: RagProjectionDeletedHook | None = None
     on_projection_prepared: RagProjectionPreparedHook | None = None

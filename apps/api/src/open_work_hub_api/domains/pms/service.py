@@ -1127,7 +1127,7 @@ def create_task_list(
     if not team_id:
         raise localized_http_exception(status_code=400, code="pms.task_list_space_missing")
     resolved_team_id = team_id
-    team, _role = _ensure_space_editor(db, user, resolved_team_id)
+    team, role = _ensure_space_editor(db, user, resolved_team_id)
     resolved_team_name = team.name
 
     _validate_folder_membership(db, resolved_team_id, folder_id)
@@ -1145,20 +1145,6 @@ def create_task_list(
     )
     db.add(task_list)
     _ensure_space_statuses(db, resolved_team_id)
-    if not db.scalar(
-        select(TeamMember.id).where(
-            TeamMember.team_id == resolved_team_id,
-            TeamMember.user_id == user.id,
-        )
-    ):
-        db.add(
-            TeamMember(
-                id=new_id(),
-                team_id=resolved_team_id,
-                user_id=user.id,
-                role="owner",
-            )
-        )
     _create_default_labels(db, task_list.id)
     db.commit()
     db.refresh(task_list)
@@ -1175,7 +1161,7 @@ def create_task_list(
     )
     assert loaded_task_list is not None
     member_count = len(_load_space_members(db, resolved_team_id))
-    return _serialize_task_list(loaded_task_list, "owner", resolved_team_name, member_count)
+    return _serialize_task_list(loaded_task_list, role, resolved_team_name, member_count)
 
 
 def list_tasks(

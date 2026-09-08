@@ -219,7 +219,7 @@ export function formatHomeEventWhen(
   return dayLabel ? `${dayLabel} ${time}` : time;
 }
 
-export function workspaceHomePriorityTone(
+export function homePriorityTone(
   priority: string | null | undefined,
 ): HomePriorityTone {
   if (priority === 'critical' || priority === 'high') return 'danger';
@@ -334,7 +334,7 @@ export function buildHomeSections({
       trailing: issue.due_date
         ? formatHomeDueDate(issue.due_date, timeZone, locale, t, now)
         : '',
-      priorityTone: workspaceHomePriorityTone(issue.priority),
+      priorityTone: homePriorityTone(issue.priority),
     }),
   );
 
@@ -399,10 +399,7 @@ export function buildHomeSections({
   ];
 }
 
-export function workspaceHomeReducer(
-  state: HomeState,
-  action: HomeAction,
-): HomeState {
+export function homeReducer(state: HomeState, action: HomeAction): HomeState {
   switch (action.type) {
     case 'load-started':
       return {

@@ -59,7 +59,7 @@ describe('buildAiChatStreamRequest', () => {
       backendMode: 'local',
       conversationScope: {
         ref: 'meeting',
-        resourceId: 'workspace',
+        resourceId: 'meeting-1',
       },
       turns,
     });
@@ -68,7 +68,7 @@ describe('buildAiChatStreamRequest', () => {
       conversation_id: undefined,
       persist: true,
       scope_ref: 'meeting',
-      scope_resource_id: 'workspace',
+      scope_resource_id: 'meeting-1',
     });
   });
 
@@ -79,7 +79,7 @@ describe('buildAiChatStreamRequest', () => {
       backendMode: 'local',
       conversationScope: {
         ref: 'meeting',
-        resourceId: 'workspace',
+        resourceId: 'meeting-1',
       },
       turns,
     });

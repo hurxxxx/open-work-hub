@@ -29,6 +29,7 @@ from open_work_hub_api.domains.search.entity_adapter_registry import (
 from open_work_hub_api.domains.search.hook_registry import get_search_index_hook_registration
 from open_work_hub_api.domains.search import projections as search_projections
 from open_work_hub_api.domains.search.projection_identity import SearchProjectionIdentityError
+from open_work_hub_api.domains.search.projection_registry import FunctionSearchProjectionAdapter
 
 
 def _request(*, entity_types: list[str] | None = None) -> KeywordSearchRequest:
@@ -78,7 +79,6 @@ def test_company_keyword_search_adapters_declare_registered_index_hooks() -> Non
     "document",
     [
         {
-            "entity_type": "doc",
             "entity_id": "doc-1",
         },
         {
@@ -95,10 +95,10 @@ def test_company_backfill_rejects_projection_identity_drift(
     document: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    adapter = SimpleNamespace(
-        adapter_id="test.docs",
+    adapter = FunctionSearchProjectionAdapter(
         entity_types=("doc",),
-        load_documents=lambda db,: [document],
+        company_loader=lambda db: [document],
+        document_loader=lambda db, **kwargs: None,
     )
     monkeypatch.setattr(
         search_projections,
@@ -111,7 +111,7 @@ def test_company_backfill_rejects_projection_identity_drift(
         lambda: (adapter,),
     )
 
-    with pytest.raises(SearchProjectionIdentityError):
+    with pytest.raises(SearchProjectionIdentityError, match="identity mismatch"):
         search_projections.all_search_documents(
             SimpleNamespace(),
         )
@@ -120,15 +120,15 @@ def test_company_backfill_rejects_projection_identity_drift(
 def test_company_backfill_rejects_projection_without_acl_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    adapter = SimpleNamespace(
-        adapter_id="test.docs",
+    adapter = FunctionSearchProjectionAdapter(
         entity_types=("doc",),
-        load_documents=lambda db,: [
+        company_loader=lambda db: [
             {
                 "entity_type": "doc",
                 "entity_id": "doc-1",
             }
         ],
+        document_loader=lambda db, **kwargs: None,
     )
     monkeypatch.setattr(
         search_projections,
@@ -147,7 +147,7 @@ def test_company_backfill_rejects_projection_without_acl_fields(
         )
 
 
-def test_company_keyword_search_rejects_workspace_without_active_source(
+def test_company_keyword_search_rejects_query_without_active_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(search_service, "resolve_company_enabled_app_ids", lambda db: [])
@@ -205,7 +205,7 @@ def test_company_keyword_search_accepts_empty_company_index(
         def count_company_documents(
             self,
         ) -> int:
-            raise AssertionError("workspace document count must not gate search")
+            raise AssertionError("company document count must not gate search")
 
         def search(self, query: KeywordSearchQuery) -> KeywordSearchResult:
             captured_queries.append(query)

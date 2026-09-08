@@ -33,8 +33,6 @@ pytestmark = pytest.mark.migration
 
 _FILE_COUNT = 10_000
 _FILE_SIZE_BYTES = 1024 * 1024
-_WORKSPACE_A_ID = "scale-corpus-workspace-a"
-_WORKSPACE_B_ID = "scale-corpus-workspace-b"
 _ACTOR_ID = "scale-corpus-platform-admin"
 _OBSERVER_ID = "scale-corpus-observer"
 _FIRST_FILE_ID = "scale-corpus-file-00000"

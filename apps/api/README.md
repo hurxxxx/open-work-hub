@@ -12,11 +12,11 @@ FastAPI composition layer for health, auth, app bootstrap, domains, AI Gateway, 
 - Runtime env contract: root `.env.example` plus ignored `.env`
 - Do not commit secrets or operations data.
 - Readiness: `curl http://127.0.0.1:8001/readyz`
-- Authenticated AI health: `/api/v1/workspaces/{workspace_slug}/chatbot/health`
+- Authenticated AI health: `/api/v1/chatbot/health`
 - Executable app routes require the current user, declared execution context, and owning-app
-  runtime availability before domain source ACL is evaluated. Workspace routes additionally
-  require route-workspace membership; global routes never infer workspace context. Shell-owned
-  platform features may have their own explicit gates rather than an executable app identity.
+  company app admission before domain source ACL is evaluated. Core platform features retain
+  their explicit account and source permissions. PMS spaces are app-owned resources; they never
+  become a global execution context.
 - App bootstrap, route, and availability ownership: [App Platform Contract](../../docs/domains/app-platform/README.md).
 - Authenticated byte delivery: [Content Access](../../docs/domains/content-access/README.md).
 
@@ -37,7 +37,9 @@ MLX_MODEL=org/local-model-id bash scripts/mlx-serve.sh
 ## Alembic
 
 - Alembic owns schema. Do not reintroduce `Base.metadata.create_all()` or hand SQL compatibility lists.
-- Baseline revision: `3efcf1ed36c3` (`initial open work hub schema`).
+- Baseline revision: `company_20260908` (`company users, groups and app-owned access schema`).
+  Previous schemas and data are unsupported; upgrading an old product database is not a migration path.
+  See the [release cutover procedure](../../docs/domains/release/README.md).
 
 ```bash
 cd apps/api

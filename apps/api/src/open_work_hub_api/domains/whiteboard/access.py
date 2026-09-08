@@ -154,6 +154,7 @@ def whiteboard_query():
         selectinload(Whiteboard.owner),
         selectinload(Whiteboard.targets),
         selectinload(Whiteboard.user_shares).selectinload(WhiteboardUserShare.user),
+        selectinload(Whiteboard.group_shares),
         selectinload(Whiteboard.link_shares),
     )
 

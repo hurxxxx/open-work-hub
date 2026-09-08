@@ -6,7 +6,7 @@ import {
 } from './bento-route-paths';
 
 describe('bento route paths', () => {
-  it('builds the workspace hub from the generated route contract', () => {
+  it('builds the company hub from the generated route contract', () => {
     expect(buildBentoHubPath()).toBe('/apps/bento');
   });
 

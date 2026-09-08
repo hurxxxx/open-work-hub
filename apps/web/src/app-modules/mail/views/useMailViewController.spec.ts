@@ -183,7 +183,7 @@ function renderController(
 }
 
 describe('useMailViewController', () => {
-  it('loads workspace snapshots with trimmed message query and filters', async () => {
+  it('loads mail snapshots with trimmed message query and filters', async () => {
     const client = adapter();
     const { result } = renderController({
       client,

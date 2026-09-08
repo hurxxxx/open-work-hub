@@ -98,7 +98,7 @@ function BentoHub() {
     () => items.filter((item) => item.visibility === 'personal'),
     [items],
   );
-  const workspaceItems = useMemo(
+  const companyItems = useMemo(
     () => items.filter((item) => item.visibility === 'company'),
     [items],
   );
@@ -428,14 +428,14 @@ function BentoHub() {
               onDelete={(item) => void deleteItem(item)}
             />
             <BentoSection
-              title={t('apps:bento.workspaceSectionTitle')}
+              title={t('apps:bento.companySectionTitle')}
               empty={t(
                 archived
                   ? 'apps:bento.archiveEmpty'
-                  : 'apps:bento.workspaceSectionEmpty',
+                  : 'apps:bento.companySectionEmpty',
               )}
               icon={Users}
-              items={workspaceItems}
+              items={companyItems}
               archived={archived}
               timeZone={timeZone}
               locale={i18n.language}
@@ -548,7 +548,7 @@ function BentoHub() {
                     {t('apps:bento.visibilityPersonal')}
                   </option>
                   <option value="company">
-                    {t('apps:bento.visibilityWorkspace')}
+                    {t('apps:bento.visibilityCompany')}
                   </option>
                 </select>
               </label>
@@ -731,17 +731,16 @@ function BentoCard({
           onSelect: onRename,
         },
         {
-          id: 'personal',
-          label: t('bento.changeToPersonal'),
-          disabled: !item.can_manage || item.visibility === 'personal',
-          separatorBefore: true,
-          onSelect: () => onVisibilityChange('personal'),
-        },
-        {
           id: 'company',
-          label: t('bento.changeToWorkspace'),
+          separatorBefore: true,
+          label: t('bento.changeToCompany'),
           disabled: !item.can_manage || item.visibility === 'company',
           onSelect: () => onVisibilityChange('company'),
+        },
+        {
+          id: 'ownership-notice',
+          disabled: true,
+          label: t('bento.companyOwnershipNotice'),
         },
         {
           id: 'archive',
@@ -812,7 +811,7 @@ function BentoCard({
           )}
           {t(
             item.visibility === 'company'
-              ? 'bento.visibilityWorkspace'
+              ? 'bento.visibilityCompany'
               : 'bento.visibilityPersonal',
           )}
         </div>
@@ -1239,17 +1238,15 @@ function BentoEditor() {
             }
             items={[
               {
-                id: 'personal',
-                label: t('bento.changeToPersonal'),
-                disabled:
-                  !detail.can_manage || detail.visibility === 'personal',
-                onSelect: () => handleVisibilityChange('personal'),
-              },
-              {
                 id: 'company',
-                label: t('bento.changeToWorkspace'),
+                label: t('bento.changeToCompany'),
                 disabled: !detail.can_manage || detail.visibility === 'company',
                 onSelect: () => handleVisibilityChange('company'),
+              },
+              {
+                id: 'ownership-notice',
+                disabled: true,
+                label: t('bento.companyOwnershipNotice'),
               },
             ]}
           />

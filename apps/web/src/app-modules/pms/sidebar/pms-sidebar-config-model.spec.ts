@@ -71,7 +71,7 @@ describe('PMS sidebar personal projection', () => {
     });
   });
 
-  it('projects declared personal links with workspace href and exact active state', () => {
+  it('projects declared personal links with app href and exact active state', () => {
     const projected = projectPersonalSidebarItems({
       activeNavItemId: 'pms-inbox',
       filteredItems: [

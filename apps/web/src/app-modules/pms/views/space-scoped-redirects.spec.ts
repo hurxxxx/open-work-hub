@@ -40,10 +40,6 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-const user = {
-  workspaces: [{ id: 'default-workspace', slug: 'default' }],
-};
-
 describe('PMS space scoped redirects', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -78,11 +74,10 @@ describe('PMS space scoped redirects', () => {
     );
   });
 
-  it('uses the explicit workspace slug for space whiteboard deep links', () => {
+  it('preserves the explicit PMS space on whiteboard deep links', () => {
     expect(
       resolveSpaceWhiteboardsRedirectPath({
         spaceId: 'space-1',
-        user,
         whiteboardId: 'board-1',
       }),
     ).toBe('/apps/whiteboard/boards/board-1?space_id=space-1');

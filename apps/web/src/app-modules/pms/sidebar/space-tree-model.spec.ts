@@ -6,7 +6,6 @@ import { buildPmsSidebarSpaceTree } from './space-tree-model';
 function space(id: string, name: string): PmsSpace {
   return {
     id,
-    workspace_key: 'workspace',
     key: id,
     name,
     description: '',
@@ -28,9 +27,8 @@ function folder(
     team_id: teamId,
     name,
     sort_order: sortOrder,
-    created_at: '2026-05-30T00:00:00Z',
-    updated_at: '2026-05-30T00:00:00Z',
-  } as PmsFolder;
+    list_count: 0,
+  };
 }
 
 function list(

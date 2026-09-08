@@ -593,32 +593,32 @@ def test_search_access_filter_skips_unregistered_entity_rows() -> None:
     assert policy.calls == [("docs_native_doc", "doc-2"), ("docs_native_doc", "doc-1")]
 
 
-def test_partition_authorized_search_ignores_stale_workspace_payload() -> None:
+def test_search_filters_candidates_by_current_authorized_partition() -> None:
     partition_id = "11111111-1111-1111-1111-111111111111"
 
     class _Policy:
         def authorize_many_resources(self, resources):
             return set(resources)
 
-    stale_workspace_row = {
+    authorized_partition_row = {
         "retrieval_partition_id": partition_id,
         "entity_type": "doc",
         "entity_id": "doc-1",
     }
     wrong_partition_row = {
-        **stale_workspace_row,
+        **authorized_partition_row,
         "retrieval_partition_id": "22222222-2222-2222-2222-222222222222",
         "entity_id": "doc-2",
     }
 
     result = _filter_accessible_search_rows(
-        [stale_workspace_row, wrong_partition_row],
+        [authorized_partition_row, wrong_partition_row],
         _Policy(),
         allowed_entity_types=frozenset({"doc"}),
         authorized_partition_ids=(partition_id,),
     )
 
-    assert result == [stale_workspace_row]
+    assert result == [authorized_partition_row]
 
 
 def test_keyword_acl_refill_uses_pit_and_search_after_until_authorized_hit() -> None:

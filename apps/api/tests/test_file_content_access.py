@@ -23,7 +23,6 @@ from open_work_hub_api.domains.files.models import FileManagerCorpus, FileManage
 
 _USER_ID = "user-1"
 _SESSION_ID = "session-1"
-_WORKSPACE_ID = "workspace-1"
 
 
 def _settings() -> SimpleNamespace:
@@ -128,7 +127,7 @@ def test_previewable_image_accepts_only_safe_raster_types() -> None:
         assert not is_previewable_image(_file(content_type=content_type))
 
 
-def test_open_file_grant_rechecks_workspace_app_and_source_acl(monkeypatch) -> None:
+def test_open_file_grant_rechecks_company_app_admission_and_source_acl(monkeypatch) -> None:
     file = _file()
     _, claims = _claims(monkeypatch, file, disposition="inline")
     storage_object = _FakeObject([b"\x89PNG\r\n\x1a\n", b"png-bytes"])
@@ -144,7 +143,7 @@ def test_open_file_grant_rechecks_workspace_app_and_source_acl(monkeypatch) -> N
     assert storage_object.closed and storage_object.released
 
 
-def test_workspace_app_revoke_invalidates_grant_before_source_access(monkeypatch) -> None:
+def test_company_app_revoke_invalidates_grant_before_source_access(monkeypatch) -> None:
     file = _file()
     _, claims = _claims(monkeypatch, file)
     monkeypatch.setattr(content_access, "can_use_app", lambda *a, **k: False)

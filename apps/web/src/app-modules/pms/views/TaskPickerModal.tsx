@@ -48,7 +48,7 @@ export interface TaskPickerModalProps {
 const DEFAULT_TASK_PICKER_MODAL_COPY: TaskPickerModalCopy = {
   titleKey: 'pms.taskPicker.title',
   descriptionKey: 'pms.taskPicker.description',
-  appLabelKey: 'pms.taskPicker.pmsWorkspace',
+  appLabelKey: 'pms.taskPicker.pmsApp',
   noAccessActionKey: 'pms.taskPicker.attachAction',
   loadListsErrorKey: 'pms.taskPicker.errors.loadListsFailed',
   loadTasksErrorKey: 'pms.taskPicker.errors.loadTasksFailed',

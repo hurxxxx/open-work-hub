@@ -179,7 +179,7 @@ describe('recording collection workflow', () => {
     expect(deleteClient.listRecordings).toHaveBeenCalledTimes(1);
   });
 
-  it('guards missing token or workspace without API calls', async () => {
+  it('guards missing token without API calls', async () => {
     const guardedClient = client();
     const { result } = renderWorkflow({
       client: guardedClient,

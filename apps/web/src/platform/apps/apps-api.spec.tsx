@@ -1,3 +1,4 @@
+import { createAppsBootstrap } from '../../../tests/fixtures/company';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,18 +10,16 @@ vi.mock('@/src/platform/api/client', () => ({
 }));
 
 function appsBootstrap(userId: string): AppsBootstrapResponse {
-  return {
+  return createAppsBootstrap({
     apps: [],
-    global_route_app_ids: [],
     app_bar_categories: [],
     personal_tool_app_ids: [],
     principal: {
       kind: 'user',
-      scope: 'personal',
       source: 'test',
       user_id: userId,
     },
-  };
+  });
 }
 
 function deferred<T>() {
@@ -40,7 +39,7 @@ describe('company app bootstrap', () => {
 
   it('masks principal A synchronously while principal B is loading', async () => {
     const pendingB = deferred<AppsBootstrapResponse>();
-    vi.mocked(apiFetchJsonWithMappedError).mockImplementation((url) => {
+    vi.mocked(apiFetchJsonWithMappedError).mockImplementation(() => {
       if (vi.mocked(apiFetchJsonWithMappedError).mock.calls.length === 1) {
         return Promise.resolve(appsBootstrap('a'));
       }
@@ -74,7 +73,7 @@ describe('company app bootstrap', () => {
     const { result, rerender } = renderHook(
       ({ principalId }: { principalId: string | null }) =>
         useAppsBootstrap('token', principalId),
-      { initialProps: { principalId: 'user-x' } },
+      { initialProps: { principalId: 'user-x' as string | null } },
     );
 
     await waitFor(() =>

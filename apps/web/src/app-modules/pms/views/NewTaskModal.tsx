@@ -31,7 +31,7 @@ import { TaskPickerModal, type TaskPickerModalCopy } from './TaskPickerModal';
 const PARENT_TASK_PICKER_COPY: TaskPickerModalCopy = {
   titleKey: 'pms.parentTaskPicker.title',
   descriptionKey: 'pms.parentTaskPicker.description',
-  appLabelKey: 'pms.taskPicker.pmsWorkspace',
+  appLabelKey: 'pms.taskPicker.pmsApp',
   noAccessActionKey: 'pms.parentTaskPicker.action',
   loadListsErrorKey: 'pms.taskPicker.errors.loadListsFailed',
   loadTasksErrorKey: 'pms.parentTaskPicker.errors.loadTasksFailed',

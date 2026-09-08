@@ -92,11 +92,11 @@ describe('app module registry', () => {
   });
 
   it('keeps platform administration outside executable app routes', () => {
+    expect(staticAdminRedirectRoutes).toEqual([]);
     expect(settingsManifest.appRoutePaths).toEqual([]);
     expect(settingsManifest.staticAppRoutePaths ?? []).toEqual([]);
     expect(settingsManifest.staticGlobalRoutePaths).toEqual([
       staticAdminLandingRoute.path,
-      ...staticAdminRedirectRoutes.map((route) => route.path),
       ...staticAdminSectionRoutes.map((route) => route.path),
     ]);
     expect(getAppModuleAppRoutes('settings')).toEqual([]);
@@ -192,8 +192,8 @@ describe('app module registry', () => {
   it('rejects static and app routes that violate manifest ownership', () => {
     expect(() =>
       assertAppModuleStaticRouteContract('settings', {
-        appRoutes: [{ path: '/admin/unknown', element: null }],
-        globalRoutes: [{ path: '/admin/missing', element: null }],
+        appRoutes: [{ path: '/admin/unknown' }],
+        globalRoutes: [{ path: '/admin/missing' }],
       }),
     ).toThrow(/not declared in manifest settings/);
 

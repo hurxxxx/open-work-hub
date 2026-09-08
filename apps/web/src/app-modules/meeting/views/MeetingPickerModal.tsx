@@ -23,7 +23,7 @@ import {
 } from './meeting-picker-model';
 
 // listMeetings has no `q` parameter, so search remains client-side over the
-// returned workspace list until the Meeting API grows a server-side search.
+// returned meeting list until the Meeting API grows a server-side search.
 export interface MeetingPickerModalProps {
   isOpen: boolean;
   onClose: () => void;

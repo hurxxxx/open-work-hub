@@ -111,7 +111,7 @@ def _pending_file(file_id: str) -> FileManagerFile:
         filename=f"{file_id}.txt",
         content_type="text/plain",
         size_bytes=64,
-        storage_key=f"files/workspace-1/{file_id}.txt",
+        storage_key=f"files/{file_id}/document.txt",
         visibility="company",
         extraction_status="pending",
         extraction_blocks=[],

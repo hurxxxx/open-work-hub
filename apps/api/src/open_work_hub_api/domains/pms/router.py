@@ -2557,14 +2557,6 @@ def create_folder(
         created_by_id=current_user.id,
     )
     db.add(default_task_list)
-    if not db.scalar(
-        select(TeamMember.id).where(
-            TeamMember.team_id == resolved_team_id, TeamMember.user_id == current_user.id
-        )
-    ):
-        db.add(
-            TeamMember(id=new_id(), team_id=resolved_team_id, user_id=current_user.id, role="owner")
-        )
     _create_default_statuses(db, default_task_list.id)
     _create_default_labels(db, default_task_list.id)
 

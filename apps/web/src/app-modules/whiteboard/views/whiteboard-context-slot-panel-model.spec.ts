@@ -14,8 +14,34 @@ function board(id: string): WhiteboardDetail {
   return {
     id,
     title: `Board ${id}`,
+    ownership_kind: 'personal',
+    company_visible: false,
+    source_app: 'whiteboard',
+    source_type: 'whiteboard',
+    source_id: id,
+    source_kind: 'native',
+    source_ref: null,
+    generation_kind: 'manual',
+    location_label: 'Personal',
+    target_label: '',
+    primary_target: null,
+    targets: [],
+    source_badge: '',
+    source_deeplink: null,
+    created_by_id: 'user-1',
+    created_by_name: 'Member',
+    created_at: '2026-09-08T00:00:00Z',
+    updated_at: '2026-09-08T00:00:00Z',
+    trashed_at: null,
+    is_favorite: false,
+    is_private: true,
+    last_viewed_at: null,
+    can_view: true,
+    can_edit: true,
+    can_share: true,
+    can_manage: true,
     scene: { elements: [], appState: {}, files: {} },
-  } as WhiteboardDetail;
+  };
 }
 
 const context: WhiteboardContextRef = {

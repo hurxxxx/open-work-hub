@@ -95,7 +95,7 @@ describe('whiteboard API client', () => {
     vi.restoreAllMocks();
   });
 
-  it('uses route helpers for omitted query strings and workspace rewriting', async () => {
+  it('uses route helpers for omitted query strings and encoded target parameters', async () => {
     mockJsonResponse({ items: [], page: 1, page_size: 25, total: 0 });
 
     await listWhiteboardHub('token-1', {

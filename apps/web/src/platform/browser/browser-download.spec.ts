@@ -156,7 +156,9 @@ describe('browser download', () => {
 
   it('opens a blob in a new tab and schedules object URL cleanup', () => {
     const calls: string[] = [];
-    let scheduledCallback: (() => void) | null = null;
+    let scheduledCallback: () => void = () => {
+      throw new Error('Expected scheduled object URL cleanup');
+    };
     const adapter: BrowserBlobOpenAdapter = {
       createObjectUrl: () => {
         calls.push('createObjectUrl');
@@ -182,7 +184,7 @@ describe('browser download', () => {
       'scheduleRevoke:30000',
     ]);
 
-    scheduledCallback?.();
+    scheduledCallback();
 
     expect(calls.at(-1)).toBe('revokeObjectUrl:blob:preview-url');
   });

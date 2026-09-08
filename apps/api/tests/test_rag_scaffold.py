@@ -123,7 +123,7 @@ def test_ensure_rag_enabled_raises_domain_error(monkeypatch) -> None:
     assert exc_info.value.code == "rag.disabled"
 
 
-def test_workspace_rag_sources_require_ai_app_enablement(monkeypatch) -> None:
+def test_company_rag_sources_require_ai_app_enablement(monkeypatch) -> None:
     monkeypatch.setattr(
         rag_application,
         "allowed_app_ids",
@@ -139,7 +139,7 @@ def test_workspace_rag_sources_require_ai_app_enablement(monkeypatch) -> None:
     assert exc_info.value.code == "rag.access_denied_not_enabled"
 
 
-def test_workspace_rag_query_requires_searchable_app_enablement(monkeypatch) -> None:
+def test_company_rag_query_requires_searchable_app_enablement(monkeypatch) -> None:
     monkeypatch.setattr(
         rag_application,
         "allowed_app_ids",
@@ -161,7 +161,7 @@ def test_workspace_rag_query_requires_searchable_app_enablement(monkeypatch) -> 
     assert exc_info.value.code == "rag.access_denied_not_enabled"
 
 
-def test_workspace_rag_query_propagates_relaxed_app_gate_to_source_listing(
+def test_company_rag_query_propagates_relaxed_app_gate_to_source_listing(
     monkeypatch,
 ) -> None:
     class StubPolicy:
@@ -222,7 +222,7 @@ def test_workspace_rag_query_propagates_relaxed_app_gate_to_source_listing(
     assert response.query_profile == {"source_kinds": ["manual"]}
 
 
-def test_workspace_rag_query_allows_explicit_rag_app_gate(monkeypatch) -> None:
+def test_company_rag_query_allows_explicit_rag_app_gate(monkeypatch) -> None:
     class StubPolicy:
         def has_accessible_source(self, resource_type):
             return resource_type == "docs_native_doc"
@@ -299,7 +299,7 @@ def test_rag_query_filters_accept_storage_width_resource_ids() -> None:
         RagQueryFilters(resource_id=resource_id + "x")
 
 
-def test_workspace_rag_reindex_requires_ai_enablement(monkeypatch) -> None:
+def test_company_rag_reindex_requires_ai_enablement(monkeypatch) -> None:
     monkeypatch.setattr(
         rag_application,
         "resolve_company_enabled_app_ids",
@@ -375,7 +375,7 @@ def test_company_rag_reindex_enqueues_company_scope_jobs(monkeypatch) -> None:
     ]
 
 
-def test_company_rag_reindex_excludes_disabled_workspace_app_adapters(
+def test_company_rag_reindex_excludes_disabled_app_adapters(
     monkeypatch,
 ) -> None:
     adapter = SimpleNamespace(
@@ -403,7 +403,7 @@ def test_company_rag_reindex_excludes_disabled_workspace_app_adapters(
     )
 
 
-def test_workspace_rag_sources_expose_official_docs(monkeypatch) -> None:
+def test_company_rag_sources_expose_official_docs(monkeypatch) -> None:
     class StubPolicy:
         def visible_rag_native_doc_source_kinds(self):
             return ["manual", "custom_report", "minutes"]
@@ -451,7 +451,7 @@ def test_workspace_rag_sources_expose_official_docs(monkeypatch) -> None:
     ]
 
 
-def test_workspace_rag_sources_include_registered_domain_sources(monkeypatch) -> None:
+def test_company_rag_sources_include_registered_domain_sources(monkeypatch) -> None:
     class StubPolicy:
         def visible_rag_native_doc_source_kinds(self):
             return []
@@ -479,7 +479,7 @@ def test_workspace_rag_sources_include_registered_domain_sources(monkeypatch) ->
     assert sources == []
 
 
-def test_workspace_rag_reindex_enqueues_official_docs(monkeypatch) -> None:
+def test_company_rag_reindex_enqueues_official_docs(monkeypatch) -> None:
     class StubDb:
         def scalar(self, _statement):
             return None
@@ -528,7 +528,7 @@ def test_workspace_rag_reindex_enqueues_official_docs(monkeypatch) -> None:
     assert result["queued_count"] == 2
 
 
-def test_workspace_rag_reindex_force_bypasses_cooldown(monkeypatch) -> None:
+def test_company_rag_reindex_force_bypasses_cooldown(monkeypatch) -> None:
     class StubDb:
         def scalar(self, _statement):
             return None
@@ -577,7 +577,7 @@ def test_workspace_rag_reindex_force_bypasses_cooldown(monkeypatch) -> None:
     assert result["queued_count"] == 1
 
 
-def test_workspace_rag_reindex_resource_count_uses_registry(monkeypatch) -> None:
+def test_company_rag_reindex_resource_count_uses_registry(monkeypatch) -> None:
     monkeypatch.setattr(
         rag_application,
         "resolve_company_enabled_app_ids",
@@ -604,7 +604,7 @@ def test_workspace_rag_reindex_resource_count_uses_registry(monkeypatch) -> None
     }
 
 
-def test_workspace_rag_query_defaults_to_text_hits_when_binary_hits_not_requested(
+def test_company_rag_query_defaults_to_text_hits_when_binary_hits_not_requested(
     monkeypatch,
 ) -> None:
     captured_filters: dict[str, object] = {}
@@ -668,7 +668,7 @@ def test_workspace_rag_query_defaults_to_text_hits_when_binary_hits_not_requeste
     assert captured_filters == {"content_modality": "text"}
 
 
-def test_workspace_rag_query_respects_explicit_content_modality_filter(monkeypatch) -> None:
+def test_company_rag_query_respects_explicit_content_modality_filter(monkeypatch) -> None:
     captured_filters: dict[str, object] = {}
 
     class StubQueryService:
@@ -979,8 +979,8 @@ def test_rag_hydrates_source_metadata_before_final_acl_and_grounding() -> None:
             resource_id="file-1",
             source_kind="files",
             text_content="company handbook",
-            visibility_refs=["workspace:workspace-before-publication"],
-            metadata={"origin_ref": "/apps/files/workspaces/workspace-before?file=file-1"},
+            visibility_refs=["owner:former-owner"],
+            metadata={"origin_ref": "/apps/files?file=file-1&folder=former-folder"},
         ),
         collection="rag-source-hydration",
     )
@@ -1109,7 +1109,7 @@ def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch
             resource_type="file_manager_file",
             resource_id="file-1",
             source_kind="files",
-            visibility_refs=["workspace:stale-workspace"],
+            visibility_refs=["group:former-group"],
         ),
     )
     wrong_partition = stale_hit.model_copy(
@@ -1120,7 +1120,7 @@ def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch
         }
     )
 
-    workspace_filter = rag_access_filter.build_user_rag_post_filter(
+    user_filter = rag_access_filter.build_user_rag_post_filter(
         db,
         user=user,
         authorized_partition_ids=[partition_id],
@@ -1132,7 +1132,7 @@ def test_partition_authorized_rag_filters_ignore_stale_scope_payload(monkeypatch
         authorized_partition_ids=[partition_id],
     )
 
-    assert workspace_filter.filter_many([stale_hit, wrong_partition]) == [stale_hit]
+    assert user_filter.filter_many([stale_hit, wrong_partition]) == [stale_hit]
     assert company_filter.filter_many([stale_hit, wrong_partition]) == [stale_hit]
 
 
@@ -1156,7 +1156,7 @@ def test_rag_query_uses_wider_default_candidate_pool_for_rerank() -> None:
                 resource_id=f"doc-{index}",
                 source_kind="docs",
                 text_content=f"budget risk review candidate {index}",
-                visibility_refs=["workspace:ws-1"],
+                visibility_refs=["company_public"],
             ),
             collection="rag-rerank-candidate-pool",
         )

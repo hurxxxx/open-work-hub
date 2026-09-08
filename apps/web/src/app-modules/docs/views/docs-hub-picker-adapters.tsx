@@ -46,7 +46,7 @@ export function buildMeetingDocsHubPickerAdapter({
       empty: t('meeting.docPicker.empty'),
       loadFailed: t('meeting.docPicker.loadFailed'),
       attachFailed: t('meeting.docPicker.attachFailed'),
-      noAccessAppLabel: t('meeting.docPicker.docsWorkspace'),
+      noAccessAppLabel: t('meeting.docPicker.docsApp'),
       noAccessAction: t('meeting.docPicker.attachAction'),
     },
     getDocId: getSourceDocId,

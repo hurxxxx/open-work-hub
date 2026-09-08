@@ -282,7 +282,7 @@ def test_file_chat_evidence_filters_candidate_after_app_admission_revoke(
     uploaded = _upload_company_file(
         client,
         corpus_name="Company chat evidence",
-        filename="workspace-secret.txt",
+        filename="private-source.txt",
     )
     dev_login(client, "delivery-hub-member")
 
@@ -300,8 +300,8 @@ def test_file_chat_evidence_filters_candidate_after_app_admission_revoke(
             hits=[
                 _retrieval_hit(
                     file_id=uploaded["id"],
-                    filename="workspace-secret.txt",
-                    excerpt="WORKSPACE-SECRET-CONTEXT",
+                    filename="private-source.txt",
+                    excerpt="PRIVATE-SOURCE-CONTEXT",
                 )
             ],
         )

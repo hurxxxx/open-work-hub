@@ -7,7 +7,7 @@ describe('Files search API', () => {
     vi.unstubAllGlobals();
   });
 
-  it('posts paged criteria through the Files workspace endpoint with cancellation', async () => {
+  it('posts paged criteria through the Files app endpoint with cancellation', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({

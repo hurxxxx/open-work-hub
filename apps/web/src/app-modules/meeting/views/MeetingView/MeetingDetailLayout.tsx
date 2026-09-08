@@ -1,7 +1,7 @@
-// Two-pane meeting workspace: collaborative notes editor on the left + the
+// Two-pane meeting detail: collaborative notes editor on the left + the
 // MeetingDetail sidebar on the right. Extracted from MeetingDetailView so
 // the same layout can be hosted in:
-//   - the dedicated workspace-scoped meeting detail route
+//   - the dedicated meeting detail route
 //   - an embedded modal (the calendar's MeetingPreviewModal)
 //
 // Loads + ensures meeting notes, manages title editing, threads onChanged /
@@ -79,7 +79,7 @@ export interface MeetingDetailLayoutProps {
   onClose?: () => void;
   /**
    * Where the back-arrow link points when no ``onClose`` is provided.
-   * Defaults to the meetings root for the current workspace.
+   * Defaults to the Meeting app root.
    */
   backHref?: string;
 }
@@ -166,11 +166,11 @@ function useMeetingDetailLayoutElement({
     string | null
   >(null);
 
-  const loadWorkspace = useCallback(async () => {
+  const loadMeeting = useCallback(async () => {
     if (!token) {
       dispatch({
         type: 'loadFailed',
-        error: t('meeting.workspace.loadFailed'),
+        error: t('meeting.detailView.loadFailed'),
       });
       return;
     }
@@ -200,7 +200,7 @@ function useMeetingDetailLayoutElement({
         const innerNotesDocId = current.notes_doc_id;
         const innerNotesPageId = current.notes_page_id;
         if (!innerNotesDocId || !innerNotesPageId) {
-          throw new Error(t('meeting.workspace.notesPrepareFailed'));
+          throw new Error(t('meeting.detailView.notesPrepareFailed'));
         }
         const [doc, pages] = await Promise.all([
           getDocsItem(resolvedToken, innerNotesDocId, null),
@@ -230,7 +230,7 @@ function useMeetingDetailLayoutElement({
         ({ doc, page } = await loadNotesFor(detail));
       }
       if (!page) {
-        throw new Error(t('meeting.workspace.notesPageFailed'));
+        throw new Error(t('meeting.detailView.notesPageFailed'));
       }
 
       dispatch({
@@ -245,14 +245,14 @@ function useMeetingDetailLayoutElement({
         error:
           err instanceof Error
             ? err.message
-            : t('meeting.workspace.loadFailed'),
+            : t('meeting.detailView.loadFailed'),
       });
     }
   }, [canReadDocs, meetingId, t, token, user]);
 
   useEffect(() => {
-    void loadWorkspace();
-  }, [loadWorkspace]);
+    void loadMeeting();
+  }, [loadMeeting]);
 
   useEffect(() => {
     if (!token || !notesDocId || !notesPageId) {
@@ -319,7 +319,7 @@ function useMeetingDetailLayoutElement({
             to={meetingsRoot}
             className="app-text-control-sm rounded-md border border-app-border px-3 py-2 text-app-ink hover:bg-app-surface-hover"
           >
-            {t('meeting.workspace.backToMeetings')}
+            {t('meeting.detailView.backToMeetings')}
           </Link>
         )}
       </div>
@@ -339,7 +339,7 @@ function useMeetingDetailLayoutElement({
         <MeetingDetail
           meetingId={meetingId}
           onChanged={() => {
-            void loadWorkspace();
+            void loadMeeting();
             onChanged?.();
           }}
           onDeleted={() => onDeleted?.()}
@@ -362,7 +362,7 @@ function useMeetingDetailLayoutElement({
   );
 
   const handleChanged = () => {
-    void loadWorkspace();
+    void loadMeeting();
     onChanged?.();
   };
 
@@ -409,7 +409,7 @@ function useMeetingDetailLayoutElement({
             <div className="flex shrink-0 items-center gap-2">
               {!detailPanelDocked ? (
                 <button
-                  aria-label={t('meeting.workspace.openDetails')}
+                  aria-label={t('meeting.detailView.openDetails')}
                   className="app-text-control-sm inline-flex h-9 items-center gap-1 rounded-md border border-app-border px-3 text-app-ink transition-colors hover:bg-app-surface-hover"
                   onClick={() =>
                     dispatch({ type: 'setDetailOpen', open: true })
@@ -418,20 +418,20 @@ function useMeetingDetailLayoutElement({
                 >
                   <PanelRightOpen size={14} />
                   <span className="hidden sm:inline">
-                    {t('meeting.workspace.detail')}
+                    {t('meeting.detailView.detail')}
                   </span>
                 </button>
               ) : null}
               {notesDocPath ? (
                 <Link
-                  aria-label={t('meeting.workspace.openInDocs')}
+                  aria-label={t('meeting.detailView.openInDocs')}
                   to={notesDocPath}
                   target={onClose ? '_blank' : undefined}
                   rel={onClose ? 'noopener noreferrer' : undefined}
                   className="app-text-control-sm inline-flex h-9 items-center gap-1 rounded-md border border-app-border px-3 text-app-ink transition-colors hover:bg-app-surface-hover"
                 >
                   <span className="hidden sm:inline">
-                    {t('meeting.workspace.openInDocsShort')}
+                    {t('meeting.detailView.openInDocsShort')}
                   </span>
                   <ExternalLink size={13} />
                 </Link>
@@ -456,11 +456,11 @@ function useMeetingDetailLayoutElement({
               <div className="space-y-4">
                 {canEditNotes ? (
                   <input
-                    aria-label={t('meeting.workspace.notesPlaceholder')}
+                    aria-label={t('meeting.detailView.notesPlaceholder')}
                     key={notesPage.id}
                     type="text"
                     defaultValue={notesPage.title}
-                    placeholder={t('meeting.workspace.notesPlaceholder')}
+                    placeholder={t('meeting.detailView.notesPlaceholder')}
                     className="app-text-title-xl w-full bg-transparent text-app-ink placeholder:text-app-ink/30 focus:outline-none"
                     onBlur={(event) => void handleTitleSave(event.target.value)}
                     onKeyDown={(event) => {
@@ -480,7 +480,7 @@ function useMeetingDetailLayoutElement({
                   </h2>
                 )}
                 <p className="app-text-caption text-app-ink/50">
-                  {t('meeting.workspace.notesSync')}
+                  {t('meeting.detailView.notesSync')}
                 </p>
               </div>
 
@@ -520,7 +520,7 @@ function useMeetingDetailLayoutElement({
                       preparing: t('docs.collab.preparing'),
                       tooManyConnections: t('docs.collab.tooManyConnections'),
                     }}
-                    placeholder={t('meeting.workspace.editorPlaceholder')}
+                    placeholder={t('meeting.detailView.editorPlaceholder')}
                     uploadFile={notesUploadFile}
                     resolveFileUrl={resolveFileUrl}
                     onChange={(content) => {
@@ -579,11 +579,11 @@ function useMeetingDetailLayoutElement({
 
       <DetailDrawer
         contentClassName="border-app-border bg-app-surface"
-        description={t('meeting.workspace.detailDrawerDescription')}
+        description={t('meeting.detailView.detailDrawerDescription')}
         embedded
         onOpenChange={(open) => dispatch({ type: 'setDetailOpen', open })}
         open={detailOpen && !detailPanelDocked}
-        title={t('meeting.workspace.detailDrawerTitle')}
+        title={t('meeting.detailView.detailDrawerTitle')}
       >
         <MeetingDetail
           meetingId={meetingId}

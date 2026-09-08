@@ -76,7 +76,7 @@ export function buildWhiteboardVisibilityMenuItems({
       label: t('whiteboard.visibilityCurrent', {
         visibility: t(
           currentVisibility === 'company'
-            ? 'whiteboard.visibilityWorkspace'
+            ? 'whiteboard.visibilityCompany'
             : 'whiteboard.visibilityPersonal',
         ),
       }),
@@ -99,10 +99,16 @@ export function buildWhiteboardVisibilityMenuItems({
       label: (
         <span className="inline-flex items-center gap-2">
           <Users size={14} />
-          {t('whiteboard.changeToWorkspace')}
+          {t('whiteboard.changeToCompany')}
         </span>
       ),
       onSelect: () => onChange('company'),
+    },
+    {
+      id: 'scope-notice',
+      separatorBefore: true,
+      disabled: true,
+      label: t('whiteboard.visibilityScopeNotice'),
     },
     {
       id: 'manage-required',
@@ -218,9 +224,9 @@ export function WhiteboardCard({
   ) => void;
 }) {
   const { t, i18n } = useTranslation('apps');
-  const visibility: WhiteboardVisibility = item.is_private
-    ? 'personal'
-    : 'company';
+  const visibility: WhiteboardVisibility = item.company_visible
+    ? 'company'
+    : 'personal';
   return (
     <article
       role="button"
@@ -291,7 +297,7 @@ export function WhiteboardCard({
             })}
           </p>
           <p className="app-text-body-sm mt-1 truncate text-app-ink/45">
-            {item.location_label || t('whiteboard.fallbackWorkspace')}
+            {item.location_label || t('whiteboard.fallbackCompany')}
           </p>
           <p className="app-text-body-sm mt-1 truncate text-app-ink/45">
             {item.created_by_name || t('whiteboard.unknown')}
@@ -305,7 +311,7 @@ export function WhiteboardCard({
             <span className="truncate">
               {t(
                 visibility === 'company'
-                  ? 'whiteboard.visibilityWorkspace'
+                  ? 'whiteboard.visibilityCompany'
                   : 'whiteboard.visibilityPersonal',
               )}
             </span>
@@ -362,9 +368,9 @@ export function WhiteboardListTable({
           </thead>
           <tbody className="divide-y divide-app-border">
             {items.map((item) => {
-              const visibility: WhiteboardVisibility = item.is_private
-                ? 'personal'
-                : 'company';
+              const visibility: WhiteboardVisibility = item.company_visible
+                ? 'company'
+                : 'personal';
               return (
                 <tr
                   key={item.id}
@@ -393,8 +399,7 @@ export function WhiteboardListTable({
                     <span className="inline-flex max-w-[220px] items-center gap-2 truncate">
                       <MapPin size={14} className="shrink-0 text-app-ink/35" />
                       <span className="truncate">
-                        {item.location_label ||
-                          t('whiteboard.fallbackWorkspace')}
+                        {item.location_label || t('whiteboard.fallbackCompany')}
                       </span>
                     </span>
                   </td>

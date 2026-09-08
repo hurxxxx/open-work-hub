@@ -1,17 +1,27 @@
+import { createAuthUser } from '../../../../tests/fixtures/company';
+import type { MeetingDetail } from './meeting-api';
 import { describe, expect, it } from 'vitest';
-import type { AuthUser } from '@/src/platform/auth/auth-api';
 import {
   canAttachToMeeting,
   canEditMeeting,
   canInviteAttendees,
   canRemoveAttachment,
 } from './meeting-permissions';
-const meeting = {
+const meeting: Pick<MeetingDetail, 'organizer_id' | 'attendees'> = {
   organizer_id: 'organizer',
-  attendees: [{ user_id: 'attendee' }],
+  attendees: [
+    {
+      id: 'attendee-record-1',
+      user_id: 'attendee',
+      email: 'attendee@example.test',
+      full_name: 'Attendee',
+      role: 'required',
+      response: 'accepted',
+    },
+  ],
 };
 const user = (id: string, system_roles: string[] = []) =>
-  ({ id, system_roles }) as AuthUser;
+  createAuthUser({ id, system_roles });
 describe('meeting business roles', () => {
   it('keeps metadata changes organizer-only even for a platform administrator', () => {
     expect(canEditMeeting(user('organizer'), meeting)).toBe(true);

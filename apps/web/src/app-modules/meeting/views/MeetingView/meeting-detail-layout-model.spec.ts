@@ -82,7 +82,7 @@ function loadedState(
   };
 }
 
-describe('meeting workspace layout model', () => {
+describe('meeting detail layout model', () => {
   it('marks loads as in-flight and clears stale errors', () => {
     const state = meetingDetailReducer(
       loadedState({ error: 'Previous failure' }),
@@ -130,7 +130,7 @@ describe('meeting workspace layout model', () => {
   it('clears loaded data and stores the error after a failed load', () => {
     const state = meetingDetailReducer(loadedState({ loading: true }), {
       type: 'loadFailed',
-      error: 'Unable to load workspace',
+      error: 'Unable to load meeting',
     });
 
     expect(state).toMatchObject({
@@ -138,7 +138,7 @@ describe('meeting workspace layout model', () => {
       notesDoc: null,
       notesPage: null,
       loading: false,
-      error: 'Unable to load workspace',
+      error: 'Unable to load meeting',
     });
   });
 
@@ -192,7 +192,7 @@ describe('meeting workspace layout model', () => {
     expect(nextState.notesPage?.title).toBe('Notes');
   });
 
-  it('formats the meeting workspace date range', () => {
+  it('formats the meeting detail date range', () => {
     expect(
       formatMeetingDetailRange(
         '2026-05-30T01:00:00',

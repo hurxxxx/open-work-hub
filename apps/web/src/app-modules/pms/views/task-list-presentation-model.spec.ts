@@ -204,6 +204,7 @@ function task(overrides: Partial<PmsTask> = {}): PmsTask {
     checklist_done: 0,
     checklist_total: 0,
     comments_count: 0,
+    completed_date: null,
     description: '',
     description_blocks: null,
     due_date: null,

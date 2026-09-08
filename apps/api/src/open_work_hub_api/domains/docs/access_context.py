@@ -210,6 +210,7 @@ def doc_query():
         selectinload(NativeDoc.owner),
         selectinload(NativeDoc.pages).selectinload(NativeDocPage.created_by),
         selectinload(NativeDoc.user_shares).selectinload(NativeDocUserShare.user),
+        selectinload(NativeDoc.group_shares),
         selectinload(NativeDoc.link_shares),
         selectinload(NativeDoc.targets),
         selectinload(NativeDoc.collection),

@@ -44,7 +44,7 @@ vi.mock('@/src/components/date/DateInput', () => ({
 vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({
     token: 'token-1',
-    user: { id: 'user-1', workspaces: [{ slug: 'workspace-1' }] },
+    user: { id: 'user-1' },
   }),
 }));
 
@@ -94,7 +94,7 @@ describe('NewTaskModal', () => {
     ).toBeNull();
   });
 
-  it('keeps the workspace selector out of workspace-scoped PMS modals', () => {
+  it('keeps the deleted workspace selector out of PMS task modals', () => {
     render(
       <NewTaskModal
         isOpen

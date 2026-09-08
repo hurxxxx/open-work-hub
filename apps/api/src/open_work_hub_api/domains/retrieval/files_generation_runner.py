@@ -100,9 +100,7 @@ _OPENSEARCH_MUTABLE_ACL_FIELDS = frozenset(
     }
 )
 _QDRANT_MUTABLE_ACL_FIELDS = frozenset({"scope_kind", "visibility_refs"})
-_QDRANT_MUTABLE_ACL_METADATA_FIELDS = frozenset(
-    {"origin_ref", "visibility", "access_scope_kind"}
-)
+_QDRANT_MUTABLE_ACL_METADATA_FIELDS = frozenset({"origin_ref", "visibility", "access_scope_kind"})
 
 
 class ProjectionContractDigest:
@@ -708,7 +706,7 @@ class FilesGenerationRunner:
             sorted({str(scope or "").strip().lower() for scope in scope_coverage})
         )
         if not normalized_scopes or any(
-            scope not in {"company", "company", "personal"} for scope in normalized_scopes
+            scope not in {"company", "personal"} for scope in normalized_scopes
         ):
             raise FilesGenerationError("attestation_scope_coverage_invalid")
 
@@ -1447,7 +1445,7 @@ class FilesGenerationRunner:
                 }
         except Exception as error:
             raise FilesGenerationError("attestation_scope_inspection_failed") from error
-        if not scopes or any(scope not in {"company", "company", "personal"} for scope in scopes):
+        if not scopes or any(scope not in {"company", "personal"} for scope in scopes):
             raise FilesGenerationError("attestation_scope_inspection_failed")
         return tuple(sorted(scopes))
 

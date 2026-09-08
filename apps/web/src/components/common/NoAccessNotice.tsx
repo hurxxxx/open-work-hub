@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface NoAccessNoticeProps {
-  /** User-facing workspace label, usually already localized by the caller. */
+  /** User-facing app label, usually already localized by the caller. */
   appLabel: string;
   /** User-facing action phrase, usually already localized by the caller. */
   action: string;
@@ -12,12 +12,12 @@ interface NoAccessNoticeProps {
 }
 
 /**
- * Standardized notice rendered when the current user lacks the workspace
- * feature required for an action. Used inside picker modals and any other
+ * Standardized notice rendered when the current user lacks the app access
+ * or feature required for an action. Used inside picker modals and any other
  * surface that surfaces a feature the user can see but can't use.
  *
- * Pair with ``useAuth().hasFeature(...)`` to gate the data-fetching effects
- * upstream so the API call that would 403 is never even fired.
+ * Pair with the current app admission projection to gate upstream data fetching.
+ * The server still enforces current app and resource permissions.
  */
 export function NoAccessNotice({
   appLabel,

@@ -66,7 +66,7 @@ class DocsReaderTest(unittest.TestCase):
                 reader.run(['psql'])
 
     def test_media_limits_and_no_clobber(self):
-        media = {'id': MEDIA_ID, 'filename': 'image.bin', 'storage_key': 'workspace/object', 'size_bytes': 1}
+        media = {'id': MEDIA_ID, 'filename': 'image.bin', 'storage_key': 'docs/object', 'size_bytes': 1}
         with tempfile.TemporaryDirectory() as output, patch.object(reader, 'container_running', return_value=True), patch.object(reader, 'run') as run:
             with self.assertRaisesRegex(ValueError, '50 MiB'):
                 reader.copy_media([{**media, 'size_bytes': reader.MAX_MEDIA_BYTES + 1}], Path(output))

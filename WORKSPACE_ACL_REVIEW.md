@@ -2,10 +2,131 @@
 
 검토 기준: 2026-09-08, 로컬 `dev`. 이번 작업은 기존 워크스페이스 정책을 확정 정책으로
 간주하지 않고 설계부터 대체하는 변경이다. 기존 라우트·스키마·데이터 호환은 요구하지 않는다.
-**상태: 재설계·보안 보완, 커밋·푸시, 개발·운영 배포 완료. 전체 릴리스 CI와 배포 smoke를
-통과했다. 공개 사용자 검증의 미실행·차단 항목은 아래에 별도 기록한다.**
+**상태: 기존 재설계 배포 후 잔재 정리와 권한 동작의 재감사를 진행했다. 단어·스키마 검색을
+통과한 뒤에도 PMS 권한 상승, 메일 작업의 권한 회수 누락, 공개 범위 오표시와 조직 동시 이동
+순환을 추가 발견했다.
+이번 후속 diff는 미커밋·운영 미배포이며, 아래 이전 릴리스 증거와 구분한다.
+남은 구조 정리와 공개 사용자 검증의 미실행·차단 항목도 별도 기록한다.**
 
-## 최종 릴리스 및 배포 증거
+## 권한 동작 재감사
+
+전역 workspace 문자열이 없어졌다는 사실만으로 권한 재설계가 완결되지는 않았다.
+그룹을 통한 접근 → 자원 생성 → 그룹 권한 회수, 비동기 작업 도중 권한 회수,
+회사 소유·전사 공개·프로젝트 연결·선택 공유의 독립성을 실제 함수와 화면으로 확인했다.
+
+| 추가 발견 | 영향과 개선 |
+| --- | --- |
+| **PMS 그룹 사용자의 직접 owner 승격** | 그룹 member/admin이 기존 공간에 폴더·리스트를 만들면 직접 owner가 추가되어 그룹 권한 회수 후에도 접근이 유지됐다. 자동 멤버 생성 경로를 제거하고 생성 응답도 실제 역할을 반환한다. 새 스페이스 최초 생성자의 owner 부여만 유지한다. |
+| **메일 동기화의 사용자 앱 권한 누락** | 회사 활성 설정만 검사해 계정 차단·비활성·임시 비밀번호·앱 대상 사용자/그룹 회수 후에도 외부 조회와 저장이 실행됐다. 공통 현재 소유자 권한 검사를 claim·provider 호출 전·외부 응답 후/저장 전에 적용하고 회수된 작업은 재시도 없이 cancelled로 끝낸다. |
+| **Docs/Whiteboard 개인 전용 오표시** | 그룹 공유 또는 제한된 회사 소유 콘텐츠도 개인 전용으로 표시될 수 있었다. 사용자·그룹·활성 링크·프로젝트 공유와 소유권을 반영하고 기존 관계를 일괄 로드한다. DB 컬럼·API 형식은 변경하지 않는다. |
+| **Docs 공개 범위와 연결 위치의 혼동** | 프로젝트를 선택해도 전사 공개가 유지되고, 비공개를 선택해도 프로젝트 권한이 남았다. 회사 공개 checkbox와 대표 프로젝트 연결을 분리하고 다른 연결·사용자·그룹·링크 권한이 유지됨을 설명한다. 권한 회수·화면 종료 뒤 오래된 응답도 반영하지 않는다. |
+| **Whiteboard 목록·공개 메뉴의 잘못된 기준** | `is_private=false`인 프로젝트/선택 공유 보드를 전사 공개로 분류해 공개 버튼까지 비활성화했다. `company_visible`로 분류하고 회사 공개 해제를 제한 공개로 표현한다. 카드·표 모두 전사 공개와 해제 동작을 검증한다. |
+| **정책상 불가능한 권한 선택** | PMS 일반 관리자에게 owner만 부여할 수 있는 admin 선택을 노출하고, Bento/Diagrams에서 회사 소유를 개인 소유로 되돌리는 버튼을 제공했다. 서버 정책에 맞게 선택지를 제거하고 회사 소유의 불가역성을 설명한다. |
+| **동시 조직 이동에 의한 순환** | 두 관리자가 서로 다른 트리를 교차 이동하면 각 검사는 성공하지만 최종 부모 관계가 순환했다. 실제 격리 PostgreSQL의 두 트랜잭션과 공개 handler로 재현했다. 행 잠금 이전에 조직 계층 전용 트랜잭션 잠금을 잡고 최신 부모 관계를 다시 읽어 한 요청만 성공하게 한다. 직접 권한 상승과는 구분되는 조직 무결성 결함이다. |
+| **RAG 타입·필드 중복 선언** | 제거된 범위 인자가 있는 타입 alias와 같은 dataclass 필드가 중복 선언되어 뒤 선언에 가려졌다. 실제 한 인자 계약과 단일 필드로 정리한다. |
+
+정책 원본은 [App Platform](docs/domains/app-platform/README.md)에 보완했다.
+UI 검증은 실제 컴포넌트 렌더와 모의 API를 사용하며 운영 화면 검증과 구분한다.
+조직 동시성 계약은 [Organization](docs/domains/organization/README.md)에 보완했다.
+메일 검사로 이미 진행 중인 외부 통신을 즉시 끊는다고 주장하지 않는다. 조회가 반환된 뒤 현재
+권한을 다시 검사해 결과·체크포인트를 버리고 후속 실행을 차단하는 경계를 검증했다.
+
+### 이번 재감사의 잔여 항목
+
+- 과거 잘못 생성된 PMS 직접 owner와 정상적으로 지정한 owner를 구분하는 provenance가 없다.
+  이번 수정은 신규 승격을 차단하며 기존 owner를 일괄 삭제하지 않는다. 기존 배정의 정당성은
+  감사 기록과 비교해 별도 확인해야 한다.
+- 대리 로그인 발급 API는 제거됐지만 `auth_sessions.impersonator_user_id` 컬럼과 세션 해석·회수,
+  일부 감사 표시 코드가 남아 있다. 현재 발급 호출부는 해당 값을 전달하지 않으며 외부에서 새로
+  발급하는 경로는 발견하지 못했다. 공격 경로가 확인된 결함과 구분하되, 완전한 기능 제거를 위해
+  세션 소비 코드·컬럼/FK/index를 함께 없애는 별도 마이그레이션 정리가 남는다.
+- 이번 변경은 배포하지 않았다. 아래 기존 운영 릴리스에는 이번 추가 보완이 포함되지 않는다.
+  기존 ASR 성공 경로·공개 UAT·복구 검증의 한계도 유지된다.
+
+### 재감사 검증
+
+PMS 결함은 수정 전 권한 회수 실패 8건, 공유 표시 결함은 오표시 8건을 재현했다.
+조직의 두 요청은 수정 전 모두 성공해 순환을 만들었고, 수정 후에는 하나만 성공한다.
+수정 후 해당 PMS·공유 API 회귀 24개, Docs·PMS 화면 관련 101개, Whiteboard 카드·표 공개
+흐름 2개, 메일 격리 회귀 34개가 통과했다.
+
+| 검사 | 이번 재감사 결과 |
+| --- | --- |
+| `OPEN_WORK_HUB_API_PYTEST_WORKERS=2 pnpm ci:api:full` | 종료 코드 0. fast 2,372·slow 18·migration 17·external integration 14, **총 2,421개 통과·기존 skip 1개**. 새 조직 PostgreSQL 동시성 회귀 2개 포함 |
+| `pnpm test:api:vm tests/test_organization_concurrency_migrations.py tests/test_organization_integrations.py -q` | 5개 통과. 실제 두 PostgreSQL 트랜잭션·실제 handler에서 최신/미리 읽은 ORM 상태 모두 검사 |
+| 마지막 조직 수정 후 `pnpm check:api-architecture`, `pnpm nx lint api`, `pnpm nx typecheck api` | 모두 종료 코드 0. 전체 테스트 시작 이후의 조직 보완도 소스 검사 완료 |
+| Worker `python -m pytest tests/test_mail_tasks.py -q`, `tests/test_worker_task_registration.py -q`, `pnpm nx lint worker` | 각각 2개·1개 통과, lint 통과. 권한 회수의 terminal cancellation 및 등록 경계 확인 |
+| `pnpm exec tsc -p apps/web/tsconfig.spec.json --noEmit` | 종료 코드 0, 테스트 타입 오류 없음 |
+| `VITEST_MAX_WORKERS=1 PLAYWRIGHT_WORKERS=1 NODE_OPTIONS=--max-old-space-size=3072 pnpm ci:web` | 종료 코드 0. 웹 **1,400개·298파일**, core-web 62개, 브라우저 셸 19개 통과. architecture·i18n·앱 typecheck·lint·OpenAPI 확인·빌드 포함 |
+| `pnpm check:skills`, `pnpm check:env-contract`, `git diff --check` | 통과. 253개 환경 키·207개 typed setting 일치, 실제 환경 값 수정 없음 |
+
+보고서의 로컬 문서 링크도 모두 확인했다. 추가 cgroup OOM kill은 0회다.
+API pytest에는 Starlette deprecation과
+`y_py` 객체의 다른 스레드 종료 경고가 남는다. 이 권한 보완에서 해당 라이브러리 경고의 원인
+분석·해결을 완료했다고 주장하지 않는다.
+
+## 후속 잔재 정리
+
+추가 감사에서 실행 권한 모델과 활성 DB의 전환은 확인했으나, 사용자 도움말·AI 안내·설계
+문서·지침·정상 테스트 입력에 이전 정책이 남아 있음을 발견했다. 단어 검색에 더해 실제
+번역 호출, 생성 계약, 테스트 타입, DB 메타데이터와 폐기 API 응답을 확인했다.
+
+| 발견 | 정리 내용 |
+| --- | --- |
+| PMS 도움말이 전역 공간 선택과 이전 계층을 안내 | 한국어·영어 안내를 회사 앱 사용 권한과 PMS 내부 스페이스·역할로 정리 |
+| Retrieval 설명이 이전 `workspace` 인자를 보내고 `{{app}}`가 화면에 남음 | 현재 회사 범위 문구와 보간 인자를 일치시키고 실제 한·영 렌더링 회귀로 검증 |
+| API README·AI 기본 안내에 폐기된 라우트·멤버십·baseline 존재 | 현재 회사/개인 실행과 앱·원본 ACL, `company_20260908` 기준으로 갱신 |
+| Accepted ADR이 이전 정책을 현행으로 안내하고 AI 지침이 이를 재참조 | 완전 대체 ADR은 폐기 안내로 축약, 부분 대체 ADR은 유효 계약만 유지하고 ADR 0012·현행 소유 문서로 연결 |
+| 테스트가 삭제된 사용자 필드·scope·URL·props로 정상 동작을 기대 | 현재 사용자·앱·회사·PMS 계약으로 fixture를 갱신하고 폐기 입력은 거부 사례로 구분 |
+| 검색 체크섬 계산 요청에 삭제된 정렬 조건의 빈 객체가 남음 | `entity_type`·`entity_id` 두 정렬 기준과 `search_after` 커서를 일치시키는 회귀를 추가하고 빈 정렬항 제거 |
+| 내부 컴포넌트·번역 키·테스트 이름·설정 경로가 이전 개념 사용 | 실제 회사/앱 기능에 맞는 이름으로 참조를 함께 정리하고 없는 E2E 입력 경로 제거 |
+| 제거한 범위 항목이 타입 선언과 집합에 잔존 | RAG identity 타입을 실제 4요소로 맞추고 retrieval의 중복 `company` 값 세 곳 제거 |
+| 개발 검색 캐시에 이전 스키마·원본 없는 문서가 남음 | 현재 PostgreSQL 원본 3개와 구 인덱스 9개를 대조하여 폐기 데이터 6개를 식별. 개발 검색 캐시를 현재 스키마로 재생성하고 원본 identity 집합을 검증 |
+| 실제 검색 재구축이 없는 `adapter_id` 속성 참조로 실패 | projection adapter의 공개 계약으로 진단 문맥을 구성하고 실제 adapter 형식의 비어 있지 않은 결과로 회귀 검증 |
+
+일반 앱 타입 검사와 Vitest 실행만으로는 테스트 fixture의 삭제된 필드가 검출되지 않았다.
+회사 사용자·앱 bootstrap·PMS·DM fixture를 생성 DTO에 맞추고,
+[검증 지침](docs/agents/vibe-coding-harness.md#router)에 테스트 변경 시 spec 타입 검사도 명시했다.
+
+활성 개발·운영 DB는 각각 `company_20260908`, 제품 테이블 161개와 Alembic 테이블 1개다.
+두 환경 모두 전역 workspace 관계·권한 컬럼·enum·view·routine은 없으며, JSON 컬럼 71개씩에서
+검사한 이전 구조 키도 발견되지 않았다. 확인한 구 관리자/앱 bootstrap/DM API는 모두 404였다.
+이 확인은 읽기 전용 트랜잭션으로 수행했고 업무 데이터 내용이나 비밀 값을 출력하지 않았다.
+
+검색 저장소까지 확장한 감사에서는 개발의 현재 별칭이 가리키는 v2 bootstrap 인덱스에 이전
+매핑과 원본 없는 문서 6개가 남아 있었다. 현재 원본은 Docs 2개·PMS 태스크 1개였다.
+개발 쓰기 프로세스를 정지하고 정확한 파생 인덱스만 초기화한 뒤 정식 backfill CLI로 재생성했다.
+현재 원본 3개의 canonical ID 집합과 색인 결과가 일치하고, 폐기 필드·범위의 문서는 0개다.
+PostgreSQL 원본은 변경하지 않았으며 개발 API·웹·Worker를 복구했다. 새 운영 접두사 아래의
+OpenSearch 인덱스와 Qdrant 컬렉션은 0개, 개발의 현재 Qdrant 컬렉션도 0개로 확인했다.
+
+남는 용어는 제품 전역 공간과 구분한다. Hermes의 `/workspace`, `workspace_retained`와 자원
+보관 한도는 터미널 파일시스템이고, PMS 스페이스는 앱 내부 자원이다. pnpm/Nx/SDK/CI의 작업
+디렉터리 용어, 폐기 입력을 거부하는 회귀, metadata·외부전송 차단 규칙과 대체 ADR 참조는 유지한다.
+복구용 구 DB에는 이전 테이블 5개·관련 컬럼 60개가 보존되어 있으며 활성 서비스와 분리되어 있다.
+복구 자료의 보존·폐기는 [운영 전환·복구 계약](docs/domains/release/README.md#incompatible-database-and-configuration-cutovers)을 따른다.
+
+### 후속 변경 검증
+
+| 검사 | 결과 |
+| --- | --- |
+| `OPEN_WORK_HUB_API_PYTEST_WORKERS=2 pnpm ci:api:full` | 종료 코드 0. fast 2,324·slow 18·migration 15·external integration 14, 합계 2,371개 통과·기존 skip 1개. API architecture·Ruff·프로젝트 typecheck 포함 |
+| 마지막 RAG 타입·중복 값 정리 후 집중 pytest | `test_rag_scaffold.py`, `test_retrieval_partitions.py`, `test_files_generation_runner.py` 101개 및 Ruff·format·API typecheck 통과 |
+| 전체 API 검사 이후 발견한 backfill 오류 수정 | 실제 문서·등록 어댑터 회귀 포함 관련 pytest 28개, Ruff·format·API architecture 통과. 최종 한 줄 수정은 전체 API 재실행 대신 이 집중 검사와 실제 개발 재구축으로 검증 |
+| `pnpm exec tsc -p apps/web/tsconfig.spec.json --noEmit` | 최초 오류 160개에서 최종 0개. 현재 DTO fixture와 비동기·브라우저 테스트 mock을 보완했으며 타입 단언·검사 제외로 숨기지 않음 |
+| `VITEST_MAX_WORKERS=1 PLAYWRIGHT_WORKERS=1 NODE_OPTIONS=--max-old-space-size=3072 pnpm ci:web` | 종료 코드 0. 웹 1,389개·core-web 62개·브라우저 셸 19개, architecture·i18n·typecheck·lint·OpenAPI 확인·빌드 통과 |
+| `pnpm ci:harness`, `pnpm ci:python-contract-guardrails`, `pnpm ci:contract` | 모두 종료 코드 0. 정책·도구·마이그레이션 그래프·Python 소스·앱/OpenAPI/실시간 계약·계약 패키지 검사와 빌드 통과 |
+| `pnpm check:env-contract`, 최종 `pnpm check:skills` | 통과. dev/example/prod 253개 키 일치, typed settings 207개 포함. 추가 fixture 검증 지침도 검사 통과 |
+| 실제 개발 PMS 도움말 | HTTP 200, 현재 소스와 일치. 한·영 구 전역 공간 문구 0개, 회사 앱 입장과 PMS 내부 권한 안내 확인 |
+| 실제 개발 검색 초기화·복원 | 정식 backfill로 원본 3개 재생성, 폐기 데이터 6개 제거·구 매핑 0개·canonical ID 집합 일치. 서비스 복원 뒤 API·웹 HTTP 200, `pnpm dev:login-smoke`와 `pnpm dev:public-smoke` 통과 |
+
+이번 후속 변경은 로컬 수정이며 아직 커밋·푸시·운영 재배포하지 않았다. 아래 CI 53과 운영 배포
+기록은 이전 릴리스의 증거로, 이번 diff의 배포 증거로 재사용하지 않는다. 활성 DB 스키마와 환경
+설정은 이번 정리에서 변경하지 않았다. 검색 파생 캐시의 재생성은 원본 DB 변경과 구분한다.
+기존 ASR 성공 경로 및 공개 UAT의 미실행 항목은 유지된다. 빌드의 큰 번들 chunk 안내는 남으며
+검증 중 추가 cgroup OOM kill은 없었다.
+
+## 이전 재설계 릴리스 및 배포 증거
 
 - [전체 CI 53](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/pipelines/53), job 83 성공.
   검증 소스는 `03507d854bdb2c6b4474ada6c9e8083c5c1c8420`이며 API 2,367개·기존 skip 1개,
@@ -107,7 +228,7 @@
   독립 DB 검증 후 개발 DB `open_work_hub_dev`를 초기화하고 새 스키마/개발 계정을 설치했다.
   후속 배포 요청은 새 운영 DB·저장소 네임스페이스로 전환하며 기존 업무 데이터는 이전하지 않는다.
 
-## 검증 증거
+## 초기 재설계 검증 증거
 
 단순 합산으로 중복 실행을 부풀리지 않는다. 아래 API 전체 구간의 합계는 **2,340개 통과,
 기존 데스크톱 manifest 부재로 1개 skip**이다. API 보안 회귀 테스트는 이 전체 검사에 포함된다.

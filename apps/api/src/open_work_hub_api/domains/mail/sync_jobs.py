@@ -16,6 +16,11 @@ from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery
 from open_work_hub_api.domains.auth.models import utcnow_naive
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.mail.models import MailAccount, MailMailbox, MailSyncJob
+from open_work_hub_api.domains.mail.sync_policy import (
+    MailSyncAccessRevoked,
+    cancel_mail_sync_job,
+    require_mail_sync_access,
+)
 
 logger = logging.getLogger(__name__)
 PENDING_MAIL_SYNC_PUBLISHES_KEY = "mail_sync_publish_after_commit"
@@ -136,6 +141,11 @@ def claim_due_mail_sync_jobs(
         return []
     due_job_ids: list[str] = []
     for job in jobs:
+        try:
+            require_mail_sync_access(db, account_id=job.account_id)
+        except MailSyncAccessRevoked as exc:
+            cancel_mail_sync_job(db, job=job, error=str(exc))
+            continue
         job.status = "pending"
         job.last_published_at = now
         job.lease_owner = None

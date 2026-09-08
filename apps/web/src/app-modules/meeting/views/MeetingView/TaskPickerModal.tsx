@@ -9,7 +9,7 @@ export type TaskPickerModalProps = Omit<PmsTaskPickerModalProps, 'copy'>;
 const MEETING_TASK_PICKER_COPY: TaskPickerModalCopy = {
   titleKey: 'meeting.taskPicker.title',
   descriptionKey: 'meeting.taskPicker.description',
-  appLabelKey: 'meeting.taskPicker.pmsWorkspace',
+  appLabelKey: 'meeting.taskPicker.pmsApp',
   noAccessActionKey: 'meeting.taskPicker.attachAction',
   loadListsErrorKey: 'meeting.taskPicker.listLoadFailed',
   loadTasksErrorKey: 'meeting.taskPicker.issueLoadFailed',

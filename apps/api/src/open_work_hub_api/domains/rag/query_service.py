@@ -399,7 +399,7 @@ def _accepts_keyword(method, keyword: str) -> bool:
     return keyword in signature.parameters
 
 
-def _query_hit_identity(hit: RagVectorSearchHit) -> tuple[str, str | None, str, str, str]:
+def _query_hit_identity(hit: RagVectorSearchHit) -> tuple[str, str, str, str]:
     projection = hit.projection
     return (
         projection.scope_kind.value,
@@ -410,7 +410,7 @@ def _query_hit_identity(hit: RagVectorSearchHit) -> tuple[str, str | None, str, 
 
 
 def _dedupe_hits(hits: Sequence[RagVectorSearchHit]) -> list[RagVectorSearchHit]:
-    deduped: dict[tuple[str, str | None, str, str, str], RagVectorSearchHit] = {}
+    deduped: dict[tuple[str, str, str, str], RagVectorSearchHit] = {}
     for hit in hits:
         identity = _query_hit_identity(hit)
         existing = deduped.get(identity)

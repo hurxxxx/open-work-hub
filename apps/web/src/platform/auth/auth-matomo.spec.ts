@@ -1,10 +1,11 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 
 import type { AuthUser } from './auth-api';
 import { resolveMatomoUserIdentity } from './auth-matomo';
 
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
-  return {
+  return createAuthUser({
     app_bar_layout: { pinned_app_ids: [] },
     date_format: 'korean',
     display_name: 'Open Work Hub Member',
@@ -21,10 +22,8 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     managed_organization_unit_ids: [],
     theme_preference: 'system',
     time_zone: 'Asia/Seoul',
-    workspaces: [],
-    workspace_roles: [],
     ...overrides,
-  };
+  });
 }
 
 describe('resolveMatomoUserIdentity', () => {

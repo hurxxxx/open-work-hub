@@ -1,3 +1,4 @@
+import { createBootstrapApp } from '../../../tests/fixtures/company';
 import { Home, Settings, Users } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 
@@ -16,6 +17,7 @@ describe('mobile navigation model', () => {
       fixedAppIds: ['home'],
       apps: [
         {
+          ...createBootstrapApp('home'),
           app_id: 'home',
           enabled: true,
           icon_key: 'home',
@@ -24,6 +26,7 @@ describe('mobile navigation model', () => {
           title: 'Home',
         },
         {
+          ...createBootstrapApp('docs'),
           app_id: 'docs',
           enabled: true,
           icon_key: 'file-text',
@@ -32,6 +35,7 @@ describe('mobile navigation model', () => {
           title: 'Docs',
         },
         {
+          ...createBootstrapApp('pms'),
           app_id: 'pms',
           coming_soon: true,
           enabled: true,
@@ -41,6 +45,7 @@ describe('mobile navigation model', () => {
           title: 'PMS',
         },
         {
+          ...createBootstrapApp('web-search'),
           app_id: 'web-search',
           enabled: true,
           icon_key: 'globe',
@@ -55,6 +60,8 @@ describe('mobile navigation model', () => {
           icon_key: 'briefcase',
           items: [
             {
+              coming_soon: false,
+              position: 0,
               app_id: 'web-search',
               enabled: true,
               icon_key: 'globe',
@@ -71,6 +78,8 @@ describe('mobile navigation model', () => {
           icon_key: 'users',
           items: [
             {
+              coming_soon: false,
+              position: 0,
               app_id: 'pms',
               enabled: true,
               icon_key: 'list-checks',
@@ -78,6 +87,8 @@ describe('mobile navigation model', () => {
               title: 'PMS',
             },
             {
+              coming_soon: false,
+              position: 1,
               app_id: 'docs',
               enabled: true,
               icon_key: 'file-text',
@@ -142,6 +153,8 @@ describe('mobile navigation model', () => {
           icon_key: 'briefcase',
           items: [
             {
+              coming_soon: false,
+              position: 0,
               app_id: 'fixed-feature',
               enabled: true,
               icon_key: 'sparkles',
@@ -158,6 +171,7 @@ describe('mobile navigation model', () => {
       fixedAppIds: ['home', 'fixed-feature'],
       apps: [
         {
+          ...createBootstrapApp('home'),
           app_id: 'home',
           enabled: true,
           icon_key: 'home',
@@ -166,6 +180,7 @@ describe('mobile navigation model', () => {
           title: 'Home',
         },
         {
+          ...createBootstrapApp('fixed-feature'),
           app_id: 'fixed-feature',
           enabled: true,
           icon_key: 'sparkles',

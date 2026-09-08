@@ -71,12 +71,11 @@ describe('company app audience policy editor', () => {
     renderPolicy();
     await screen.findByRole('button', { name: 'people:' });
     expect(
-      screen.getByRole('combobox', { name: 'companyAccess.app', exact: true }),
+      screen.getByRole('combobox', { name: /^companyAccess\.app$/ }),
     ).toBeTruthy();
     expect(
       screen.getByRole('combobox', {
-        name: 'companyAccess.audience',
-        exact: true,
+        name: /^companyAccess\.audience$/,
       }),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'people:' }));

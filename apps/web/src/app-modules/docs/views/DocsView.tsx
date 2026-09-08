@@ -1,4 +1,5 @@
 import { DocsGroupSharing } from './DocsGroupSharing';
+import { DocsPublicationControls } from './DocsPublicationControls';
 import { useAppAdmission } from '@/src/platform/apps/app-bootstrap-context';
 import {
   DndContext,
@@ -62,7 +63,6 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router-dom';
-import { updateDocsCompanySharing } from '../api/docs-api';
 
 import {
   TaskPickerModal,
@@ -85,7 +85,6 @@ import {
   createNativeDoc,
   deleteDocLinkShare,
   deleteDocPage,
-  deleteDocTarget,
   deleteDocUserShare,
   deleteDocsItem,
   detachDocPmsTask,
@@ -103,7 +102,6 @@ import {
   resolveSharedLink,
   toggleDocFavorite,
   updateDocPage,
-  updateDocTarget,
   updateDocsItem,
   upsertDocLinkShare,
   upsertDocUserShare,
@@ -153,7 +151,6 @@ import {
   isDocsViewCategory,
   removeDocsPageSubtree,
   resolveDefaultDocsCreateLocation,
-  resolveDocsCreateLocationValue,
   resolveDocsCreatePrimaryTarget,
   resolveDocsPageAuthorName,
   resolveDocsPageSelection,
@@ -768,7 +765,6 @@ const renderDocsShell = (props: any) => {
     activeCategoryLabel,
     activeSpaceFilterId,
     availableSpaces,
-    changingLocation,
     confirmDialog,
     copyDirectLink,
     copyShareLink,
@@ -779,8 +775,8 @@ const renderDocsShell = (props: any) => {
     docs,
     editorView,
     handleAttachPmsTask,
-    handleChangeLocation,
     handleChangeUserAccess,
+    handlePublicationUpdated,
     handleCreateDoc,
     handleCreatePage,
     handleDeleteDoc,
@@ -814,7 +810,6 @@ const renderDocsShell = (props: any) => {
     relatedPmsTasks,
     resetDocsFilters,
     resolveFileUrl,
-    resolveLocationValueFromTarget,
     searchOpen,
     searchQuery,
     selectDocPage,
@@ -1226,34 +1221,12 @@ const renderDocsShell = (props: any) => {
                   ) : null}
                 </div>
 
-                {/* 2. Who can access — target visibility */}
-                <div className="rounded-lg border border-app-border bg-app-bg p-4 space-y-3">
-                  <div>
-                    <div className="app-text-control text-app-ink">
-                      {t('docs.share.whoCanAccess')}
-                    </div>
-                    <div className="app-text-caption text-app-ink/55">
-                      {t('docs.share.visibilityDescription')}
-                    </div>
-                  </div>
-                  <LocationPicker
-                    value={
-                      selectedDoc.company_visible
-                        ? 'company'
-                        : resolveLocationValueFromTarget(
-                            selectedDoc.primary_target,
-                          )
-                    }
-                    onChange={(value) => void handleChangeLocation(value)}
-                    options={locationOptions}
-                    busy={changingLocation || !selectedDoc.can_manage}
-                  />
-                  {!selectedDoc.can_manage ? (
-                    <div className="app-text-micro text-app-ink/55">
-                      {t('docs.share.manageOnlyNotice')}
-                    </div>
-                  ) : null}
-                </div>
+                <DocsPublicationControls
+                  token={token}
+                  doc={selectedDoc}
+                  spaces={availableSpaces}
+                  onUpdated={handlePublicationUpdated}
+                />
 
                 {/* 3. Copy link — always visible direct doc URL */}
                 <div className="flex items-center gap-2 rounded-lg border border-app-border bg-app-bg px-3 py-2">
@@ -1738,7 +1711,6 @@ const DocsViewContent = ({
   const {
     activeDragId,
     availableSpaces,
-    changingLocation,
     contentEditorVersions,
     copiedDocId,
     creating,
@@ -1776,7 +1748,6 @@ const DocsViewContent = ({
   const {
     setActiveDragId,
     setAvailableSpaces,
-    setChangingLocation,
     setContentEditorVersions,
     setCopiedDocId,
     setCreating,
@@ -2311,7 +2282,7 @@ const DocsViewContent = ({
         value: 'company',
         icon: Globe,
         title: t('common:labels.company'),
-        desc: t('docs.location.workspaceDesc'),
+        desc: t('docs.location.companyDesc'),
       },
       ...availableSpaces.map((space) => ({
         value: `space:${space.id}`,
@@ -2332,13 +2303,6 @@ const DocsViewContent = ({
   const resolveTargetFromLocationValue = useCallback(
     (locationValue: string) => {
       return resolveDocsCreatePrimaryTarget(locationValue);
-    },
-    [],
-  );
-
-  const resolveLocationValueFromTarget = useCallback(
-    (target: { app: string; type: string; id: string } | null) => {
-      return resolveDocsCreateLocationValue(target);
     },
     [],
   );
@@ -2804,47 +2768,11 @@ const DocsViewContent = ({
     }
   };
 
-  const handleChangeLocation = async (nextLocation: string) => {
-    if (!token || !selectedDoc || !selectedDoc.can_manage) return;
-    const current = selectedDoc.company_visible
-      ? 'company'
-      : resolveLocationValueFromTarget(selectedDoc.primary_target);
-    if (current === nextLocation) return;
-    if (
-      nextLocation !== 'private' &&
-      !(await confirm({
-        title: t('shell:contentPublication.title'),
-        description: t('shell:contentPublication.confirm'),
-        confirmLabel: t('common:actions.confirm'),
-        cancelLabel: t('common:actions.cancel'),
-      }))
-    )
-      return;
-    setChangingLocation(true);
-    try {
-      const nextTarget = resolveTargetFromLocationValue(nextLocation);
-      const updated =
-        nextLocation === 'company' ||
-        (nextLocation === 'private' && selectedDoc.company_visible)
-          ? await updateDocsCompanySharing(
-              token,
-              selectedDoc.id,
-              nextLocation === 'company',
-              true,
-            )
-          : nextTarget === null
-            ? await deleteDocTarget(token, selectedDoc.id)
-            : await updateDocTarget(token, selectedDoc.id, {
-                ...nextTarget,
-                company_admin_read_acknowledged: true,
-              });
-      setSelectedDoc(updated);
-      setDocs((current) =>
-        current.map((doc) => (doc.id === updated.id ? updated : doc)),
-      );
-    } finally {
-      setChangingLocation(false);
-    }
+  const handlePublicationUpdated = (updated: DocsHubItem) => {
+    setSelectedDoc(updated);
+    setDocs((current) =>
+      current.map((doc) => (doc.id === updated.id ? updated : doc)),
+    );
   };
 
   const handleRemoveUserShare = async (userId: string) => {
@@ -3214,7 +3142,6 @@ const DocsViewContent = ({
     activeCategoryLabel,
     activeSpaceFilterId,
     availableSpaces,
-    changingLocation,
     confirmDialog,
     copyDirectLink,
     copyShareLink,
@@ -3225,8 +3152,8 @@ const DocsViewContent = ({
     docs,
     editorView,
     handleAttachPmsTask,
-    handleChangeLocation,
     handleChangeUserAccess,
+    handlePublicationUpdated,
     handleCreateDoc,
     handleCreatePage,
     handleDeleteDoc,
@@ -3260,7 +3187,6 @@ const DocsViewContent = ({
     relatedPmsTasks,
     resetDocsFilters,
     resolveFileUrl,
-    resolveLocationValueFromTarget,
     searchOpen,
     searchQuery,
     selectDocPage,

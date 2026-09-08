@@ -1,21 +1,20 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { createRef, useRef, useState, type ComponentProps } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
-import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { AppBarDesktopRail } from './AppBarDesktopRail';
 import { launcherGridColumnCount } from './AppBarLauncherMenus';
 import type { AppBarTranslator } from './app-bar-model';
 
-const currentUser = {
+const currentUser = createAuthUser({
   display_name: '허건우',
   full_name: '허건우',
   system_roles: [],
   group_ids: [],
   managed_organization_unit_ids: [],
-  workspaces: [],
-} as AuthUser;
+});
 
 const translate: AppBarTranslator = (key, options) =>
   (
@@ -40,6 +39,8 @@ const collaborationCategory = {
   position: 0,
   items: [
     {
+      coming_soon: false,
+      position: 0,
       app_id: 'docs',
       title: '문서',
       route_base: '/apps/docs',
@@ -69,6 +70,7 @@ function railProps(
     fixedItems: [],
     moreMenuRef: createRef(),
     notificationsEnabled: false,
+    notificationPanelOpen: false,
     onCloseEditor: vi.fn(),
     onCloseLauncherMenus: vi.fn(),
     onMovePinnedApp: vi.fn(),

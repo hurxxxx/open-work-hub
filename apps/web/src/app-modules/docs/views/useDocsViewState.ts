@@ -61,7 +61,6 @@ export const useDocsViewState = () => {
   const [linkCopied, setLinkCopied] = useState(false);
   const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [copiedDocId, setCopiedDocId] = useState<string | null>(null);
-  const [changingLocation, setChangingLocation] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{
     overId: string;
@@ -71,7 +70,6 @@ export const useDocsViewState = () => {
   return {
     activeDragId,
     availableSpaces,
-    changingLocation,
     contentEditorVersions,
     copiedDocId,
     creating,
@@ -98,7 +96,6 @@ export const useDocsViewState = () => {
     selectedDoc,
     setActiveDragId,
     setAvailableSpaces,
-    setChangingLocation,
     setContentEditorVersions,
     setCopiedDocId,
     setCreating,

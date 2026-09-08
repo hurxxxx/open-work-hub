@@ -5,7 +5,7 @@ description: Use when changing product AI tools, MCP manifests, or registered LL
 
 # MCP Capability Governance
 
-- Read ADR 0002 for capabilities and ADR 0005 for LLM workloads.
+- Start with [App Platform](../../../docs/domains/app-platform/README.md) and [ADR 0012](../../../adr/0012-company-app-access-without-workspaces.md) for current authorization. Read ADR 0002 for capabilities and ADR 0005 for LLM workloads; their former scope requirements are superseded.
 - Register through `register_ai_capabilities(registry)` and `AiCapabilityRegistry`.
 - Use AI-specific DTOs, not REST request models.
 - Write tools require approval, discoverability predicate, execution ACL, audit.

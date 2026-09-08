@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveShellDisplayAppId } from './shell-display-app-model';
 
 describe('resolveShellDisplayAppId', () => {
-  it('uses the leaf workspace app identity instead of its shell owner', () => {
+  it('uses the leaf app identity instead of its shell owner', () => {
     expect(
       resolveShellDisplayAppId({
         activeAppId: 'business',
@@ -12,7 +12,7 @@ describe('resolveShellDisplayAppId', () => {
     ).toBe('retrieval-search');
   });
 
-  it('keeps the shell identity outside leaf workspace routes', () => {
+  it('keeps the shell identity outside leaf app routes', () => {
     expect(
       resolveShellDisplayAppId({
         activeAppId: 'settings',

@@ -67,7 +67,7 @@ describe('useHomeController', () => {
     expect(result.current.state.recentPages).toEqual([]);
   });
 
-  it('does not load without token or workspace slug', () => {
+  it('does not load without a token', () => {
     const client = clientWith();
     renderController({ client, token: null });
 
@@ -77,7 +77,7 @@ describe('useHomeController', () => {
     expect(client.listPlannerEvents).not.toHaveBeenCalled();
   });
 
-  it('does not request data from disabled workspace apps', async () => {
+  it('does not request data from disabled apps', async () => {
     const client = clientWith();
     const { result } = renderController({
       client,
@@ -96,7 +96,7 @@ describe('useHomeController', () => {
     expect(client.listPlannerEvents).toHaveBeenCalled();
   });
 
-  it('waits for workspace bootstrap before loading home data', () => {
+  it('waits for app bootstrap before loading home data', () => {
     const client = clientWith();
     renderController({ client, enabledAppIds: null });
 

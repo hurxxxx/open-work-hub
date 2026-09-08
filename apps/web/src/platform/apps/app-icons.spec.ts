@@ -6,7 +6,7 @@ import {
   appIconForKey,
 } from './app-icons';
 
-describe('workspace app icons', () => {
+describe('app icons', () => {
   it('maps every picker group key to a concrete icon', () => {
     const knownKeys = new Set(APP_ICON_KEYS);
 

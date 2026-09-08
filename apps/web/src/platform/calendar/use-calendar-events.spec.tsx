@@ -33,7 +33,6 @@ function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     sourceType: 'planner_event',
     sourceId: 'event-1',
     color: '#14b8a6',
-    workspace: null,
     metadata: { plannerEventId: 'event-1' },
     ...overrides,
   };

@@ -20,9 +20,6 @@ class _Session:
     def __exit__(self, *_args: object) -> None:
         return None
 
-    def scalars(self, _query: object) -> list[SimpleNamespace]:
-        return [SimpleNamespace(id="workspace-valid", key="valid")]
-
 
 def _quality_corpus_bytes() -> bytes:
     return json.dumps(

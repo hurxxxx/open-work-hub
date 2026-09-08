@@ -43,9 +43,8 @@ function folder(id: string, name: string, sortOrder: number): PmsFolder {
     team_id: 'space-1',
     name,
     sort_order: sortOrder,
-    created_at: '2026-05-30T00:00:00Z',
-    updated_at: '2026-05-30T00:00:00Z',
-  } as PmsFolder;
+    list_count: 0,
+  };
 }
 
 function doc(id: string, title: string, sortOrder: number): DocsHubItem {

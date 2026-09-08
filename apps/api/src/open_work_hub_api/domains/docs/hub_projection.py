@@ -85,8 +85,10 @@ def serialize_native_share_summary(doc: NativeDoc) -> dict[str, Any]:
     return {
         "visibility": (
             "shared"
-            if doc.company_visible
+            if doc.ownership_kind == "company"
+            or doc.company_visible
             or user_share_count > 0
+            or doc.group_shares
             or active_link is not None
             or is_target_shared
             or is_meeting_note

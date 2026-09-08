@@ -1,3 +1,4 @@
+import { createBootstrapApp } from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 import { Home } from 'lucide-react';
 
@@ -19,6 +20,7 @@ import {
 
 function app(overrides: Partial<BootstrapApp>): BootstrapApp {
   return {
+    ...createBootstrapApp('home'),
     app_id: 'home',
     title: 'HOME',
     route_base: '/apps/home',
@@ -50,6 +52,8 @@ const APP_BAR_CATEGORIES: BootstrapAppBarCategory[] = [
     position: 0,
     items: [
       {
+        coming_soon: false,
+        position: 0,
         app_id: 'chatbot',
         title: 'AI 어시스턴트 챗봇',
         route_base: '/apps/chatbot',
@@ -57,6 +61,8 @@ const APP_BAR_CATEGORIES: BootstrapAppBarCategory[] = [
         enabled: true,
       },
       {
+        coming_soon: false,
+        position: 1,
         app_id: 'web-search',
         title: '웹 검색 봇',
         route_base: '/apps/web-search',
@@ -73,6 +79,8 @@ const APP_BAR_CATEGORIES: BootstrapAppBarCategory[] = [
     position: 1,
     items: [
       {
+        coming_soon: false,
+        position: 0,
         app_id: 'pms',
         title: 'PMS',
         route_base: '/apps/pms',
@@ -80,6 +88,8 @@ const APP_BAR_CATEGORIES: BootstrapAppBarCategory[] = [
         enabled: true,
       },
       {
+        coming_soon: false,
+        position: 1,
         app_id: 'docs',
         title: '문서',
         route_base: '/apps/docs',
@@ -87,6 +97,8 @@ const APP_BAR_CATEGORIES: BootstrapAppBarCategory[] = [
         enabled: true,
       },
       {
+        coming_soon: false,
+        position: 2,
         app_id: 'mail',
         title: '메일',
         route_base: '/apps/mail',
@@ -94,6 +106,8 @@ const APP_BAR_CATEGORIES: BootstrapAppBarCategory[] = [
         enabled: true,
       },
       {
+        coming_soon: false,
+        position: 3,
         app_id: 'whiteboard',
         title: '화이트보드',
         route_base: '/apps/whiteboard',
@@ -110,13 +124,17 @@ const APP_BAR_CATEGORIES: BootstrapAppBarCategory[] = [
     position: 2,
     items: [
       {
-        app_id: 'workspace-tool',
-        title: 'Workspace Tool',
-        route_base: '/apps/workspace-tool',
+        coming_soon: false,
+        position: 0,
+        app_id: 'custom-tool',
+        title: 'Custom Tool',
+        route_base: '/apps/custom-tool',
         icon_key: 'wrench',
         enabled: true,
       },
       {
+        coming_soon: false,
+        position: 1,
         app_id: 'diagrams',
         title: '데이터 시각화',
         route_base: '/apps/diagrams',
@@ -128,11 +146,11 @@ const APP_BAR_CATEGORIES: BootstrapAppBarCategory[] = [
 ];
 
 describe('app-bar model', () => {
-  it('projects visible workspace apps for active title and fixed rail items', () => {
+  it('projects visible apps for active title and fixed rail items', () => {
     const visibleItems = buildVisibleAppBarItems(
       [
         app({ app_id: 'home', title: 'Home' }),
-        app({ app_id: 'workspace-tool', title: 'Workspace Tool' }),
+        app({ app_id: 'custom-tool', title: 'Custom Tool' }),
         app({ app_id: 'chatbot', title: 'Chatbot', enabled: false }),
         app({
           app_id: 'unknown-app',
@@ -188,7 +206,7 @@ describe('app-bar model', () => {
     ).toBeNull();
   });
 
-  it('does not project fixed apps that are not visible in workspace bootstrap', () => {
+  it('does not project fixed apps that are not visible in app bootstrap', () => {
     const visibleItems = buildVisibleAppBarItems(
       [
         app({ app_id: 'home', title: 'Home', enabled: false }),
@@ -272,7 +290,7 @@ describe('app-bar model', () => {
             'docs',
             'mail',
             'whiteboard',
-            'workspace-tool',
+            'custom-tool',
             'diagrams',
           ],
         },
@@ -334,6 +352,8 @@ describe('app-bar model', () => {
       pinnable: false,
       items: [
         {
+          coming_soon: false,
+          position: 0,
           app_id: 'mail',
           title: 'Mail',
           route_base: '/apps/mail',
@@ -394,8 +414,7 @@ describe('app-bar model', () => {
     ).toBeNull();
   });
 
-  it('builds workspace search hrefs', () => {
-    expect(buildSearchHref('project docs')).toBe('/apps/retrieval-search');
-    expect(buildSearchHref(null)).toBe('/apps/retrieval-search');
+  it('builds company search hrefs', () => {
+    expect(buildSearchHref()).toBe('/apps/retrieval-search');
   });
 });
