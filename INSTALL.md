@@ -18,7 +18,8 @@ Web·API·Worker는 저장소 소스에서 실행하고, 최초 셋업의 Postgr
 - 새로 설치하는 프로젝트용 PostgreSQL과 Redis Open Source는 **설치 시점의 최신 안정 버전(최신 정식 메이저의 최신 패치)**을 사용한다. beta·RC·nightly는 제외한다.
 - Ubuntu 기본 패키지를 최신으로 간주하지 않는다. [PostgreSQL 공식 APT 저장소(PGDG)](https://www.postgresql.org/download/linux/ubuntu/)와 [Redis 공식 APT 저장소](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/apt/) 안내를 따라 공식 릴리스·OS 지원·APT 후보 버전을 확인한 뒤 호스트에 네이티브로 설치하고 systemd로 관리한다.
 - 실제 설치 버전과 출처, 연결·마이그레이션 확인 결과를 셋업 결과에 기록한다. 최신 안정판의 OS 지원이나 프로젝트 호환성에 문제가 있으면 임의로 낮추지 말고 이유와 대안을 안내하여 사용자와 결정한다.
-- 기존 서비스·데이터는 보존한다. 기존 데이터베이스의 메이저 업그레이드는 백업·호환성·복구 계획과 별도 승인이 필요하다. GitLab 번들 데이터베이스와 Docker/CI의 고정 버전 변경도 이 네이티브 최초 설치 작업에 포함하지 않는다.
+- 기존 서비스·데이터는 보존한다. 기존 데이터베이스의 메이저 업그레이드는 백업·호환성·복구 계획과 별도 승인이 필요하다. GitLab 번들 데이터베이스와 기존 개발·운영 Compose DB의 버전은 이 네이티브 최초 설치 작업에서 변경하지 않는다.
+- 새 CI 테스트 DB와 검증 이미지의 PostgreSQL 클라이언트는 설치한 프로젝트 DB의 메이저 버전에 맞춘다. 셋업 범위에 맞는 이미지 선택·재빌드는 포함하며, 예전 검증 이미지에 맞추려고 다른 메이저 버전의 DB를 추가 설치하지 않는다. [검증 이미지와 DB 계약](docs/domains/release/README.md#validation-image-platform-and-database)을 따른다.
 
 ## 1. 에이전트에 설치 요청하기
 
@@ -344,15 +345,24 @@ sudo gitlab-runner verify
 등록 절차는 [공식 Runner 안내](https://docs.gitlab.com/runner/register/)를 따른다.
 등록 성공만으로 작업 실행 준비가 끝나는 것은 아니다. 검증 Runner가 사용하는 Docker 데몬에서
 **승인된 저장소 커밋**으로 다음 이미지를 준비한다.
+프로젝트 DB에 읽기 전용으로 접속해 실제 서버 메이저 버전을 확인한다. `psql --version`은 클라이언트 버전이므로 서버 버전 대신 사용하지 않는다.
+아래 예시의 `owh-dev`는 에이전트가 기존 개발 DB 설정을 바탕으로 준비한 [libpq 연결 서비스](https://www.postgresql.org/docs/current/libpq-pgservice.html) 이름이다. 비밀번호는 소유자만 읽을 수 있는 passfile로 전달하고 명령 인자에 쓰지 않는다. `psql`, Docker, Buildx와 `jq`가 필요하다.
 
 ```bash
-bash scripts/build-ci-validation-image.sh
+project_postgres_version_num="$(psql -XAtw 'service=owh-dev' -c 'SHOW server_version_num')"
+if [[ ! "$project_postgres_version_num" =~ ^[0-9]{6,}$ ]]; then
+  echo '프로젝트 PostgreSQL 서버 버전을 확인하지 못했습니다.' >&2
+  exit 1
+fi
+project_postgres_major="$((10#$project_postgres_version_num / 10000))"
+bash scripts/build-ci-validation-image.sh --postgres-major "$project_postgres_major"
 docker build -f ops/opensearch/Dockerfile -t open-work-hub-opensearch:3.3.2-nori .
 ```
 
 검증 이미지 이름은 현재 `open-work-hub-validation:node22-python312`다.
 개발 서버의 Node.js 24 설치와는 별도이며, 이름만 같은 다른 이미지로 대체하지 않는다.
-ARM64 등 다른 아키텍처의 빌드는 [검증 이미지 플랫폼 계약](docs/domains/release/README.md#validation-image-platform-and-database)을 따른다.
+빌드 스크립트는 선택한 PostgreSQL 메이저의 공식 Bookworm 이미지 태그를 불변 digest로 확인한다. PostgreSQL 버전·digest·Docker 플랫폼·Dockerfile·의존성이 일치하면 기존 이미지를 다시 검사해 재사용하고, 다르면 빌드한다. 빌드·클라이언트 검사 실패는 설치 실패로 처리한다.
+출력된 PostgreSQL 버전·이미지 digest·플랫폼·의존성 해시를 셋업 결과에 기록한다. 같은 입력으로 재현하려면 `--postgres-client-image 'postgres@sha256:<기록한-digest>'`를 전달한다. ARM64를 포함한 [플랫폼·재빌드 계약](docs/domains/release/README.md#validation-image-platform-and-database)을 따른다.
 로컬 이미지를 쓰는 전용 Runner는 `if-not-present` 등 그 배포 방식에 맞는 pull 정책을 구성한다.
 다른 Docker 데몬에서 실행하는 Runner라면 같은 검증된 이미지가 그 데몬에도 준비되어야 한다.
 CI의 Redis·MinIO 서비스 이미지도 내려받을 수 있어야 한다.
@@ -378,9 +388,9 @@ MR 소스의 스크립트를 직접 실행하도록 바꾸지 않으며, 리뷰�
 검증 Runner에서 접근할 수 있는 **CI 전용 비운영 PostgreSQL DB와 계정**을 준비한다.
 테스트용 DB 생성·삭제에 필요한 권한만 부여하고 GitLab 자체 DB, 개발 업무 DB나 운영 DB를 사용하지 않는다.
 Docker 작업 안의 `127.0.0.1`은 호스트 DB 주소가 아니므로 Runner의 실제 네트워크에서 접속 가능한 주소를 사용한다.
-현재 검증 이미지의 PostgreSQL 클라이언트와 맞는 서버 버전은
-[검증 DB 계약](docs/domains/release/README.md#validation-image-platform-and-database)을 따른다.
-네이티브 CI 클러스터는 개발용과 별도 데이터 디렉터리·포트·계정을 사용한다.
+CI 서버와 검증 이미지 클라이언트의 메이저 버전은 프로젝트 DB와 맞춘다. PostgreSQL 17 같은 특정 메이저 버전을 요구하지 않는다.
+같은 비운영 PostgreSQL 인스턴스에 별도 CI DB·계정을 둘 수 있으며, CI 계정은 개발 업무 DB를 소유하거나 접근하지 못하게 한다. 별도 CI 클러스터가 필요하면 같은 메이저 버전으로 만들고 별도 데이터 디렉터리·포트·계정을 사용한다.
+릴리스 CI는 실제 DB 서버와 이미지의 `pg_dump`·`pg_restore`·`psql` 버전이 일치하는지 테스트 시작 전에 검사한다. 불일치 시 DB 연결 대상과 [검증 이미지 구성](docs/domains/release/README.md#validation-image-platform-and-database)을 바로잡고 재실행한다.
 Docker 전용 네트워크로 연결할 때는 해당 인터페이스와 CIDR에만 DB 수신·`pg_hba.conf` 접근을 허용하고,
 부팅 시 네트워크를 만드는 Docker 서비스가 DB보다 먼저 준비되도록 systemd 의존성을 설정한다.
 Debian 계열에서 클러스터 이름은 `ci`처럼 하이픈 없이 정해 systemd 인스턴스 이름의 경로 변환을 피한다.

@@ -125,7 +125,7 @@ export function expectedGitlabPipelineConfig() {
       rules: [{ if: RELEASE_MR_RULE }],
       before_script: [],
       script: [
-        'bash scripts/ci/prepare-validation-runtime.sh',
+        'bash scripts/ci/prepare-validation-runtime.sh --postgres',
         'cp .env.example .env',
         "sed -i 's#^OPEN_WORK_HUB_ENV_PROFILE=.*#OPEN_WORK_HUB_ENV_PROFILE=test#; s#^OPEN_WORK_HUB_WORKER_BROKER_URL=.*#OPEN_WORK_HUB_WORKER_BROKER_URL=memory://#; s#^OPEN_WORK_HUB_WORKER_RESULT_BACKEND=.*#OPEN_WORK_HUB_WORKER_RESULT_BACKEND=cache+memory://#' .env",
         "grep -qx 'OPEN_WORK_HUB_ENV_PROFILE=test' .env",

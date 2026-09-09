@@ -1,6 +1,6 @@
 ARG NODE_IMAGE=node@sha256:78839ac448c23517f8eab2e8f7943d9b4f73979eb7f8bed2c73dbf72ff869e7b
 ARG UV_IMAGE=ghcr.io/astral-sh/uv@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58
-ARG POSTGRES_CLIENT_IMAGE=postgres@sha256:7bade6d532592ca8ce7ee32def7399dad2607c4ea5583839fc4352a095a11ea6
+ARG POSTGRES_CLIENT_IMAGE
 
 FROM ${NODE_IMAGE} AS node_toolchain
 
@@ -55,6 +55,13 @@ RUN set -eux; \
 
 FROM ${UV_IMAGE}
 
+ARG POSTGRES_MAJOR
+ARG POSTGRES_CLIENT_IMAGE
+ARG VALIDATION_CONTRACT_SHA256
+LABEL io.open-work-hub.validation.contract="${VALIDATION_CONTRACT_SHA256}" \
+      io.open-work-hub.validation.postgres-major="${POSTGRES_MAJOR}" \
+      io.open-work-hub.validation.postgres-client-image="${POSTGRES_CLIENT_IMAGE}"
+
 COPY --from=node_toolchain /usr/local/ /usr/local/
 COPY --from=postgres_client /opt/postgres-client/bin/ /usr/local/bin/
 COPY --from=postgres_client /opt/postgres-client/lib/ /usr/local/lib/
@@ -81,9 +88,13 @@ RUN apt-get update \
     && python --version \
     && jq --version \
     && uv --version \
-    && pg_dump --version | grep -Eq '^pg_dump \(PostgreSQL\) 17\.' \
-    && pg_restore --version | grep -Eq '^pg_restore \(PostgreSQL\) 17\.' \
-    && psql --version | grep -Eq '^psql \(PostgreSQL\) 17\.'
+    && printf '%s\n' "${POSTGRES_MAJOR}" | grep -Eq '^[1-9][0-9]+$' \
+    && printf '%s\n' "${POSTGRES_CLIENT_IMAGE}" | grep -Eq '^postgres@sha256:[a-f0-9]{64}$' \
+    && pg_dump --version | grep -Eq "^pg_dump \(PostgreSQL\) ${POSTGRES_MAJOR}\." \
+    && pg_restore --version | grep -Eq "^pg_restore \(PostgreSQL\) ${POSTGRES_MAJOR}\." \
+    && psql --version | grep -Eq "^psql \(PostgreSQL\) ${POSTGRES_MAJOR}\." \
+    && mkdir -p /opt/open-work-hub/locks/api \
+    && printf '%s\n' "${POSTGRES_MAJOR}" > /opt/open-work-hub/locks/api/postgres-major
 
 ARG API_DEPENDENCY_SHA256
 

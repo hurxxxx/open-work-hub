@@ -7,9 +7,9 @@ import path from 'node:path';
 import test from 'node:test';
 
 function fixture(t) {
-  const root = fs.mkdtempSync(
+  const root = fs.realpathSync(fs.mkdtempSync(
     path.join(os.tmpdir(), 'owh-validation-runtime-'),
-  );
+  ));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const write = (name, value) => {
     const target = path.join(root, name);
@@ -59,7 +59,7 @@ function fixture(t) {
     root,
     env,
     write,
-    run: () => spawnSync('bash', [script], { env, encoding: 'utf8' }),
+    run: (args = []) => spawnSync('bash', [script, ...args], { env, encoding: 'utf8' }),
   };
 }
 
@@ -79,6 +79,17 @@ test('full and focused CI share identity-checked Python environments without cop
       );
     }
   }
+});
+
+test('release preparation requires a successful PostgreSQL preflight before linking runtimes', (t) => {
+  const f = fixture(t);
+  const python = f.write('image/API/bin/python', '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$0.args"\nexit 2\n');
+  fs.chmodSync(python, 0o755);
+  assert.equal(f.run(['--postgres']).status, 2);
+  assert.match(fs.readFileSync(`${python}.args`, 'utf8'), /check-validation-postgres.py\n--major-file\n/);
+  assert.equal(fs.existsSync(path.join(f.root, 'node_modules')), false);
+  fs.writeFileSync(python, '#!/usr/bin/env bash\nexit 0\n');
+  assert.equal(f.run(['--postgres']).status, 0);
 });
 
 test('dependency mismatch fails before creating any runtime link', (t) => {
