@@ -398,6 +398,8 @@ git log --oneline origin/dev..upstream/main
 
 `origin`·`upstream`은 원격 이름이며 접근 권한을 차단하는 장치는 아니다.
 `remote.pushDefault=origin`은 기본 push 목적지를 정할 뿐 명시적인 다른 원격 push를 막지는 않는다.
-원본은 읽기용으로 사용하고 내부 변경사항을 GitHub에 push하거나 PR로 보내지 않는다.
+일상적인 내부 개발에서는 원본을 읽기용으로 사용하고 내부 사이트 변경사항은 GitLab에서 관리한다.
+원본 프로젝트 개선을 위한 GitHub PR 생성·병합은 명시적으로 요청받은 범위에서
+[저장소 정책](AGENTS.md#git-and-delivery)에 따라 진행한다.
 원격 관리 방식은 [Git 공식 설명](https://git-scm.com/book/en/v2/Git-Basics-Working-with-Remotes)과
 [GitHub의 upstream 설정 안내](https://docs.github.com/en/pull-requests/how-tos/work-with-forks/configuring-a-remote-repository-for-a-fork)를 참고한다.
