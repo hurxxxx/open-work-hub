@@ -1,7 +1,7 @@
 """Service layer for conversations + turns persistence.
 
-All queries scope by ``workspace_id + user_id`` — conversations are private
-to the creating user within a workspace. Soft-deleted rows (``deleted_at
+All queries scope by the authenticated ``user_id`` — conversations are private
+to the creating user. Soft-deleted rows (``deleted_at
 IS NOT NULL``) are excluded from list/get but remain on disk; no automatic
 cleanup runs today.
 """
@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.models import User, Workspace, utcnow_naive
+from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.conversations.default_scope_adapters import (
     is_supported_conversation_scope_ref,
 )
@@ -34,7 +34,6 @@ from .turn_rewrite import (
     plan_conversation_tail_rewrite,
 )
 
-
 TITLE_MAX_LEN = 200
 
 
@@ -45,7 +44,6 @@ def _generate_id() -> str:
 def create_conversation(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     title: str = "",
     scope_ref: str | None = None,
@@ -77,7 +75,6 @@ def create_conversation(
         reusable = db.scalar(
             select(Conversation)
             .where(
-                Conversation.workspace_id == workspace.id,
                 Conversation.user_id == user.id,
                 Conversation.deleted_at.is_(None),
                 Conversation.scope_ref == normalized_scope_ref,
@@ -93,7 +90,6 @@ def create_conversation(
     now = utcnow_naive()
     conversation = Conversation(
         id=_generate_id(),
-        workspace_id=workspace.id,
         user_id=user.id,
         title=normalized_title,
         scope_ref=normalized_scope_ref,
@@ -164,7 +160,6 @@ def _decode_cursor(cursor: str) -> tuple[datetime, str]:
 def list_conversations(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     limit: int = 20,
     cursor: str | None = None,
@@ -172,7 +167,7 @@ def list_conversations(
     scope_resource_id: str | None = None,
     allowed_scope_refs: frozenset[str] | None = None,
 ) -> tuple[list[Conversation], str | None]:
-    """Return the user's conversations in this workspace, newest first.
+    """Return the user's conversations for this account, newest first.
 
     Pagination uses a compound ``(updated_at, id)`` cursor — required to stay
     stable when two rows share the same ``updated_at`` tick (bulk creates,
@@ -183,7 +178,6 @@ def list_conversations(
     stmt = (
         select(Conversation)
         .where(
-            Conversation.workspace_id == workspace.id,
             Conversation.user_id == user.id,
             Conversation.deleted_at.is_(None),
         )
@@ -241,7 +235,6 @@ def list_conversations(
 def get_conversation(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     conversation_id: str,
 ) -> Conversation:
@@ -249,7 +242,6 @@ def get_conversation(
     conversation = db.get(Conversation, conversation_id)
     if (
         conversation is None
-        or conversation.workspace_id != workspace.id
         or conversation.user_id != user.id
         or conversation.deleted_at is not None
     ):
@@ -263,14 +255,11 @@ def get_conversation(
 def rename_conversation(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     conversation_id: str,
     title: str,
 ) -> Conversation:
-    conversation = get_conversation(
-        db, workspace=workspace, user=user, conversation_id=conversation_id
-    )
+    conversation = get_conversation(db, user=user, conversation_id=conversation_id)
     normalized = (title or "").strip()[:TITLE_MAX_LEN]
     if not normalized:
         raise localized_http_exception(
@@ -286,7 +275,6 @@ def rename_conversation(
 def soft_delete_conversation(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     conversation_id: str,
 ) -> None:
@@ -295,9 +283,7 @@ def soft_delete_conversation(
     Turns are retained on disk — no automatic cleanup job exists yet, so
     deletions are fully recoverable by an admin until we add one.
     """
-    conversation = get_conversation(
-        db, workspace=workspace, user=user, conversation_id=conversation_id
-    )
+    conversation = get_conversation(db, user=user, conversation_id=conversation_id)
     conversation.deleted_at = utcnow_naive()
     db.commit()
 
@@ -327,7 +313,6 @@ def truncate_turns_from_seq(
 def rewrite_turns_from_target(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     conversation_id: str,
     target_turn_id: str,
@@ -348,7 +333,6 @@ def rewrite_turns_from_target(
         select(Conversation)
         .where(
             Conversation.id == conversation_id,
-            Conversation.workspace_id == workspace.id,
             Conversation.user_id == user.id,
             Conversation.deleted_at.is_(None),
         )
@@ -487,9 +471,7 @@ def stage_turn(
     """
 
     db.execute(
-        select(Conversation.id)
-        .where(Conversation.id == conversation.id)
-        .with_for_update()
+        select(Conversation.id).where(Conversation.id == conversation.id).with_for_update()
     ).scalar_one()
     next_seq = db.execute(
         select(func.coalesce(func.max(ConversationTurn.seq), -1) + 1).where(
@@ -521,9 +503,7 @@ def update_staged_or_persisted_turn(
     """Update the server-owned placeholder for a durable background run."""
 
     turn = db.scalar(
-        select(ConversationTurn)
-        .where(ConversationTurn.id == turn_id)
-        .with_for_update()
+        select(ConversationTurn).where(ConversationTurn.id == turn_id).with_for_update()
     )
     if turn is None or turn.role != "assistant":
         raise LookupError(f"assistant conversation turn not found: {turn_id}")

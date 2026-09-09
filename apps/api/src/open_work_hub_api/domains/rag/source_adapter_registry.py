@@ -6,9 +6,7 @@ from typing import Any
 
 from open_work_hub_api.domains.rag.contracts import RagSyncLane, RagSyncOperation
 
-
 RagProjectionLoader = Callable[[Any, str, Any], Any | None]
-RagWorkspaceResourceIdsLoader = Callable[[Any, Any], Iterable[str]]
 RagCompanyResourceIdsLoader = Callable[[Any], Iterable[str]]
 RagSourceVisibilityPredicate = Callable[[Any, "RagSourceAdapter"], bool]
 RagVisibilityScopeResourceIdsLoader = Callable[[Any, Any], Iterable[str]]
@@ -35,7 +33,6 @@ class RagResourceAdapter:
     app_id: str | None = None
     partition_adapter_id: str | None = None
     load_projection: RagProjectionLoader | None = None
-    workspace_resource_ids: RagWorkspaceResourceIdsLoader | None = None
     company_resource_ids: RagCompanyResourceIdsLoader | None = None
     on_projection_deleted: RagProjectionDeletedHook | None = None
     on_projection_prepared: RagProjectionPreparedHook | None = None
@@ -43,7 +40,7 @@ class RagResourceAdapter:
     on_projection_synced: RagProjectionSyncedHook | None = None
     on_projection_failed: RagProjectionFailedHook | None = None
     include_in_default_query: bool = False
-    include_in_workspace_reindex: bool = False
+    include_in_reindex: bool = False
     include_in_company_reindex: bool = False
 
 
@@ -75,7 +72,9 @@ def register_rag_source_adapter(adapter: RagSourceAdapter) -> None:
 def register_rag_resource_adapter(adapter: RagResourceAdapter) -> None:
     existing = _resource_adapters_by_resource_type.get(adapter.resource_type)
     if existing is not None and existing != adapter:
-        raise ValueError(f"RAG resource adapter is already registered for {adapter.resource_type!r}")
+        raise ValueError(
+            f"RAG resource adapter is already registered for {adapter.resource_type!r}"
+        )
     _resource_adapters_by_resource_type[adapter.resource_type] = adapter
     if adapter.include_in_default_query:
         register_default_rag_resource_type(adapter.resource_type)
@@ -87,9 +86,7 @@ def register_rag_visibility_scope_adapter(adapter: RagVisibilityScopeAdapter) ->
         raise ValueError("RAG visibility scope adapter must declare scope_type")
     resource_type = adapter.resource_type.strip()
     if not resource_type:
-        raise ValueError(
-            f"RAG visibility scope adapter {scope_type!r} must declare resource_type"
-        )
+        raise ValueError(f"RAG visibility scope adapter {scope_type!r} must declare resource_type")
     normalized = RagVisibilityScopeAdapter(
         scope_type=scope_type,
         resource_type=resource_type,
@@ -164,12 +161,14 @@ def rag_visibility_scope_adapters() -> tuple[RagVisibilityScopeAdapter, ...]:
     return tuple(_visibility_scope_adapters_by_scope_type.values())
 
 
-def workspace_reindex_rag_resource_adapters(enabled_app_ids: set[str]) -> tuple[RagResourceAdapter, ...]:
+def reindex_rag_resource_adapters(
+    enabled_app_ids: set[str],
+) -> tuple[RagResourceAdapter, ...]:
     return tuple(
         adapter
         for adapter in _resource_adapters_by_resource_type.values()
-        if adapter.include_in_workspace_reindex
-        and adapter.workspace_resource_ids is not None
+        if adapter.include_in_reindex
+        and adapter.company_resource_ids is not None
         and adapter.app_id in enabled_app_ids
     )
 
@@ -191,7 +190,7 @@ def searchable_rag_app_ids() -> frozenset[str]:
         adapter.app_id
         for adapter in _resource_adapters_by_resource_type.values()
         if adapter.include_in_default_query
-        or adapter.include_in_workspace_reindex
+        or adapter.include_in_reindex
         or adapter.include_in_company_reindex
     }
     app_ids.update(
@@ -246,5 +245,5 @@ __all__ = [
     "reset_rag_source_adapters",
     "resource_types_for_rag_source_kinds",
     "searchable_rag_app_ids",
-    "workspace_reindex_rag_resource_adapters",
+    "reindex_rag_resource_adapters",
 ]

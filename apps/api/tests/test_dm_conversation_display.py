@@ -13,7 +13,10 @@ def test_direct_conversation_display_name_uses_other_active_user() -> None:
         participants=[_participant(sender), _participant(recipient)],
     )
 
-    assert conversation_display.dm_conversation_display_name(conversation, "recipient") == "Sender Name"
+    assert (
+        conversation_display.dm_conversation_display_name(conversation, "recipient")
+        == "Sender Name"
+    )
 
 
 def test_group_conversation_display_name_prefers_title() -> None:
@@ -23,7 +26,10 @@ def test_group_conversation_display_name_prefers_title() -> None:
         participants=[_participant(_user("sender")), _participant(_user("recipient"))],
     )
 
-    assert conversation_display.dm_conversation_display_name(conversation, "recipient") == "Launch Room"
+    assert (
+        conversation_display.dm_conversation_display_name(conversation, "recipient")
+        == "Launch Room"
+    )
 
 
 def test_group_conversation_display_name_falls_back_to_active_participant_names() -> None:
@@ -50,15 +56,24 @@ def test_group_conversation_display_name_falls_back_to_active_participant_names(
 
 
 def test_dm_user_name_prefers_display_name_then_full_name_then_email() -> None:
-    assert conversation_display.dm_user_name(
-        _user("display", display_name="Display Name", full_name="Full Name"),
-    ) == "Display Name"
-    assert conversation_display.dm_user_name(
-        _user("full", full_name="Full Name"),
-    ) == "Full Name"
-    assert conversation_display.dm_user_name(
-        _user("email", full_name="", email="email@example.test"),
-    ) == "email@example.test"
+    assert (
+        conversation_display.dm_user_name(
+            _user("display", display_name="Display Name", full_name="Full Name"),
+        )
+        == "Display Name"
+    )
+    assert (
+        conversation_display.dm_user_name(
+            _user("full", full_name="Full Name"),
+        )
+        == "Full Name"
+    )
+    assert (
+        conversation_display.dm_user_name(
+            _user("email", full_name="", email="email@example.test"),
+        )
+        == "email@example.test"
+    )
 
 
 def _conversation(

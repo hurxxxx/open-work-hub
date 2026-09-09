@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import type { DmMessage, DmThread, DmUser } from '../api/dm-api';
+import type { DmMessage, DmMessageAttachment, DmThread } from '../api/dm-api';
+import {
+  dmAttachmentFixture,
+  dmParticipantFixture as participant,
+  dmUserFixture as user,
+} from '../testing/dm-fixtures';
 import {
   buildDmThreadListItem,
   displayDmUserName,
@@ -36,13 +41,13 @@ describe('dm thread list model', () => {
         'u1',
       ),
     ).toBe('Grace');
-    expect(dmThreadDisplayName(conversation({ title: 'Release room' }), 'u1')).toBe(
-      'Release room',
-    );
+    expect(
+      dmThreadDisplayName(conversation({ title: 'Release room' }), 'u1'),
+    ).toBe('Release room');
     expect(
       dmThreadDisplayName(
         conversation({
-          display_name: null,
+          display_name: '',
           participants: [
             participant(user({ id: 'u1', full_name: 'Me' })),
             participant(user({ id: 'u2', full_name: 'Ada Lovelace' })),
@@ -58,7 +63,9 @@ describe('dm thread list model', () => {
   });
 
   it('creates localized message and thread previews', () => {
-    expect(dmMessagePreviewText(message({ body: ' hello ' }), t)).toBe(' hello ');
+    expect(dmMessagePreviewText(message({ body: ' hello ' }), t)).toBe(
+      ' hello ',
+    );
     expect(
       dmMessagePreviewText(
         message({
@@ -71,10 +78,7 @@ describe('dm thread list model', () => {
     expect(
       dmMessagePreviewText(
         message({
-          attachments: [
-            attachment({ id: 'a1' }),
-            attachment({ id: 'a2' }),
-          ],
+          attachments: [attachment({ id: 'a1' }), attachment({ id: 'a2' })],
           body: '',
         }),
         t,
@@ -122,40 +126,18 @@ describe('dm thread list model', () => {
   });
 });
 
-function user(overrides: Partial<DmUser> = {}): DmUser {
-  return {
-    id: 'u1',
-    email: 'user@example.test',
-    full_name: 'Ada Lovelace',
-    display_name: '',
-    avatar_url: null,
-    ...overrides,
-  };
-}
-
-function participant(
-  participantUser: DmUser,
-): DmThread['participants'][number] {
-  return {
-    role: 'member',
-    user: participantUser,
-  };
-}
-
 function attachment(
-  overrides: Partial<DmMessage['attachments'][number]> = {},
-): DmMessage['attachments'][number] {
-  return {
+  overrides: Partial<DmMessageAttachment> = {},
+): DmMessageAttachment {
+  return dmAttachmentFixture({
     id: 'a1',
+    message_id: 'm1',
     filename: 'file.txt',
     content_type: 'text/plain',
     size_bytes: 100,
     is_image: false,
-    preview_url: null,
-    download_url: null,
-    created_at: '2026-05-20T00:00:00.000Z',
     ...overrides,
-  };
+  });
 }
 
 function message(overrides: Partial<DmMessage> = {}): DmMessage {
@@ -166,6 +148,7 @@ function message(overrides: Partial<DmMessage> = {}): DmMessage {
     sequence: 1,
     sender_id: 'u1',
     sender_name: 'User One',
+    read_state: { unread_count: 0, read_by_all: true },
     body: '',
     attachments: [],
     created_at: '2026-05-20T00:00:00.000Z',

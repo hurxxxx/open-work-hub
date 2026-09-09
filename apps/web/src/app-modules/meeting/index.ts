@@ -1,13 +1,16 @@
 import { createElement, lazy, Suspense } from 'react';
 
+import { meetingManifest } from './manifest';
+import { meetingAppRoutes } from './routes';
+import { meetingSidebarConfig } from './sidebar';
 import type { MeetingCreateModalProps } from './views/MeetingView/MeetingCreateModal';
-import type { MeetingWorkspaceLayoutProps } from './views/MeetingView/MeetingWorkspaceLayout';
+import type { MeetingDetailLayoutProps } from './views/MeetingView/MeetingDetailLayout';
 
 export { meetingManifest } from './manifest';
-export { meetingWorkspaceRoutes } from './routes';
+export { meetingAppRoutes } from './routes';
 export { meetingSidebarConfig } from './sidebar';
 export type { MeetingCreateModalProps } from './views/MeetingView/MeetingCreateModal';
-export type { MeetingWorkspaceLayoutProps } from './views/MeetingView/MeetingWorkspaceLayout';
+export type { MeetingDetailLayoutProps } from './views/MeetingView/MeetingDetailLayout';
 
 const LazyMeetingCreateModal = lazy(() =>
   import('./views/MeetingView/MeetingCreateModal').then((module) => ({
@@ -15,9 +18,9 @@ const LazyMeetingCreateModal = lazy(() =>
   })),
 );
 
-const LazyMeetingWorkspaceLayout = lazy(() =>
-  import('./views/MeetingView/MeetingWorkspaceLayout').then((module) => ({
-    default: module.MeetingWorkspaceLayout,
+const LazyMeetingDetailLayout = lazy(() =>
+  import('./views/MeetingView/MeetingDetailLayout').then((module) => ({
+    default: module.MeetingDetailLayout,
   })),
 );
 
@@ -29,10 +32,16 @@ export function MeetingCreateModal(props: MeetingCreateModalProps) {
   );
 }
 
-export function MeetingWorkspaceLayout(props: MeetingWorkspaceLayoutProps) {
+export function MeetingDetailLayout(props: MeetingDetailLayoutProps) {
   return createElement(
     Suspense,
     { fallback: null },
-    createElement(LazyMeetingWorkspaceLayout, props),
+    createElement(LazyMeetingDetailLayout, props),
   );
 }
+
+export const meetingModule = {
+  manifest: meetingManifest,
+  sidebarConfig: meetingSidebarConfig,
+  appRoutes: meetingAppRoutes,
+} as const;

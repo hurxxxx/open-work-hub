@@ -1,33 +1,17 @@
+import { Plus, Search } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
 
 import { Button, Dialog, DropdownMenu, SearchField } from '@open-work-hub/ui';
 
 import {
-  bulkWorkspaceMembers,
   createAdminUser,
   deleteAdminUser,
-  impersonateAdminUser,
   listAdminUsers,
-  removeWorkspaceMember,
   resetUserPassword,
   updateAdminUser,
-  type WorkspaceItem,
 } from './admin-api';
-import {
-  ADMIN_PEOPLE_PAGE_SIZE_OPTIONS,
-  BodyCell,
-  EmptyRow,
-  FORM_FIELD_CLASS as fieldClassName,
-  HeadCell,
-  SectionMessage,
-  formatDateLabel,
-  formatStatusLabel,
-  getErrorMessage,
-} from './admin-shared';
 import {
   buildAdminPeopleExportRows,
   buildAdminPeopleRows,
@@ -38,85 +22,22 @@ import {
   type AdminPeopleFormatter,
 } from './admin-people-rows-model';
 import {
-  activeWorkspaces,
-  workspaceMembershipIdsForUser,
-} from './admin-user-access-model';
-import {
-  saveAdminUserAccessWorkflow,
-  type AdminUserAccessWorkflowPorts,
-} from './admin-user-access-workflow';
+  ADMIN_PEOPLE_PAGE_SIZE_OPTIONS,
+  BodyCell,
+  EmptyRow,
+  FORM_FIELD_CLASS as fieldClassName,
+  formatDateLabel,
+  formatStatusLabel,
+  getErrorMessage,
+  HeadCell,
+  SectionMessage,
+} from './admin-shared';
 import { useAdminPeopleDirectoryController } from './useAdminPeopleDirectoryController';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { downloadBlobAsFile } from '@/src/platform/browser/browser-download';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
-
-function WorkspaceMembershipChecklist({
-  availableWorkspaces,
-  disabled = false,
-  emptyLabel,
-  onChange,
-  selectedWorkspaceIds,
-}: {
-  availableWorkspaces: readonly WorkspaceItem[];
-  disabled?: boolean;
-  emptyLabel: string;
-  onChange: (workspaceIds: string[]) => void;
-  selectedWorkspaceIds: readonly string[];
-}) {
-  const { t } = useTranslation('apps');
-  const selectedIds = useMemo(
-    () => new Set(selectedWorkspaceIds),
-    [selectedWorkspaceIds],
-  );
-
-  if (availableWorkspaces.length === 0) {
-    return (
-      <div className="app-text-caption rounded-md border border-dashed border-app-border p-3 text-app-ink/55">
-        {emptyLabel}
-      </div>
-    );
-  }
-
-  return (
-    <fieldset className="grid gap-2" disabled={disabled}>
-      <legend className="app-text-caption mb-1 text-app-ink/55">
-        {t('admin.console.people.workspaceMemberships')}
-      </legend>
-      <div className="max-h-52 overflow-y-auto rounded-md border border-app-border">
-        {availableWorkspaces.map((workspace) => (
-          <label
-            className="app-text-control flex cursor-pointer items-center gap-3 border-b border-app-border px-3 py-2 text-app-ink last:border-b-0 hover:bg-app-surface-hover"
-            key={workspace.id}
-          >
-            <input
-              checked={selectedIds.has(workspace.id)}
-              onChange={(event) => {
-                onChange(
-                  event.target.checked
-                    ? Array.from(
-                        new Set([...selectedWorkspaceIds, workspace.id]),
-                      )
-                    : selectedWorkspaceIds.filter(
-                        (workspaceId) => workspaceId !== workspace.id,
-                      ),
-                );
-              }}
-              type="checkbox"
-            />
-            <span className="min-w-0">
-              <span className="block truncate">{workspace.name}</span>
-              <span className="app-text-caption block truncate text-app-ink/55">
-                {workspace.key}
-              </span>
-            </span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
 
 function primaryOrganizationValue(user: AuthUser, key: 'id' | 'name'): string {
   const value = user.primary_organization_unit?.[key];
@@ -126,7 +47,6 @@ function primaryOrganizationValue(user: AuthUser, key: 'id' | 'name'): string {
 export function PeopleSection({ token }: { token: string }) {
   const { t, i18n } = useTranslation('apps');
   const auth = useAuth();
-  const navigate = useNavigate();
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const timeZone = normalizeTimeZone(auth.user?.time_zone);
   const directory = useAdminPeopleDirectoryController({
@@ -134,9 +54,6 @@ export function PeopleSection({ token }: { token: string }) {
     messages: {
       organizationListLoadFailed: t(
         'admin.console.people.organizationListLoadFailed',
-      ),
-      workspaceListLoadFailed: t(
-        'admin.console.people.workspaceListLoadFailed',
       ),
       userListLoadFailed: t('admin.console.people.userListLoadFailed'),
     },
@@ -153,7 +70,6 @@ export function PeopleSection({ token }: { token: string }) {
     totalUsers,
     unassignedOnly,
     users,
-    workspaces,
   } = directory.state;
   const [createOpen, setCreateOpen] = useState(false);
   const [loginId, setLoginId] = useState('');
@@ -164,9 +80,6 @@ export function PeopleSection({ token }: { token: string }) {
   const [jobTitle, setJobTitle] = useState('');
   const [primaryOrganizationUnitId, setPrimaryOrganizationUnitId] =
     useState('');
-  const [selectedWorkspaceIds, setSelectedWorkspaceIds] = useState<string[]>(
-    [],
-  );
   const [selectedPlatformAdmin, setSelectedPlatformAdmin] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -184,29 +97,13 @@ export function PeopleSection({ token }: { token: string }) {
   >('active');
   const [editLoginBlocked, setEditLoginBlocked] = useState(false);
   const [editPlatformAdmin, setEditPlatformAdmin] = useState(false);
-  const [editOriginalWorkspaceIds, setEditOriginalWorkspaceIds] = useState<
-    string[]
-  >([]);
-  const [editWorkspaceIds, setEditWorkspaceIds] = useState<string[]>([]);
   const [isSavingUser, setIsSavingUser] = useState(false);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
-  const [impersonatingUserId, setImpersonatingUserId] = useState<string | null>(
-    null,
-  );
-  const availableWorkspaces = useMemo(
-    () => activeWorkspaces(workspaces),
-    [workspaces],
-  );
-  const availableWorkspaceIdSet = useMemo(
-    () => new Set(availableWorkspaces.map((workspace) => workspace.id)),
-    [availableWorkspaces],
-  );
-  const canImpersonateUsers = auth.hasPermission('user.impersonate');
   const peopleFormatter = useMemo<AdminPeopleFormatter>(
     () => ({
       role: {
-        admin: t('admin.shared.roles.admin.label'),
-        member: t('admin.shared.roles.member.label'),
+        admin: t('admin.console.people.platformAdmin'),
+        member: t('admin.console.people.regularUser'),
       },
       status: (status) => formatStatusLabel(status, t),
       date: (value) => formatDateLabel(value, locale, timeZone),
@@ -223,25 +120,6 @@ export function PeopleSection({ token }: { token: string }) {
         format: peopleFormatter,
       }),
     [page, pageSize, peopleFormatter, totalUsers, users],
-  );
-  const userAccessWorkflowPorts = useMemo<AdminUserAccessWorkflowPorts>(
-    () => ({
-      addWorkspaceMember: async (workspaceId, userId, role) => {
-        const result = await bulkWorkspaceMembers(token, workspaceId, {
-          action: 'add',
-          subjects: [{ subject_type: 'user', subject_id: userId, role }],
-        });
-        if (result.failed.length > 0) {
-          throw new Error(
-            result.failed[0]?.detail ??
-              t('admin.console.people.accessSaveFailed'),
-          );
-        }
-      },
-      removeWorkspaceMember: (workspaceId, userId) =>
-        removeWorkspaceMember(token, workspaceId, 'user', userId),
-    }),
-    [t, token],
   );
   const editingUser = useMemo(
     () => users.find((user) => user.id === editingUserId) ?? null,
@@ -263,7 +141,6 @@ export function PeopleSection({ token }: { token: string }) {
     setEmployeeCode('');
     setJobTitle('');
     setPrimaryOrganizationUnitId('');
-    setSelectedWorkspaceIds([]);
     setSelectedPlatformAdmin(false);
     setCreateOpen(true);
     requestAnimationFrame(() => {
@@ -301,13 +178,6 @@ export function PeopleSection({ token }: { token: string }) {
         primary_organization_unit_id: primaryOrganizationUnitId || null,
         system_roles: selectedPlatformAdmin ? ['platform_admin'] : [],
       });
-      await saveAdminUserAccessWorkflow({
-        userId: createdUser.user.id,
-        workspaces: availableWorkspaces,
-        currentWorkspaceIds: [],
-        nextWorkspaceIds: selectedWorkspaceIds,
-        ports: userAccessWorkflowPorts,
-      });
       setCreateOpen(false);
       setMessage(
         t('admin.console.people.userCreated', {
@@ -319,7 +189,7 @@ export function PeopleSection({ token }: { token: string }) {
       if (createdUser) {
         setCreateOpen(false);
         setError(
-          t('admin.console.people.userCreatedAccessFailed', {
+          t('admin.console.people.userCreatedReloadFailed', {
             password: createdUser.temporary_password,
           }),
         );
@@ -354,28 +224,6 @@ export function PeopleSection({ token }: { token: string }) {
           t('admin.console.people.passwordResetFailed'),
         ),
       );
-    }
-  }
-
-  async function handleImpersonateUser(user: AuthUser) {
-    if (impersonatingUserId) {
-      return;
-    }
-    setMessage(null);
-    setError(null);
-    setImpersonatingUserId(user.id);
-    try {
-      const session = await impersonateAdminUser(token, user.id);
-      auth.switchSession(session);
-      navigate('/', { replace: true });
-    } catch (caughtError) {
-      setError(
-        getErrorMessage(
-          caughtError,
-          t('admin.console.people.impersonateFailed'),
-        ),
-      );
-      setImpersonatingUserId(null);
     }
   }
 
@@ -419,18 +267,20 @@ export function PeopleSection({ token }: { token: string }) {
     );
     setEditLoginBlocked(Boolean(user.login_blocked));
     setEditPlatformAdmin(user.system_roles.includes('platform_admin'));
-    const workspaceIds = workspaceMembershipIdsForUser(user).filter(
-      (workspaceId) => availableWorkspaceIdSet.has(workspaceId),
-    );
-    setEditOriginalWorkspaceIds(workspaceIds);
-    setEditWorkspaceIds(workspaceIds);
     requestAnimationFrame(() => {
       document.getElementById('admin-user-edit-full-name')?.focus();
     });
   }
 
-  async function handleUpdateUser(event: React.FormEvent<HTMLFormElement>) {
+  function handleUpdateUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!editingUserId) {
+      return;
+    }
+    void saveEditedUser();
+  }
+
+  async function saveEditedUser() {
     if (!editingUserId) {
       return;
     }
@@ -457,13 +307,6 @@ export function PeopleSection({ token }: { token: string }) {
         login_blocked: editLoginBlocked,
       });
       profileSaved = true;
-      await saveAdminUserAccessWorkflow({
-        userId: editingUserId,
-        workspaces: availableWorkspaces,
-        currentWorkspaceIds: editOriginalWorkspaceIds,
-        nextWorkspaceIds: editWorkspaceIds,
-        ports: userAccessWorkflowPorts,
-      });
       setEditingUserId(null);
       setMessage(t('admin.console.people.userSaved'));
       await reloadUsers(page);
@@ -555,12 +398,11 @@ export function PeopleSection({ token }: { token: string }) {
         t('admin.console.people.columns.employeeCode'),
         t('admin.console.people.columns.jobTitle'),
         t('admin.console.people.columns.organization'),
-        t('admin.console.people.columns.workspaces'),
+        t('admin.console.people.columns.groups'),
         t('admin.console.people.columns.role'),
         t('admin.console.people.columns.status'),
         t('admin.console.people.columns.lastActive'),
         t('admin.console.people.columns.created'),
-        t('admin.console.people.columns.enabledApps'),
       ];
       downloadBlobAsFile(
         new Blob([encodeAdminPeopleCsv({ header, rows })], {
@@ -701,7 +543,7 @@ export function PeopleSection({ token }: { token: string }) {
                   {t('admin.console.people.columns.organization')}
                 </HeadCell>
                 <HeadCell className="w-[150px]" dense>
-                  {t('admin.console.people.columns.workspaces')}
+                  {t('admin.console.people.columns.groups')}
                 </HeadCell>
                 <HeadCell className="w-[80px]" dense>
                   {t('admin.console.people.columns.role')}
@@ -773,7 +615,7 @@ export function PeopleSection({ token }: { token: string }) {
                         className="max-w-[150px] truncate text-app-ink/55"
                         dense
                       >
-                        {row.workspaceNames}
+                        {row.groupCount}
                       </BodyCell>
                       <BodyCell
                         className="whitespace-nowrap text-app-ink/55"
@@ -792,12 +634,6 @@ export function PeopleSection({ token }: { token: string }) {
                             </span>
                           ) : null}
                         </div>
-                      </BodyCell>
-                      <BodyCell
-                        className="max-w-[110px] truncate text-app-ink/55"
-                        dense
-                      >
-                        {row.appsLabel}
                       </BodyCell>
                       <BodyCell className="text-app-ink/55" dense>
                         {row.lastActiveLabel}
@@ -825,28 +661,6 @@ export function PeopleSection({ token }: { token: string }) {
                                   !row.user.login_blocked,
                                 ),
                             },
-                            ...(canImpersonateUsers && !isCurrentUser
-                              ? [
-                                  {
-                                    id: 'impersonate',
-                                    label:
-                                      impersonatingUserId === row.id
-                                        ? t(
-                                            'admin.console.people.impersonatingUser',
-                                          )
-                                        : t(
-                                            'admin.console.people.impersonateUser',
-                                          ),
-                                    disabled:
-                                      Boolean(impersonatingUserId) ||
-                                      row.user.status !== 'active' ||
-                                      row.user.login_blocked,
-                                    separatorBefore: true,
-                                    onSelect: () =>
-                                      void handleImpersonateUser(row.user),
-                                  },
-                                ]
-                              : []),
                             {
                               id: 'reset',
                               label: t('admin.console.people.resetPassword'),
@@ -1093,14 +907,6 @@ export function PeopleSection({ token }: { token: string }) {
               </span>
             </label>
           </section>
-          <section className="border-t border-app-border pt-4">
-            <WorkspaceMembershipChecklist
-              availableWorkspaces={availableWorkspaces}
-              emptyLabel={t('admin.console.people.noCreatableWorkspaces')}
-              onChange={setSelectedWorkspaceIds}
-              selectedWorkspaceIds={selectedWorkspaceIds}
-            />
-          </section>
         </form>
       </Dialog>
 
@@ -1296,14 +1102,6 @@ export function PeopleSection({ token }: { token: string }) {
                 </span>
               </span>
             </label>
-          </section>
-          <section className="border-t border-app-border pt-4">
-            <WorkspaceMembershipChecklist
-              availableWorkspaces={availableWorkspaces}
-              emptyLabel={t('admin.console.people.noWorkspaces')}
-              onChange={setEditWorkspaceIds}
-              selectedWorkspaceIds={editWorkspaceIds}
-            />
           </section>
         </form>
       </Dialog>

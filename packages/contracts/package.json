@@ -39,6 +39,14 @@
     "./realtime": {
       "types": "./dist/realtime.d.ts",
       "import": "./dist/realtime.js"
+    },
+    "./app-contracts": {
+      "types": "./dist/app-contracts.d.ts",
+      "import": "./dist/app-contracts.js"
+    },
+    "./app-routes": {
+      "types": "./dist/app-routes.d.ts",
+      "import": "./dist/app-routes.js"
     }
   },
   "scripts": {

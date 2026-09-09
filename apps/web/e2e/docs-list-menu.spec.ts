@@ -13,7 +13,7 @@ const docsHubItems = [
     doc_type: 'general',
     collection: null,
     primary_container: null,
-    location_label: 'Workspace Docs',
+    location_label: 'Company Docs',
     is_private: false,
     is_favorite: false,
     can_manage: true,
@@ -36,7 +36,7 @@ const docsHubItems = [
     doc_type: 'general',
     collection: null,
     primary_container: null,
-    location_label: 'Workspace Docs',
+    location_label: 'Company Docs',
     is_private: false,
     is_favorite: false,
     can_manage: true,
@@ -52,7 +52,7 @@ const docsHubItems = [
 ];
 
 async function stubDocsList(page: Page) {
-  await page.route('**/api/v1/workspaces/*/docs/hub**', (route) =>
+  await page.route('**/api/v1/docs/hub**', (route) =>
     route.fulfill({
       json: {
         items: docsHubItems,
@@ -62,13 +62,13 @@ async function stubDocsList(page: Page) {
       },
     }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/collections**', (route) =>
+  await page.route('**/api/v1/docs/collections**', (route) =>
     route.fulfill({ json: { items: [], total: 0 } }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/favorites**', (route) =>
+  await page.route('**/api/v1/docs/favorites**', (route) =>
     route.fulfill({ json: [] }),
   );
-  await page.route('**/api/v1/workspaces/*/docs/recent-pages**', (route) =>
+  await page.route('**/api/v1/docs/recent-pages**', (route) =>
     route.fulfill({ json: [] }),
   );
   await page.route('**/api/v1/docs/favorites**', (route) =>
@@ -80,15 +80,23 @@ async function stubDocsList(page: Page) {
 }
 
 test.describe('Docs list row menu', () => {
-  test('keeps the bottom row menu reachable outside the table frame', async ({ page }) => {
+  test('keeps the bottom row menu reachable outside the table frame', async ({
+    page,
+  }) => {
     await stubShellBackend(page);
     await stubConversationsApi(page);
     await stubDocsList(page);
 
-    await page.goto('/w/hq/docs');
+    await page.goto('/apps/docs');
     await expect(page.getByText('HP ZGX Nano AI Station 셋업')).toBeVisible();
 
-    await page.locator('tbody tr').last().locator('td').last().locator('button').click();
+    await page
+      .locator('tbody tr')
+      .last()
+      .locator('td')
+      .last()
+      .locator('button')
+      .click();
 
     const renameAction = page.getByText('이름 변경');
     await expect(renameAction).toBeVisible();
@@ -100,7 +108,10 @@ test.describe('Docs list row menu', () => {
             rect.left + rect.width / 2,
             rect.top + rect.height / 2,
           );
-          return target === node || Boolean(target && (node.contains(target) || target.contains(node)));
+          return (
+            target === node ||
+            Boolean(target && (node.contains(target) || target.contains(node)))
+          );
         }),
       )
       .toBe(true);

@@ -64,8 +64,7 @@ def select_gateway_tool(
 ) -> str | None:
     registry = get_ai_capability_registry()
     registered_adapters = {
-        adapter.tool_name: adapter
-        for adapter in registry.gateway_adapters_for_agent(task.agent_id)
+        adapter.tool_name: adapter for adapter in registry.gateway_adapters_for_agent(task.agent_id)
     }
     approved_exact_tool_names = _approved_exact_tool_names(
         task=task,
@@ -73,9 +72,7 @@ def select_gateway_tool(
     )
     read_builders = read_gateway_tool_builders()
     gateway_tool_names = (
-        frozenset(read_builders)
-        | frozenset(registered_adapters)
-        | approved_exact_tool_names
+        frozenset(read_builders) | frozenset(registered_adapters) | approved_exact_tool_names
     )
     requested = [
         name
@@ -89,10 +86,7 @@ def select_gateway_tool(
 
     preferred = (
         *default_gateway_tools_for_agent(task.agent_id),
-        *(
-            adapter.tool_name
-            for adapter in registry.gateway_adapters_for_agent(task.agent_id)
-        ),
+        *(adapter.tool_name for adapter in registry.gateway_adapters_for_agent(task.agent_id)),
     )
     for name in preferred:
         if name in available_tool_names:
@@ -150,9 +144,7 @@ def _gateway_passthrough_arguments(
     task: LocalAgentTask,
 ) -> dict[str, Any]:
     return {
-        key: value
-        for key, value in task.tool_arguments.items()
-        if key in adapter.passthrough_keys
+        key: value for key, value in task.tool_arguments.items() if key in adapter.passthrough_keys
     }
 
 

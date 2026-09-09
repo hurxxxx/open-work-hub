@@ -1,3 +1,7 @@
+import {
+  getAppRouteChrome,
+  getAppRoutePattern,
+} from '@open-work-hub/contracts/app-routes';
 import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
@@ -11,11 +15,13 @@ const CommunityView = lazy(() =>
 
 export const communityGlobalRoutes: StaticRouteDefinition[] = [
   {
-    path: '/community',
+    chrome: getAppRouteChrome('community.root'),
+    path: getAppRoutePattern('community.root'),
     element: lazyRoute(createElement(CommunityView)),
   },
   {
-    path: '/community/posts/:postId',
+    chrome: getAppRouteChrome('community.post'),
+    path: getAppRoutePattern('community.post'),
     element: lazyRoute(createElement(CommunityView)),
   },
 ];

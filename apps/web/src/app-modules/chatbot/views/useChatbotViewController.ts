@@ -1,16 +1,11 @@
+import { useConfirm } from '@open-work-hub/ui';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  useLocation,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from 'react-router-dom';
-import { useConfirm } from '@open-work-hub/ui';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import type { NavItem } from '@/src/app/shell/navigation-types';
+import { resolveAppInvocationHref } from '@/src/platform/apps/app-links';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { resolveToolInvocationHref } from '@/src/platform/workspaces/workspace-utils';
 import {
   CONVERSATIONS_UPDATED_EVENT,
   getConversation,
@@ -21,6 +16,10 @@ import {
 } from '../api/useAiGraphRunRecovery';
 import { useChatStream } from '../api/useChatStream';
 import type { ChatTurn } from './chat/MessageBubble';
+import type {
+  ChatbotExperienceConfig,
+  ResolvedChatbotExperienceConfig,
+} from './chatbot-experience';
 import {
   buildAiChatStreamRequest,
   buildConversationSearchParams,
@@ -31,22 +30,18 @@ import {
   mergeToolCalls,
   normalizeConversationDetail,
   resolvePendingAiDraft,
-  shouldConfirmRewrite,
   serializeTurnForModel,
+  shouldConfirmRewrite,
   type AiChatSendRequestOptions,
   type AiPendingSendSnapshot,
   type AiSendTransition,
 } from './chatbot-view-model';
-import { useChatbotViewState } from './useChatbotViewState';
-import { useChatbotHealth } from './useChatbotHealth';
-import { useChatbotChatStreamCommit } from './useChatbotChatStreamCommit';
-import { useChatbotArtifactRouting } from './useChatbotArtifactRouting';
 import { useChatbotApprovals } from './useChatbotApprovals';
+import { useChatbotArtifactRouting } from './useChatbotArtifactRouting';
+import { useChatbotChatStreamCommit } from './useChatbotChatStreamCommit';
 import { useChatbotConversationHydration } from './useChatbotConversationHydration';
-import type {
-  ChatbotExperienceConfig,
-  ResolvedChatbotExperienceConfig,
-} from './chatbot-experience';
+import { useChatbotHealth } from './useChatbotHealth';
+import { useChatbotViewState } from './useChatbotViewState';
 
 export function useChatbotViewController(
   experience: ChatbotExperienceConfig = {},
@@ -56,12 +51,12 @@ export function useChatbotViewController(
   const { status: authStatus, token, user } = useAuth();
   const { pathname: locationPathname, state: locationState } = useLocation();
   const navigate = useNavigate();
-  const { workspaceSlug } = useParams();
+
   const [searchParams, setSearchParams] = useSearchParams();
   // `c` query param is the durable source of truth for which persisted
   // conversation this tab is showing. The conversation list navigates to
-  // `/w/:slug/chatbot?c=<id>` to switch threads; the bare
-  // `/w/:slug/chatbot` path
+  // the canonical chatbot app route with `?c=<id>` to switch threads; the
+  // route without `c`
   // opens a fresh chat. Stream-created conversations write themselves back
   // into this param so a page refresh resumes the same thread.
   const routeConversationId = searchParams.get('c');
@@ -83,12 +78,12 @@ export function useChatbotViewController(
     locationState,
     routeDraft,
   });
-  const { health, healthError } = useChatbotHealth(token, workspaceSlug);
+  const { health, healthError } = useChatbotHealth(token);
   const backendMode = 'local' as const;
   const resolvedExperience = useMemo<ResolvedChatbotExperienceConfig>(() => {
     return {
       routeAppId: experience.routeAppId ?? 'chatbot',
-      routePathSuffix: experience.routePathSuffix ?? '',
+      routeId: experience.routeId ?? 'chatbot.root',
       sidebarEyebrow: experience.sidebarEyebrow ?? 'AI',
       sidebarTitle:
         experience.sidebarTitle ?? t('apps:ai.sidebar.recentConversations'),
@@ -109,7 +104,7 @@ export function useChatbotViewController(
     experience.emptyGreeting,
     experience.emptySubline,
     experience.routeAppId,
-    experience.routePathSuffix,
+    experience.routeId,
     experience.sidebarEyebrow,
     experience.sidebarTitle,
     experience.sourceArtifactTypes,
@@ -173,9 +168,8 @@ export function useChatbotViewController(
     () =>
       [
         user?.id ?? 'anonymous',
-        workspaceSlug ?? 'no-workspace',
         resolvedExperience.routeAppId,
-        resolvedExperience.routePathSuffix,
+        resolvedExperience.routeId,
         resolvedExperience.conversationScope?.ref ?? 'unscoped',
         resolvedExperience.conversationScope?.resourceId ?? 'unscoped',
       ].join(':'),
@@ -183,12 +177,11 @@ export function useChatbotViewController(
       resolvedExperience.conversationScope?.ref,
       resolvedExperience.conversationScope?.resourceId,
       resolvedExperience.routeAppId,
-      resolvedExperience.routePathSuffix,
+      resolvedExperience.routeId,
       user?.id,
-      workspaceSlug,
     ],
   );
-  const chat = useChatStream(token, workspaceSlug, chatRuntimeKey, {
+  const chat = useChatStream(token, chatRuntimeKey, {
     disableSyncFallback:
       resolvedExperience.executionMode === 'durable_background',
   });
@@ -223,7 +216,6 @@ export function useChatbotViewController(
     enabled: resolvedExperience.executionMode === 'durable_background',
     refreshKey: chat.state.status,
     token,
-    workspaceSlug,
   });
   const recoveredRunIsActive = isAiGraphRunActive(durableRunRecovery.run);
   const isRunInProgress = isSending || recoveredRunIsActive;
@@ -275,7 +267,6 @@ export function useChatbotViewController(
     setApprovalError,
     token,
     upsertPendingApproval,
-    workspaceSlug,
   });
 
   const isComposerDisabled =
@@ -290,9 +281,7 @@ export function useChatbotViewController(
         return;
       }
       try {
-        const detail = await getConversation(token, conversationId, {
-          workspaceSlug,
-        });
+        const detail = await getConversation(token, conversationId, {});
         const normalizedDetail = normalizeConversationDetail(detail);
         setTurns(normalizedDetail.turns);
         setActiveConversationId(normalizedDetail.activeConversationId);
@@ -311,7 +300,6 @@ export function useChatbotViewController(
       setTurns,
       syncLivePendingApproval,
       token,
-      workspaceSlug,
     ],
   );
 
@@ -384,7 +372,6 @@ export function useChatbotViewController(
     skipNextHydrationResetRef,
     syncLivePendingApproval,
     token,
-    workspaceSlug,
   });
 
   useEffect(() => {
@@ -625,9 +612,8 @@ export function useChatbotViewController(
   };
 
   function handleSelectTool(item: NavItem) {
-    // Tool invocation semantics: plain AI items land on their /tool/:id page,
-    // deep-links (linkAppId, absolutePath) honor their NavItem metadata.
-    navigate(resolveToolInvocationHref(item, workspaceSlug, user));
+    // Registered app metadata owns every navigation target.
+    navigate(resolveAppInvocationHref(item));
   }
 
   function handleSubmit() {
@@ -708,7 +694,6 @@ export function useChatbotViewController(
       slashCommandItems,
       t,
       visibleToolCalls,
-      workspaceSlug,
     },
   };
 }

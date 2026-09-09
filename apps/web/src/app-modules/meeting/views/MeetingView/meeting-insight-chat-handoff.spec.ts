@@ -18,7 +18,6 @@ function makeInsight(
     id: 'insight-1',
     meeting_id: 'meeting-1',
     recording_id: null,
-    workspace_id: 'workspace-1',
     insight_type: 'action',
     payload: {},
     confidence: null,
@@ -42,7 +41,6 @@ describe('meeting insight chat handoff plan', () => {
   it('plans scoped conversation creation, draft state, and encoded target URL', () => {
     const translate = makeTranslator();
     const plan = planMeetingInsightChatHandoff({
-      workspaceSlug: 'team space',
       meeting: { id: 'meeting-1', title: 'Weekly Sync' },
       insight: makeInsight({
         id: 'action-1',
@@ -63,7 +61,7 @@ describe('meeting insight chat handoff plan', () => {
       aiDraftOrigin: 'meeting_insight',
     });
     expect(plan.targetUrlForConversation('conversation 1/2')).toBe(
-      '/w/team%20space/chatbot?c=conversation%201%2F2',
+      '/apps/chatbot?c=conversation+1%2F2',
     );
   });
 

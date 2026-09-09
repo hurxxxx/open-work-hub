@@ -2,10 +2,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { FileText, MessageSquare, Search } from 'lucide-react';
 
-import type { WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
-import type { WorkspaceBootstrapAppBarCategory } from '@/src/platform/workspaces/workspaces-api';
+import type { ShellAppId } from '@/src/platform/apps/app-links';
+import type { BootstrapAppBarCategory } from '@/src/platform/apps/apps-api';
 import { AppBarEditor } from './AppBarEditor';
-import type { AppBarTranslator, AppBarWorkspaceItem } from './app-bar-model';
+import type { AppBarTranslator, AppBarLaunchItem } from './app-bar-model';
 
 const translate: AppBarTranslator = (key, options) => {
   const value =
@@ -32,13 +32,13 @@ const translate: AppBarTranslator = (key, options) => {
   return value;
 };
 
-const draftItems: AppBarWorkspaceItem[] = [
-  { id: 'chatbot' as WorkspaceAppId, title: '챗봇', icon: MessageSquare },
-  { id: 'docs' as WorkspaceAppId, title: '문서', icon: FileText },
-  { id: 'web-search' as WorkspaceAppId, title: '웹 검색', icon: Search },
+const draftItems: AppBarLaunchItem[] = [
+  { id: 'chatbot' as ShellAppId, title: '챗봇', icon: MessageSquare },
+  { id: 'docs' as ShellAppId, title: '문서', icon: FileText },
+  { id: 'web-search' as ShellAppId, title: '웹 검색', icon: Search },
 ];
 
-const launcherCategories: WorkspaceBootstrapAppBarCategory[] = [
+const launcherCategories: BootstrapAppBarCategory[] = [
   {
     id: 'ai',
     key: 'ai',
@@ -47,16 +47,20 @@ const launcherCategories: WorkspaceBootstrapAppBarCategory[] = [
     position: 0,
     items: [
       {
+        coming_soon: false,
+        position: 0,
         app_id: 'chatbot',
         title: '챗봇',
-        route_base: '/chatbot',
+        route_base: '/apps/chatbot',
         icon_key: 'message-square',
         enabled: true,
       },
       {
+        coming_soon: false,
+        position: 1,
         app_id: 'web-search',
         title: '웹 검색',
-        route_base: '/web-search',
+        route_base: '/apps/web-search',
         icon_key: 'search',
         enabled: true,
       },
@@ -70,9 +74,11 @@ const launcherCategories: WorkspaceBootstrapAppBarCategory[] = [
     position: 1,
     items: [
       {
+        coming_soon: false,
+        position: 0,
         app_id: 'docs',
         title: '문서',
-        route_base: '/docs',
+        route_base: '/apps/docs',
         icon_key: 'file-text',
         enabled: true,
       },
@@ -81,9 +87,9 @@ const launcherCategories: WorkspaceBootstrapAppBarCategory[] = [
 ];
 
 function renderEditor({
-  draftPinnedAppIds = ['chatbot' as WorkspaceAppId],
+  draftPinnedAppIds = ['chatbot' as ShellAppId],
 }: {
-  draftPinnedAppIds?: WorkspaceAppId[];
+  draftPinnedAppIds?: ShellAppId[];
 } = {}) {
   const onTogglePinnedApp = vi.fn();
   render(
@@ -145,7 +151,7 @@ describe('AppBarEditor', () => {
         'recording',
         'diagrams',
         'docs',
-      ] as WorkspaceAppId[],
+      ] as ShellAppId[],
     });
 
     for (const checkbox of screen.getAllByLabelText('문서 즐겨찾기에 추가')) {

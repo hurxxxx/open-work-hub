@@ -9,28 +9,33 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.meeting import service as meeting_service
 from open_work_hub_api.domains.meeting.models import (
     Meeting,
     MeetingTaskLink,
 )
-from open_work_hub_api.domains.meeting.permissions import ensure_meeting_participant
-from open_work_hub_api.domains.pms.access import _ensure_task_readable as ensure_task_readable
-from open_work_hub_api.domains.recording import blob_store as recording_blob_store
-from open_work_hub_api.domains.recording import service as canonical_recording_service
-from open_work_hub_api.domains.recording.schemas import (
-    RecordingUploadCompleteRequest as CanonicalRecordingCompleteRequest,
-    RecordingUploadInitRequest as CanonicalRecordingStagingInitRequest,
+from open_work_hub_api.domains.meeting.permissions import (
+    ensure_meeting_participant,
+    ensure_meeting_reader,
 )
 from open_work_hub_api.domains.meeting.schemas import (
-    MeetingDetail,
     RecordingChunkAck,
     RecordingCompleteRequest,
     RecordingPlaybackResponse,
     RecordingStagingInitRequest,
     RecordingStagingItem,
 )
+from open_work_hub_api.domains.pms.access import _ensure_task_readable as ensure_task_readable
+from open_work_hub_api.domains.recording import blob_store as recording_blob_store
+from open_work_hub_api.domains.recording import service as canonical_recording_service
+from open_work_hub_api.domains.recording.schemas import (
+    RecordingUploadCompleteRequest as CanonicalRecordingCompleteRequest,
+)
+from open_work_hub_api.domains.recording.schemas import (
+    RecordingUploadInitRequest as CanonicalRecordingStagingInitRequest,
+)
+
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
@@ -54,10 +59,9 @@ def _serialize_canonical_staging(staging, *, meeting_id: str) -> RecordingStagin
     )
 
 
-def _ensure_canonical_staging_for_meeting(db: Session, *, workspace: Workspace, meeting_id: str, staging_id: str):
+def _ensure_canonical_staging_for_meeting(db: Session, *, meeting_id: str, staging_id: str):
     staging = canonical_recording_service.load_staging_or_404(
         db,
-        workspace=workspace,
         staging_id=staging_id,
     )
     if (
@@ -84,7 +88,9 @@ def _meeting_task_link_exists(db: Session, *, meeting_id: str, task_id: str) -> 
     )
 
 
-def _validate_linked_task_id(db: Session, *, meeting: Meeting, user: User, linked_task_id: str | None) -> None:
+def _validate_linked_task_id(
+    db: Session, *, meeting: Meeting, user: User, linked_task_id: str | None
+) -> None:
     if linked_task_id is None:
         return
     ensure_task_readable(db, user, linked_task_id)
@@ -98,17 +104,15 @@ def _validate_linked_task_id(db: Session, *, meeting: Meeting, user: User, linke
 def init_staging(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting_id: str,
     payload: RecordingStagingInitRequest,
 ) -> RecordingStagingItem:
-    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
+    meeting = meeting_service._load_meeting(db, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     _validate_linked_task_id(db, meeting=meeting, user=user, linked_task_id=payload.linked_task_id)
     staging = canonical_recording_service.init_staging(
         db,
-        workspace=workspace,
         user=user,
         payload=CanonicalRecordingStagingInitRequest(
             idempotency_key=payload.idempotency_key,
@@ -126,7 +130,6 @@ def init_staging(
 async def upload_chunk(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting_id: str,
     staging_id: str,
@@ -134,17 +137,15 @@ async def upload_chunk(
     upload: UploadFile,
     chunk_sha256: str | None,
 ) -> RecordingChunkAck:
-    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
+    meeting = meeting_service._load_meeting(db, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     _ensure_canonical_staging_for_meeting(
         db,
-        workspace=workspace,
         meeting_id=meeting.id,
         staging_id=staging_id,
     )
     return await canonical_recording_service.upload_chunk(
         db,
-        workspace=workspace,
         user=user,
         staging_id=staging_id,
         seq=seq,
@@ -156,15 +157,13 @@ async def upload_chunk(
 def list_my_staging(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting_id: str,
 ) -> list[RecordingStagingItem]:
-    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
+    meeting = meeting_service._load_meeting(db, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     items = canonical_recording_service.list_my_staging(
         db,
-        workspace=workspace,
         user=user,
         initial_target_app="meeting",
         initial_target_type="meeting",
@@ -176,22 +175,19 @@ def list_my_staging(
 def discard_staging(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting_id: str,
     staging_id: str,
 ) -> None:
-    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
+    meeting = meeting_service._load_meeting(db, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     _ensure_canonical_staging_for_meeting(
         db,
-        workspace=workspace,
         meeting_id=meeting.id,
         staging_id=staging_id,
     )
     canonical_recording_service.discard_staging(
         db,
-        workspace=workspace,
         user=user,
         staging_id=staging_id,
     )
@@ -200,23 +196,20 @@ def discard_staging(
 def complete_staging(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting_id: str,
     staging_id: str,
     payload: RecordingCompleteRequest,
-):
-    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
+) -> Meeting:
+    meeting = meeting_service._load_meeting(db, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     _ensure_canonical_staging_for_meeting(
         db,
-        workspace=workspace,
         meeting_id=meeting.id,
         staging_id=staging_id,
     )
     canonical_recording_service.complete_staging(
         db,
-        workspace=workspace,
         user=user,
         staging_id=staging_id,
         payload=CanonicalRecordingCompleteRequest(
@@ -225,25 +218,23 @@ def complete_staging(
             source="live_recording",
         ),
     )
-    fresh = meeting_service._load_meeting(db, workspace, meeting.id)
-    return meeting_service._serialize_meeting(db, fresh)
+    fresh = meeting_service._load_meeting(db, meeting.id)
+    return fresh
 
 
 def import_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting_id: str,
     upload: UploadFile,
     linked_task_id: str | None,
-):
-    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
+) -> Meeting:
+    meeting = meeting_service._load_meeting(db, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     _validate_linked_task_id(db, meeting=meeting, user=user, linked_task_id=linked_task_id)
     canonical_recording_service.import_recording(
         db,
-        workspace=workspace,
         user=user,
         upload=upload,
         title=meeting.title,
@@ -256,37 +247,31 @@ def import_recording(
         initial_target_id=meeting.id,
         linked_task_id=linked_task_id,
     )
-    fresh = meeting_service._load_meeting(db, workspace, meeting.id)
-    return meeting_service._serialize_meeting(db, fresh)
+    fresh = meeting_service._load_meeting(db, meeting.id)
+    return fresh
 
 
 def get_recording_playback(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting_id: str,
     recording_id: str,
 ) -> RecordingPlaybackResponse:
-    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
-    ensure_meeting_participant(db, user, meeting)
+    meeting = meeting_service._load_meeting(db, meeting_id)
+    ensure_meeting_reader(db, user, meeting)
     canonical_recording_service.load_meeting_recording_or_404(
         db,
-        workspace=workspace,
         meeting_id=meeting.id,
         recording_id=recording_id,
     )
     playback = canonical_recording_service.get_recording_playback(
         db,
-        workspace=workspace,
         user=user,
         recording_id=recording_id,
     )
     return RecordingPlaybackResponse(
-        url=(
-            f"/api/v1/workspaces/{workspace.key}/meeting/meetings/{meeting.id}"
-            f"/recordings/{recording_id}/media"
-        ),
+        url=(f"/api/v1/meeting/meetings/{meeting.id}/recordings/{recording_id}/media"),
         expires_at=playback.expires_at,
     )
 
@@ -294,22 +279,19 @@ def get_recording_playback(
 def stream_recording_media(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting_id: str,
     recording_id: str,
 ) -> StreamingResponse:
-    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
-    ensure_meeting_participant(db, user, meeting)
+    meeting = meeting_service._load_meeting(db, meeting_id)
+    ensure_meeting_reader(db, user, meeting)
     canonical_recording_service.load_meeting_recording_or_404(
         db,
-        workspace=workspace,
         meeting_id=meeting.id,
         recording_id=recording_id,
     )
     return canonical_recording_service.stream_recording_media(
         db,
-        workspace=workspace,
         user=user,
         recording_id=recording_id,
     )
@@ -318,32 +300,29 @@ def stream_recording_media(
 def retry_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting_id: str,
     recording_id: str,
-):
-    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
+) -> Meeting:
+    meeting = meeting_service._load_meeting(db, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     canonical_recording_service.retry_meeting_recording(
         db,
-        workspace=workspace,
         user=user,
         meeting=meeting,
         recording_id=recording_id,
     )
-    fresh = meeting_service._load_meeting(db, workspace, meeting.id)
-    return meeting_service._serialize_meeting(db, fresh)
+    fresh = meeting_service._load_meeting(db, meeting.id)
+    return fresh
 
 
 def delete_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting_id: str,
     recording_id: str,
-) -> MeetingDetail:
+) -> Meeting:
     """Hard-delete a finalized meeting recording.
 
     Permission: organizer of the meeting OR the user who originally uploaded
@@ -354,11 +333,10 @@ def delete_recording(
     minio object, and clears any auto-generated notes doc reference if this
     recording produced one. The DB row is removed entirely.
     """
-    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
+    meeting = meeting_service._load_meeting(db, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     canonical_recording_service.archive_meeting_recording(
         db,
-        workspace=workspace,
         user=user,
         meeting=meeting,
         recording_id=recording_id,
@@ -373,12 +351,16 @@ def delete_recording(
     )
     db.commit()
 
-    fresh = meeting_service._load_meeting(db, workspace, meeting.id)
-    return meeting_service._serialize_meeting(db, fresh)
+    fresh = meeting_service._load_meeting(db, meeting.id)
+    return fresh
 
 
 def cleanup_meeting_recordings(db: Session, *, meeting: Meeting) -> None:
-    from open_work_hub_api.domains.recording.models import Recording, RecordingTarget, RecordingStaging
+    from open_work_hub_api.domains.recording.models import (
+        Recording,
+        RecordingStaging,
+        RecordingTarget,
+    )
 
     recordings = db.scalars(
         select(Recording)
@@ -433,20 +415,20 @@ def cleanup_stale_staging_once(db: Session) -> dict[str, int]:
 def fetch_local_recording_blob(
     db: Session,
     *,
-    workspace: Workspace,
     meeting_id: str,
     staging_id: str,
     user: User,
 ) -> bytes:
-    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
+    meeting = meeting_service._load_meeting(db, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     staging = _ensure_canonical_staging_for_meeting(
         db,
-        workspace=workspace,
         meeting_id=meeting.id,
         staging_id=staging_id,
     )
     if staging.uploaded_by_id != user.id:
-        raise localized_http_exception(status_code=status.HTTP_403_FORBIDDEN, code="meeting.uploader_read_staging_required")
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN, code="meeting.uploader_read_staging_required"
+        )
     assembled_path = canonical_recording_service.assemble_staging_chunks(staging)
     return assembled_path.read_bytes()

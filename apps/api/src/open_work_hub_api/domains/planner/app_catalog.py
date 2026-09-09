@@ -1,27 +1,18 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
-    WorkspaceNavRegistration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-PLANNER_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="planner",
-    title="Planner",
-    route_base="/planner",
-    icon_key="calendar",
-    availability_scope="platform",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=False,
-    launcher_personal_tools=True,
+PLANNER_APP = app_registration(
+    "planner",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="planner-calendar",
             title="캘린더",
             category="Schedule",
             icon_key="calendar",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="planner-timeline",
             title="타임라인",
             category="Schedule",

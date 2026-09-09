@@ -1,15 +1,14 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import { Activity, Calendar } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
 export const plannerManifest: AppModuleManifest = {
   appBarItem: { id: 'planner', title: 'planner', icon: Calendar },
-  surfaces: { launcher: { globalPath: '/planner' } },
   contract: {
     owner: 'planner-platform',
     permissions: [],
     apiDomain: 'planner',
-    resourceScope: 'personal',
     aiCapabilities: [
       'planner.list_events',
       'planner.create_event',
@@ -23,6 +22,10 @@ export const plannerManifest: AppModuleManifest = {
     ],
     appLocalTests: [
       'apps/web/src/app-modules/planner/views/planner-calendar-session.spec.ts',
+      'apps/web/src/app-modules/planner/views/planner-calendar-event-projection.spec.ts',
+      'apps/web/src/app-modules/planner/views/PlannerView.mutation.spec.tsx',
+      'apps/web/src/platform/calendar/calendar-events-session.spec.ts',
+      'apps/web/src/platform/calendar/use-calendar-events.spec.tsx',
       'apps/api/tests/test_planner_events.py',
     ],
   },
@@ -44,6 +47,6 @@ export const plannerManifest: AppModuleManifest = {
       pathSuffix: '?view=timeline',
     },
   ],
-  workspaceRoutePaths: [],
-  globalRoutePaths: ['/planner'],
+  appRoutePaths: [],
+  globalRoutePaths: [getAppRoutePattern('planner.root')],
 };

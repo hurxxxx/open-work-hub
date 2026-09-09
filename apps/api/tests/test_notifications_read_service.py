@@ -5,11 +5,13 @@ from typing import Any
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.notifications import read_service
+from open_work_hub_api.domains.notifications import visibility as notification_visibility
 from open_work_hub_api.domains.notifications.read_service import (
     list_user_notifications,
     mark_all_read_and_publish,
@@ -18,6 +20,21 @@ from open_work_hub_api.domains.notifications.read_service import (
     mark_one_read,
 )
 from open_work_hub_api.domains.pms.models import Notification
+
+
+@pytest.fixture(autouse=True)
+def _isolate_read_service_from_source_policy(monkeypatch) -> None:
+    """These unit tests exercise read state; source-policy tests own visibility."""
+
+    def _visible(_db, *, user, rows):
+        return [row for row in rows if row.user_id == user.id]
+
+    monkeypatch.setattr(notification_visibility, "visible_notifications", _visible)
+    monkeypatch.setattr(
+        read_service,
+        "notification_is_visible",
+        lambda _db, *, notification, user: notification.user_id == user.id,
+    )
 
 
 def _session() -> Session:
@@ -47,17 +64,17 @@ def _add_notification(
     created_at: datetime,
     action_url: str = "/dm/conversations/conversation-1",
     is_read: bool = False,
-    notification_type: str = "test_notification",
 ) -> None:
     session.add(
         Notification(
             id=notification_id,
             user_id=user_id,
-            type=notification_type,
+            type="test_notification",
             title=f"Notification {notification_id}",
             body="Body",
-            reference_type="conversation",
-            reference_id="conversation-1",
+            source_type="community_post",
+            source_id="post-1",
+            origin_app_id="community",
             action_url=action_url,
             is_read=is_read,
             created_at=created_at,
@@ -101,41 +118,7 @@ def test_list_user_notifications_paginates_user_rows_in_created_order() -> None:
         session.close()
 
 
-def test_list_user_notifications_excludes_legacy_dm_message_rows() -> None:
-    session = _session()
-    try:
-        _add_user(session, "user-1")
-        created_at = datetime(2026, 1, 1, tzinfo=UTC).replace(tzinfo=None)
-        _add_notification(
-            session,
-            notification_id="dm-notification",
-            user_id="user-1",
-            created_at=created_at,
-            notification_type="dm_message",
-        )
-        _add_notification(
-            session,
-            notification_id="community-notification",
-            user_id="user-1",
-            created_at=created_at + timedelta(minutes=1),
-            notification_type="community_comment",
-        )
-        session.commit()
-
-        response = list_user_notifications(
-            session,
-            user_id="user-1",
-            page=1,
-            page_size=10,
-        )
-
-        assert response.total == 1
-        assert [item.id for item in response.items] == ["community-notification"]
-    finally:
-        session.close()
-
-
-def test_list_user_notifications_normalizes_legacy_pms_action_urls() -> None:
+def test_list_user_notifications_preserves_canonical_pms_action_urls() -> None:
     session = _session()
     try:
         _add_user(session, "user-1")
@@ -144,33 +127,13 @@ def test_list_user_notifications_normalizes_legacy_pms_action_urls() -> None:
             notification_id="pms-notification",
             user_id="user-1",
             created_at=datetime(2026, 1, 1, tzinfo=UTC).replace(tzinfo=None),
-            action_url="/tool/pms-list-list-1?workspace=hq&task=task-1",
+            action_url="/apps/pms/lists/list-1?task=task-1",
         )
         session.commit()
 
         response = list_user_notifications(session, user_id="user-1", page=1, page_size=20)
 
-        assert response.items[0].action_url == "/w/hq/pms/lists/list-1?task=task-1"
-    finally:
-        session.close()
-
-
-def test_list_user_notifications_normalizes_duplicate_workspace_app_action_urls() -> None:
-    session = _session()
-    try:
-        _add_user(session, "user-1")
-        _add_notification(
-            session,
-            notification_id="docs-notification",
-            user_id="user-1",
-            created_at=datetime(2026, 1, 1, tzinfo=UTC).replace(tzinfo=None),
-            action_url="/w/hq/docs/docs/cooling-module",
-        )
-        session.commit()
-
-        response = list_user_notifications(session, user_id="user-1", page=1, page_size=20)
-
-        assert response.items[0].action_url == "/w/hq/docs/cooling-module"
+        assert response.items[0].action_url == "/apps/pms/lists/list-1?task=task-1"
     finally:
         session.close()
 
@@ -259,8 +222,9 @@ def test_mark_one_read_and_publish_emits_read_event_with_serialized_notification
                     "type": "test_notification",
                     "title": "Notification notification-1",
                     "body": "Body",
-                    "reference_type": "conversation",
-                    "reference_id": "conversation-1",
+                    "source_type": "community_post",
+                    "source_id": "post-1",
+                    "origin_app_id": "community",
                     "action_url": "/dm/conversations/conversation-1",
                     "is_read": True,
                     "created_at": created_at.isoformat(),
@@ -343,6 +307,50 @@ def test_mark_all_read_and_publish_emits_read_all_event() -> None:
         other = session.get(Notification, "notification-2")
         assert other is not None
         assert other.is_read is False
+    finally:
+        session.close()
+
+
+def test_notification_visibility_scan_uses_bounded_batches(monkeypatch) -> None:
+    session = _session()
+    try:
+        _add_user(session, "user-1")
+        created_at = datetime(2026, 1, 1, tzinfo=UTC).replace(tzinfo=None)
+        for index in range(5):
+            _add_notification(
+                session,
+                notification_id=f"notification-{index}",
+                user_id="user-1",
+                created_at=created_at + timedelta(minutes=index),
+            )
+        session.commit()
+        user = session.get(User, "user-1")
+        assert user is not None
+        batch_sizes: list[int] = []
+
+        def _visible(_db, *, user, rows):
+            batch_sizes.append(len(rows))
+            return [row for row in rows if row.user_id == user.id]
+
+        monkeypatch.setattr(notification_visibility, "visible_notifications", _visible)
+
+        batches = list(
+            notification_visibility.iter_visible_notification_batches(
+                session,
+                user=user,
+                statement=select(Notification).order_by(Notification.created_at.desc()),
+                batch_size=2,
+            )
+        )
+
+        assert batch_sizes == [2, 2, 1]
+        assert [row.id for batch in batches for row in batch] == [
+            "notification-4",
+            "notification-3",
+            "notification-2",
+            "notification-1",
+            "notification-0",
+        ]
     finally:
         session.close()
 

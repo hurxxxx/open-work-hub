@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-import hashlib
-import json
 from types import SimpleNamespace
 from typing import Protocol
 
@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from open_work_hub_api.core.settings import is_production_environment
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.document_processing import EvidenceBlock
 from open_work_hub_api.domains.files.models import (
     FileManagerCorpus,
@@ -51,6 +51,8 @@ from open_work_hub_api.domains.retrieval.files_quality_judgments import (
     validate_files_quality_judgments,
 )
 from open_work_hub_api.domains.retrieval.models import (
+    RetrievalPartition,
+    RetrievalPartitionState,
     RetrievalProjectionBackend,
     RetrievalProjectionDesiredState,
     RetrievalProjectionEvent,
@@ -58,12 +60,6 @@ from open_work_hub_api.domains.retrieval.models import (
     RetrievalProjectionGenerationAttestation,
     RetrievalProjectionGenerationState,
     RetrievalProjectionHead,
-    RetrievalPartition,
-    RetrievalPartitionState,
-)
-from open_work_hub_api.domains.retrieval.projection_identity import (
-    canonical_search_document_id,
-    canonical_vector_point_id,
 )
 from open_work_hub_api.domains.retrieval.projection_generations import (
     RetrievalProjectionGenerationCutoverTarget,
@@ -78,6 +74,10 @@ from open_work_hub_api.domains.retrieval.projection_generations import (
     prepare_generation_pair_cutover,
     record_generation_validation,
 )
+from open_work_hub_api.domains.retrieval.projection_identity import (
+    canonical_search_document_id,
+    canonical_vector_point_id,
+)
 from open_work_hub_api.domains.search.index_gateway import (
     RETRIEVAL_PARTITIONED_INDEX_SCHEMA_VERSION,
     keyword_search_index_alias,
@@ -88,23 +88,19 @@ from open_work_hub_api.domains.source_access.resource_types import (
     FILE_MANAGER_FILE_RESOURCE_TYPE,
 )
 
-
 _EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 
 _OPENSEARCH_MUTABLE_ACL_FIELDS = frozenset(
     {
         "id",
-        "workspace_id",
         "visibility",
         "deep_link",
         "source_updated_at",
         "created_at",
     }
 )
-_QDRANT_MUTABLE_ACL_FIELDS = frozenset({"scope_kind", "workspace_id", "visibility_refs"})
-_QDRANT_MUTABLE_ACL_METADATA_FIELDS = frozenset(
-    {"origin_ref", "visibility", "access_scope_kind", "managed_workspace_id"}
-)
+_QDRANT_MUTABLE_ACL_FIELDS = frozenset({"scope_kind", "visibility_refs"})
+_QDRANT_MUTABLE_ACL_METADATA_FIELDS = frozenset({"origin_ref", "visibility", "access_scope_kind"})
 
 
 class ProjectionContractDigest:
@@ -710,7 +706,7 @@ class FilesGenerationRunner:
             sorted({str(scope or "").strip().lower() for scope in scope_coverage})
         )
         if not normalized_scopes or any(
-            scope not in {"company", "workspace", "personal"} for scope in normalized_scopes
+            scope not in {"company", "personal"} for scope in normalized_scopes
         ):
             raise FilesGenerationError("attestation_scope_coverage_invalid")
 
@@ -1443,13 +1439,13 @@ class FilesGenerationRunner:
                     (
                         str(row.access_scope_kind).strip().lower()
                         if row.corpus_id is not None
-                        else "workspace"
+                        else "company"
                     )
                     for row in rows
                 }
         except Exception as error:
             raise FilesGenerationError("attestation_scope_inspection_failed") from error
-        if not scopes or any(scope not in {"company", "workspace", "personal"} for scope in scopes):
+        if not scopes or any(scope not in {"company", "personal"} for scope in scopes):
             raise FilesGenerationError("attestation_scope_inspection_failed")
         return tuple(sorted(scopes))
 
@@ -2088,7 +2084,7 @@ def load_files_source_snapshot(db: Session) -> FilesSourceProjectionSnapshot:
     canonical projection head agree. Unsupported rows are explicit exclusions;
     pending or failed rows make the baseline unavailable instead of disappearing.
     Projection contracts intentionally omit mutable ACL routing hints so a
-    corpus scope/workspace transition is fenced by ``acl_envelope_sha256`` but
+    corpus scope transition is fenced by ``acl_envelope_sha256`` but
     does not require re-indexing or embedding.
     """
 
@@ -2101,7 +2097,6 @@ def load_files_source_snapshot(db: Session) -> FilesSourceProjectionSnapshot:
             FileManagerFile.visibility,
             FileManagerFile.folder_id,
             FileManagerFile.corpus_id,
-            FileManagerFile.workspace_id,
             FileManagerFile.owner_id,
             FileManagerFile.updated_at,
             FileManagerFile.extraction_status,
@@ -2112,10 +2107,7 @@ def load_files_source_snapshot(db: Session) -> FilesSourceProjectionSnapshot:
             FileManagerFile.retrieval_partition_id.label("file_partition_id"),
             User.display_name.label("owner_display_name"),
             User.full_name.label("owner_full_name"),
-            Workspace.key.label("workspace_key"),
-            Workspace.active.label("workspace_active"),
             FileManagerCorpus.retrieval_partition_id.label("corpus_partition_id"),
-            FileManagerCorpus.managed_workspace_id.label("corpus_managed_workspace_id"),
             FileManagerCorpus.access_scope_kind.label("corpus_access_scope_kind"),
             FileManagerCorpus.metadata_version.label("corpus_metadata_version"),
             FileManagerCorpus.source_managed.label("corpus_source_managed"),
@@ -2131,9 +2123,7 @@ def load_files_source_snapshot(db: Session) -> FilesSourceProjectionSnapshot:
             FileManagerFileSourceMetadata.document_type.label("source_metadata_document_type"),
             FileManagerFileSourceMetadata.acl_resolved.label("source_metadata_acl_resolved"),
             RetrievalPartition.source_namespace.label("partition_source_namespace"),
-            RetrievalPartition.managed_workspace_id.label("partition_managed_workspace_id"),
             RetrievalPartition.candidate_scope_kind.label("partition_candidate_scope_kind"),
-            RetrievalPartition.candidate_workspace_id.label("partition_candidate_workspace_id"),
             RetrievalPartition.candidate_user_id.label("partition_candidate_user_id"),
             RetrievalPartition.state.label("partition_state"),
             RetrievalPartition.metadata_version.label("partition_metadata_version"),
@@ -2144,7 +2134,6 @@ def load_files_source_snapshot(db: Session) -> FilesSourceProjectionSnapshot:
             RetrievalProjectionHead.content_checksum,
         )
         .outerjoin(User, User.id == FileManagerFile.owner_id)
-        .outerjoin(Workspace, Workspace.id == FileManagerFile.workspace_id)
         .outerjoin(FileManagerCorpus, FileManagerCorpus.id == FileManagerFile.corpus_id)
         .outerjoin(
             FileManagerFileSourceMetadata,
@@ -2209,7 +2198,6 @@ def load_files_source_snapshot(db: Session) -> FilesSourceProjectionSnapshot:
                 SimpleNamespace(
                     id=str(row.corpus_id),
                     retrieval_partition_id=str(row.corpus_partition_id),
-                    managed_workspace_id=str(row.corpus_managed_workspace_id),
                     access_scope_kind=str(row.corpus_access_scope_kind),
                     metadata_version=int(row.corpus_metadata_version),
                 )
@@ -2247,7 +2235,6 @@ def load_files_source_snapshot(db: Session) -> FilesSourceProjectionSnapshot:
                 visibility=str(row.visibility),
                 folder_id=row.folder_id,
                 corpus_id=row.corpus_id,
-                workspace_id=str(row.workspace_id),
                 owner_id=str(row.owner_id),
                 updated_at=row.updated_at,
                 extraction_status=str(row.extraction_status),
@@ -2259,12 +2246,8 @@ def load_files_source_snapshot(db: Session) -> FilesSourceProjectionSnapshot:
                 owner=owner,
                 source_metadata=source_metadata,
             )
-            workspace = SimpleNamespace(
-                id=str(row.workspace_id),
-                key=str(row.workspace_key),
-            )
             projection_version = int(row.projection_version)
-            search_document = dict(build_file_search_document(workspace=workspace, file=file))
+            search_document = dict(build_file_search_document(file=file))
             search_document.update(
                 {
                     "resource_type": FILE_MANAGER_FILE_RESOURCE_TYPE,
@@ -2357,14 +2340,11 @@ def load_files_source_snapshot(db: Session) -> FilesSourceProjectionSnapshot:
 def _source_acl_envelope(row: SimpleNamespace) -> dict[str, object] | None:
     try:
         partition_id = str(row.file_partition_id or "").strip()
-        workspace_id = str(row.workspace_id or "").strip()
         partition_metadata_version = int(row.partition_metadata_version)
     except (AttributeError, TypeError, ValueError):
         return None
     if (
         not partition_id
-        or not workspace_id
-        or not bool(row.workspace_active)
         or str(row.partition_source_namespace or "") != "files"
         or str(row.partition_state or "") != RetrievalPartitionState.ACTIVE.value
         or partition_metadata_version < 1
@@ -2376,9 +2356,7 @@ def _source_acl_envelope(row: SimpleNamespace) -> dict[str, object] | None:
     if corpus_id is None:
         if (
             not bool(row.partition_is_default_ingest)
-            or str(row.partition_managed_workspace_id or "") != workspace_id
-            or str(row.partition_candidate_scope_kind or "") != "workspace"
-            or str(row.partition_candidate_workspace_id or "") != workspace_id
+            or str(row.partition_candidate_scope_kind or "") != "company"
         ):
             return None
         corpus_envelope: dict[str, object] | None = None
@@ -2388,25 +2366,19 @@ def _source_acl_envelope(row: SimpleNamespace) -> dict[str, object] | None:
         except (TypeError, ValueError):
             return None
         scope_kind = str(row.corpus_access_scope_kind or "")
-        managed_workspace_id = str(row.corpus_managed_workspace_id or "")
-        expected_candidate_workspace_id = workspace_id if scope_kind == "workspace" else None
         if (
-            scope_kind not in {"workspace", "company"}
+            scope_kind not in {"company"}
             or corpus_metadata_version < 1
             or corpus_metadata_version != partition_metadata_version
             or str(row.corpus_partition_id or "") != partition_id
-            or managed_workspace_id != workspace_id
             or bool(row.partition_is_default_ingest)
-            or str(row.partition_managed_workspace_id or "") != managed_workspace_id
             or str(row.partition_candidate_scope_kind or "") != scope_kind
-            or row.partition_candidate_workspace_id != expected_candidate_workspace_id
         ):
             return None
         corpus_envelope = {
             "corpus_id": corpus_id,
             "metadata_version": corpus_metadata_version,
             "access_scope_kind": scope_kind,
-            "managed_workspace_id": managed_workspace_id,
             "source_managed": bool(row.corpus_source_managed),
             "authorization_mode": str(row.corpus_authorization_mode or "cohort"),
             "source_acl_resolved": (
@@ -2421,16 +2393,13 @@ def _source_acl_envelope(row: SimpleNamespace) -> dict[str, object] | None:
         "resource_id": str(row.id),
         "retrieval_partition_id": partition_id,
         "source": {
-            "workspace_id": workspace_id,
             "owner_id": str(row.owner_id or ""),
             "visibility": str(row.visibility or ""),
         },
         "corpus": corpus_envelope,
         "partition": {
             "metadata_version": partition_metadata_version,
-            "managed_workspace_id": row.partition_managed_workspace_id,
             "candidate_scope_kind": str(row.partition_candidate_scope_kind),
-            "candidate_workspace_id": row.partition_candidate_workspace_id,
             "candidate_user_id": row.partition_candidate_user_id,
             "state": str(row.partition_state),
             "is_default_ingest": bool(row.partition_is_default_ingest),

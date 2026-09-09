@@ -55,7 +55,7 @@ class CheckPythonSourceIntegrityTest(unittest.TestCase):
             "duplicate-router-spec",
             self.codes(
                 "SPECS = [\n"
-                '    _RouterSpec(report_router, "workspace"),\n'
+                '    _RouterSpec(report_router, "reports"),\n'
                 '    _RouterSpec(report_router, "api"),\n'
                 "]\n"
             ),
@@ -66,7 +66,7 @@ class CheckPythonSourceIntegrityTest(unittest.TestCase):
             "duplicate-router-spec",
             self.codes(
                 "SPECS = [\n"
-                '    _RouterSpec(router=report_router, prefix="workspace"),\n'
+                '    _RouterSpec(router=report_router, prefix="reports"),\n'
                 '    _RouterSpec(router=report_router, prefix="api"),\n'
                 "]\n"
             ),

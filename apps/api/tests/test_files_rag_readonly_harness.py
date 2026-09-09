@@ -170,8 +170,6 @@ def test_ingest_is_fail_closed_behind_explicit_scope(tmp_path: Path, capsys) -> 
                 "--source",
                 str(source),
                 "--execute-ingest",
-                "--workspace-slug",
-                "engineering",
                 "--corpus-id",
                 "corpus-01",
             ]
@@ -180,7 +178,7 @@ def test_ingest_is_fail_closed_behind_explicit_scope(tmp_path: Path, capsys) -> 
     )
     assert json.loads(capsys.readouterr().out)["code"] == "ingest_adapter_not_connected"
 
-    assert harness.main(["--source", str(source), "--workspace-slug", "engineering"]) == 2
+    assert harness.main(["--source", str(source), "--corpus-id", "corpus-01"]) == 2
     assert json.loads(capsys.readouterr().out)["code"] == "ingest_flag_required"
 
 
@@ -346,9 +344,7 @@ def test_html_reports_are_eligible_but_short_helpers_and_active_text_are_not(
     assert manifest["inventory"]["eligible_file_count"] == 1
     assert _exclusions(manifest) == {"html_visible_text_below_minimum": 1}
     html_extension = next(
-        row
-        for row in manifest["inventory"]["extensions"]
-        if row["extension"] == "html"
+        row for row in manifest["inventory"]["extensions"] if row["extension"] == "html"
     )
     assert html_extension["file_count"] == 2
     assert html_extension["eligible_file_count"] == 1

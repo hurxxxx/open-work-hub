@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from open_work_hub_api.domains.rag.providers.operation import (
-    ProviderCircuitBreaker,
-)
+from open_work_hub_api.domains.rag.providers.operation import ProviderCircuitBreaker
 
 
 class _Clock:

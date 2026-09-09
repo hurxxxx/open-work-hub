@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Check, Search } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   Dialog,
@@ -13,8 +13,8 @@ import {
 
 import {
   filterIconPickerKeys,
-  iconPickerAllKeys,
   ICON_PICKER_ALL_GROUP_ID,
+  iconPickerAllKeys,
   type IconPickerGroup,
 } from './icon-picker-model';
 

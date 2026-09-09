@@ -11,11 +11,11 @@ Use current code/tests, owner docs, and root ADRs. Do not guess past a missing f
 
 1. Build deterministic pass/fail signal: focused test, curl/script, CLI fixture, Playwright, trace replay, throwaway harness, fuzz loop, bisection, or `scripts/hitl-loop.template.sh`.
 2. Reproduce the user's exact failure. Capture symptom and repeatability.
-3. Rank 3-5 falsifiable hypotheses. Each predicts what change/probe will prove or disprove it.
+3. Rank the hypotheses supported by current evidence. Each predicts what probe will prove or disprove it; do not pad the list to a fixed count.
 4. Instrument one variable per probe. Use debugger/REPL first, then targeted tagged logs like `[DEBUG-a4f2]`. For perf, measure before fixing.
-5. Add regression test at the real bug seam when available. If no correct seam exists, report that as architecture risk.
-6. Fix. Re-run original loop and regression test.
-7. Remove debug logs/prototypes. Record actual cause and validation.
+5. For diagnosis-only requests, report the cause, evidence, and proposed fix without modifying product code.
+6. When repair is requested, fix the cause, add a regression test at the real bug seam when useful, and re-run the original loop. Use authorization already given in this task.
+7. Remove temporary debug code. Record actual cause and validation.
 
 ## Stop
 

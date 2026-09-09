@@ -5,7 +5,6 @@ from typing import Literal
 
 from open_work_hub_api.domains.ai.runtime.contracts import RiskLevel, RuntimeProfile
 
-
 TerminalDependencyPolicy = Literal["domain_agents", "verifier_or_all_prior"]
 
 

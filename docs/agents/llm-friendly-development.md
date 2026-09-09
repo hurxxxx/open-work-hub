@@ -6,6 +6,7 @@
 - Thin abstractions. Add registry/adapter/plugin loader only for real runtime variation.
 - Match code names to domain terms. Avoid local aliases and pass-through modules.
 - Preserve compatibility routes/contracts until explicitly retired.
+- [ADR 0012](../../adr/0012-company-app-access-without-workspaces.md) and [App Platform](../domains/app-platform/README.md) own current company, app admission, and execution scope. Superseded ADR sections are not implementation requirements.
 - Expose complex behavior as descriptors, profiles, degraded reasons, and source IDs.
 - No branch for one prompt, keyword, field, user, customer, or fixture.
 
@@ -24,7 +25,8 @@
 - Register from `register_ai_capabilities(registry)`.
 - Workload unit = independently configurable function/stage.
 - Call only `execute_llm` or `stream_llm`.
-- Caller supplies constant `workload_id`, app/actor/workspace context, and input/messages.
+- Caller supplies constant `workload_id`, app/actor, declared personal/company execution context,
+  and input/messages. No global container ID is attached to company execution.
 - Caller never selects provider, model, pool, endpoint, credential, retry/fallback, or route by user input.
 - Providers and agent runtimes are approved adapters behind the common interface.
 - Output caps default to local 32K and external 64K unless descriptor/admin route is stricter.
@@ -32,7 +34,9 @@
 - Unknown workload, missing adapter, unsupported route, or security block fails closed.
 - Embedding/rerank/OCR/ASR use Inference Gateway, not LLM workload contracts.
 
-Owners: [AI Gateway](../domains/ai/gateway.md), [AI Write Policy](../domains/ai/write-policy.md), [ADR 0002](../../adr/0002-mcp-capability-platform.md), [ADR 0005](../../adr/0005-registered-llm-workload.md).
+Owners: [AI Domain](../domains/ai/README.md) and [AI Execution](../domains/ai/execution.md).
+[ADR 0002](../../adr/0002-mcp-capability-platform.md) and
+[ADR 0005](../../adr/0005-registered-llm-workload.md) retain capability/workload contracts under ADR 0012.
 
 ## MCP/AI Tools
 
@@ -45,14 +49,19 @@ Owners: [AI Gateway](../domains/ai/gateway.md), [AI Write Policy](../domains/ai/
 ## Retrieval/RAG
 
 - New callers use Retrieval surfaces; `/rag` wrappers stay compatibility-only.
-- Active caller-facing sources: Qdrant `generic_rag`, OpenSearch `keyword`.
+- Active caller-facing backend channels: Qdrant `generic_rag`, OpenSearch `keyword`; resource
+  participation is listed separately in the RAG source matrix.
 - Do not compare raw scores across backends.
-- Workspace keyword search is declared by backend `SearchEntityAdapter`, not frontend flags/app allowlists.
+- Company keyword search is declared by backend `SearchEntityAdapter`, not frontend flags/app allowlists.
 - `retrieval_partition_id` is candidate scope, not ACL.
 - Evidence, summaries, external LLM payloads, and citations pass source-owned final ACL.
 - Projection identity/version/cutover: ADR 0009.
 
-Owners: [Retrieval](../domains/retrieval/README.md), [RAG](../domains/rag/README.md), [ADR 0004](../../adr/0004-retrieval-rag-boundary-policy.md), [ADR 0009](../../adr/0009-retrieval-partition-projection-generations.md).
+Owners: [Retrieval](../domains/retrieval/README.md), [RAG](../domains/rag/README.md),
+and [Source Access](../domains/source-access/README.md).
+[ADR 0004](../../adr/0004-retrieval-rag-boundary-policy.md) and
+[ADR 0009](../../adr/0009-retrieval-partition-projection-generations.md) retain backend/projection
+safety contracts under ADR 0012.
 
 ## Avoid
 
@@ -68,6 +77,6 @@ Owners: [Retrieval](../domains/retrieval/README.md), [RAG](../domains/rag/README
 
 - New AI capability: registry compile, duplicate guard, MCP schema/discovery, direct invoke, hidden-tool blocked tests.
 - New LLM workload: duplicate/budget/adapter/default-route tests and direct-call guard.
-- New workspace API: router registration, server app gate, `pnpm check:api-contract`.
+- New app API: router registration, server app gate, `pnpm check:api-contract`.
 - Docs updates: verify paths, commands, and owner links against current tree.
 - Check selection: [Vibe Harness](vibe-coding-harness.md).

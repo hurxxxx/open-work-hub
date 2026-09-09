@@ -1,12 +1,12 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { CalendarDays, ClipboardList, MessagesSquare } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   dmManifest,
   FloatingDmWidget,
-  type DmThreadScrollSnapshots,
   useFloatingDmUnreadCount,
+  type DmThreadScrollSnapshots,
 } from '@/src/app-modules/dm';
 import {
   FloatingTodayPlannerWidget,
@@ -16,34 +16,34 @@ import {
 import {
   FloatingPmsWidget,
   pmsManifest,
-  type FloatingPmsWidgetOpenRequest,
   useFloatingPmsAssignedSummary,
+  type FloatingPmsWidgetOpenRequest,
 } from '@/src/app-modules/pms';
+import { useAppBootstrapContext } from '@/src/platform/apps/app-bootstrap-context';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { normalizeTimeZone } from '@/src/platform/time/time-utils';
-import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
+import { CALENDAR_EVENTS_CHANGED_EVENT } from '@/src/platform/calendar/calendar-events-changed';
 import {
   PersonalWidgetHost,
   type PersonalWidgetSecondaryPanelAdapter,
 } from '@/src/platform/personal-widgets/PersonalWidgetHost';
-import type { PersonalTodoItem } from '@/src/platform/personal-widgets/personal-widgets-api';
 import {
-  FLOATING_DM_OPEN_EVENT,
-  type FloatingDmOpenEventDetail,
-  FLOATING_PMS_OPEN_EVENT,
   dispatchFloatingPmsOpen,
+  FLOATING_DM_OPEN_EVENT,
+  FLOATING_PMS_OPEN_EVENT,
+  type FloatingDmOpenEventDetail,
   type FloatingPmsOpenEventDetail,
 } from '@/src/platform/personal-widgets/floating-panel-events';
+import type { PersonalTodoItem } from '@/src/platform/personal-widgets/personal-widgets-api';
+import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { resolvePersonalWidgetDockPanels } from './personal-widget-registry-model';
 
 export function ShellPersonalWidgetHost() {
   const { token, user } = useAuth();
   const { t } = useTranslation('shell');
-  const workspaceBootstrap = useWorkspaceBootstrapContext();
-  const currentWorkspaceSlug = workspaceBootstrap.data?.workspace.slug ?? null;
+  const appBootstrap = useAppBootstrapContext();
   const plannerEnabled = Boolean(
-    workspaceBootstrap.globalApps?.platform_enabled_app_ids.includes(
-      plannerManifest.appBarItem.id,
+    appBootstrap.data?.apps.some(
+      (app) => app.app_id === plannerManifest.appBarItem.id,
     ),
   );
   const timeZone = normalizeTimeZone(user?.time_zone);
@@ -64,6 +64,21 @@ export function ShellPersonalWidgetHost() {
     timeZone,
     plannerReloadSeq,
   );
+  useEffect(() => {
+    const handleCalendarEventsChanged = () => {
+      setPlannerReloadSeq((current) => current + 1);
+    };
+    window.addEventListener(
+      CALENDAR_EVENTS_CHANGED_EVENT,
+      handleCalendarEventsChanged,
+    );
+    return () => {
+      window.removeEventListener(
+        CALENDAR_EVENTS_CHANGED_EVENT,
+        handleCalendarEventsChanged,
+      );
+    };
+  }, []);
   const handleConvertTodoToPms = useCallback((todo: PersonalTodoItem) => {
     dispatchFloatingPmsOpen({
       mode: 'createTask',
@@ -79,7 +94,7 @@ export function ShellPersonalWidgetHost() {
   }, []);
   const dmPanel = useMemo<PersonalWidgetSecondaryPanelAdapter>(
     () => ({
-      badgeClassName: 'bg-blue-600 text-white',
+      badgeClassName: 'bg-blue-700 text-white',
       getLauncherLabel: (count) =>
         t('personalWidgets.dm.openWithUnread', { count }),
       id: dmManifest.moduleId,
@@ -108,7 +123,7 @@ export function ShellPersonalWidgetHost() {
   );
   const pmsPanel = useMemo<PersonalWidgetSecondaryPanelAdapter>(
     () => ({
-      badgeClassName: 'bg-emerald-600 text-white',
+      badgeClassName: 'bg-emerald-700 text-white',
       getLauncherLabel: (count) =>
         t('personalWidgets.pms.openWithAssigned', { count }),
       id: pmsManifest.appBarItem.id,
@@ -133,7 +148,6 @@ export function ShellPersonalWidgetHost() {
           onCreateTaskOpenRequestHandled={handlePmsCreateTaskOpenRequest}
           openRequest={pmsOpenRequest}
           reloadSeq={pmsReloadSeq}
-          workspaceSlug={currentWorkspaceSlug}
         />
       ),
       shouldActivateOnOpen: (event) => {
@@ -148,7 +162,6 @@ export function ShellPersonalWidgetHost() {
       unreadCount: pmsAssignedCount,
     }),
     [
-      currentWorkspaceSlug,
       handlePmsCreateTaskOpenRequest,
       pmsAssignedCount,
       pmsOpenRequest,
@@ -158,7 +171,7 @@ export function ShellPersonalWidgetHost() {
   );
   const todayPlannerPanel = useMemo<PersonalWidgetSecondaryPanelAdapter>(
     () => ({
-      badgeClassName: 'bg-amber-600 text-white',
+      badgeClassName: 'bg-amber-800 text-white',
       getLauncherLabel: (count) =>
         t('personalWidgets.planner.openWithToday', { count }),
       id: 'today-planner',
@@ -167,10 +180,7 @@ export function ShellPersonalWidgetHost() {
         <CalendarDays aria-hidden="true" size={size} strokeWidth={2.1} />
       ),
       renderPanel: () => (
-        <FloatingTodayPlannerWidget
-          onChanged={() => setPlannerReloadSeq((current) => current + 1)}
-          reloadSeq={plannerReloadSeq}
-        />
+        <FloatingTodayPlannerWidget reloadSeq={plannerReloadSeq} />
       ),
       shortTitle: t('personalWidgets.planner.shortTitle'),
       title: t('personalWidgets.planner.title'),

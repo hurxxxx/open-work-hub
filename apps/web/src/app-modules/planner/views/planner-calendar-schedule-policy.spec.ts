@@ -17,7 +17,6 @@ function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     end: '2026-03-10T10:00:00+09:00',
     allDay: false,
     color: '#3b82f6',
-    workspace: { id: 'workspace-1', slug: 'hq', name: 'HQ' },
     metadata: {
       attendeeCount: null,
       location: null,
@@ -73,7 +72,6 @@ describe('planner calendar schedule policy', () => {
       command: {
         type: 'updateTask',
         sourceId: 'task-1',
-        workspaceSlug: 'hq',
         payload: { due_date: '2026-03-12' },
       },
     });
@@ -92,7 +90,6 @@ describe('planner calendar schedule policy', () => {
       command: {
         type: 'updateTask',
         sourceId: 'task-1',
-        workspaceSlug: 'hq',
         payload: { due_date: '2026-03-14', start_date: '2026-03-12' },
       },
     });

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import timedelta
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import status
@@ -19,7 +18,7 @@ from open_work_hub_api.domains.ai.gateway import (
     execute_llm,
 )
 from open_work_hub_api.domains.auth.access import record_audit_log
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.meeting.models import (
     Meeting,
@@ -30,7 +29,6 @@ from open_work_hub_api.domains.meeting.models import (
 from open_work_hub_api.domains.meeting.schemas import MeetingAvailabilityResponse
 from open_work_hub_api.domains.planner.event_time import parse_iso_or_date
 from open_work_hub_api.domains.recording.models import Recording, RecordingTarget
-
 
 logger = logging.getLogger(__name__)
 
@@ -112,10 +110,14 @@ def _meeting_service():
 
 
 def _recording_transcript(recording: MeetingRecording | Recording) -> str:
+    if isinstance(recording, Recording):
+        return recording.result.transcript_text.strip() if recording.result is not None else ""
     return (recording.transcript_text or "").strip()
 
 
 def _recording_summary(recording: MeetingRecording | Recording) -> str:
+    if isinstance(recording, Recording):
+        return (recording.result.summary_text or "").strip() if recording.result is not None else ""
     return (getattr(recording, "summary_text", None) or "").strip()
 
 
@@ -194,7 +196,6 @@ def _serialize_insight(insight: MeetingInsight) -> dict[str, Any]:
         "id": insight.id,
         "meeting_id": insight.meeting_id,
         "recording_id": insight.recording_id,
-        "workspace_id": insight.workspace_id,
         "insight_type": insight.insight_type,
         "payload": insight.payload_json,
         "confidence": insight.confidence,
@@ -220,7 +221,6 @@ def _canonical_recording_tables_available(db: Session) -> bool:
 def _latest_canonical_meeting_recording(
     db: Session,
     *,
-    workspace_id: str,
     meeting_id: str,
     require_transcript: bool = False,
 ) -> Recording | None:
@@ -229,9 +229,8 @@ def _latest_canonical_meeting_recording(
     query = (
         select(Recording)
         .join(RecordingTarget)
-        .options(selectinload(Recording.targets))
+        .options(selectinload(Recording.targets), selectinload(Recording.result))
         .where(
-            Recording.workspace_id == workspace_id,
             Recording.trashed_at.is_(None),
             RecordingTarget.target_app == "meeting",
             RecordingTarget.target_type == "meeting",
@@ -240,7 +239,9 @@ def _latest_canonical_meeting_recording(
         .order_by(RecordingTarget.sort_order.desc(), Recording.started_at.desc())
     )
     if require_transcript:
-        query = query.where(Recording.transcript_text.is_not(None))
+        from open_work_hub_api.domains.recording.models import RecordingResult
+
+        query = query.join(RecordingResult).where(RecordingResult.transcript_text != "")
     return db.scalar(query)
 
 
@@ -251,7 +252,6 @@ def _load_latest_ready_recording(
     if meeting is not None:
         recording = _latest_canonical_meeting_recording(
             db,
-            workspace_id=meeting.workspace_id,
             meeting_id=meeting.id,
             require_transcript=True,
         )
@@ -277,7 +277,7 @@ def _load_ready_recording_context(
         recording = db.scalar(
             select(Recording)
             .where(Recording.id == recording_id)
-            .options(selectinload(Recording.targets))
+            .options(selectinload(Recording.targets), selectinload(Recording.result))
         )
         if recording is not None:
             meeting_target = next(
@@ -293,7 +293,7 @@ def _load_ready_recording_context(
                     status_code=status.HTTP_404_NOT_FOUND,
                     code="meeting.recording_not_found",
                 )
-            if not recording.transcript_text:
+            if recording.result is None or not recording.result.transcript_text:
                 raise localized_http_exception(
                     status_code=status.HTTP_409_CONFLICT,
                     code="meeting.recording_summary_unavailable",
@@ -373,7 +373,6 @@ def _record_created_audit(
     db: Session,
     *,
     meeting_id: str,
-    workspace_id: str,
     recording_id: str,
     actor_user_id: str | None,
     created_counts: dict[str, int],
@@ -388,7 +387,6 @@ def _record_created_audit(
         actor_user_id=actor_user_id,
         summary=f"Meeting insights extracted for {meeting_id}",
         payload={
-            "workspace_id": workspace_id,
             "meeting_id": meeting_id,
             "recording_id": recording_id,
             "insight_counts": created_counts,
@@ -438,7 +436,6 @@ def extract_and_persist_meeting_insights(
         context = LlmTaskContext(
             source=source,
             actor_user_id=actor_user_id,
-            workspace_id=meeting.workspace_id,
             task_kind=_INSIGHT_TASK_KIND[insight_type],
             app_id="meeting",
             principal_kind="system" if actor_user_id is None else "user",
@@ -496,7 +493,6 @@ def extract_and_persist_meeting_insights(
                 id=new_id(),
                 meeting_id=meeting.id,
                 recording_id=insight_recording_id,
-                workspace_id=meeting.workspace_id,
                 insight_type=insight_type,
                 payload_json=payload_json,
                 confidence=confidence,
@@ -513,7 +509,6 @@ def extract_and_persist_meeting_insights(
     _record_created_audit(
         db,
         meeting_id=meeting.id,
-        workspace_id=meeting.workspace_id,
         recording_id=recording.id,
         actor_user_id=actor_user_id,
         created_counts=created_counts,
@@ -524,14 +519,12 @@ def extract_and_persist_meeting_insights(
 def _ensure_meeting_access(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     meeting_id: str,
 ) -> Meeting:
     return _meeting_service().load_meeting_for_participant(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         meeting_id=meeting_id,
@@ -579,7 +572,6 @@ def _ensure_insights_available(
 def list_action_insights(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     meeting_id: str,
@@ -587,7 +579,6 @@ def list_action_insights(
 ) -> dict[str, Any]:
     meeting = _ensure_meeting_access(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         meeting_id=meeting_id,
@@ -606,7 +597,6 @@ def list_action_insights(
 def list_decision_insights(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     meeting_id: str,
@@ -614,7 +604,6 @@ def list_decision_insights(
 ) -> dict[str, Any]:
     meeting = _ensure_meeting_access(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         meeting_id=meeting_id,
@@ -669,7 +658,6 @@ def _validate_followup_availability_range(
 def draft_followup_schedule(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     meeting_id: str,
@@ -678,7 +666,6 @@ def draft_followup_schedule(
 ) -> dict[str, Any]:
     meeting = _ensure_meeting_access(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         meeting_id=meeting_id,
@@ -699,7 +686,6 @@ def draft_followup_schedule(
     if selected_attendee_user_ids and slot_range is not None:
         availability = _meeting_service().list_meeting_availability(
             db,
-            workspace=workspace,
             principal=principal,
             viewer=user,
             user_ids=selected_attendee_user_ids,

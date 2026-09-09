@@ -19,7 +19,7 @@ function file(contentType: string): FileItem {
     filename: 'file',
     content_type: contentType,
     size_bytes: 1024,
-    visibility: 'workspace',
+    visibility: 'company',
     owner_id: 'owner',
     owner_name: 'Owner',
     can_delete: true,

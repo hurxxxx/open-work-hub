@@ -2,7 +2,7 @@
 
 이 도메인은 회사 내부 또는 승인된 외부 시스템이 Open Work Hub의 제한된 company-level
 projection을 읽는 경계를 소유한다. 현재 제공하는 기능은 조직·임직원 디렉터리의 읽기 전용
-연계이며 사용자 세션, 관리자 API, workspace API를 대신하는 범용 서비스 계정이 아니다.
+연계이며 사용자 세션, 관리자 API, 앱 API를 대신하는 범용 서비스 계정이 아니다.
 
 핵심 결정과 보안 근거는
 [ADR 0010](../../../adr/0010-platform-api-key-directory-integration.md)에 기록한다.
@@ -55,8 +55,9 @@ tombstone, webhook과 exactly-once 전달은 현재 제공하지 않는다. 장�
 
 ## 감사와 운영
 
-- 발급, 목록, 재표시, 폐기와 성공한 외부 read는 actor 또는 API key ID, scope가 아닌 결과 수,
-  paging 정보만 포함해 감사한다.
+- 발급 감사는 actor, API key ID와 승인된 scope를 기록한다. 목록·재표시·폐기는 actor와 key
+  수명주기를, 성공한 외부 read는 API key ID, scope가 고정된 operation, 결과 수와 paging 정보를
+  기록한다. 키 원문과 projection 본문은 감사 payload에 넣지 않는다.
 - 키 hash와 prefix로 원문을 복원할 수 없다. 재표시는 암호문을 통해서만 수행한다.
 - 암호화 root를 변경하면 기존 키 인증은 계속 가능하지만 기존 암호문 재표시는 불가능해진다.
   회전 시 새 root로 새 키를 발급해 consumer를 전환한 뒤 이전 키를 폐기한다.

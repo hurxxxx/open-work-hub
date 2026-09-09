@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlencode
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.files.models import FileManagerFile
 from open_work_hub_api.domains.files.retrieval_contract import FILES_RAG_SOURCE_KIND
 from open_work_hub_api.domains.files.search import (
@@ -25,7 +25,6 @@ from open_work_hub_api.domains.retrieval.contracts import (
 from open_work_hub_api.domains.retrieval.ranking import MIN_NORMALIZED_RERANK_SCORE
 from open_work_hub_api.domains.source_access import SourceAclPolicy
 from open_work_hub_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
-
 
 MAX_FILE_CHAT_EVIDENCE_ITEMS = 8
 MAX_FILE_CHAT_EVIDENCE_CANDIDATES = 100
@@ -58,7 +57,6 @@ class _FileChatSource:
 def query_file_chat_evidence(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     query: str,
     limit: int = MAX_FILE_CHAT_EVIDENCE_ITEMS,
@@ -77,7 +75,6 @@ def query_file_chat_evidence(
     runtime = resolve_file_search_runtime(db)
     response = query_retrieval(
         db,
-        workspace=workspace,
         user=user,
         request=RetrievalQueryRequest(
             query=query,
@@ -132,7 +129,7 @@ def query_file_chat_evidence(
     # before the final ACL query so deletes, moves, and scope revocations that
     # committed during retrieval take effect on this response.
     db.expire_all()
-    policy = SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
+    policy = SourceAclPolicy.for_user(db, user=user)
     allowed = policy.authorize_many_resources(
         (FILE_MANAGER_FILE_RESOURCE_TYPE, str(hit.resource_id))
         for hit in ranked_hits
@@ -154,7 +151,6 @@ def query_file_chat_evidence(
                 filename=source.filename,
                 locator=_evidence_locator(
                     hit,
-                    workspace=workspace,
                     source=source,
                 ),
                 excerpt=excerpt,
@@ -229,7 +225,6 @@ def _filter_file_chat_relevance(
 def _evidence_locator(
     hit: Any,
     *,
-    workspace: Workspace,
     source: _FileChatSource,
 ) -> str | None:
     metadata = hit.metadata if isinstance(hit.metadata, dict) else {}
@@ -241,7 +236,12 @@ def _evidence_locator(
     query = {"file": source.file_id}
     if source.folder_id:
         query["folder"] = source.folder_id
-    return f"/w/{workspace.key}/files?{urlencode(query)}"
+    return build_app_href(
+        InternalAppLocation(
+            route_id="files.root",
+            query_params=query,
+        )
+    )
 
 
 __all__ = [

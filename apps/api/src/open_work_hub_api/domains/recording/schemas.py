@@ -5,10 +5,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 RecordingAudioStatus = Literal["local_only", "uploading", "saved", "failed"]
 RecordingProcessingStatus = Literal["pending", "transcribing", "done", "failed"]
-RecordingDocStatus = Literal["pending", "creating", "done", "failed"]
+RecordingSummaryStatus = Literal["pending", "analyzing", "verifying", "done", "failed"]
 RecordingMeetingInsightStatus = Literal["none", "pending", "extracting", "done", "failed"]
 
 
@@ -27,11 +26,33 @@ class RecordingTargetOut(BaseModel):
     created_at: datetime
 
 
-class RecordingOut(BaseModel):
+class RecordingResultOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    transcript_text: str
+    summary_text: str | None
+    verifier_note: str | None
+    version: int
+    generated_at: datetime | None
+    updated_at: datetime
+
+
+class RecordingPublicationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    workspace_id: str
+    target_app: str
+    target_resource_id: str
+    target_title: str | None = None
+    result_version: int
+    published_by_id: str
+    created_at: datetime
+
+
+class RecordingListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
     owner_id: str
     title: str
     started_at: datetime
@@ -43,13 +64,10 @@ class RecordingOut(BaseModel):
     mime_type: str
     audio_status: str
     transcript_status: str
-    raw_transcript_doc_status: str
-    minutes_doc_status: str
+    summary_status: str
     meeting_insight_status: str
     progress_pct: int
     failure_reason: str | None
-    raw_transcript_doc_id: str | None
-    minutes_doc_id: str | None
     transcribe_started_at: datetime | None
     transcribe_completed_at: datetime | None
     created_at: datetime
@@ -58,8 +76,13 @@ class RecordingOut(BaseModel):
     targets: list[RecordingTargetOut] = Field(default_factory=list)
 
 
+class RecordingDetailOut(RecordingListItem):
+    result: RecordingResultOut | None = None
+    publications: list[RecordingPublicationOut] = Field(default_factory=list)
+
+
 class RecordingListResponse(BaseModel):
-    items: list[RecordingOut]
+    items: list[RecordingListItem]
 
 
 class RecordingUploadInitRequest(BaseModel):
@@ -76,7 +99,6 @@ class RecordingUploadInitRequest(BaseModel):
 
 class RecordingUploadOut(BaseModel):
     id: str
-    workspace_id: str
     uploaded_by_id: str
     idempotency_key: str
     status: str

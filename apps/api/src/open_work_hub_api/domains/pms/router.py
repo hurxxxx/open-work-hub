@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import csv
 from dataclasses import asdict
-from io import StringIO
 from datetime import UTC, date, datetime
+from io import StringIO
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, UploadFile, status
-from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -15,86 +14,71 @@ from sqlalchemy.orm import Session, selectinload
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.principal import user_principal
-from open_work_hub_api.domains.auth.access import (
-    get_or_create_default_pms_space,
-    has_system_role,
-    slugify,
-)
-from open_work_hub_api.domains.auth.dependencies import (
-    require_current_user,
-    require_current_workspace,
-)
-from open_work_hub_api.domains.auth.models import (
-    Team,
-    TeamMember,
-    User,
-    Workspace,
-    WorkspaceUserBinding,
-)
+from open_work_hub_api.domains.auth.access import has_system_role, slugify
+from open_work_hub_api.domains.auth.app_gate import require_app_access
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from open_work_hub_api.domains.content_access.dependencies import require_content_grant_issuer
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
+from open_work_hub_api.domains.pms import board_configuration as pms_board_configuration
+from open_work_hub_api.domains.pms import service as pms_service
+from open_work_hub_api.domains.pms import task_doc_links as pms_task_doc_links
+from open_work_hub_api.domains.pms import task_list_customization as pms_task_list_customization
+from open_work_hub_api.domains.pms import task_work_items as pms_task_work_items
+from open_work_hub_api.domains.pms import view_preferences as pms_view_preferences
+from open_work_hub_api.domains.pms.access import (
+    _accessible_space_ids,
+    _active_accessible_task_lists_query,
+    _ensure_list_editor,
+    _ensure_list_member,
+    _ensure_list_owner,
+    _ensure_space_access,
+    _ensure_space_editor,
+    _ensure_space_manager,
+    _ensure_task_list_active,
+    _load_active_space,
+    _space_member_ids,
+    resolve_pms_space_role,
+)
+from open_work_hub_api.domains.pms.app_catalog import PMS_APP
 from open_work_hub_api.domains.pms.attachments import (
-    TaskAttachmentDisposition,
     TaskAttachmentUpload,
     delete_task_attachment,
-    get_task_attachment_download_url,
-    open_task_attachment_content,
     upload_task_attachment,
 )
-from open_work_hub_api.domains.pms import task_doc_links as pms_task_doc_links
+from open_work_hub_api.domains.pms.dashboard_summary import dashboard_summary_payload
 from open_work_hub_api.domains.pms.models import (
     Folder,
+    Label,
+    Milestone,
+    SpaceStatus,
     Task,
     TaskActivityLog,
     TaskAssignee,
     TaskComment,
     TaskFollower,
     TaskLabel,
-    Label,
-    Milestone,
-    Notification,
-    SpaceStatus,
     TaskList,
     TaskListStatus,
 )
-from open_work_hub_api.domains.pms.access import (
-    _active_accessible_task_lists_query,
-    _accessible_space_ids,
-    _ensure_space_access,
-    _ensure_space_editor,
-    _ensure_space_manager,
-    _ensure_list_editor,
-    _ensure_list_member,
-    _ensure_list_owner,
-    _ensure_task_list_active,
-    _get_pms_workspace,
-    _load_active_space,
-    resolve_pms_space_role,
-    _space_member_ids,
+from open_work_hub_api.domains.pms.projections import (
+    serialize_task_summary,
+)
+from open_work_hub_api.domains.pms.projections import (
+    task_reference as _task_reference,
 )
 from open_work_hub_api.domains.pms.rag_sync import (
     collect_label_task_ids,
-    enqueue_task_rag_sync,
     enqueue_label_task_recompute,
     enqueue_milestone_task_recompute,
+    enqueue_task_rag_sync,
 )
-from open_work_hub_api.domains.pms import board_configuration as pms_board_configuration
-from open_work_hub_api.domains.pms import service as pms_service
-from open_work_hub_api.domains.pms import task_list_customization as pms_task_list_customization
-from open_work_hub_api.domains.pms import view_preferences as pms_view_preferences
-from open_work_hub_api.domains.pms import task_work_items as pms_task_work_items
-from open_work_hub_api.domains.pms.dashboard_summary import dashboard_summary_payload
-from open_work_hub_api.domains.pms.links import normalize_pms_deep_link
-from open_work_hub_api.domains.pms.app_catalog import PMS_WORKSPACE_APP
-from open_work_hub_api.domains.pms.projections import (
-    serialize_task_summary,
-    task_reference as _task_reference,
-)
+from open_work_hub_api.domains.pms.space_models import Team, TeamMember
 from open_work_hub_api.domains.pms.status_lifecycle import (
     create_default_task_list_statuses as _create_default_statuses,
 )
 from open_work_hub_api.domains.pms.status_router import router as status_router
-from open_work_hub_api.domains.rag.contracts import RagSyncOperation
 from open_work_hub_api.domains.pms.workflow import (
     calculate_progress,
     is_closed_status,
@@ -105,7 +89,7 @@ from open_work_hub_api.domains.pms.workflow import (
     status_definitions,
     status_label,
 )
-
+from open_work_hub_api.domains.rag.contracts import RagSyncOperation
 
 TASK_LIST_STATUS_LABELS = {
     "planned": "Planned",
@@ -314,8 +298,6 @@ class SpaceUpdateRequest(BaseModel):
 
 class SpaceItem(BaseModel):
     id: str
-    workspace_id: str
-    workspace_key: str
     key: str
     name: str
     description: str
@@ -594,29 +576,6 @@ class AttachmentItem(BaseModel):
     created_at: datetime
 
 
-class NotificationItem(BaseModel):
-    id: str
-    type: str
-    title: str
-    body: str
-    reference_type: str
-    reference_id: str | None
-    action_url: str | None = None
-    is_read: bool
-    created_at: datetime
-
-
-class NotificationListResponse(BaseModel):
-    items: list[NotificationItem]
-    total: int
-    page: int
-    page_size: int
-
-
-class UnreadCountResponse(BaseModel):
-    count: int
-
-
 class TaskDetailResponse(BaseModel):
     task: TaskItem
     comments: list[TaskCommentItem]
@@ -669,19 +628,15 @@ class DashboardSummaryResponse(BaseModel):
     recent_activity: list[RecentActivityItem]
 
 
-require_pms_app_enabled = require_workspace_app_enabled(
-    PMS_WORKSPACE_APP.app_id,
-    error_code="workspace.app_disabled",
+require_pms_app_enabled = require_app_access(
+    PMS_APP.app_id,
+    error_code="app.access_required",
 )
 
 router = APIRouter(
     prefix="/pms",
     tags=["pms"],
     dependencies=[Depends(require_pms_app_enabled)],
-)
-public_router = APIRouter(
-    prefix="/pms",
-    tags=["pms"],
 )
 
 
@@ -709,8 +664,6 @@ def _is_pms_super_admin(db: Session, user: User) -> bool:
 def _serialize_space(team: Team, current_user_role: str | None) -> SpaceItem:
     return SpaceItem(
         id=team.id,
-        workspace_id=team.workspace_id,
-        workspace_key=team.workspace.key,
         key=team.key,
         name=team.name,
         description=team.description,
@@ -743,13 +696,12 @@ def _is_active_space_id(db: Session, space_id: str) -> bool:
     return _load_active_space(db, space_id) is not None
 
 
-def _unique_space_key(db: Session, workspace_id: str, name: str) -> str:
+def _unique_space_key(db: Session, name: str) -> str:
     base = slugify(name) or "space"
     candidate = base
     counter = 1
     while db.scalar(
         select(Team.id).where(
-            Team.workspace_id == workspace_id,
             Team.key == candidate,
         )
     ):
@@ -969,8 +921,8 @@ def _create_notification(
     ntype: str,
     title: str,
     body: str,
-    reference_type: str = "task",
-    reference_id: str | None = None,
+    source_type: str = "pms_task",
+    source_id: str | None = None,
     action_url: str | None = None,
 ) -> None:
     pms_service._create_notification(
@@ -979,8 +931,8 @@ def _create_notification(
         ntype,
         title,
         body,
-        reference_type=reference_type,
-        reference_id=reference_id,
+        source_type=source_type,
+        source_id=source_id,
         action_url=action_url,
     )
 
@@ -1068,13 +1020,10 @@ def _serialize_visible_task_doc_links(
 def list_spaces(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> list[SpaceItem]:
     return pms_service.list_spaces(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.list_spaces",
         ),
@@ -1086,15 +1035,12 @@ def list_spaces(
 def list_pms_users(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> list[SpaceUserItem]:
     del current_user
     users = db.scalars(
         select(User)
-        .join(WorkspaceUserBinding, WorkspaceUserBinding.user_id == User.id)
         .where(
             User.status == "active",
-            WorkspaceUserBinding.workspace_id == workspace.id,
         )
         .order_by(User.full_name.asc(), User.email.asc())
     ).all()
@@ -1112,13 +1058,11 @@ def list_pms_users(
 def get_view_preferences(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> PmsViewPreferencesResponse:
     return PmsViewPreferencesResponse(
         task_list_group_by=pms_view_preferences.get_task_list_group_by(
             db,
             user=current_user,
-            workspace=workspace,
         )
     )
 
@@ -1128,13 +1072,11 @@ def update_view_preferences(
     payload: UpdatePmsViewPreferencesRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> PmsViewPreferencesResponse:
     return PmsViewPreferencesResponse(
         task_list_group_by=pms_view_preferences.update_task_list_group_by(
             db,
             user=current_user,
-            workspace=workspace,
             group_by=payload.task_list_group_by,
         )
     )
@@ -1145,14 +1087,11 @@ def create_space(
     payload: SpaceCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> SpaceItem:
     return SpaceItem.model_validate(
         pms_service.create_space(
             db,
-            workspace=workspace,
             principal=user_principal(
-                workspace_id=workspace.id,
                 user_id=current_user.id,
                 source="api.pms.create_space",
             ),
@@ -1169,14 +1108,11 @@ def update_space(
     payload: SpaceUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> SpaceItem:
     return SpaceItem.model_validate(
         pms_service.update_space(
             db,
-            workspace=workspace,
             principal=user_principal(
-                workspace_id=workspace.id,
                 user_id=current_user.id,
                 source="api.pms.update_space",
             ),
@@ -1193,13 +1129,10 @@ def delete_space(
     space_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     pms_service.delete_space(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.delete_space",
         ),
@@ -1216,14 +1149,11 @@ def list_space_members(
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> SpaceMemberListResponse:
     return SpaceMemberListResponse.model_validate(
         pms_service.list_space_members(
             db,
-            workspace=workspace,
             principal=user_principal(
-                workspace_id=workspace.id,
                 user_id=current_user.id,
                 source="api.pms.list_space_members",
             ),
@@ -1245,14 +1175,11 @@ def add_space_member(
     payload: SpaceMemberCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> SpaceMemberItem:
     return SpaceMemberItem.model_validate(
         pms_service.add_space_member(
             db,
-            workspace=workspace,
             principal=user_principal(
-                workspace_id=workspace.id,
                 user_id=current_user.id,
                 source="api.pms.add_space_member",
             ),
@@ -1271,14 +1198,11 @@ def update_space_member(
     payload: SpaceMemberRoleUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> SpaceMemberItem:
     return SpaceMemberItem.model_validate(
         pms_service.update_space_member(
             db,
-            workspace=workspace,
             principal=user_principal(
-                workspace_id=workspace.id,
                 user_id=current_user.id,
                 source="api.pms.update_space_member",
             ),
@@ -1296,13 +1220,10 @@ def remove_space_member(
     user_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     pms_service.remove_space_member(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.remove_space_member",
         ),
@@ -1324,13 +1245,10 @@ def list_task_lists(
     team_id: str | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskListsResponse:
     return pms_service.list_task_lists(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.list_task_lists",
         ),
@@ -1356,13 +1274,10 @@ def list_space_lists(
     archived: bool | None = None,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskListsResponse:
     return pms_service.list_task_lists(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.list_space_lists",
         ),
@@ -1382,14 +1297,11 @@ def create_task_list(
     payload: TaskListCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskListItem:
     return TaskListItem.model_validate(
         pms_service.create_task_list(
             db,
-            workspace=workspace,
             principal=user_principal(
-                workspace_id=workspace.id,
                 user_id=current_user.id,
                 source="api.pms.create_task_list",
             ),
@@ -1670,13 +1582,10 @@ def list_tasks(
     start_date_to: date | None = None,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskItemsResponse:
     return pms_service.list_tasks(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.list_tasks",
         ),
@@ -1710,13 +1619,10 @@ def create_task(
     payload: TaskCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskItem:
     return pms_service.create_task(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.create_task",
         ),
@@ -1746,13 +1652,10 @@ def list_assigned_tasks(
     page_size: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskItemsResponse:
     return pms_service.list_assigned_tasks(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.list_assigned_tasks",
         ),
@@ -1770,13 +1673,10 @@ def list_today_overdue_tasks(
     page_size: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskItemsResponse:
     return pms_service.list_today_overdue_tasks(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.list_today_overdue_tasks",
         ),
@@ -1792,18 +1692,17 @@ def get_task(
     task_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> TaskDetailResponse:
     return pms_service.get_task_detail(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.get_task",
         ),
         user=current_user,
         task_id=task_id,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -1813,13 +1712,10 @@ def update_task(
     payload: TaskUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskItem:
     return pms_service.update_task(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.update_task",
         ),
@@ -1851,13 +1747,10 @@ def reorder_task_list_tasks(
     payload: TaskReorderRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskReorderResponse:
     items = pms_service.reorder_task_list_tasks(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.reorder_tasks",
         ),
@@ -1947,13 +1840,10 @@ def create_task_comment(
     payload: TaskCommentCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskCommentItem:
     return pms_service.add_task_comment(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.create_task_comment",
         ),
@@ -2092,13 +1982,13 @@ async def upload_attachment(
     file: UploadFile,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> AttachmentItem:
     item = upload_task_attachment(
         db,
-        workspace=current_workspace,
         user=current_user,
         task_id=task_id,
+        content_grant_issuer=content_grant_issuer,
         upload=TaskAttachmentUpload(
             filename=file.filename,
             content_type=file.content_type,
@@ -2108,154 +1998,17 @@ async def upload_attachment(
     return AttachmentItem(**asdict(item))
 
 
-@router.get("/attachments/{attachment_id}/download")
-def download_attachment(
-    attachment_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> RedirectResponse:
-    url = get_task_attachment_download_url(
-        db,
-        user=current_user,
-        attachment_id=attachment_id,
-    )
-    return RedirectResponse(url=url, status_code=302)
-
-
-@public_router.get("/attachments/{attachment_id}/content")
-def proxy_attachment_content(
-    attachment_id: str,
-    expires: int = Query(..., ge=1),
-    signature: str = Query(..., min_length=1),
-    disposition: TaskAttachmentDisposition = "attachment",
-    db: Session = Depends(get_db_session),
-) -> StreamingResponse:
-    content = open_task_attachment_content(
-        db,
-        attachment_id=attachment_id,
-        expires=expires,
-        signature=signature,
-        disposition=disposition,
-    )
-    return StreamingResponse(
-        content.body,
-        media_type=content.media_type,
-        headers=content.headers,
-    )
-
-
 @router.delete("/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_attachment(
     attachment_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    current_workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     delete_task_attachment(
         db,
-        workspace=current_workspace,
         user=current_user,
         attachment_id=attachment_id,
     )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-# ── Notifications ────────────────────────────────────────────────────
-
-
-@router.get("/notifications", response_model=NotificationListResponse)
-def list_notifications(
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> NotificationListResponse:
-    rows = list(
-        db.scalars(
-            select(Notification)
-            .where(Notification.user_id == current_user.id)
-            .order_by(Notification.created_at.desc())
-        )
-    )
-    page_items, total = _paginate(
-        [
-            NotificationItem(
-                id=n.id,
-                type=n.type,
-                title=n.title,
-                body=n.body,
-                reference_type=n.reference_type,
-                reference_id=n.reference_id,
-                action_url=normalize_pms_deep_link(n.action_url),
-                is_read=n.is_read,
-                created_at=n.created_at,
-            )
-            for n in rows
-        ],
-        page,
-        page_size,
-    )
-    return NotificationListResponse(items=page_items, total=total, page=page, page_size=page_size)
-
-
-@router.get("/notifications/unread-count", response_model=UnreadCountResponse)
-def get_unread_count(
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> UnreadCountResponse:
-    count = (
-        db.scalar(
-            select(func.count(Notification.id)).where(
-                Notification.user_id == current_user.id,
-                Notification.is_read == False,  # noqa: E712
-            )
-        )
-        or 0
-    )
-    return UnreadCountResponse(count=count)
-
-
-@router.patch("/notifications/{notification_id}/read", response_model=NotificationItem)
-def mark_notification_read(
-    notification_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> NotificationItem:
-    notification = db.scalar(
-        select(Notification).where(
-            Notification.id == notification_id, Notification.user_id == current_user.id
-        )
-    )
-    if notification is None:
-        raise localized_http_exception(status_code=404, code="pms.notification_not_found")
-    notification.is_read = True
-    db.commit()
-    return NotificationItem(
-        id=notification.id,
-        type=notification.type,
-        title=notification.title,
-        body=notification.body,
-        reference_type=notification.reference_type,
-        reference_id=notification.reference_id,
-        action_url=normalize_pms_deep_link(notification.action_url),
-        is_read=notification.is_read,
-        created_at=notification.created_at,
-    )
-
-
-@router.patch("/notifications/read-all", status_code=status.HTTP_204_NO_CONTENT)
-def mark_all_notifications_read(
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    from sqlalchemy import update as sa_update
-
-    db.execute(
-        sa_update(Notification)
-        .where(Notification.user_id == current_user.id, Notification.is_read == False)  # noqa: E712
-        .values(is_read=True)
-    )
-    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -2640,13 +2393,10 @@ def set_task_assignees(
     payload: SetTaskAssigneesRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> list[TaskAssigneeItem]:
     updated_task = pms_service.update_task(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.pms.set_task_assignees",
         ),
@@ -2783,11 +2533,8 @@ def create_folder(
     current_user: User = Depends(require_current_user),
 ) -> FolderItem:
     resolved_team_id = payload.team_id
-    if resolved_team_id is None:
-        resolved_team_id = get_or_create_default_pms_space(
-            db,
-            workspace=_get_pms_workspace(db),
-        ).id
+    if not resolved_team_id:
+        raise localized_http_exception(status_code=400, code="pms.task_list_space_missing")
     _ensure_space_editor(db, current_user, resolved_team_id)
     folder = Folder(
         id=new_id(),
@@ -2810,14 +2557,6 @@ def create_folder(
         created_by_id=current_user.id,
     )
     db.add(default_task_list)
-    if not db.scalar(
-        select(TeamMember.id).where(
-            TeamMember.team_id == resolved_team_id, TeamMember.user_id == current_user.id
-        )
-    ):
-        db.add(
-            TeamMember(id=new_id(), team_id=resolved_team_id, user_id=current_user.id, role="owner")
-        )
     _create_default_statuses(db, default_task_list.id)
     _create_default_labels(db, default_task_list.id)
 

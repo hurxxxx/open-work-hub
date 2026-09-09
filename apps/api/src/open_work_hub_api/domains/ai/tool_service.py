@@ -11,39 +11,57 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.core.telemetry import get_tracer
 from open_work_hub_api.core.principal import CallerPrincipal
+from open_work_hub_api.core.telemetry import get_tracer
 from open_work_hub_api.domains.ai import approvals as ai_approvals
 from open_work_hub_api.domains.ai.audit import log_llm_tool_call
-from open_work_hub_api.domains.ai.tool_error_projection import tool_http_exception_message
-from open_work_hub_api.domains.ai.tool_argument_validation import (
-    ToolArgumentValidationFailure,
-    validate_tool_arguments,
+from open_work_hub_api.domains.ai.registry import (
+    get_ai_capability_registry,
+    resolve_app_entitlements,
 )
 from open_work_hub_api.domains.ai.tool_approval_gate import (
     ToolRequiresApproval as ToolRequiresApproval,
+)
+from open_work_hub_api.domains.ai.tool_approval_gate import (
     approval_required_http_exception as approval_required_http_exception,
+)
+from open_work_hub_api.domains.ai.tool_approval_gate import (
     build_rejected_approval_payload,
     build_tool_requires_approval,
     validate_replayed_approval,
 )
-from open_work_hub_api.domains.ai.tool_context import ToolExecutionContext, bind_tool_execution_context
+from open_work_hub_api.domains.ai.tool_argument_validation import (
+    ToolArgumentValidationFailure,
+    validate_tool_arguments,
+)
+from open_work_hub_api.domains.ai.tool_context import (
+    ToolExecutionContext,
+    bind_tool_execution_context,
+)
+from open_work_hub_api.domains.ai.tool_error_projection import tool_http_exception_message
 from open_work_hub_api.domains.ai.tool_result_projection import (
     dump_json as dump_json,
+)
+from open_work_hub_api.domains.ai.tool_result_projection import (
     preview_text as preview_text,
+)
+from open_work_hub_api.domains.ai.tool_result_projection import (
     render_tool_result_message as render_tool_result_message,
+)
+from open_work_hub_api.domains.ai.tool_result_projection import (
     sanitize_reject_reason_for_llm as sanitize_reject_reason_for_llm,
+)
+from open_work_hub_api.domains.ai.tool_result_projection import (
     serialize_rejected_tool_result_for_llm as serialize_rejected_tool_result_for_llm,
+)
+from open_work_hub_api.domains.ai.tool_result_projection import (
     serialize_tool_result_for_llm as serialize_tool_result_for_llm,
+)
+from open_work_hub_api.domains.ai.tool_result_projection import (
     tool_result_preview as tool_result_preview,
 )
-from open_work_hub_api.domains.ai.registry import (
-    build_workspace_context,
-    get_ai_capability_registry,
-    resolve_workspace_entitlement_view,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
-
+from open_work_hub_api.domains.ai.tool_surface import descriptor_owner_app_enabled
+from open_work_hub_api.domains.auth.models import User
 
 _AUDIT_TEXT_ARGUMENT_KEYS = frozenset(
     {
@@ -65,7 +83,6 @@ _AUDIT_TEXT_ARGUMENT_KEYS = frozenset(
 def execute_tool(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     tool_name: str,
@@ -75,6 +92,7 @@ def execute_tool(
     agent_run_id: str | None = None,
     conversation_id: str | None = None,
     approved_call_id: str | None = None,
+    externally_approved_call_id: str | None = None,
 ) -> dict[str, Any]:
     started = perf_counter()
     registry = get_ai_capability_registry()
@@ -89,7 +107,6 @@ def execute_tool(
         _log_tool_call(
             source=source,
             principal=principal,
-            workspace=workspace,
             tool_name=tool_name,
             args_summary=args_summary,
             status="error",
@@ -116,7 +133,6 @@ def execute_tool(
             _log_tool_call(
                 source=source,
                 principal=principal,
-                workspace=workspace,
                 tool_name=tool_name,
                 args_summary=args_summary,
                 status="error",
@@ -134,25 +150,26 @@ def execute_tool(
                 code="ai.tool_discoverability_predicate_missing",
                 tool_name=tool_name,
             )
-        workspace_context = build_workspace_context(workspace)
-        entitlements = resolve_workspace_entitlement_view(db, workspace=workspace)
-        if not predicate(principal, workspace_context, entitlements):
+        entitlements = resolve_app_entitlements(db, user_id=principal.user_id)
+        if not descriptor_owner_app_enabled(
+            descriptor,
+            enabled_app_ids=entitlements.enabled_app_ids,
+        ) or not predicate(principal, entitlements):
             _log_tool_call(
                 source=source,
                 principal=principal,
-                workspace=workspace,
                 tool_name=tool_name,
                 args_summary=args_summary,
                 status="blocked",
                 latency_ms=_elapsed_ms(started),
                 call_id=call_id,
-                error=f"AI tool is not available in this workspace: {tool_name}",
+                error=f"AI tool is not available for this user: {tool_name}",
                 agent_run_id=agent_run_id,
                 conversation_id=conversation_id,
             )
             raise localized_http_exception(
                 status_code=status.HTTP_403_FORBIDDEN,
-                code="ai.tool_unavailable_in_workspace",
+                code="ai.tool_unavailable_for_user",
                 tool_name=tool_name,
             )
 
@@ -160,7 +177,6 @@ def execute_tool(
         _log_tool_call(
             source=source,
             principal=principal,
-            workspace=workspace,
             tool_name=tool_name,
             args_summary=args_summary,
             status="error",
@@ -185,7 +201,6 @@ def execute_tool(
         _log_tool_call(
             source=source,
             principal=principal,
-            workspace=workspace,
             tool_name=tool_name,
             args_summary=args_summary,
             status="error",
@@ -214,12 +229,16 @@ def execute_tool(
         if descriptor is not None
         else definition.approval_required
     )
+    if externally_approved_call_id is not None and source not in {
+        "hermes-mcp",
+        "hermes-terminal-mcp",
+    }:
+        raise RuntimeError("External approval evidence is restricted to Hermes MCP bridges.")
     if approval_required:
         if principal.kind != "user":
             _log_tool_call(
                 source=source,
                 principal=principal,
-                workspace=workspace,
                 tool_name=tool_name,
                 args_summary=args_summary,
                 status="blocked",
@@ -233,11 +252,12 @@ def execute_tool(
                 status_code=status.HTTP_403_FORBIDDEN,
                 code="ai.only_user_principal_approval_tools",
             )
-        if approved_call_id is None:
+        if externally_approved_call_id is not None:
+            approved_call_id = externally_approved_call_id
+        elif approved_call_id is None:
             _log_tool_call(
                 source=source,
                 principal=principal,
-                workspace=workspace,
                 tool_name=tool_name,
                 args_summary=args_summary,
                 status="blocked",
@@ -252,70 +272,67 @@ def execute_tool(
                 tool_name=tool_name,
                 validated_arguments=validated_arguments,
                 descriptor=descriptor,
-                workspace=workspace,
                 principal=principal,
                 parsed_args=argument_validation.parsed_args,
             )
 
-        approval = ai_approvals.get_approval(
-            db,
-            workspace=workspace,
-            user=user,
-            approval_id=approved_call_id,
-            for_update=True,
-        )
-        validate_replayed_approval(
-            approval=approval,
-            tool_name=tool_name,
-            call_id=call_id,
-        )
-        if approval.status == "approved":
-            pass
-        elif approval.status == "rejected":
-            payload = build_rejected_approval_payload(
-                tool_name=definition.name,
-                owner_domain=definition.owner_domain,
-                approval_required=approval_required,
-                reject_reason=approval.reject_reason,
-            )
-            ai_approvals.record_approval_execution_result(
+        if externally_approved_call_id is None:
+            approval = ai_approvals.get_approval(
                 db,
+                user=user,
+                approval_id=approved_call_id,
+                for_update=True,
+            )
+            validate_replayed_approval(
                 approval=approval,
-                execution_result=payload["result"],
-                status="rejected",
-            )
-            _log_tool_call(
-                source=source,
-                principal=principal,
-                workspace=workspace,
                 tool_name=tool_name,
-                args_summary=args_summary,
-                status="ok",
-                latency_ms=_elapsed_ms(started),
                 call_id=call_id,
-                approval_id=approval.id,
-                agent_run_id=agent_run_id,
-                conversation_id=conversation_id,
             )
-            return payload
-        elif approval.status in {"cancelled", "expired"}:
-            raise localized_http_exception(
-                status_code=status.HTTP_410_GONE,
-                code="ai.tool_approval_no_longer_usable",
-                status=approval.status,
-            )
-        else:
-            raise localized_http_exception(
-                status_code=status.HTTP_409_CONFLICT,
-                code="ai.tool_approval_already_status",
-                status=approval.status,
-            )
+            if approval.status == "approved":
+                pass
+            elif approval.status == "rejected":
+                payload = build_rejected_approval_payload(
+                    tool_name=definition.name,
+                    owner_domain=definition.owner_domain,
+                    approval_required=approval_required,
+                    reject_reason=approval.reject_reason,
+                )
+                ai_approvals.record_approval_execution_result(
+                    db,
+                    approval=approval,
+                    execution_result=payload["result"],
+                    status="rejected",
+                )
+                _log_tool_call(
+                    source=source,
+                    principal=principal,
+                    tool_name=tool_name,
+                    args_summary=args_summary,
+                    status="ok",
+                    latency_ms=_elapsed_ms(started),
+                    call_id=call_id,
+                    approval_id=approval.id,
+                    agent_run_id=agent_run_id,
+                    conversation_id=conversation_id,
+                )
+                return payload
+            elif approval.status in {"cancelled", "expired"}:
+                raise localized_http_exception(
+                    status_code=status.HTTP_410_GONE,
+                    code="ai.tool_approval_no_longer_usable",
+                    status=approval.status,
+                )
+            else:
+                raise localized_http_exception(
+                    status_code=status.HTTP_409_CONFLICT,
+                    code="ai.tool_approval_already_status",
+                    status=approval.status,
+                )
 
     tracer = get_tracer("open_work_hub_api.ai.tools")
     with bind_tool_execution_context(
         ToolExecutionContext(
             source=source,
-            workspace_id=workspace.id,
             tool_name=tool_name,
             call_id=call_id,
             agent_run_id=agent_run_id,
@@ -327,7 +344,6 @@ def execute_tool(
                 "ai.tool.execute",
                 attributes={
                     "tool_name": tool_name,
-                    "workspace_id": workspace.id,
                     "call_id": call_id or "",
                     "agent_run_id": agent_run_id or "",
                     "conversation_id": conversation_id or "",
@@ -336,7 +352,6 @@ def execute_tool(
                 result = _invoke_tool_handler(
                     handler,
                     db,
-                    workspace,
                     principal,
                     user,
                     validated_arguments,
@@ -357,7 +372,6 @@ def execute_tool(
             _log_tool_call(
                 source=source,
                 principal=principal,
-                workspace=workspace,
                 tool_name=tool_name,
                 args_summary=args_summary,
                 status="error",
@@ -384,7 +398,6 @@ def execute_tool(
             _log_tool_call(
                 source=source,
                 principal=principal,
-                workspace=workspace,
                 tool_name=tool_name,
                 args_summary=args_summary,
                 status="error",
@@ -414,7 +427,6 @@ def execute_tool(
     _log_tool_call(
         source=source,
         principal=principal,
-        workspace=workspace,
         tool_name=tool_name,
         args_summary=args_summary,
         status="ok",
@@ -472,7 +484,6 @@ def _audit_argument_summary(value: Any, *, key: str | None = None) -> Any:
 def _invoke_tool_handler(
     handler,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     validated_arguments: Mapping[str, Any],
@@ -485,7 +496,6 @@ def _invoke_tool_handler(
         kwargs["approved_call_id"] = approved_call_id
     return handler(
         db,
-        workspace,
         principal,
         user,
         validated_arguments,
@@ -497,7 +507,6 @@ def _log_tool_call(
     *,
     source: str,
     principal: CallerPrincipal,
-    workspace: Workspace,
     tool_name: str,
     args_summary: str,
     status: str,
@@ -514,7 +523,6 @@ def _log_tool_call(
         actor_user_id=principal.user_id,
         principal_kind=principal.kind,
         principal_id=principal.principal_id,
-        workspace_id=workspace.id,
         tool_name=tool_name,
         args_summary=args_summary,
         status=status,

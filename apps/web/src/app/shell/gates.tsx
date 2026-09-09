@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -7,33 +6,33 @@ import {
   type AdminSection,
   type AdminSectionAccessResolver,
 } from '@/src/platform/admin/admin-permissions';
+import {
+  resolveAppGate,
+  type AppGateResult,
+} from '@/src/platform/apps/app-access';
+import { useAppBootstrapContext } from '@/src/platform/apps/app-bootstrap-context';
+import { appIconForKey } from '@/src/platform/apps/app-icons';
 import { hasAdminConsoleAccess } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { AccessDeniedView } from '@/src/platform/auth/settings-pages';
-import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
-import { workspaceAppIconForKey } from '@/src/platform/workspaces/workspace-app-icons';
-import {
-  resolveWorkspaceAppGate,
-  type WorkspaceAppGateResult,
-} from '@/src/platform/workspaces/workspace-app-access';
 import type { AppModuleId, NavItem } from './navigation-types';
 import { ComingSoonView } from './tool-views/ComingSoonView';
 
-function renderWorkspaceGateContent({
+function renderAppGateContent({
   children,
   gate,
   t,
 }: {
   children: ReactNode;
-  gate: WorkspaceAppGateResult;
+  gate: AppGateResult;
   t: (key: string) => string;
 }) {
   switch (gate.status) {
-    case 'workspace_denied':
-      return <AccessDeniedView description={t('gates.workspaceAppDenied')} />;
+    case 'principal_denied':
+      return <AccessDeniedView description={t('gates.appDisabled')} />;
     case 'loading':
       return (
-        <div className="p-8 text-app-ink/55">{t('gates.workspaceLoading')}</div>
+        <div className="p-8 text-app-ink/55">{t('appBootstrap.loading')}</div>
       );
     case 'bootstrap_error':
       return <AccessDeniedView description={gate.error} />;
@@ -44,7 +43,7 @@ function renderWorkspaceGateContent({
   }
 }
 
-export function WorkspaceGate({
+export function AppGate({
   children,
   appId,
   bootstrapAppIds,
@@ -59,21 +58,19 @@ export function WorkspaceGate({
 }) {
   const auth = useAuth();
   const { t } = useTranslation('shell');
-  const { workspaceSlug } = useParams();
-  const gate = resolveWorkspaceAppGate({
+  const gate = resolveAppGate({
     appId,
     bootstrapAppIds,
     bootstrapError,
     bootstrapLoading,
     user: auth.user,
-    workspaceSlug,
   });
 
-  return renderWorkspaceGateContent({ children, gate, t });
+  return renderAppGateContent({ children, gate, t });
 }
 
-export function workspaceBootstrapEnabledAppIds(
-  data: ReturnType<typeof useWorkspaceBootstrapContext>['data'],
+export function bootstrapEnabledAppIds(
+  data: ReturnType<typeof useAppBootstrapContext>['data'],
 ): string[] | null {
   if (!data) {
     return null;
@@ -81,8 +78,8 @@ export function workspaceBootstrapEnabledAppIds(
   return data.apps.flatMap((app) => (app.enabled ? [app.app_id] : []));
 }
 
-export function workspaceFeatureComingSoonItem(
-  data: ReturnType<typeof useWorkspaceBootstrapContext>['data'],
+export function featureComingSoonItem(
+  data: ReturnType<typeof useAppBootstrapContext>['data'],
   appId: string,
 ): NavItem | null {
   const item = data?.apps.find((candidate) => candidate.app_id === appId);
@@ -92,15 +89,15 @@ export function workspaceFeatureComingSoonItem(
   return {
     id: item.app_id,
     title: item.title,
-    icon: workspaceAppIconForKey(item.icon_key),
+    icon: appIconForKey(item.icon_key),
     category: '',
     appId: item.app_id as AppModuleId,
-    pathSuffix: item.route_base,
+    absolutePath: item.route_base,
     comingSoon: true,
   };
 }
 
-export function WorkspaceFeatureAppGate({
+export function FeatureAppGate({
   children,
   appId,
 }: {
@@ -109,26 +106,24 @@ export function WorkspaceFeatureAppGate({
 }) {
   const auth = useAuth();
   const { t } = useTranslation('shell');
-  const { workspaceSlug } = useParams();
-  const workspaceBootstrap = useWorkspaceBootstrapContext();
-  const gate = resolveWorkspaceAppGate({
+  const appBootstrap = useAppBootstrapContext();
+  const gate = resolveAppGate({
     appId,
-    bootstrapAppIds: workspaceBootstrapEnabledAppIds(workspaceBootstrap.data),
-    bootstrapError: workspaceBootstrap.error,
-    bootstrapLoading: workspaceBootstrap.loading,
+    bootstrapAppIds: bootstrapEnabledAppIds(appBootstrap.data),
+    bootstrapError: appBootstrap.error,
+    bootstrapLoading: appBootstrap.loading,
     user: auth.user,
-    workspaceSlug,
   });
 
   const comingSoonItem =
     gate.status === 'allowed'
-      ? workspaceFeatureComingSoonItem(workspaceBootstrap.data, appId)
+      ? featureComingSoonItem(appBootstrap.data, appId)
       : null;
   if (comingSoonItem) {
     return <ComingSoonView item={comingSoonItem} />;
   }
 
-  return renderWorkspaceGateContent({ children, gate, t });
+  return renderAppGateContent({ children, gate, t });
 }
 
 export function AdminGate({

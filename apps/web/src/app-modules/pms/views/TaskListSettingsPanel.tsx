@@ -1,27 +1,27 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  Plus,
-  Pencil,
-  Trash2,
-  Check,
-  Loader2,
-  GripVertical,
-  MoreHorizontal,
-  Info,
-} from 'lucide-react';
-import { Button, Dialog, InlineNotice } from '@open-work-hub/ui';
-import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { UserSearchMultiSelect } from '@/src/platform/users/UserSearchMultiSelect';
-import { selectUserOptionsForPicker } from '@/src/platform/users/user-option-picker-model';
 import {
   formatDateTime,
   normalizeTimeZone,
 } from '@/src/platform/time/time-utils';
+import { UserSearchMultiSelect } from '@/src/platform/users/UserSearchMultiSelect';
+import { selectUserOptionsForPicker } from '@/src/platform/users/user-option-picker-model';
+import { Button, Dialog, InlineNotice } from '@open-work-hub/ui';
 import {
-  listTaskListLabels,
+  Check,
+  GripVertical,
+  Info,
+  Loader2,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
   listPmsUsers,
   listSpaceMembers,
+  listTaskListLabels,
   type PmsLabel,
   type PmsSpaceMember,
   type PmsStatusCategory,
@@ -29,6 +29,10 @@ import {
   type PmsUserSummary,
 } from '../api/pms-api';
 import { StatusIconGlyph } from './StatusIcon';
+import {
+  canMutateTaskListSettingsMember,
+  roleOptionsForTaskListSettings,
+} from './task-list-members-model';
 import {
   LABEL_PRESET_COLORS,
   useTaskListLabelsController,
@@ -38,10 +42,6 @@ import {
   useTaskListMembersController,
 } from './useTaskListMembersController';
 import { useTaskListWorkflowStatusesController } from './useTaskListWorkflowStatusesController';
-import {
-  canMutateTaskListSettingsMember,
-  roleOptionsForTaskListSettings,
-} from './task-list-members-model';
 
 const CATEGORY_OPTIONS = [
   { value: 'not_started', labelKey: 'pms.settings.category.notStarted' },
@@ -56,7 +56,7 @@ type TaskListSettingsPanelProps = {
   taskListId: string;
   taskListName?: string | null;
   teamId: string | null;
-  workspaceSlug?: string | null;
+
   currentUserRole: string | null;
   onClose: () => void;
   onLabelsChanged?: (labels: PmsLabel[]) => void;
@@ -72,7 +72,6 @@ function useTaskListSettingsModel({
   taskListId,
   taskListName,
   teamId,
-  workspaceSlug,
   currentUserRole,
   onClose,
   onLabelsChanged,
@@ -142,7 +141,6 @@ function useTaskListSettingsModel({
     onMembersChanged,
     teamId,
     token,
-    workspaceSlug,
   });
   const workflowStatuses = useTaskListWorkflowStatusesController({
     currentUserRole,
@@ -194,9 +192,9 @@ function useTaskListSettingsModel({
     try {
       const [memberRes, userItems, labelRes] = await Promise.all([
         teamId
-          ? listSpaceMembers(token, teamId, workspaceSlug)
+          ? listSpaceMembers(token, teamId)
           : Promise.resolve({ items: [], total: 0, page: 1, page_size: 20 }),
-        listPmsUsers(token, workspaceSlug),
+        listPmsUsers(token),
         listTaskListLabels(token, taskListId),
       ]);
       replaceMembers(memberRes.items);
@@ -211,15 +209,7 @@ function useTaskListSettingsModel({
     } finally {
       setLoading(false);
     }
-  }, [
-    replaceLabels,
-    replaceMembers,
-    taskListId,
-    teamId,
-    token,
-    workspaceSlug,
-    t,
-  ]);
+  }, [replaceLabels, replaceMembers, taskListId, teamId, token, t]);
 
   useEffect(() => {
     void loadAll();

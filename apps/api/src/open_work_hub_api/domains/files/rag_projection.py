@@ -1,19 +1,23 @@
 from __future__ import annotations
 
+import hashlib
+import mimetypes
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-import hashlib
 from io import BytesIO
-import mimetypes
 from pathlib import Path
-import re
 from typing import Any, Protocol
+from urllib.parse import urlencode
 from zipfile import BadZipFile, ZipFile
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload, undefer
 
+from open_work_hub_api.core.app_routes import (
+    app_entry_href,
+)
 from open_work_hub_api.domains.document_processing import (
     EvidenceBlock,
     UnsupportedDocumentType,
@@ -43,7 +47,6 @@ from open_work_hub_api.domains.rag.contracts import (
     RagVectorSearchHit,
 )
 from open_work_hub_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
-
 
 FILES_EXTRACTION_PARSER_VERSION = "files-retrieval-v2"
 FILES_OCR_POLICY_VERSION = "files-native-first-v1"
@@ -128,7 +131,6 @@ class FileExtractionRuntime(Protocol):
         *,
         content: bytes,
         content_type: str | None = None,
-        workspace_id: str | None = None,
         resource_type: str | None = None,
         source_kind: str | None = None,
     ) -> str: ...
@@ -188,15 +190,19 @@ def load_file_rag_projection(
             raise
         if not _store_artifact_if_active(db, file_id=file.id, artifact=artifact):
             return None
-    return build_file_rag_projection(file=file, artifact=artifact)
+    return build_file_rag_projection(
+        file=file,
+        artifact=artifact,
+    )
 
 
-def workspace_file_resource_ids(db: Session, workspace: Any) -> list[str]:
+def file_resource_ids(
+    db: Session,
+) -> list[str]:
     return list(
         db.scalars(
             select(FileManagerFile.id)
             .where(
-                FileManagerFile.workspace_id == workspace.id,
                 FileManagerFile.deleted_at.is_(None),
             )
             .order_by(FileManagerFile.created_at.asc(), FileManagerFile.id.asc())
@@ -306,7 +312,6 @@ def extract_file_artifact(
             ocr_text = rag_service.extract_text(
                 content=content,
                 content_type=observed_mime,
-                workspace_id=file.workspace_id,
                 resource_type=FILE_MANAGER_FILE_RESOURCE_TYPE,
                 source_kind=FILES_RAG_SOURCE_KIND,
             )
@@ -379,21 +384,14 @@ def build_file_rag_projection(
     corpus = file.corpus
     if corpus is not None and corpus.access_scope_kind == "company":
         scope_kind = RagScopeKind.COMPANY
-        workspace_id = None
         visibility_refs = ["company_public"]
-    elif corpus is not None:
-        scope_kind = RagScopeKind.WORKSPACE
-        workspace_id = corpus.managed_workspace_id
-        visibility_refs = [f"workspace:{corpus.managed_workspace_id}"]
     else:
-        scope_kind = RagScopeKind.WORKSPACE
-        workspace_id = file.workspace_id
+        scope_kind = RagScopeKind.COMPANY
         visibility_refs = [f"owner:{file.owner_id}"]
-        if file.visibility == "workspace":
-            visibility_refs.append(f"workspace:{file.workspace_id}")
+        if file.visibility == "company":
+            visibility_refs.append("company_public")
     return RagProjection(
         scope_kind=scope_kind,
-        workspace_id=workspace_id,
         resource_type=FILE_MANAGER_FILE_RESOURCE_TYPE,
         resource_id=file.id,
         source_kind=FILES_RAG_SOURCE_KIND,
@@ -405,16 +403,15 @@ def build_file_rag_projection(
         ),
         visibility_refs=visibility_refs,
         metadata={
-            "origin_ref": _file_deep_link(file),
+            "origin_ref": _file_deep_link(
+                file,
+            ),
             "content_modality": "text",
             "filename": file.filename,
             "content_type": file.content_type,
             "size_bytes": file.size_bytes,
             "visibility": file.visibility,
             "corpus_id": file.corpus_id,
-            "managed_workspace_id": (
-                corpus.managed_workspace_id if corpus is not None else file.workspace_id
-            ),
             "folder_id": file.folder_id,
             "content_checksum": artifact.content_checksum,
             **safe_external_source_metadata(file),
@@ -910,11 +907,13 @@ def _summary(text: str, *, max_chars: int = 240) -> str | None:
     return normalized[: max_chars - 3].rstrip() + "..."
 
 
-def _file_deep_link(file: FileManagerFile) -> str:
-    base = f"/files?file={file.id}"
+def _file_deep_link(
+    file: FileManagerFile,
+) -> str:
+    query = {"file": file.id}
     if file.folder_id:
-        return f"{base}&folder={file.folder_id}"
-    return base
+        query["folder"] = file.folder_id
+    return f"{app_entry_href('files')}?{urlencode(sorted(query.items()))}"
 
 
 def hydrate_file_rag_hits_from_source(
@@ -925,7 +924,7 @@ def hydrate_file_rag_hits_from_source(
     """Hydrate Files response scope from PostgreSQL without granting access.
 
     The vector payload is only a candidate envelope. The RAG query service
-    invokes this before its final source-owned ACL pass, so stale workspace,
+    invokes this before its final source-owned ACL pass, so stale scope,
     visibility, and origin metadata cannot flow into grounding or citations.
     """
 
@@ -967,24 +966,14 @@ def hydrate_file_rag_hits_from_source(
         corpus = file.corpus
         if corpus is not None and corpus.access_scope_kind == "company":
             scope_kind = RagScopeKind.COMPANY
-            workspace_id = None
             visibility_refs = ["company_public"]
             access_scope_kind = "company"
-            managed_workspace_id = corpus.managed_workspace_id
-        elif corpus is not None:
-            scope_kind = RagScopeKind.WORKSPACE
-            workspace_id = corpus.managed_workspace_id
-            visibility_refs = [f"workspace:{corpus.managed_workspace_id}"]
-            access_scope_kind = "workspace"
-            managed_workspace_id = corpus.managed_workspace_id
         else:
-            scope_kind = RagScopeKind.WORKSPACE
-            workspace_id = file.workspace_id
+            scope_kind = RagScopeKind.COMPANY
             visibility_refs = [f"owner:{file.owner_id}"]
-            if file.visibility == "workspace":
-                visibility_refs.append(f"workspace:{file.workspace_id}")
-            access_scope_kind = "workspace"
-            managed_workspace_id = file.workspace_id
+            if file.visibility == "company":
+                visibility_refs.append("company_public")
+            access_scope_kind = "company"
 
         metadata = refresh_safe_external_source_metadata(
             dict(projection.metadata),
@@ -992,14 +981,17 @@ def hydrate_file_rag_hits_from_source(
         )
         metadata.update(
             {
-                "origin_ref": _file_deep_link(file),
+                "origin_ref": _file_deep_link(
+                    file,
+                    # Resource visibility may be company-wide, but the file
+                    # still has one owning app context.
+                ),
                 "filename": file.filename,
                 "content_type": file.content_type,
                 "size_bytes": file.size_bytes,
                 "visibility": (access_scope_kind if corpus is not None else file.visibility),
                 "corpus_id": file.corpus_id,
                 "access_scope_kind": access_scope_kind,
-                "managed_workspace_id": managed_workspace_id,
                 "folder_id": file.folder_id,
             }
         )
@@ -1007,7 +999,6 @@ def hydrate_file_rag_hits_from_source(
             update={
                 "retrieval_partition_id": file.retrieval_partition_id,
                 "scope_kind": scope_kind,
-                "workspace_id": workspace_id,
                 "title": external_source_title(file),
                 "visibility_refs": visibility_refs,
                 "metadata": metadata,
@@ -1038,5 +1029,5 @@ __all__ = [
     "novel_ocr_text",
     "purge_deleted_file_retrieval_artifact",
     "read_file_content",
-    "workspace_file_resource_ids",
+    "file_resource_ids",
 ]

@@ -24,11 +24,14 @@ describe('useChatbotConversationHydration', () => {
   it('shows the pending question when remount hydration races an empty persisted conversation', async () => {
     vi.mocked(getConversation).mockResolvedValue({
       id: 'conversation-1',
+      title: 'Analysis',
+      createdAt: '2026-09-08T10:00:00Z',
+      updatedAt: '2026-09-08T10:00:00Z',
       livePendingApproval: null,
       scopeRef: 'docs',
-      scopeResourceId: 'workspace',
+      scopeResourceId: 'doc-1',
       turns: [],
-    } as ConversationDetail);
+    } satisfies ConversationDetail);
     const patchViewState = vi.fn();
 
     renderHook(() =>
@@ -55,7 +58,6 @@ describe('useChatbotConversationHydration', () => {
         skipNextHydrationResetRef: { current: false },
         syncLivePendingApproval: vi.fn(),
         token: 'token-1',
-        workspaceSlug: 'research',
       }),
     );
 

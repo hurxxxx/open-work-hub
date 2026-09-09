@@ -55,13 +55,17 @@ def test_open_work_hub_desktop_update_manifest_rejects_unsafe_paths_and_files() 
     manifest = _manifest_fixture()
     del manifest["servedArtifactContentTypes"][".exe"]
 
-    with pytest.raises(OpenWorkHubDesktopUpdateManifestError, match="servedArtifactContentTypes is missing"):
+    with pytest.raises(
+        OpenWorkHubDesktopUpdateManifestError, match="servedArtifactContentTypes is missing"
+    ):
         validate_open_work_hub_desktop_update_manifest(manifest)
 
     manifest = _manifest_fixture()
     manifest["platforms"]["win"]["installerStableCopy"] = "missing.exe"
 
-    with pytest.raises(OpenWorkHubDesktopUpdateManifestError, match="installerStableCopy must reference"):
+    with pytest.raises(
+        OpenWorkHubDesktopUpdateManifestError, match="installerStableCopy must reference"
+    ):
         validate_open_work_hub_desktop_update_manifest(manifest)
 
 
@@ -70,7 +74,9 @@ def test_open_work_hub_desktop_update_dir_values_reject_unsafe_env_paths() -> No
         open_work_hub_desktop_update_dir_values({"OPEN_WORK_HUB_DESKTOP_UPDATE_WIN_DIR": "   "})
 
     with pytest.raises(OpenWorkHubDesktopUpdateManifestError, match="clean relative path"):
-        open_work_hub_desktop_update_dir_values({"OPEN_WORK_HUB_DESKTOP_UPDATE_WIN_DIR": "../outside"})
+        open_work_hub_desktop_update_dir_values(
+            {"OPEN_WORK_HUB_DESKTOP_UPDATE_WIN_DIR": "../outside"}
+        )
 
 
 def _manifest_fixture() -> dict[str, object]:

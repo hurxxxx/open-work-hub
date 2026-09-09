@@ -59,7 +59,6 @@ def test_opensearch_keyword_client_round_trip(
         index_prefix=index_prefix,
     )
     document = {
-        "workspace_id": "release-canary-workspace",
         "entity_type": "plugin_chunk",
         "entity_id": "release-canary-document",
         "title": "Release canary",
@@ -69,20 +68,17 @@ def test_opensearch_keyword_client_round_trip(
     try:
         client.upsert_document(document)
         assert (
-            client.count_workspace_documents(
-                workspace_id=document["workspace_id"],
+            client.count_company_documents(
                 entity_types=(document["entity_type"],),
             )
             == 1
         )
         client.delete_document(
-            workspace_id=document["workspace_id"],
             entity_type=document["entity_type"],
             entity_id=document["entity_id"],
         )
         assert (
-            client.count_workspace_documents(
-                workspace_id=document["workspace_id"],
+            client.count_company_documents(
                 entity_types=(document["entity_type"],),
             )
             == 0

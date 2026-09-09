@@ -1,3 +1,4 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import {
   Calendar,
   CheckCircle2,
@@ -14,7 +15,6 @@ export const pmsManifest: AppModuleManifest = {
     owner: 'pms-platform',
     permissions: [],
     apiDomain: 'pms',
-    workspaceApiPrefixes: ['/api/v1/pms'],
     aiCapabilities: [
       'pms.search_tasks',
       'pms.get_task',
@@ -36,8 +36,7 @@ export const pmsManifest: AppModuleManifest = {
       'apps/api/tests/test_pms_issues.py',
     ],
   },
-  defaultActiveNavItemId: '',
-  surfaces: { launcher: { defaultPinOrder: 0 } },
+  defaultActiveNavItemId: 'pms-inbox',
   navItems: [
     {
       id: 'pms-inbox',
@@ -71,15 +70,15 @@ export const pmsManifest: AppModuleManifest = {
       pathSuffix: '/today',
     },
   ],
-  workspaceRoutePaths: [
-    '/w/:workspaceSlug/pms',
-    '/w/:workspaceSlug/pms/assigned',
-    '/w/:workspaceSlug/pms/today',
-    '/w/:workspaceSlug/pms/lists/:taskListId',
-    '/w/:workspaceSlug/pms/spaces/:spaceId',
-    '/w/:workspaceSlug/pms/spaces/:spaceId/docs',
-    '/w/:workspaceSlug/pms/spaces/:spaceId/docs/:docId',
-    '/w/:workspaceSlug/pms/spaces/:spaceId/whiteboards',
-    '/w/:workspaceSlug/pms/spaces/:spaceId/whiteboards/:whiteboardId',
+  appRoutePaths: [
+    getAppRoutePattern('pms.root'),
+    getAppRoutePattern('pms.assigned'),
+    getAppRoutePattern('pms.today'),
+    getAppRoutePattern('pms.list'),
+    getAppRoutePattern('pms.space'),
+    getAppRoutePattern('pms.space-docs'),
+    getAppRoutePattern('pms.space-doc'),
+    getAppRoutePattern('pms.space-whiteboards'),
+    getAppRoutePattern('pms.space-whiteboard'),
   ],
 };

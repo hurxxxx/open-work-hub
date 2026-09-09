@@ -14,7 +14,6 @@ from open_work_hub_api.domains.admin.document_processing_schemas import (
 from open_work_hub_api.domains.auth.access import is_platform_admin_user
 from open_work_hub_api.domains.auth.dependencies import AuthContext, require_permission
 
-
 router = APIRouter(prefix="/admin/document-processing", tags=["admin"])
 
 

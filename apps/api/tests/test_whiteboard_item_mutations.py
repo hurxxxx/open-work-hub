@@ -7,8 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_session_factory
-from open_work_hub_api.domains.auth.access import bind_current_workspace
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.whiteboard.access import (
     load_whiteboard_for_share_token_or_404,
     load_whiteboard_for_user_or_404,
@@ -113,9 +112,6 @@ def test_update_command_reuses_private_item_and_shared_link_access(
 
 def _bound_delivery_hub_session() -> Session:
     db = get_session_factory()()
-    workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-    assert workspace is not None
-    bind_current_workspace(db, workspace)
     return db
 
 
@@ -127,7 +123,7 @@ def _load_user(db: Session, user_id: str) -> User:
 
 def _create_whiteboard(client: TestClient, token: str, *, title: str) -> dict[str, Any]:
     response = client.post(
-        "/api/v1/workspaces/delivery-hub/whiteboard/items",
+        "/api/v1/whiteboard/items",
         headers=_auth_headers(token),
         json={"title": title},
     )
@@ -137,7 +133,7 @@ def _create_whiteboard(client: TestClient, token: str, *, title: str) -> dict[st
 
 def _create_edit_link_share(client: TestClient, token: str, item_id: str) -> str:
     response = client.put(
-        f"/api/v1/workspaces/delivery-hub/whiteboard/items/{item_id}/sharing/link",
+        f"/api/v1/whiteboard/items/{item_id}/sharing/link",
         headers=_auth_headers(token),
         json={"access_level": "edit"},
     )

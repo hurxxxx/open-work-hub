@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import json
 import logging
+from datetime import timedelta
 from uuid import uuid4
 
 from sqlalchemy import select, update
@@ -18,6 +18,7 @@ from open_work_hub_api.domains.ai.model_settings_service import (
     AiModelSettingsError,
     resolve_ai_model_workload_route,
 )
+from open_work_hub_api.domains.ai_graph.execution_policy import enforce_graph_run_app_policy
 from open_work_hub_api.domains.ai_graph.execution_registry import register_ai_graph_executor
 from open_work_hub_api.domains.ai_graph.repository import (
     AiGraphExecutionLeaseLostError,
@@ -39,7 +40,6 @@ from open_work_hub_api.domains.bento.models import (
     BentoDocument,
 )
 
-
 BENTO_AGENT_GRAPH_ID = "bento.agent"
 BENTO_AGENT_GRAPH_VERSION = "1"
 logger = logging.getLogger(__name__)
@@ -57,6 +57,14 @@ def execute_bento_agent_job(run_id: str) -> str:
         )
         if not claim.acquired:
             return claim.reason or claim.status
+        if not enforce_graph_run_app_policy(
+            db,
+            run_id=run_id,
+            claim_token=claim_token,
+            stage="bento.ai.claim_policy_gate",
+        ):
+            _finish_app_disabled(db, run_id=run_id)
+            return "app_disabled"
         job = db.get(BentoAiJob, run_id)
         job_input = db.get(BentoAiJobInput, run_id)
         if job is None or job_input is None:
@@ -73,15 +81,11 @@ def execute_bento_agent_job(run_id: str) -> str:
         job.updated_at = utcnow_naive()
         db.commit()
 
-        workload_id = (
-            BENTO_GENERATE_WORKLOAD_ID if job.kind == "create" else BENTO_EDIT_WORKLOAD_ID
-        )
+        workload_id = BENTO_GENERATE_WORKLOAD_ID if job.kind == "create" else BENTO_EDIT_WORKLOAD_ID
 
         def cancelled() -> bool:
             return (
-                db.scalar(
-                    select(BentoAiJob.cancel_requested_at).where(BentoAiJob.id == run_id)
-                )
+                db.scalar(select(BentoAiJob.cancel_requested_at).where(BentoAiJob.id == run_id))
                 is not None
             )
 
@@ -102,6 +106,14 @@ def execute_bento_agent_job(run_id: str) -> str:
             db.commit()
 
         try:
+            if not enforce_graph_run_app_policy(
+                db,
+                run_id=run_id,
+                claim_token=claim_token,
+                stage="bento.ai.provider_policy_gate",
+            ):
+                _finish_app_disabled(db, run_id=run_id)
+                return "app_disabled"
             route = resolve_ai_model_workload_route(db, workload_id=workload_id)
             if route.runtime_adapter_id != job.runtime_adapter_id:
                 raise RuntimeError("bento.runtime_configuration_changed")
@@ -109,7 +121,6 @@ def execute_bento_agent_job(run_id: str) -> str:
             result = adapter.run(
                 AgentRuntimeRequest(
                     run_id=run_id,
-                    workspace_id=job.workspace_id,
                     actor_user_id=job.requested_by_id,
                     workload_id=workload_id,
                     route=route,
@@ -127,13 +138,20 @@ def execute_bento_agent_job(run_id: str) -> str:
             )
             if cancelled():
                 raise AgentRuntimeCancelled()
+            if not enforce_graph_run_app_policy(
+                db,
+                run_id=run_id,
+                claim_token=claim_token,
+                stage="bento.ai.mutation_policy_gate",
+            ):
+                _finish_app_disabled(db, run_id=run_id)
+                return "app_disabled"
             document_json = str(result.output_payload["document_json"])
             parsed = json.loads(document_json)
             title = str(parsed["title"]).strip()
             if job.kind == "create":
                 document = BentoDocument(
                     id=str(uuid4()),
-                    workspace_id=job.workspace_id,
                     owner_id=job.requested_by_id,
                     title=title,
                     visibility=job.visibility,
@@ -151,7 +169,6 @@ def execute_bento_agent_job(run_id: str) -> str:
                     update(BentoDocument)
                     .where(
                         BentoDocument.id == job.target_document_id,
-                        BentoDocument.workspace_id == job.workspace_id,
                         BentoDocument.version == job.base_version,
                         BentoDocument.archived_at.is_(None),
                     )
@@ -208,6 +225,20 @@ def execute_bento_agent_job(run_id: str) -> str:
             return "failed"
 
 
+def _finish_app_disabled(db, *, run_id: str) -> None:
+    job = db.get(BentoAiJob, run_id)
+    if job is not None:
+        job.status = "cancelled"
+        job.error_code = "app_execution_disabled"
+        job.finished_at = utcnow_naive()
+        job.updated_at = utcnow_naive()
+    job_input = db.get(BentoAiJobInput, run_id)
+    if job_input is not None:
+        db.delete(job_input)
+    AiGraphRunInputRepository(db).delete_after_terminal(run_id)
+    db.commit()
+
+
 def _finish_failed_or_cancelled(
     db,
     *,
@@ -228,9 +259,7 @@ def _finish_failed_or_cancelled(
             run_id,
             "cancelled" if cancelled else "failed",
             stage="bento.ai.cancelled" if cancelled else "bento.ai.failed",
-            status_message_key=(
-                "bento.ai.cancelled" if cancelled else "bento.ai.failed"
-            ),
+            status_message_key=("bento.ai.cancelled" if cancelled else "bento.ai.failed"),
             error_code=error_code,
             claim_token=claim_token,
         )

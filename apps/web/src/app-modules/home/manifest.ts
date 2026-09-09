@@ -1,3 +1,4 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import { Home } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
@@ -14,6 +15,5 @@ export const homeManifest: AppModuleManifest = {
   },
   defaultActiveNavItemId: '',
   navItems: [],
-  surfaces: { launcher: { fixed: true } },
-  workspaceRoutePaths: ['/w/:workspaceSlug/home'],
+  appRoutePaths: [getAppRoutePattern('home.root')],
 };

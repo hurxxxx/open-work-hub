@@ -1,21 +1,21 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
 import hashlib
 import json
+from collections.abc import Callable
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.app_access import can_use_app
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.files.models import FileManagerFile
 from open_work_hub_api.domains.retrieval.evaluation import RetrievalQualityCorpus
 from open_work_hub_api.domains.source_access import SourceAclPolicy
 from open_work_hub_api.domains.source_access.resource_types import (
     FILE_MANAGER_FILE_RESOURCE_TYPE,
 )
-
 
 _ACL_BATCH_SIZE = 500
 
@@ -38,7 +38,7 @@ class FilesQualityJudgmentSnapshot:
 
 
 SessionFactory = Callable[[], Session]
-SourceAclPolicyFactory = Callable[[Session, Workspace, User], SourceAclPolicy]
+SourceAclPolicyFactory = Callable[[Session, User], SourceAclPolicy]
 
 
 def validate_files_quality_judgments(
@@ -55,21 +55,18 @@ def validate_files_quality_judgments(
     """
 
     policy_factory = source_acl_policy_factory or _source_acl_policy
-    cases_by_context: dict[tuple[str, str], list] = {}
+    cases_by_context: dict[str, list] = {}
     for case in corpus.cases:
         if not case.forbidden_resource_ids:
             raise FilesQualityJudgmentError("quality_judgment_forbidden_required")
-        cases_by_context.setdefault((case.workspace_id, case.user_id), []).append(case)
+        cases_by_context.setdefault(case.user_id, []).append(case)
 
     context_evidence: list[dict[str, object]] = []
     active_resource_count: int | None = None
-    for (workspace_id, user_id), cases in sorted(cases_by_context.items()):
+    for user_id, cases in sorted(cases_by_context.items()):
         try:
             with session_factory() as db:
-                workspace = db.get(Workspace, workspace_id)
                 user = db.get(User, user_id)
-                if workspace is None or not workspace.active:
-                    raise FilesQualityJudgmentError("evaluation_context_unavailable")
                 if user is None or user.status != "active" or user.login_blocked:
                     raise FilesQualityJudgmentError("evaluation_context_unavailable")
 
@@ -86,9 +83,8 @@ def validate_files_quality_judgments(
                 elif active_resource_count != len(active_ids):
                     raise FilesQualityJudgmentError("quality_source_changed_during_validation")
 
-                policy = policy_factory(db, workspace, user)
-                workspace_role = getattr(policy, "workspace_role", None)
-                if not isinstance(workspace_role, str) or not workspace_role.strip():
+                policy = policy_factory(db, user)
+                if not can_use_app(db, user_id=user.id, app_id="files"):
                     raise FilesQualityJudgmentError("evaluation_context_unavailable")
                 keyword_allowed = _authorize_all(policy, active_ids, rag=False)
                 rag_allowed = _authorize_all(policy, active_ids, rag=True)
@@ -106,13 +102,9 @@ def validate_files_quality_judgments(
 
                 context_evidence.append(
                     {
-                        "workspace_id": workspace_id,
                         "user_id": user_id,
-                        "workspace_active": bool(workspace.active),
                         "user_status": str(user.status),
                         "user_login_blocked": bool(user.login_blocked),
-                        "user_is_admin": bool(getattr(user, "is_admin", False)),
-                        "workspace_role": workspace_role.strip().lower(),
                         "active_resource_count": len(active_ids),
                         "active_resource_sha256": _ids_sha256(active_ids),
                         "keyword_allowed_count": len(keyword_allowed),
@@ -172,10 +164,9 @@ def _ids_sha256(resource_ids) -> str:
 
 def _source_acl_policy(
     db: Session,
-    workspace: Workspace,
     user: User,
 ) -> SourceAclPolicy:
-    return SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
+    return SourceAclPolicy.for_user(db, user=user)
 
 
 __all__ = [

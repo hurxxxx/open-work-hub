@@ -78,13 +78,6 @@ class PersonalMemoOut(BaseModel):
     updated_at: datetime | None
 
 
-class PersonalPmsWorkspaceOut(BaseModel):
-    id: str
-    slug: str
-    name: str
-    role: str | None = None
-
-
 class PersonalPmsTaskOut(BaseModel):
     id: str
     list_id: str
@@ -120,7 +113,6 @@ class PersonalPmsTaskOut(BaseModel):
     recurrence_rule: str | None = None
     labels: list[dict[str, str]] = Field(default_factory=list)
     updated_at: datetime
-    workspace: PersonalPmsWorkspaceOut
 
 
 class PersonalPmsAssignedTasksResponse(BaseModel):
@@ -128,4 +120,3 @@ class PersonalPmsAssignedTasksResponse(BaseModel):
     total: int
     page: int
     page_size: int
-    workspaces: list[PersonalPmsWorkspaceOut] = Field(default_factory=list)

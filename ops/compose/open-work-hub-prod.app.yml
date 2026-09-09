@@ -1,0 +1,412 @@
+name: open-work-hub-prod-app
+
+x-open-work-hub-app: &open-work-hub-app
+  image: open-work-hub-app:prod
+  network_mode: host
+  env_file:
+    - ../../.env
+  environment: &open-work-hub-app-environment
+    # The external provider credential is available only to Hermes services.
+    OPENROUTER_API_KEY: ""
+    OPEN_WORK_HUB_API_AUTO_MIGRATE: "0"
+    OPEN_WORK_HUB_API_FRONTEND_DIST_DIR: /opt/open-work-hub/dist/apps/web
+    OPEN_WORK_HUB_API_RECORDING_SPOOL_DIR: /opt/open-work-hub/.runtime/recording-spool
+    OPEN_WORK_HUB_API_SERVE_FRONTEND: "true"
+    OPEN_WORK_HUB_OPF_CACHE_DIR: /opt/open-work-hub/.runtime/opf-cache
+  init: true
+  volumes:
+    - open-work-hub-prod-app-runtime:/opt/open-work-hub/.runtime
+
+services:
+  hermes-bootstrap:
+    image: nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
+    container_name: open-work-hub-prod-hermes-bootstrap
+    network_mode: host
+    restart: "no"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /run:rw,exec,nosuid,nodev,mode=0755
+      - /tmp:rw,exec,nosuid,nodev,mode=1777
+    environment:
+      API_SERVER_KEY: ${OPEN_WORK_HUB_HERMES_API_KEY:-}
+      HERMES_GATEWAY_NO_SUPERVISE: "1"
+      HERMES_GID: "10000"
+      HERMES_UID: "10000"
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    command:
+      - /bin/sh
+      - -ec
+      - >-
+        /opt/hermes/.venv/bin/python /opt/open-work-hub-hermes/bootstrap.py &&
+        /opt/hermes/.venv/bin/hermes gateway stop
+    volumes:
+      - open-work-hub-prod-hermes-data:/opt/data
+      - ../hermes/bootstrap.py:/opt/open-work-hub-hermes/bootstrap.py:ro
+
+  hermes-gateway:
+    image: nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
+    container_name: open-work-hub-prod-hermes-gateway
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /run:rw,exec,nosuid,nodev,mode=0755
+      - /tmp:rw,exec,nosuid,nodev,mode=1777
+    depends_on:
+      hermes-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 127.0.0.1
+      API_SERVER_KEY: ${OPEN_WORK_HUB_HERMES_API_KEY:-}
+      API_SERVER_PORT: ${OPEN_WORK_HUB_HERMES_RUNTIME_PORT:-8642}
+      GATEWAY_MULTIPLEX_PROFILES: "true"
+      HERMES_GATEWAY_NO_SUPERVISE: "1"
+      HERMES_GID: "10000"
+      HERMES_MODEL: qwen/qwen3.8-flash
+      HERMES_UID: "10000"
+    command:
+      - /opt/hermes/.venv/bin/python
+      - /opt/open-work-hub-hermes/gateway_entry.py
+      - gateway
+      - run
+      - --no-supervise
+    volumes:
+      - open-work-hub-prod-hermes-data:/opt/data
+      - ../hermes/gateway_entry.py:/opt/open-work-hub-hermes/gateway_entry.py:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS
+          -H "Authorization: Bearer $${API_SERVER_KEY}"
+          "http://127.0.0.1:$${API_SERVER_PORT}/health/detailed" >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  hermes-dashboard:
+    image: nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
+    container_name: open-work-hub-prod-hermes-dashboard
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /run:rw,exec,nosuid,nodev,mode=0755
+      - /tmp:rw,exec,nosuid,nodev,mode=1777
+    depends_on:
+      hermes-gateway:
+        condition: service_healthy
+    environment:
+      GATEWAY_MULTIPLEX_PROFILES: "true"
+      HERMES_DASHBOARD_SESSION_TOKEN: ${OPEN_WORK_HUB_HERMES_MANAGEMENT_TOKEN:-}
+      HERMES_GID: "10000"
+      HERMES_UID: "10000"
+    command:
+      - dashboard
+      - --host
+      - 127.0.0.1
+      - --port
+      - ${OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT:-9119}
+      - --no-open
+    volumes:
+      - open-work-hub-prod-hermes-data:/opt/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS
+          "http://127.0.0.1:${OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT:-9119}/api/health"
+          >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  hermes-terminal-egress-client-init:
+    image: nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
+    container_name: open-work-hub-prod-hermes-terminal-egress-client-init
+    user: "0:0"
+    read_only: true
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        chown 0:0 /client
+        chmod 0700 /client
+        chown 10000:10000 /client
+    volumes:
+      - open-work-hub-prod-hermes-terminal-egress-client:/client
+    network_mode: none
+
+  hermes-terminal-egress:
+    image: nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
+    container_name: open-work-hub-prod-hermes-terminal-egress
+    restart: unless-stopped
+    depends_on:
+      hermes-terminal-egress-client-init:
+        condition: service_completed_successfully
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /run:rw,exec,nosuid,nodev,mode=0755
+      - /tmp:rw,exec,nosuid,nodev,mode=1777
+    environment:
+      HERMES_GID: "10000"
+      HERMES_HOME: /opt/data
+      HERMES_UID: "10000"
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OWH_HERMES_TERMINAL_EGRESS_CLIENT_DIR: /opt/data/home/egress-client
+    command:
+      - /opt/hermes/.venv/bin/python
+      - /opt/open-work-hub-hermes/terminal_egress.py
+    volumes:
+      - open-work-hub-prod-hermes-terminal-egress-data:/opt/data
+      - open-work-hub-prod-hermes-terminal-egress-client:/opt/data/home/egress-client
+      - ../hermes/terminal_egress.py:/opt/open-work-hub-hermes/terminal_egress.py:ro
+    healthcheck:
+      test:
+        - CMD
+        - /opt/hermes/.venv/bin/python
+        - -c
+        - >-
+          import pathlib,socket;
+          assert pathlib.Path('/opt/data/home/egress-client/openrouter.token').is_file();
+          s=socket.create_connection(('127.0.0.1',19090),3);s.close()
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+    networks:
+      open-work-hub-hermes-terminal-sandbox:
+        aliases:
+          - hermes-terminal-egress
+      default: {}
+
+  hermes-terminal-broker:
+    image: open-work-hub-app:prod
+    container_name: open-work-hub-prod-hermes-terminal-broker
+    user: "0:0"
+    restart: unless-stopped
+    depends_on:
+      hermes-terminal-egress:
+        condition: service_healthy
+    environment:
+      OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET: ${OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET:-}
+      OWH_HERMES_TERMINAL_BROKER_INSTANCE_ID: prod-broker
+      OWH_HERMES_TERMINAL_EGRESS_CLIENT_DIR: /run/owh-hermes-terminal-egress
+      OWH_HERMES_TERMINAL_EGRESS_CLIENT_VOLUME: open-work-hub-prod-hermes-terminal-egress-client
+      OWH_HERMES_TERMINAL_IMAGE: nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
+      OWH_HERMES_TERMINAL_MCP_RELAY_BASE_URL: http://hermes-terminal-broker:18765/mcp
+      OWH_HERMES_TERMINAL_MCP_SOCKET_PATH: /run/open-work-hub/hermes-terminal-mcp.sock
+      OWH_HERMES_TERMINAL_PROFILE_ARCHIVE_MAX_BYTES: ${OPEN_WORK_HUB_HERMES_TERMINAL_PROFILE_ARCHIVE_MAX_BYTES:-67108864}
+      OWH_HERMES_TERMINAL_RESOURCE_NAMESPACE: ${OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE:?Production Hermes resource namespace is required}
+      OWH_HERMES_TERMINAL_SANDBOX_NETWORK: open-work-hub-prod-hermes-terminal-sandbox
+      OWH_HERMES_TERMINAL_WORKSPACE_ARCHIVE_MAX_BYTES: ${OPEN_WORK_HUB_HERMES_TERMINAL_WORKSPACE_ARCHIVE_MAX_BYTES:-268435456}
+      OWH_HERMES_TERMINAL_WORKSPACE_LIVE_MAX_BYTES: ${OPEN_WORK_HUB_HERMES_TERMINAL_WORKSPACE_ARCHIVE_MAX_BYTES:-268435456}
+    command:
+      - apps/api/.venv/bin/uvicorn
+      - open_work_hub_api.domains.hermes_terminal.broker_app:app
+      - --app-dir
+      - apps/api/src
+      - --host
+      - 0.0.0.0
+      - --port
+      - "18765"
+      - --no-access-log
+    ports:
+      - "127.0.0.1:${OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT:-8765}:18765"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - open-work-hub-prod-app-runtime:/run/open-work-hub
+      - open-work-hub-prod-hermes-terminal-egress-client:/run/owh-hermes-terminal-egress:ro
+    healthcheck:
+      test:
+        - CMD
+        - apps/api/.venv/bin/python
+        - -c
+        - >-
+          import json,urllib.request;
+          body=json.load(urllib.request.urlopen('http://127.0.0.1:18765/healthz',timeout=5));
+          assert body.get('ready') is True
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      open-work-hub-hermes-terminal-sandbox:
+        aliases:
+          - hermes-terminal-broker
+      default: {}
+
+  migrate:
+    <<: *open-work-hub-app
+    command:
+      - apps/api/.venv/bin/python
+      - -c
+      - from open_work_hub_api.core.db import run_migrations; run_migrations()
+    restart: "no"
+
+  api:
+    <<: *open-work-hub-app
+    container_name: open-work-hub-prod-api
+    depends_on:
+      hermes-dashboard:
+        condition: service_healthy
+      hermes-gateway:
+        condition: service_healthy
+      hermes-terminal-broker:
+        condition: service_healthy
+      privacy-filter:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        exec apps/api/.venv/bin/uvicorn open_work_hub_api.main:app \
+          --app-dir apps/api/src \
+          --host "$${OPEN_WORK_HUB_APP_BIND_HOST:-127.0.0.1}" \
+          --port "$${OPEN_WORK_HUB_APP_PORT:-8000}" \
+          --proxy-headers \
+          --forwarded-allow-ips "$${OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS:-127.0.0.1}"
+    restart: unless-stopped
+    stop_grace_period: 45s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          apps/api/.venv/bin/python -c
+          'import os, urllib.request;
+          urllib.request.urlopen(
+          "http://127.0.0.1:" + os.environ.get("OPEN_WORK_HUB_APP_PORT", "8000") + "/healthz",
+          timeout=5).read()'
+      interval: 15s
+      timeout: 8s
+      retries: 12
+      start_period: 90s
+
+  privacy-filter:
+    <<: *open-work-hub-app
+    container_name: open-work-hub-prod-privacy-filter
+    command:
+      - apps/api/.venv/bin/python
+      - -c
+      - |
+        import os
+        from urllib.parse import urlparse
+        import uvicorn
+        endpoint = urlparse(os.environ["OPEN_WORK_HUB_OPF_SERVICE_BASE_URL"])
+        uvicorn.run(
+            "open_work_hub_api.domains.ai.privacy_filter_service:app",
+            app_dir="apps/api/src",
+            host=endpoint.hostname,
+            port=endpoint.port,
+        )
+    restart: unless-stopped
+    stop_grace_period: 45s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          apps/api/.venv/bin/python -c
+          'import json, os, urllib.request;
+          body = json.load(urllib.request.urlopen(
+          os.environ["OPEN_WORK_HUB_OPF_SERVICE_BASE_URL"].rstrip("/") + "/healthz",
+          timeout=5));
+          assert body.get("ready") is True'
+      interval: 15s
+      timeout: 8s
+      retries: 20
+      start_period: 5m
+
+  worker:
+    <<: *open-work-hub-app
+    container_name: open-work-hub-prod-worker
+    depends_on:
+      hermes-dashboard:
+        condition: service_healthy
+      hermes-gateway:
+        condition: service_healthy
+    environment:
+      <<: *open-work-hub-app-environment
+      OPEN_WORK_HUB_WORKER_QUEUE_GROUP: all
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        queues="$$(apps/worker/.venv/bin/python -m open_work_hub_worker.queue_contract --celery-queues)"
+        exec apps/worker/.venv/bin/celery \
+          -A open_work_hub_worker.celery_app:celery_app worker \
+          --loglevel=info \
+          --queues "$${queues}" \
+          --hostname "prod-worker@%h"
+    restart: unless-stopped
+    stop_grace_period: 65m
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          apps/worker/.venv/bin/celery
+          -A open_work_hub_worker.celery_app:celery_app inspect ping
+          --destination "prod-worker@$${HOSTNAME}" --timeout 5
+          | grep -q pong
+      interval: 20s
+      timeout: 10s
+      retries: 12
+      start_period: 45s
+
+  beat:
+    <<: *open-work-hub-app
+    container_name: open-work-hub-prod-beat
+    environment:
+      <<: *open-work-hub-app-environment
+      OPEN_WORK_HUB_WORKER_QUEUE_GROUP: beat
+    command:
+      - apps/worker/.venv/bin/celery
+      - -A
+      - open_work_hub_worker.celery_app:celery_app
+      - beat
+      - --loglevel=info
+    restart: unless-stopped
+    stop_grace_period: 45s
+    healthcheck:
+      test:
+        - CMD
+        - apps/worker/.venv/bin/python
+        - -m
+        - open_work_hub_worker.beat_health
+      interval: 30s
+      timeout: 5s
+      retries: 2
+      start_period: 90s
+
+volumes:
+  open-work-hub-prod-app-runtime:
+    name: open-work-hub-prod-app-runtime
+  open-work-hub-prod-hermes-data:
+    name: open-work-hub-prod-hermes-data
+  open-work-hub-prod-hermes-terminal-egress-data:
+    name: open-work-hub-prod-hermes-terminal-egress-data
+  open-work-hub-prod-hermes-terminal-egress-client:
+    name: open-work-hub-prod-hermes-terminal-egress-client
+
+networks:
+  open-work-hub-hermes-terminal-sandbox:
+    name: open-work-hub-prod-hermes-terminal-sandbox
+    internal: true

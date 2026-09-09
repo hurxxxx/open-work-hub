@@ -2,16 +2,24 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
+  clearMatomoUser,
+  identifyMatomoUser,
+} from '@/src/platform/analytics/matomo';
+import { i18n, syncLocale } from '@/src/platform/i18n';
+import {
+  syncDateFormatPreference,
+  syncTimeZonePreference,
+} from '@/src/platform/time/time-utils';
+import {
+  AuthApiError,
   changePassword as changePasswordRequest,
   developmentAccountLogin as developmentAccountLoginRequest,
   developmentAdminLogin as developmentAdminLoginRequest,
   getBootstrapStatus,
   getCurrentUser,
-  hasAdminConsoleAccess,
   hasAnySystemRole,
-  hasWorkspaceMembership,
-  login as loginRequest,
   listSessions as listSessionsRequest,
+  login as loginRequest,
   logout as logoutRequest,
   revokeSession as revokeSessionRequest,
   setupFirstUser as setupFirstUserRequest,
@@ -26,6 +34,7 @@ import {
   type UpdatePreferencesPayload,
 } from './auth-api';
 import { AuthContext } from './auth-context';
+import { resolveMatomoUserIdentity } from './auth-matomo';
 import {
   initialAuthState,
   projectRefreshSession,
@@ -38,20 +47,10 @@ import {
   persistAuthToken,
   readStoredAuthToken,
 } from './auth-storage';
-import { resolveMatomoUserIdentity } from './auth-matomo';
 import {
   syncDesktopLoginSession,
   syncDesktopLogoutSession,
 } from './desktop-session-sync';
-import { i18n, syncLocale } from '@/src/platform/i18n';
-import {
-  syncDateFormatPreference,
-  syncTimeZonePreference,
-} from '@/src/platform/time/time-utils';
-import {
-  clearMatomoUser,
-  identifyMatomoUser,
-} from '@/src/platform/analytics/matomo';
 
 export { useAuth } from './auth-context';
 export { AuthLoadingScreen } from './auth-loading-screen';
@@ -62,13 +61,8 @@ const PERMISSION_ROLE_MAP: Record<string, string[]> = {
   'admin.access': ['platform_admin'],
   'user.read': ['platform_admin'],
   'user.write': ['platform_admin'],
-  'workspace.read': ['platform_admin'],
-  'workspace.write': ['platform_admin'],
-  'team.read': ['platform_admin'],
-  'team.write': ['platform_admin'],
   'audit.read': ['platform_admin'],
   'session.revoke': ['platform_admin'],
-  'user.impersonate': ['platform_admin'],
 };
 
 function errorMessage(caughtError: unknown, fallback: string): string {
@@ -85,6 +79,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 function useAuthProviderElement(children: ReactNode) {
   const [state, setState] = useState<AuthState>(() => initialAuthState());
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
 
@@ -176,6 +172,55 @@ function useAuthProviderElement(children: ReactNode) {
     }
   }, [requestIsCurrent]);
 
+  const refreshAccessUser = useCallback(async (): Promise<AuthUser> => {
+    const sessionToken = state.token;
+    if (!sessionToken) {
+      throw new Error(i18n.t('auth:errors.noActiveSession'));
+    }
+
+    const requestId = ++requestIdRef.current;
+    try {
+      const user = await getCurrentUser(sessionToken);
+      if (requestIsCurrent(requestId)) {
+        syncLocale(user.locale);
+        syncDateFormatPreference(user.date_format);
+        syncTimeZonePreference(user.time_zone);
+        identifyMatomoUser(resolveMatomoUserIdentity(user));
+        setState((current) =>
+          current.token === sessionToken
+            ? toAuthenticatedAuthState({
+                user,
+                token: sessionToken,
+                devAdminLoginAvailable: current.devAdminLoginAvailable,
+                devLoginAccounts: current.devLoginAccounts,
+              })
+            : current,
+        );
+      }
+      return user;
+    } catch (caughtError) {
+      if (
+        caughtError instanceof AuthApiError &&
+        (caughtError.status === 401 || caughtError.status === 403) &&
+        requestIsCurrent(requestId)
+      ) {
+        clearStoredAuthToken();
+        syncDesktopLogoutSession();
+        clearMatomoUser();
+        setState((current) => ({
+          status: 'unauthenticated',
+          user: null,
+          token: null,
+          requiresSetup: false,
+          devAdminLoginAvailable: current.devAdminLoginAvailable,
+          devLoginAccounts: current.devLoginAccounts,
+          bootstrapError: null,
+        }));
+      }
+      throw caughtError;
+    }
+  }, [requestIsCurrent, state.token]);
+
   useEffect(() => {
     void refreshSession();
   }, [refreshSession]);
@@ -248,18 +293,10 @@ function useAuthProviderElement(children: ReactNode) {
   const logout = useCallback(async () => {
     const requestId = ++requestIdRef.current;
     const sessionToken = state.token;
-
-    try {
-      if (sessionToken) {
-        await logoutRequest(sessionToken);
-      }
-    } finally {
-      clearStoredAuthToken();
-      markPostLogoutHomeRedirect();
-      syncDesktopLogoutSession();
-      clearMatomoUser();
-    }
-
+    clearStoredAuthToken();
+    markPostLogoutHomeRedirect();
+    syncDesktopLogoutSession();
+    clearMatomoUser();
     if (requestIsCurrent(requestId)) {
       setState({
         status: 'unauthenticated',
@@ -271,6 +308,10 @@ function useAuthProviderElement(children: ReactNode) {
         bootstrapError: null,
       });
     }
+
+    if (sessionToken) {
+      await logoutRequest(sessionToken).catch(() => undefined);
+    }
   }, [
     requestIsCurrent,
     state.devAdminLoginAvailable,
@@ -280,25 +321,44 @@ function useAuthProviderElement(children: ReactNode) {
 
   const updatePreferences = useCallback(
     async (payload: UpdatePreferencesPayload) => {
-      if (!state.token) {
+      const sessionToken = state.token;
+      if (!sessionToken) {
         throw new Error(i18n.t('auth:errors.noActiveSession'));
       }
 
-      const user = await updatePreferencesRequest(state.token, payload);
-      if (mountedRef.current) {
-        syncLocale(user.locale);
-        syncDateFormatPreference(user.date_format);
-        syncTimeZonePreference(user.time_zone);
-        identifyMatomoUser(resolveMatomoUserIdentity(user));
-        setState((current) =>
-          toAuthenticatedAuthState({
-            user,
-            token: current.token ?? state.token ?? '',
-            devAdminLoginAvailable: current.devAdminLoginAvailable,
-            devLoginAccounts: current.devLoginAccounts,
-          }),
-        );
+      const user = await updatePreferencesRequest(sessionToken, payload);
+      const currentState = stateRef.current;
+      if (
+        !mountedRef.current ||
+        currentState.token !== sessionToken ||
+        !currentState.user
+      ) {
+        return;
       }
+      const mergedUser: AuthUser = {
+        ...currentState.user,
+        app_bar_layout: user.app_bar_layout,
+        date_format: user.date_format,
+        display_name: user.display_name,
+        full_name: user.full_name,
+        locale: user.locale,
+        theme_preference: user.theme_preference,
+        time_zone: user.time_zone,
+      };
+      syncLocale(mergedUser.locale);
+      syncDateFormatPreference(mergedUser.date_format);
+      syncTimeZonePreference(mergedUser.time_zone);
+      identifyMatomoUser(resolveMatomoUserIdentity(mergedUser));
+      setState((current) =>
+        current.token === sessionToken
+          ? toAuthenticatedAuthState({
+              user: mergedUser,
+              token: sessionToken,
+              devAdminLoginAvailable: current.devAdminLoginAvailable,
+              devLoginAccounts: current.devLoginAccounts,
+            })
+          : current,
+      );
     },
     [state.token],
   );
@@ -352,16 +412,6 @@ function useAuthProviderElement(children: ReactNode) {
     [state.user],
   );
 
-  const hasFeature = useCallback(
-    (featureCode: string, workspaceSlug?: string | null) => {
-      if (featureCode === 'nav.admin') {
-        return hasAdminConsoleAccess(state.user);
-      }
-      return hasWorkspaceMembership(state.user, workspaceSlug);
-    },
-    [state.user],
-  );
-
   const value = useMemo(
     () => ({
       ...state,
@@ -373,12 +423,12 @@ function useAuthProviderElement(children: ReactNode) {
       switchSession,
       logout,
       refreshSession,
+      refreshAccessUser,
       updatePreferences,
       changePassword,
       listSessions,
       revokeSession,
       hasPermission,
-      hasFeature,
     }),
     [
       state,
@@ -390,12 +440,12 @@ function useAuthProviderElement(children: ReactNode) {
       switchSession,
       logout,
       refreshSession,
+      refreshAccessUser,
       updatePreferences,
       changePassword,
       listSessions,
       revokeSession,
       hasPermission,
-      hasFeature,
     ],
   );
 

@@ -22,8 +22,9 @@ function status(
     name: slug,
     slug,
     category,
-    position: 0,
-  } as PmsTaskListStatus;
+    sort_order: 0,
+    color: '#94a3b8',
+  };
 }
 
 describe('pms view scoped state model', () => {

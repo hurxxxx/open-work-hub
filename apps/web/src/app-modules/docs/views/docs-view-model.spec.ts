@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type {
-  DocsHubItem,
-  DocsPageItem,
-} from '../api/docs-api';
+import type { DocsHubItem, DocsPageItem } from '../api/docs-api';
 import {
   DOCS_HTML_ZOOM_MAX,
   DOCS_HTML_ZOOM_MIN,
@@ -69,44 +66,22 @@ function doc(overrides: Partial<DocsHubItem> = {}): DocsHubItem {
 }
 
 describe('docs view model', () => {
-  it('resolves docs create default location from active category', () => {
-    expect(resolveDefaultDocsCreateLocation('all')).toBe('workspace');
+  it('defaults standalone creation to personal ownership', () => {
+    expect(resolveDefaultDocsCreateLocation('all')).toBe('private');
     expect(resolveDefaultDocsCreateLocation('private')).toBe('private');
   });
-
-  it('maps docs create locations to primary targets', () => {
-    expect(
-      resolveDocsCreatePrimaryTarget('private', 'workspace-1'),
-    ).toBeNull();
-    expect(
-      resolveDocsCreatePrimaryTarget('workspace', 'workspace-1'),
-    ).toEqual({
-      app: 'docs',
-      type: 'workspace_sidebar',
-      id: 'workspace-1',
-    });
-    expect(
-      resolveDocsCreatePrimaryTarget('space:space-1', 'workspace-1'),
-    ).toEqual({
+  it('uses app-owned targets only for explicit business placement', () => {
+    expect(resolveDocsCreatePrimaryTarget('private')).toBeNull();
+    expect(resolveDocsCreatePrimaryTarget('company')).toBeNull();
+    expect(resolveDocsCreatePrimaryTarget('space:space-1')).toEqual({
       app: 'pms',
       type: 'space',
       id: 'space-1',
     });
-    expect(resolveDocsCreatePrimaryTarget('workspace', null)).toBeNull();
-    expect(
-      resolveDocsCreatePrimaryTarget('unknown', 'workspace-1'),
-    ).toBeNull();
+    expect(resolveDocsCreatePrimaryTarget('unknown')).toBeNull();
   });
-
-  it('maps primary targets back to docs create location values', () => {
+  it('maps app-owned targets back to placement values', () => {
     expect(resolveDocsCreateLocationValue(null)).toBe('private');
-    expect(
-      resolveDocsCreateLocationValue({
-        app: 'docs',
-        type: 'workspace_sidebar',
-        id: 'workspace-1',
-      }),
-    ).toBe('workspace');
     expect(
       resolveDocsCreateLocationValue({
         app: 'pms',

@@ -1,15 +1,19 @@
 import { act, cleanup, render } from '@testing-library/react';
+import type { Terminal } from '@xterm/xterm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentTerminalSurface } from './AgentTerminalSurface';
 
 type DataListener = (data: string) => void;
+type KeyListener = Parameters<Terminal['attachCustomKeyEventHandler']>[0];
 type WheelListener = (event: WheelEvent) => boolean;
 
 const terminalHarness = vi.hoisted(() => ({
   instances: [] as Array<{
     emitData: (data: string) => void;
+    emitKey: (event: KeyboardEvent) => boolean | undefined;
     emitWheel: (event: WheelEvent) => boolean | undefined;
+    selection: string;
     options: {
       theme?: {
         selectionBackground?: string;
@@ -31,8 +35,10 @@ vi.mock('@xterm/xterm', () => ({
   Terminal: class {
     cols = 80;
     rows = 24;
+    selection = '';
     writes: string[] = [];
     private dataListener: DataListener | null = null;
+    private keyListener: KeyListener | null = null;
     private wheelListener: WheelListener | null = null;
 
     constructor(
@@ -47,10 +53,18 @@ vi.mock('@xterm/xterm', () => ({
       terminalHarness.instances.push(this);
     }
 
-    dispose() {}
-    focus() {}
-    loadAddon() {}
-    open() {}
+    dispose = vi.fn();
+    focus = vi.fn();
+    loadAddon = vi.fn();
+    open = vi.fn();
+
+    hasSelection() {
+      return this.selection.length > 0;
+    }
+
+    getSelection() {
+      return this.selection;
+    }
 
     onData(listener: DataListener) {
       this.dataListener = listener;
@@ -61,8 +75,16 @@ vi.mock('@xterm/xterm', () => ({
       this.wheelListener = listener;
     }
 
+    attachCustomKeyEventHandler(listener: KeyListener) {
+      this.keyListener = listener;
+    }
+
     emitData(data: string) {
       this.dataListener?.(data);
+    }
+
+    emitKey(event: KeyboardEvent) {
+      return this.keyListener?.(event);
     }
 
     emitWheel(event: WheelEvent) {
@@ -138,9 +160,9 @@ beforeEach(() => {
   vi.stubGlobal(
     'ResizeObserver',
     class {
-      disconnect() {}
-      observe() {}
-      unobserve() {}
+      disconnect = vi.fn();
+      observe = vi.fn();
+      unobserve = vi.fn();
     },
   );
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -157,6 +179,68 @@ afterEach(() => {
 });
 
 describe('AgentTerminalSurface replay handling', () => {
+  it.each([
+    { key: 'c', ctrlKey: true },
+    { key: 'C', ctrlKey: true, shiftKey: true },
+    { key: 'c', metaKey: true },
+  ])(
+    'copies selected text without processing the terminal key: %j',
+    (shortcut) => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal('navigator', { clipboard: { writeText } });
+      render(
+        <AgentTerminalSurface
+          ariaLabel="terminal"
+          onConnectionStateChange={vi.fn()}
+          onError={vi.fn()}
+          onExit={vi.fn()}
+          sessionId="session-copy"
+          token="token-1"
+        />,
+      );
+      const terminal = terminalHarness.instances[0];
+      if (!terminal) throw new Error('terminal harness did not initialize');
+      terminal.selection = 'selected terminal output';
+
+      expect(terminal.emitKey(new KeyboardEvent('keydown', shortcut))).toBe(
+        false,
+      );
+      expect(writeText).toHaveBeenCalledExactlyOnceWith(terminal.selection);
+    },
+  );
+
+  it.each([
+    { type: 'keydown', key: 'c', selection: '' },
+    { type: 'keydown', key: 'a', selection: 'selected terminal output' },
+    { type: 'keyup', key: 'c', selection: 'selected terminal output' },
+  ])(
+    'preserves terminal key processing outside selection copy: %j',
+    (input) => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      vi.stubGlobal('navigator', { clipboard: { writeText } });
+      render(
+        <AgentTerminalSurface
+          ariaLabel="terminal"
+          onConnectionStateChange={vi.fn()}
+          onError={vi.fn()}
+          onExit={vi.fn()}
+          sessionId="session-key"
+          token="token-1"
+        />,
+      );
+      const terminal = terminalHarness.instances[0];
+      if (!terminal) throw new Error('terminal harness did not initialize');
+      terminal.selection = input.selection;
+
+      expect(
+        terminal.emitKey(
+          new KeyboardEvent(input.type, { key: input.key, ctrlKey: true }),
+        ),
+      ).toBe(true);
+      expect(writeText).not.toHaveBeenCalled();
+    },
+  );
+
   it('uses contrasting terminal selection colors in dark mode', () => {
     render(
       <AgentTerminalSurface

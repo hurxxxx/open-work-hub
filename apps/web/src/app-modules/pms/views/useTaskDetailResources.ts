@@ -15,8 +15,8 @@ import {
 } from './task-detail-resources-model';
 export {
   INITIAL_TASK_DETAIL_RESOURCES_STATE,
-  taskDetailResourcesReducer,
   taskDetailResourcesFromLoaded,
+  taskDetailResourcesReducer,
 } from './task-detail-resources-model';
 export type {
   TaskDetailResourcesAction,
@@ -26,11 +26,9 @@ export type {
 export function useTaskDetailResources({
   taskId,
   token,
-  workspaceSlug,
 }: {
   taskId: string;
   token: string | null;
-  workspaceSlug: string | null;
 }) {
   const [state, dispatch] = useReducer(
     taskDetailResourcesReducer,
@@ -38,15 +36,18 @@ export function useTaskDetailResources({
   );
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      dispatch({ type: 'loading', value: false });
+      return;
+    }
     dispatch({ type: 'loading', value: true });
     Promise.all([
-      getTaskDetail(token, taskId, workspaceSlug),
+      getTaskDetail(token, taskId),
       listTaskActivityLogs(token, taskId),
     ])
       .then(([detail, logs]) => dispatch({ type: 'loaded', detail, logs }))
       .finally(() => dispatch({ type: 'loading', value: false }));
-  }, [token, taskId, workspaceSlug]);
+  }, [token, taskId]);
 
   return {
     state,

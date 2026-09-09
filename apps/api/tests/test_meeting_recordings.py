@@ -39,7 +39,9 @@ class _FakeRecordingMinio:
         del bucket, length, content_type
         self.objects[key] = data.read()
 
-    def fput_object(self, bucket: str, key: str, path: str, content_type: str | None = None) -> None:
+    def fput_object(
+        self, bucket: str, key: str, path: str, content_type: str | None = None
+    ) -> None:
         del bucket, content_type
         self.objects[key] = Path(path).read_bytes()
 
@@ -70,8 +72,13 @@ def _install_fake_recording_storage(monkeypatch, tmp_path) -> _FakeRecordingMini
     monkeypatch.setattr(canonical_recording_service, "_broker_is_reachable", lambda: True)
     monkeypatch.setattr(
         canonical_recording_service,
-        "enqueue_recording_pipeline",
+        "new_recording_attempt_id",
         lambda recording_id: f"task-{recording_id}",
+    )
+    monkeypatch.setattr(
+        canonical_recording_service,
+        "enqueue_recording_pipeline",
+        lambda recording_id, attempt_id: None,
     )
     return fake
 
@@ -113,12 +120,12 @@ def test_init_staging_is_idempotent(client, monkeypatch, tmp_path) -> None:
 
     payload = {"idempotency_key": "rec-init-1", "mime_type": "audio/webm"}
     first = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin["token"]),
         json=payload,
     )
     second = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin["token"]),
         json=payload,
     )
@@ -137,7 +144,7 @@ def test_chunk_upload_same_seq_same_payload_is_idempotent(client, monkeypatch, t
     admin = _bootstrap_admin_session(client)
     meeting = _create_meeting(client, admin["token"], title="Recording chunk")
     init_response = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin["token"]),
         json={"idempotency_key": "rec-chunk-1", "mime_type": "audio/webm"},
     )
@@ -146,12 +153,12 @@ def test_chunk_upload_same_seq_same_payload_is_idempotent(client, monkeypatch, t
     digest = hashlib.sha256(chunk).hexdigest()
 
     first = client.put(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
         headers={**_auth_headers(admin["token"]), "X-Chunk-Sha256": digest},
         files={"file": ("chunk-0.webm", chunk, "audio/webm")},
     )
     second = client.put(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
         headers={**_auth_headers(admin["token"]), "X-Chunk-Sha256": digest},
         files={"file": ("chunk-0.webm", chunk, "audio/webm")},
     )
@@ -173,7 +180,7 @@ def test_complete_staging_promotes_to_recording(client, monkeypatch, tmp_path) -
     admin = _bootstrap_admin_session(client)
     meeting = _create_meeting(client, admin["token"], title="Recording complete")
     init_response = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin["token"]),
         json={"idempotency_key": "rec-complete-1", "mime_type": "audio/webm"},
     )
@@ -181,14 +188,14 @@ def test_complete_staging_promotes_to_recording(client, monkeypatch, tmp_path) -
     chunk = b"final recording chunk"
     digest = hashlib.sha256(chunk).hexdigest()
     upload_response = client.put(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
         headers={**_auth_headers(admin["token"]), "X-Chunk-Sha256": digest},
         files={"file": ("chunk-0.webm", chunk, "audio/webm")},
     )
     assert upload_response.status_code == 200, upload_response.text
 
     complete_response = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/complete",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/complete",
         headers=_auth_headers(admin["token"]),
         json={"duration_sec_estimate": 4},
     )
@@ -202,34 +209,35 @@ def test_complete_staging_promotes_to_recording(client, monkeypatch, tmp_path) -
         recording = session.get(Recording, staging_id)
         assert recording is not None
         assert recording.celery_task_id == f"task-{staging_id}"
-        assert _meeting_recording_target(
-            session,
-            meeting_id=meeting["id"],
-            recording_id=recording.id,
-        ).sort_order == 1
+        assert (
+            _meeting_recording_target(
+                session,
+                meeting_id=meeting["id"],
+                recording_id=recording.id,
+            ).sort_order
+            == 1
+        )
         assert fake_minio.objects[recording.storage_key] == chunk
         assert re.fullmatch(
             rf"\d{{8}}T\d{{6}}Z-{recording.id}\.webm",
             Path(recording.storage_key).name,
         )
+
+
 def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> None:
     """Single-recorder lock: while one participant is staging an active
     recording, other participants get a 409 with the active recorder name."""
     _install_fake_recording_storage(monkeypatch, tmp_path)
-    from test_meeting import (
-        _create_user_with_workspaces,
-        _login,
-    )
+    from test_meeting import _create_company_user, _login
 
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
 
-    second = _create_user_with_workspaces(
+    second = _create_company_user(
         client,
         admin_token,
         email="second-recorder@open-work-hub.local",
         full_name="Second Recorder",
-        workspace_keys=["administrator"],
     )
     second_token = _login(client, second["user"]["email"], second["temporary_password"])
 
@@ -242,7 +250,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
 
     # Admin starts a recording.
     first_init = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin_token),
         json={"idempotency_key": "lock-test-admin", "mime_type": "audio/webm"},
     )
@@ -251,7 +259,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
 
     # Second user tries to start a recording while admin is still active → 409.
     blocked = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(second_token),
         json={"idempotency_key": "lock-test-second", "mime_type": "audio/webm"},
     )
@@ -264,7 +272,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
 
     # Admin can still resume their own staging (idempotent path).
     same_admin = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin_token),
         json={"idempotency_key": "lock-test-admin", "mime_type": "audio/webm"},
     )
@@ -274,7 +282,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
     # The meeting detail exposes the active recorder so the frontend can disable
     # the start button on other users' UIs.
     detail_response = client.get(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}",
+        f"/api/v1/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(second_token),
     )
     assert detail_response.status_code == 200
@@ -289,13 +297,13 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
     chunk = b"x"
     digest = hashlib.sha256(chunk).hexdigest()
     upload = client.put(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging/{admin_staging_id}/chunks/0",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{admin_staging_id}/chunks/0",
         headers={**_auth_headers(admin_token), "X-Chunk-Sha256": digest},
         files={"file": ("0.webm", chunk, "audio/webm")},
     )
     assert upload.status_code == 200, upload.text
     complete = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging/{admin_staging_id}/complete",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{admin_staging_id}/complete",
         headers=_auth_headers(admin_token),
         json={"duration_sec_estimate": 1},
     )
@@ -303,7 +311,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
 
     # Second user can now start.
     after_release = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(second_token),
         json={"idempotency_key": "lock-test-second", "mime_type": "audio/webm"},
     )
@@ -315,16 +323,15 @@ def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) 
     Other participants get 403, the recording disappears from the meeting, and
     raw audio stays available for retention cleanup."""
     fake_minio = _install_fake_recording_storage(monkeypatch, tmp_path)
-    from test_meeting import _create_user_with_workspaces, _login
+    from test_meeting import _create_company_user, _login
 
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    other = _create_user_with_workspaces(
+    other = _create_company_user(
         client,
         admin_token,
         email="other-recording@open-work-hub.local",
         full_name="Other Recording",
-        workspace_keys=["administrator"],
     )
     other_token = _login(client, other["user"]["email"], other["temporary_password"])
 
@@ -337,7 +344,7 @@ def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) 
 
     # Admin uploads + finalizes a recording.
     init = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin_token),
         json={"idempotency_key": "delete-test", "mime_type": "audio/webm"},
     )
@@ -346,13 +353,13 @@ def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) 
     chunk = b"y"
     digest = hashlib.sha256(chunk).hexdigest()
     upload = client.put(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
         headers={**_auth_headers(admin_token), "X-Chunk-Sha256": digest},
         files={"file": ("0.webm", chunk, "audio/webm")},
     )
     assert upload.status_code == 200, upload.text
     complete = client.post(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/complete",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/complete",
         headers=_auth_headers(admin_token),
         json={"duration_sec_estimate": 1},
     )
@@ -360,7 +367,9 @@ def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) 
     body = complete.json()
     assert len(body["recordings"]) == 1
     recording_id = body["recordings"][0]["id"]
-    storage_key = body["recordings"][0]["storage_key"] if "storage_key" in body["recordings"][0] else None
+    storage_key = (
+        body["recordings"][0]["storage_key"] if "storage_key" in body["recordings"][0] else None
+    )
 
     # Capture the storage key directly from the DB so we can verify minio removal.
     with Session(get_engine()) as session:
@@ -371,14 +380,14 @@ def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) 
 
     # Non-uploader / non-organizer attendee cannot delete.
     forbidden = client.delete(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/{recording_id}",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/{recording_id}",
         headers=_auth_headers(other_token),
     )
     assert forbidden.status_code == 403
 
     # Admin (also the uploader here) deletes successfully.
     deleted = client.delete(
-        f"/api/v1/workspaces/administrator/meeting/meetings/{meeting['id']}/recordings/{recording_id}",
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/{recording_id}",
         headers=_auth_headers(admin_token),
     )
     assert deleted.status_code == 200, deleted.text

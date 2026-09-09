@@ -1,5 +1,5 @@
-import { useCallback, useState, type SetStateAction } from 'react';
 import type { TFunction } from 'i18next';
+import { useCallback, useState, type SetStateAction } from 'react';
 
 import {
   createChecklistItem,
@@ -158,14 +158,7 @@ export function useTaskDetailChecklist({
         );
       }
     },
-    [
-      canEdit,
-      editingChecklistText,
-      setChecklistItems,
-      setSaveError,
-      t,
-      token,
-    ],
+    [canEdit, editingChecklistText, setChecklistItems, setSaveError, t, token],
   );
 
   const handleDeleteChecklistItem = useCallback(

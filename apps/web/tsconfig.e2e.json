@@ -5,5 +5,17 @@
     "types": ["node", "@playwright/test"],
     "composite": true
   },
-  "include": ["playwright.config.ts", "e2e/**/*.ts"]
+  "include": [
+    "playwright.config.ts",
+    "e2e/**/*.ts",
+    "src/app-modules/*/manifest.ts",
+    "src/app/shell/app-contract-manifests.ts",
+    "src/app/shell/navigation-types.ts",
+    "../../packages/contracts/src/api.ts",
+    "../../packages/contracts/src/app-contracts.ts",
+    "../../packages/contracts/src/app-contracts.generated.ts",
+    "../../packages/contracts/src/app-routes.ts",
+    "../../packages/contracts/src/openapi.generated.d.ts",
+    "../../packages/contracts/src/realtime.ts"
+  ]
 }

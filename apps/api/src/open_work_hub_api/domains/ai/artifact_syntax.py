@@ -5,15 +5,12 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-
 ArtifactTagCandidate = Literal["accept", "wait", "reject"]
 
 ARTIFACT_OPEN_PREFIX = "<artifact"
 ARTIFACT_CLOSE_PREFIX = "</artifact"
 
-_ATTR_RE = re.compile(
-    r'([a-zA-Z_][a-zA-Z0-9_-]*)\s*=\s*"((?:\\.|[^"\\])*)"'
-)
+_ATTR_RE = re.compile(r'([a-zA-Z_][a-zA-Z0-9_-]*)\s*=\s*"((?:\\.|[^"\\])*)"')
 # Characters that can legally follow `<artifact` / `</artifact` in a valid
 # tag (whitespace, self-close, tag-end). Anything else means we're looking at
 # a different tag name that happens to share the prefix, such as `<artifacts>`.

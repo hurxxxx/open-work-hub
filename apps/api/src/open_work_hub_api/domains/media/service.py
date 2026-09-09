@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.media.models import MediaFile
 
-
 MEDIA_ID_PATTERN = re.compile(r"media:([0-9a-f-]{36})")
 
 

@@ -1,48 +1,37 @@
+import {
+  createAppsBootstrap,
+  createBootstrapApp,
+} from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 
-import type {
-  AppsBootstrapResponse,
-  WorkspaceBootstrapApp,
-} from '@/src/platform/workspaces/workspaces-api';
+import type { AppsBootstrapResponse } from '@/src/platform/apps/apps-api';
 import {
   PERSONAL_TOOLS_CATEGORY_ID,
   projectShellAppsBootstrap,
 } from './apps-bootstrap-model';
 
-function workspaceApp(appId: string): WorkspaceBootstrapApp {
-  return {
-    app_id: appId,
-    title: appId,
-    route_base: `/${appId}`,
-    icon_key: 'box',
-    enabled: true,
-    coming_soon: false,
-    nav_items: [],
-  };
-}
-
 function globalBootstrap(
   personalToolIds: string[] = ['mail', 'planner'],
 ): AppsBootstrapResponse {
   const personalTools = personalToolIds.map((appId) => ({
+    ...createBootstrapApp(appId),
     app_id: appId,
     title: appId,
-    route_base: `/${appId}`,
+    route_base: `/apps/${appId}`,
     icon_key: appId === 'mail' ? 'mail' : 'calendar',
-    availability_scope: 'platform' as const,
     enabled: true,
     coming_soon: false,
   }));
   const community = {
+    ...createBootstrapApp('community'),
     app_id: 'community',
     title: 'Community',
-    route_base: '/community',
+    route_base: '/apps/community',
     icon_key: 'messages-square',
-    availability_scope: 'platform' as const,
     enabled: true,
     coming_soon: false,
   };
-  return {
+  return createAppsBootstrap({
     apps: [community, ...personalTools],
     app_bar_categories: [
       {
@@ -59,57 +48,28 @@ function globalBootstrap(
         ],
       },
     ],
-    personal_tools: personalTools,
-    platform_enabled_app_ids: ['community', ...personalToolIds],
+    personal_tool_app_ids: personalToolIds,
     principal: {
       kind: 'user',
-      scope: 'personal',
-      workspace_id: null,
       source: 'test',
       user_id: 'user-1',
     },
-  };
+  });
 }
 
 describe('projectShellAppsBootstrap', () => {
-  it('merges platform apps and creates a fixed non-pinnable personal tools launcher', () => {
+  it('projects only launchable apps and creates a fixed non-pinnable personal tools launcher', () => {
     const projection = projectShellAppsBootstrap({
       globalBootstrap: globalBootstrap(),
-      personalToolsScope: 'All workspaces',
+      personalToolsScope: 'Personal tools',
       personalToolsTitle: 'Personal',
-      workspaceApps: [workspaceApp('home'), workspaceApp('docs')],
-      workspaceCategories: [
-        {
-          id: 'collaboration',
-          key: 'collaboration',
-          title: 'Collaboration',
-          icon_key: 'users',
-          position: 2,
-          items: [
-            {
-              app_id: 'docs',
-              title: 'Docs',
-              route_base: '/docs',
-              icon_key: 'file-text',
-              enabled: true,
-              position: 1,
-            },
-          ],
-        },
-      ],
     });
 
-    expect(projection.enabledAppIds).toEqual([
-      'home',
-      'docs',
-      'community',
-      'mail',
-      'planner',
-    ]);
+    expect(projection.enabledAppIds).toEqual(['community', 'mail', 'planner']);
     expect(projection.appBarCategories[0]).toMatchObject({
       id: PERSONAL_TOOLS_CATEGORY_ID,
       title: 'Personal',
-      contextLabel: 'All workspaces',
+      contextLabel: 'Personal tools',
       pinnable: false,
     });
     expect(
@@ -117,16 +77,14 @@ describe('projectShellAppsBootstrap', () => {
     ).toEqual(['mail', 'planner']);
     expect(
       projection.appBarCategories[1]?.items.map((item) => item.app_id),
-    ).toEqual(['docs', 'community']);
+    ).toEqual(['community']);
   });
 
   it('omits the personal tools launcher when every personal app is disabled', () => {
     const projection = projectShellAppsBootstrap({
       globalBootstrap: globalBootstrap([]),
-      personalToolsScope: 'All workspaces',
+      personalToolsScope: 'Personal tools',
       personalToolsTitle: 'Personal',
-      workspaceApps: [],
-      workspaceCategories: [],
     });
 
     expect(
@@ -134,5 +92,16 @@ describe('projectShellAppsBootstrap', () => {
         (category) => category.id === PERSONAL_TOOLS_CATEGORY_ID,
       ),
     ).toBe(false);
+  });
+
+  it('uses the same current app admission projection for every route', () => {
+    const projection = projectShellAppsBootstrap({
+      globalBootstrap: globalBootstrap(['mail']),
+      personalToolsScope: 'Personal tools',
+      personalToolsTitle: 'Personal',
+    });
+
+    expect(projection.enabledAppIds).toEqual(['community', 'mail']);
+    expect(projection.globalRouteAppIds).toEqual(['community', 'mail']);
   });
 });

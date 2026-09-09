@@ -1,19 +1,19 @@
 import { LazyMotion, domAnimation, m } from 'motion/react';
 import { Suspense, lazy } from 'react';
 
-import { ChatThread } from './chat/ChatThread';
 import { ApprovalModal } from './chat/ApprovalModal';
-import { ToolCallCard } from './chat/ToolCallCard';
-import { ChatTopBar } from './chat/ChatTopBar';
 import { ChatComposer } from './chat/ChatComposer';
+import { ChatThread } from './chat/ChatThread';
+import { ChatTopBar } from './chat/ChatTopBar';
 import { EmptyState } from './chat/EmptyState';
+import { ToolCallCard } from './chat/ToolCallCard';
+import type { ChatbotExperienceConfig } from './chatbot-experience';
+import { resolveFailedPromptRestoreInput } from './chatbot-view-model';
 import { ChatbotConversationListPanel } from './ChatbotConversationListPanel';
 import {
   useChatbotViewController,
   type ChatbotViewController,
 } from './useChatbotViewController';
-import { resolveFailedPromptRestoreInput } from './chatbot-view-model';
-import type { ChatbotExperienceConfig } from './chatbot-experience';
 
 const ArtifactPanel = lazy(() =>
   import('./chat/ArtifactPanel').then((module) => ({
@@ -243,13 +243,11 @@ function ChatbotViewContent({
   const {
     activeArtifact,
     allArtifacts,
-    backendMode,
     confirmDialog,
     durableRun,
     experience,
     t,
     visibleToolCalls,
-    workspaceSlug,
   } = derived;
 
   return (
@@ -262,13 +260,11 @@ function ChatbotViewContent({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-app-surface lg:flex-row">
           <ChatbotConversationListPanel
             activeConversationId={currentConversationId}
-            currentWorkspaceSlug={workspaceSlug}
             navigationDisabled={isSending}
             pendingConversationTitle={
               isSending ? chatState.pendingUserContent : null
             }
-            routeAppId={experience.routeAppId}
-            routePathSuffix={experience.routePathSuffix}
+            routeId={experience.routeId}
             scopeRef={experience.conversationScope?.ref}
             scopeResourceId={experience.conversationScope?.resourceId}
             eyebrow={experience.sidebarEyebrow}
@@ -278,7 +274,6 @@ function ChatbotViewContent({
           <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-app-surface">
             <ChatTopBar
               title={experience.title}
-              backendMode={backendMode}
               health={health}
               healthError={healthError}
             />

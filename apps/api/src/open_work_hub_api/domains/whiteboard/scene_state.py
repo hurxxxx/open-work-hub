@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-import json
 from typing import Any
 
 from sqlalchemy import select
@@ -14,7 +14,6 @@ from open_work_hub_api.domains.whiteboard.models import (
     WhiteboardCollabDocument,
     empty_scene,
 )
-
 
 PERSISTED_SCENE_APP_STATE_KEYS = frozenset(
     {
@@ -63,9 +62,7 @@ def scene_for_compare(scene: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def scene_matches(left: dict[str, Any] | None, right: dict[str, Any] | None) -> bool:
-    return json.dumps(
-        scene_for_compare(left), sort_keys=True, separators=(",", ":")
-    ) == json.dumps(
+    return json.dumps(scene_for_compare(left), sort_keys=True, separators=(",", ":")) == json.dumps(
         scene_for_compare(right),
         sort_keys=True,
         separators=(",", ":"),

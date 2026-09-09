@@ -19,13 +19,11 @@ describe('PMS sidebar personal projection', () => {
   it('projects the pms-tasks root as one active task group with child tool links', () => {
     const projected = projectPersonalSidebarItems({
       activeNavItemId: 'pms-tasks-today',
-      currentWorkspaceSlug: 'hq',
       filteredItems: [
         item({
           id: 'pms-inbox',
           title: 'Inbox',
           icon: Inbox,
-          pathSuffix: '/inbox',
         }),
         item({
           id: 'pms-tasks-assigned',
@@ -59,13 +57,13 @@ describe('PMS sidebar personal projection', () => {
       children: [
         {
           kind: 'link',
-          href: '/w/hq/pms/assigned',
+          href: '/apps/pms/assigned',
           isActive: false,
           item: { id: 'pms-tasks-assigned' },
         },
         {
           kind: 'link',
-          href: '/w/hq/pms/today',
+          href: '/apps/pms/today',
           isActive: true,
           item: { id: 'pms-tasks-today' },
         },
@@ -73,16 +71,14 @@ describe('PMS sidebar personal projection', () => {
     });
   });
 
-  it('projects normal personal links with workspace href and exact active state', () => {
+  it('projects declared personal links with app href and exact active state', () => {
     const projected = projectPersonalSidebarItems({
-      activeNavItemId: 'pms-overview',
-      currentWorkspaceSlug: 'hq',
+      activeNavItemId: 'pms-inbox',
       filteredItems: [
         item({
-          id: 'pms-overview',
-          title: 'Overview',
+          id: 'pms-inbox',
+          title: 'Inbox',
           icon: Layout,
-          pathSuffix: '/overview',
         }),
         item({
           id: 'pms-later',
@@ -104,14 +100,14 @@ describe('PMS sidebar personal projection', () => {
     expect(projected).toMatchObject([
       {
         kind: 'link',
-        href: '/w/hq/pms/overview',
+        href: '/apps/pms',
         isActive: true,
         isComingSoon: false,
-        item: { id: 'pms-overview' },
+        item: { id: 'pms-inbox' },
       },
       {
         kind: 'link',
-        href: '/tool/pms-later',
+        href: '/apps/pms',
         isActive: false,
         isComingSoon: true,
         item: { id: 'pms-later' },
@@ -122,7 +118,6 @@ describe('PMS sidebar personal projection', () => {
   it('projects task child links directly when the pms-tasks root is not present', () => {
     const projected = projectPersonalSidebarItems({
       activeNavItemId: 'pms-tasks-assigned',
-      currentWorkspaceSlug: 'hq',
       filteredItems: [
         item({
           id: 'pms-tasks-assigned',
@@ -137,7 +132,7 @@ describe('PMS sidebar personal projection', () => {
     expect(projected).toMatchObject([
       {
         kind: 'link',
-        href: '/w/hq/pms/assigned',
+        href: '/apps/pms/assigned',
         isActive: true,
         item: { id: 'pms-tasks-assigned' },
       },

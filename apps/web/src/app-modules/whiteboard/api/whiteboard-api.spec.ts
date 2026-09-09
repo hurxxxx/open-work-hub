@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  configureWorkspaceApiRoutePolicy,
-  resetWorkspaceApiRoutePolicy,
-} from '@/src/platform/api/workspace-api-path-policy';
-import { APP_WORKSPACE_API_ROUTE_POLICY } from '@/src/app/shell/workspace-api-routes';
-import {
   getWhiteboard,
   listWhiteboardHub,
   listWhiteboardShareableUsers,
@@ -92,36 +87,35 @@ describe('whiteboard API client', () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
-    resetWorkspaceApiRoutePolicy();
-    configureWorkspaceApiRoutePolicy(APP_WORKSPACE_API_ROUTE_POLICY);
     globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    resetWorkspaceApiRoutePolicy();
     vi.restoreAllMocks();
   });
 
-  it('uses route helpers for omitted query strings and workspace rewriting', async () => {
+  it('uses route helpers for omitted query strings and encoded target parameters', async () => {
     mockJsonResponse({ items: [], page: 1, page_size: 25, total: 0 });
 
-    await listWhiteboardHub(
-      'token-1',
-      { view: 'recent', q: '', page: 0, page_size: 25, target_id: 'task/1' },
-      'team space',
-    );
+    await listWhiteboardHub('token-1', {
+      view: 'recent',
+      q: '',
+      page: 0,
+      page_size: 25,
+      target_id: 'task/1',
+    });
 
     expect(fetchMock()).toHaveBeenCalledWith(
-      '/api/v1/workspaces/team%20space/whiteboard/hub?view=recent&page=0&page_size=25&target_id=task%2F1',
+      '/api/v1/whiteboard/hub?view=recent&page=0&page_size=25&target_id=task%2F1',
       expect.objectContaining({ cache: 'no-store' }),
     );
 
     mockJsonResponse([]);
-    await listWhiteboardShareableUsers('token-1', '', 'team space');
+    await listWhiteboardShareableUsers('token-1', '');
 
     expect(fetchMock()).toHaveBeenLastCalledWith(
-      '/api/v1/workspaces/team%20space/whiteboard/shareable-users',
+      '/api/v1/whiteboard/shareable-users',
       expect.objectContaining({ cache: 'no-store' }),
     );
   });
@@ -131,7 +125,7 @@ describe('whiteboard API client', () => {
 
     let caught: unknown;
     try {
-      await getWhiteboard('token-1', 'board 1', 'team space');
+      await getWhiteboard('token-1', 'board 1');
     } catch (error) {
       caught = error;
     }
@@ -142,7 +136,7 @@ describe('whiteboard API client', () => {
       message: 'Whiteboard unavailable.',
     });
     expect(fetchMock()).toHaveBeenCalledWith(
-      '/api/v1/workspaces/team%20space/whiteboard/items/board%201',
+      '/api/v1/whiteboard/items/board%201',
       expect.objectContaining({ cache: 'no-store' }),
     );
   });

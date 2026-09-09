@@ -16,7 +16,7 @@ describe('bento embed protocol', () => {
   it('builds a separate-origin local iframe URL', () => {
     const config = buildBentoEmbedConfig({
       env: { DEV: true, VITE_OPEN_WORK_HUB_BENTO_PORT: '18084' },
-      location: testLocation('http://127.0.0.1:4200/w/team/bento'),
+      location: testLocation('http://127.0.0.1:4200/apps/bento'),
     });
     expect(config).toEqual({
       src: 'http://127.0.0.1:18084/?open-work-hub-embed=1',
@@ -28,19 +28,19 @@ describe('bento embed protocol', () => {
     expect(
       buildBentoEmbedConfig({
         env: { VITE_OPEN_WORK_HUB_BENTO_URL: '/bento/' },
-        location: testLocation('https://hub.example/w/team/bento'),
+        location: testLocation('https://hub.example/apps/bento'),
       }),
     ).toBeNull();
     expect(
       buildBentoEmbedConfig({
         env: { VITE_OPEN_WORK_HUB_BENTO_URL: 'data:text/html,not-bento' },
-        location: testLocation('https://hub.example/w/team/bento'),
+        location: testLocation('https://hub.example/apps/bento'),
       }),
     ).toBeNull();
     expect(
       buildBentoEmbedConfig({
         env: { VITE_OPEN_WORK_HUB_BENTO_URL: 'http://bento.example/' },
-        location: testLocation('https://hub.example/w/team/bento'),
+        location: testLocation('https://hub.example/apps/bento'),
       }),
     ).toBeNull();
   });
@@ -61,13 +61,13 @@ describe('bento embed protocol', () => {
     expect(
       parseBentoBridgeMessage({
         channel: 'open-work-hub:bento',
-        version: 1,
+        version: 2,
         type: 'document-changed',
         documentJson: '{"format":"bento/slides"}',
       }),
     ).toMatchObject({ type: 'document-changed' });
     expect(
-      parseBentoBridgeMessage({ channel: 'wrong', version: 1, type: 'ready' }),
+      parseBentoBridgeMessage({ channel: 'wrong', version: 2, type: 'ready' }),
     ).toBeNull();
   });
 
@@ -75,7 +75,18 @@ describe('bento embed protocol', () => {
     expect(buildBentoLoadMessage('{}')).toMatchObject({
       type: 'load-document',
       documentJson: '{}',
+      readOnly: true,
     });
+    expect(buildBentoLoadMessage('{}', false)).toMatchObject({
+      readOnly: false,
+    });
+    expect(
+      parseBentoBridgeMessage({
+        channel: 'open-work-hub:bento',
+        version: 1,
+        type: 'ready',
+      }),
+    ).toBeNull();
     expect(buildBentoExportMessage()).toMatchObject({
       type: 'export-document',
     });

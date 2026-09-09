@@ -3,8 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from open_work_hub_api.core.db import get_session_factory
+from open_work_hub_api.domains.ai_graph.execution_policy import enforce_graph_run_app_policy
 from open_work_hub_api.domains.ai_graph.models import AiGraphRun
-
+from open_work_hub_api.domains.ai_graph.repository import AiGraphRunInputRepository
 
 AiGraphExecutor = Callable[[str], str]
 AiGraphExecutorKey = tuple[str, str]
@@ -33,12 +34,23 @@ def execute_registered_ai_graph(run_id: str) -> str:
         run = db.get(AiGraphRun, run_id)
         if run is None:
             raise LookupError(run_id)
+        if run.status in {"completed", "failed", "cancelled"}:
+            AiGraphRunInputRepository(db).delete_after_terminal(run.id)
+            db.commit()
+            return run.status
+        if not enforce_graph_run_app_policy(
+            db,
+            run_id=run.id,
+            claim_token=run.execution_claim_token,
+            stage="registry.policy_gate",
+        ):
+            AiGraphRunInputRepository(db).delete_after_terminal(run.id)
+            db.commit()
+            return "app_disabled"
         key = (run.graph_id, run.graph_version)
         executor = _executors.get(key)
     if executor is None:
-        raise LookupError(
-            f"AI graph executor not registered: {run.graph_id}@{run.graph_version}"
-        )
+        raise LookupError(f"AI graph executor not registered: {run.graph_id}@{run.graph_version}")
     return executor(run_id)
 
 

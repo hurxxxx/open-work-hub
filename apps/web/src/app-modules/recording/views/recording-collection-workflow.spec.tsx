@@ -11,7 +11,6 @@ import {
 function recording(overrides: Partial<Recording> = {}): Recording {
   return {
     id: 'recording-1',
-    workspace_id: 'workspace-1',
     owner_id: 'user-1',
     title: 'Daily Standup',
     started_at: '2026-05-30T09:00:00Z',
@@ -21,15 +20,12 @@ function recording(overrides: Partial<Recording> = {}): Recording {
     storage_key: null,
     file_size: 1536,
     mime_type: 'audio/webm',
-    audio_status: 'ready',
-    transcript_status: 'ready',
-    raw_transcript_doc_status: 'ready',
-    minutes_doc_status: 'ready',
-    meeting_insight_status: 'ready',
+    audio_status: 'saved',
+    transcript_status: 'done',
+    summary_status: 'done',
+    meeting_insight_status: 'done',
     progress_pct: 100,
     failure_reason: null,
-    raw_transcript_doc_id: null,
-    minutes_doc_id: null,
     transcribe_started_at: null,
     transcribe_completed_at: null,
     created_at: '2026-05-30T09:00:00Z',
@@ -50,9 +46,13 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function client(overrides: Partial<RecordingCollectionClient> = {}): RecordingCollectionClient {
+function client(
+  overrides: Partial<RecordingCollectionClient> = {},
+): RecordingCollectionClient {
   return {
-    listRecordings: vi.fn().mockResolvedValue({ items: [recording()], total: 1 }),
+    listRecordings: vi
+      .fn()
+      .mockResolvedValue({ items: [recording()], total: 1 }),
     retryRecording: vi.fn().mockResolvedValue(recording()),
     deleteRecording: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -67,17 +67,17 @@ const targetScope: RecordingCollectionScope = {
   targetId: 'meeting-1',
 };
 
-function renderWorkflow(options: {
-  client?: RecordingCollectionClient;
-  scope?: RecordingCollectionScope;
-  token?: string | null;
-  workspaceSlug?: string | null;
-} = {}) {
+function renderWorkflow(
+  options: {
+    client?: RecordingCollectionClient;
+    scope?: RecordingCollectionScope;
+    token?: string | null;
+  } = {},
+) {
   const usedClient = options.client ?? client();
   const rendered = renderHook(() =>
     useRecordingCollectionWorkflow({
       token: options.token === undefined ? 'token-1' : options.token,
-      workspaceSlug: options.workspaceSlug === undefined ? 'hq' : options.workspaceSlug,
       scope: options.scope ?? viewScope,
       messages: {
         loadFailed: 'load failed',
@@ -96,26 +96,20 @@ describe('recording collection workflow', () => {
     renderWorkflow({ client: viewClient, scope: viewScope });
 
     await waitFor(() => {
-      expect(viewClient.listRecordings).toHaveBeenCalledWith(
-        'token-1',
-        'hq',
-        { view: 'mine' },
-      );
+      expect(viewClient.listRecordings).toHaveBeenCalledWith('token-1', {
+        view: 'mine',
+      });
     });
 
     const targetClient = client();
     renderWorkflow({ client: targetClient, scope: targetScope });
 
     await waitFor(() => {
-      expect(targetClient.listRecordings).toHaveBeenCalledWith(
-        'token-1',
-        'hq',
-        {
-          target_app: 'meeting',
-          target_type: 'meeting',
-          target_id: 'meeting-1',
-        },
-      );
+      expect(targetClient.listRecordings).toHaveBeenCalledWith('token-1', {
+        target_app: 'meeting',
+        target_type: 'meeting',
+        target_id: 'meeting-1',
+      });
     });
   });
 
@@ -155,7 +149,6 @@ describe('recording collection workflow', () => {
 
     expect(retryClient.retryRecording).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       'recording-1',
     );
     expect(retryClient.listRecordings).toHaveBeenCalledTimes(1);
@@ -181,13 +174,12 @@ describe('recording collection workflow', () => {
 
     expect(deleteClient.deleteRecording).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       'recording-1',
     );
     expect(deleteClient.listRecordings).toHaveBeenCalledTimes(1);
   });
 
-  it('guards missing token or workspace without API calls', async () => {
+  it('guards missing token without API calls', async () => {
     const guardedClient = client();
     const { result } = renderWorkflow({
       client: guardedClient,

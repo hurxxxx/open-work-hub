@@ -1,20 +1,21 @@
 import type {
   AppsBootstrapResponse,
-  WorkspaceBootstrapApp,
-  WorkspaceBootstrapAppBarCategory,
-  WorkspaceBootstrapAppBarCategoryItem,
-} from '@/src/platform/workspaces/workspaces-api';
+  BootstrapApp,
+  BootstrapAppBarCategory,
+  BootstrapAppBarCategoryItem,
+} from '@/src/platform/apps/apps-api';
 
 export const PERSONAL_TOOLS_CATEGORY_ID = 'personal-tools';
 
 export interface ShellAppsBootstrapProjection {
-  apps: WorkspaceBootstrapApp[];
-  appBarCategories: WorkspaceBootstrapAppBarCategory[];
+  apps: BootstrapApp[];
+  appBarCategories: BootstrapAppBarCategory[];
   enabledAppIds: string[];
+  globalRouteAppIds: string[] | null;
 }
 
 function categoryItemPosition(
-  item: WorkspaceBootstrapAppBarCategoryItem,
+  item: BootstrapAppBarCategoryItem,
   fallback: number,
 ): number {
   return item.position ?? fallback;
@@ -24,35 +25,23 @@ export function projectShellAppsBootstrap({
   globalBootstrap,
   personalToolsScope,
   personalToolsTitle,
-  workspaceApps,
-  workspaceCategories,
 }: {
   globalBootstrap: AppsBootstrapResponse | null;
   personalToolsScope: string;
   personalToolsTitle: string;
-  workspaceApps: readonly WorkspaceBootstrapApp[];
-  workspaceCategories: readonly WorkspaceBootstrapAppBarCategory[];
 }): ShellAppsBootstrapProjection {
-  const appById = new Map<string, WorkspaceBootstrapApp>(
-    workspaceApps.map((app) => [app.app_id, app]),
+  const appById = new Map<string, BootstrapApp>(
+    (globalBootstrap?.apps ?? []).map((app) => [app.app_id, app]),
   );
-  for (const app of globalBootstrap?.apps ?? []) {
-    appById.set(app.app_id, { ...app, nav_items: [] });
-  }
 
-  const personalToolIds = new Set(
-    (globalBootstrap?.personal_tools ?? []).map((app) => app.app_id),
-  );
+  const personalToolIds = new Set(globalBootstrap?.personal_tool_app_ids ?? []);
   const categoryById = new Map<
     string,
-    WorkspaceBootstrapAppBarCategory & {
-      itemById: Map<string, WorkspaceBootstrapAppBarCategoryItem>;
+    BootstrapAppBarCategory & {
+      itemById: Map<string, BootstrapAppBarCategoryItem>;
     }
   >();
-  for (const category of [
-    ...workspaceCategories,
-    ...(globalBootstrap?.app_bar_categories ?? []),
-  ]) {
+  for (const category of [...(globalBootstrap?.app_bar_categories ?? [])]) {
     const existing = categoryById.get(category.id);
     const itemById = existing?.itemById ?? new Map();
     category.items.forEach((item, index) => {
@@ -81,7 +70,9 @@ export function projectShellAppsBootstrap({
     .filter((category) => category.items.length > 0)
     .sort((left, right) => left.position - right.position);
 
-  const personalTools = globalBootstrap?.personal_tools ?? [];
+  const personalTools = (globalBootstrap?.apps ?? []).filter(
+    (app) => personalToolIds.has(app.app_id) && app.enabled,
+  );
   if (personalTools.length > 0) {
     appBarCategories.unshift({
       id: PERSONAL_TOOLS_CATEGORY_ID,
@@ -91,14 +82,12 @@ export function projectShellAppsBootstrap({
       position: Number.MIN_SAFE_INTEGER,
       pinnable: false,
       contextLabel: personalToolsScope,
-      showWorkspaceContext: false,
       items: personalTools.map((app, position) => ({
         app_id: app.app_id,
         title: app.title,
         route_base: app.route_base,
         icon_key: app.icon_key,
-        availability_scope: 'platform',
-        enabled: app.enabled,
+        enabled: true,
         coming_soon: app.coming_soon,
         position,
       })),
@@ -110,5 +99,9 @@ export function projectShellAppsBootstrap({
     apps,
     appBarCategories,
     enabledAppIds: apps.filter((app) => app.enabled).map((app) => app.app_id),
+    globalRouteAppIds:
+      globalBootstrap?.apps
+        .filter((app) => app.enabled)
+        .map((app) => app.app_id) ?? null,
   };
 }

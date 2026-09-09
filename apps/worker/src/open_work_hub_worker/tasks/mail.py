@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-from functools import lru_cache
 import logging
+from functools import lru_cache
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
-from open_work_hub_worker.celery_app import celery_app
-from open_work_hub_worker.settings import get_settings as get_worker_settings
 from open_work_hub_api.domains.mail.service import (
     MailSyncRetryScheduled,
     mail_background_sync_enabled,
@@ -15,7 +10,12 @@ from open_work_hub_api.domains.mail.service import (
     publish_due_mail_sync_jobs,
     sync_account,
 )
+from open_work_hub_api.domains.mail.sync_policy import MailSyncAccessRevoked
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
+from open_work_hub_worker.celery_app import celery_app
+from open_work_hub_worker.settings import get_settings as get_worker_settings
 
 logger = logging.getLogger(__name__)
 _MAIL_SYNC_TASK_TIME_LIMIT = get_worker_settings().mail_sync_processing_lease_seconds
@@ -68,6 +68,8 @@ def sync_mail_account(self, account_id: str) -> str:
             return "cancelled:disabled"
         result = sync_account(session, account_id=account_id)
         return f"synced:{result.changed_count}"
+    except MailSyncAccessRevoked:
+        return "cancelled:access_revoked"
     finally:
         session.close()
 

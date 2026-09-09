@@ -12,11 +12,13 @@ import {
 } from './recording-recovery-session-plan';
 import type { RecoverySessionItem } from './useRecordingRecovery';
 
-function localSession(overrides: Partial<RecordingSessionState> = {}): RecordingSessionState {
+function localSession(
+  overrides: Partial<RecordingSessionState> = {},
+): RecordingSessionState {
   return {
     stagingId: 'staging-1',
-    workspaceSlug: 'hq',
-    scopeKey: 'hq:recording:unlinked',
+    userId: 'user-1',
+    scopeKey: 'user-1:recording:unlinked',
     idempotencyKey: 'idem-1',
     mimeType: 'audio/webm',
     title: null,
@@ -33,15 +35,15 @@ function localSession(overrides: Partial<RecordingSessionState> = {}): Recording
     uploadCompletedAt: null,
     interruptedAt: null,
     interruptionReason: null,
-    meetingId: null,
     ...overrides,
   };
 }
 
-function remoteUpload(overrides: Partial<RecordingUpload> = {}): RecordingUpload {
+function remoteUpload(
+  overrides: Partial<RecordingUpload> = {},
+): RecordingUpload {
   return {
     id: 'staging-1',
-    workspace_id: 'workspace-1',
     user_id: 'user-1',
     idempotency_key: 'idem-1',
     mime_type: 'audio/webm',
@@ -59,7 +61,9 @@ function remoteUpload(overrides: Partial<RecordingUpload> = {}): RecordingUpload
   } as RecordingUpload;
 }
 
-function recoveryItem(overrides: Partial<RecoverySessionItem> = {}): RecoverySessionItem {
+function recoveryItem(
+  overrides: Partial<RecoverySessionItem> = {},
+): RecoverySessionItem {
   return {
     stagingId: 'staging-1',
     localSession: null,
@@ -128,7 +132,10 @@ describe('recording recovery session plan', () => {
       'discard',
     ]);
 
-    const continueAction = getRecordingRecoveryAction(plan, 'continue-recording');
+    const continueAction = getRecordingRecoveryAction(
+      plan,
+      'continue-recording',
+    );
     expect(continueAction).toMatchObject({
       kind: 'continue-recording',
       continueSession: {
@@ -142,7 +149,11 @@ describe('recording recovery session plan', () => {
 
     const runner = createRunner();
     const refresh = vi.fn(async () => undefined);
-    await runRecordingRecoveryAction(requireAction(plan, 'resume-upload'), runner, refresh);
+    await runRecordingRecoveryAction(
+      requireAction(plan, 'resume-upload'),
+      runner,
+      refresh,
+    );
     expect(runner.resumeUpload).toHaveBeenCalledWith('staging-1');
     expect(refresh).toHaveBeenCalledTimes(1);
   });
@@ -163,11 +174,19 @@ describe('recording recovery session plan', () => {
 
     const runner = createRunner();
     const refresh = vi.fn(async () => undefined);
-    await runRecordingRecoveryAction(requireAction(plan, 'import-original'), runner, refresh);
+    await runRecordingRecoveryAction(
+      requireAction(plan, 'import-original'),
+      runner,
+      refresh,
+    );
     expect(runner.importOriginal).toHaveBeenCalledWith('staging-1');
     expect(refresh).toHaveBeenCalledTimes(1);
 
-    await runRecordingRecoveryAction(requireAction(plan, 'download-original'), runner, refresh);
+    await runRecordingRecoveryAction(
+      requireAction(plan, 'download-original'),
+      runner,
+      refresh,
+    );
     expect(runner.downloadOriginal).toHaveBeenCalledWith('staging-1');
     expect(refresh).toHaveBeenCalledTimes(1);
   });
@@ -193,7 +212,11 @@ describe('recording recovery session plan', () => {
 
     const runner = createRunner();
     const refresh = vi.fn(async () => undefined);
-    await runRecordingRecoveryAction(requireAction(plan, 'discard'), runner, refresh);
+    await runRecordingRecoveryAction(
+      requireAction(plan, 'discard'),
+      runner,
+      refresh,
+    );
     expect(runner.discard).toHaveBeenCalledWith('staging-1', true);
     expect(refresh).toHaveBeenCalledTimes(1);
   });

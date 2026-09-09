@@ -72,8 +72,6 @@ def _validate_dispatch_coherence(
     artifact: AiArtifactCreate,
 ) -> None:
     mismatches: list[str] = []
-    if artifact.workspace_id != run_request.workspace_id:
-        mismatches.append("workspace_id")
     if artifact.app_id != run_request.app_id:
         mismatches.append("app_id")
     if artifact.owner_user_id != run_request.requested_by_user_id:
@@ -85,9 +83,7 @@ def _validate_dispatch_coherence(
     if artifact.graph_run_id is not None:
         mismatches.append("graph_run_id")
     if mismatches:
-        raise ValueError(
-            "pending artifact does not match graph run: " + ", ".join(mismatches)
-        )
+        raise ValueError("pending artifact does not match graph run: " + ", ".join(mismatches))
 
 
 def prepare_graph_dispatch(

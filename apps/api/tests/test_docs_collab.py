@@ -9,6 +9,7 @@ import pytest
 from starlette.websockets import WebSocketDisconnect
 import y_py as Y
 
+from dev_accounts import content_headers
 from open_work_hub_api.domains.docs.collab import (
     CollabPageContext,
     DocsCollabHub,
@@ -20,8 +21,9 @@ from open_work_hub_api.domains.docs.collab import (
 from open_work_hub_api.domains.collaboration import CollabConnectionLimitExceeded
 from open_work_hub_api.domains.docs.collab_codec import blocks_to_yjs_state, yjs_state_to_blocks
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.media import router as media_router
+from open_work_hub_api.domains.media import content_access as media_content_access
 from open_work_hub_api.domains.media.models import MediaFile
+from open_work_hub_api.domains.media.object_storage import MediaObjectStorage
 from open_work_hub_api.core.db import get_session_factory
 from test_docs_hub import (
     _add_task_list_member,
@@ -31,13 +33,7 @@ from test_docs_hub import (
     _create_task_list,
     _get_doc_item,
 )
-from test_meeting import (
-    _bootstrap_admin_session,
-    _create_meeting,
-    _create_user_with_workspaces,
-    _first_workspace_slug,
-    _login,
-)
+from test_meeting import _bootstrap_admin_session, _create_meeting, _create_company_user, _login
 
 
 def _paragraph_blocks(text: str) -> list[dict]:
@@ -179,10 +175,11 @@ def _resolve_media_url(client: TestClient, token: str, media_id: str) -> str:
 
 
 def _create_native_doc_page(
-    client: TestClient, token: str, workspace_slug: str
+    client: TestClient,
+    token: str,
 ) -> tuple[dict, dict]:
     create_doc_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(token),
         json={"title": "Realtime Notes"},
     )
@@ -190,7 +187,7 @@ def _create_native_doc_page(
     doc = create_doc_response.json()
 
     pages_response = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}/pages",
+        f"/api/v1/docs/items/{doc['id']}/pages",
         headers=_auth_headers(token),
     )
     assert pages_response.status_code == 200, pages_response.text
@@ -201,12 +198,14 @@ def _create_native_doc_page(
 
 def test_docs_collab_session_snapshot_and_rest_patch_stay_in_sync(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
-    doc, page = _create_native_doc_page(client, admin["token"], workspace_slug)
+    doc, page = _create_native_doc_page(
+        client,
+        admin["token"],
+    )
 
     page_ref = make_page_ref(page["source_type"], page["source_page_id"])
-    session_path = f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/session"
-    snapshot_path = f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/snapshot"
+    session_path = f"/api/v1/docs/collab/pages/{page_ref}/session"
+    snapshot_path = f"/api/v1/docs/collab/pages/{page_ref}/snapshot"
 
     initial_session_response = client.get(
         session_path,
@@ -246,7 +245,7 @@ def test_docs_collab_session_snapshot_and_rest_patch_stay_in_sync(client: TestCl
     assert refreshed_session["yjs_state"] == yjs_state
 
     page_refresh_response = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}/pages",
+        f"/api/v1/docs/items/{doc['id']}/pages",
         headers=_auth_headers(admin["token"]),
     )
     assert page_refresh_response.status_code == 200, page_refresh_response.text
@@ -257,7 +256,7 @@ def test_docs_collab_session_snapshot_and_rest_patch_stay_in_sync(client: TestCl
 
     rest_blocks = _paragraph_blocks("Updated through REST")
     rest_patch_response = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/docs/pages/{page['id']}",
+        f"/api/v1/docs/pages/{page['id']}",
         headers=_auth_headers(admin["token"]),
         json={"content_blocks": rest_blocks},
     )
@@ -276,12 +275,14 @@ def test_docs_collab_session_snapshot_and_rest_patch_stay_in_sync(client: TestCl
 
 def test_docs_collab_snapshot_updates_parent_doc_timestamp(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
-    doc, page = _create_native_doc_page(client, admin["token"], workspace_slug)
+    doc, page = _create_native_doc_page(
+        client,
+        admin["token"],
+    )
 
     page_ref = make_page_ref(page["source_type"], page["source_page_id"])
     snapshot_response = client.put(
-        f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/snapshot",
+        f"/api/v1/docs/collab/pages/{page_ref}/snapshot",
         headers=_auth_headers(admin["token"]),
         json={
             "content_blocks": _paragraph_blocks("Timestamp from collab"),
@@ -294,7 +295,6 @@ def test_docs_collab_snapshot_updates_parent_doc_timestamp(client: TestClient) -
         client,
         admin["token"],
         doc["id"],
-        workspace_slug=workspace_slug,
     )
     assert refreshed_doc["updated_at"] > doc["updated_at"]
 
@@ -303,8 +303,10 @@ def test_docs_collab_stale_runtime_flush_does_not_overwrite_newer_snapshot(
     client: TestClient,
 ) -> None:
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
-    doc, page = _create_native_doc_page(client, admin["token"], workspace_slug)
+    doc, page = _create_native_doc_page(
+        client,
+        admin["token"],
+    )
 
     old_state = blocks_to_yjs_state(_paragraph_blocks("Old runtime state"))
     latest_state = blocks_to_yjs_state(_paragraph_blocks("Latest REST snapshot"))
@@ -315,7 +317,7 @@ def test_docs_collab_stale_runtime_flush_does_not_overwrite_newer_snapshot(
 
     page_ref = make_page_ref(page["source_type"], page["source_page_id"])
     snapshot_response = client.put(
-        f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/snapshot",
+        f"/api/v1/docs/collab/pages/{page_ref}/snapshot",
         headers=_auth_headers(admin["token"]),
         json={
             "content_blocks": latest_blocks,
@@ -340,7 +342,7 @@ def test_docs_collab_stale_runtime_flush_does_not_overwrite_newer_snapshot(
         db.close()
 
     page_refresh_response = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}/pages",
+        f"/api/v1/docs/items/{doc['id']}/pages",
         headers=_auth_headers(admin["token"]),
     )
     assert page_refresh_response.status_code == 200, page_refresh_response.text
@@ -354,12 +356,14 @@ def test_docs_collab_snapshot_does_not_touch_parent_doc_when_content_unchanged(
     client: TestClient,
 ) -> None:
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
-    doc, page = _create_native_doc_page(client, admin["token"], workspace_slug)
+    doc, page = _create_native_doc_page(
+        client,
+        admin["token"],
+    )
 
     compact_blocks = _paragraph_blocks("Existing content")
     patch_response = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/docs/pages/{page['id']}",
+        f"/api/v1/docs/pages/{page['id']}",
         headers=_auth_headers(admin["token"]),
         json={"content_blocks": compact_blocks},
     )
@@ -368,7 +372,6 @@ def test_docs_collab_snapshot_does_not_touch_parent_doc_when_content_unchanged(
         client,
         admin["token"],
         doc["id"],
-        workspace_slug=workspace_slug,
     )
 
     yjs_state = blocks_to_yjs_state(compact_blocks)
@@ -376,7 +379,7 @@ def test_docs_collab_snapshot_does_not_touch_parent_doc_when_content_unchanged(
 
     page_ref = make_page_ref(page["source_type"], page["source_page_id"])
     snapshot_response = client.put(
-        f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/snapshot",
+        f"/api/v1/docs/collab/pages/{page_ref}/snapshot",
         headers=_auth_headers(admin["token"]),
         json={
             "content_blocks": canonical_blocks,
@@ -389,17 +392,18 @@ def test_docs_collab_snapshot_does_not_touch_parent_doc_when_content_unchanged(
         client,
         admin["token"],
         doc["id"],
-        workspace_slug=workspace_slug,
     )
     assert refreshed_doc["updated_at"] == after_patch_doc["updated_at"]
 
 
 def test_docs_collab_websocket_requires_auth_and_accepts_valid_token(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
-    _doc, page = _create_native_doc_page(client, admin["token"], workspace_slug)
+    _doc, page = _create_native_doc_page(
+        client,
+        admin["token"],
+    )
     page_ref = make_page_ref(page["source_type"], page["source_page_id"])
-    websocket_path = f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/ws"
+    websocket_path = f"/api/v1/docs/collab/pages/{page_ref}/ws"
 
     with pytest.raises(WebSocketDisconnect) as invalid_auth:
         with client.websocket_connect(websocket_path) as websocket:
@@ -407,7 +411,8 @@ def test_docs_collab_websocket_requires_auth_and_accepts_valid_token(client: Tes
             websocket.receive_json()
     assert invalid_auth.value.code == 4401
 
-    with client.websocket_connect(f"{websocket_path}?token={admin['token']}") as websocket:
+    with client.websocket_connect(websocket_path) as websocket:
+        websocket.send_json({"type": "auth", "token": admin["token"]})
         assert websocket.receive_bytes()
         websocket.close()
 
@@ -417,20 +422,21 @@ def test_docs_native_page_linked_media_resolves_for_shared_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
-    doc, page = _create_native_doc_page(client, admin["token"], workspace_slug)
+    doc, page = _create_native_doc_page(
+        client,
+        admin["token"],
+    )
 
-    member = _create_user_with_workspaces(
+    member = _create_company_user(
         client,
         admin["token"],
         email="docs-media-member@open-work-hub.local",
         full_name="Docs Media Member",
-        workspace_keys=[workspace_slug],
     )
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
     share_response = client.put(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}/sharing/users/{member['user']['id']}",
+        f"/api/v1/docs/items/{doc['id']}/sharing/users/{member['user']['id']}",
         headers=_auth_headers(admin["token"]),
         json={"access_level": "edit"},
     )
@@ -455,7 +461,7 @@ def test_docs_native_page_linked_media_resolves_for_shared_user(
     )
     assert resolve_response.status_code == 200, resolve_response.text
     resolved_url = resolve_response.json()["resolved"][f"media:{media['id']}"]
-    assert resolved_url.startswith(f"/api/v1/media/content/{media['id']}?")
+    assert resolved_url.startswith("/api/v1/content#grant=")
     assert "127.0.0.1:59000" not in resolved_url
 
     class FakeMinioObject:
@@ -465,7 +471,7 @@ def test_docs_native_page_linked_media_resolves_for_shared_user(
 
         def stream(self, chunk_size: int):
             assert chunk_size > 0
-            yield b"png-bytes"
+            yield b"\x89PNG\r\n\x1a\npng-bytes"
 
         def close(self) -> None:
             self.closed = True
@@ -481,11 +487,18 @@ def test_docs_native_page_linked_media_resolves_for_shared_user(
             assert storage_key.endswith("/fixture.png")
             return fake_object
 
-    monkeypatch.setattr(media_router, "get_minio_client", lambda: FakeMinioClient())
+    monkeypatch.setattr(
+        media_content_access,
+        "media_object_storage",
+        lambda: MediaObjectStorage(bucket_name="test-bucket", client=FakeMinioClient()),
+    )
 
-    content_response = client.get(resolved_url)
+    content_response = client.get(
+        resolved_url,
+        headers=content_headers(member_token, resolved_url),
+    )
     assert content_response.status_code == 200, content_response.text
-    assert content_response.content == b"png-bytes"
+    assert content_response.content == b"\x89PNG\r\n\x1a\npng-bytes"
     assert content_response.headers["content-type"] == "image/png"
     assert fake_object.closed is True
     assert fake_object.released is True
@@ -514,10 +527,18 @@ def test_media_content_missing_storage_object_returns_not_found(
                 object_name=storage_key,
             )
 
-    monkeypatch.setattr(media_router, "get_minio_client", lambda: FakeMinioClient())
+    monkeypatch.setattr(
+        media_content_access,
+        "media_object_storage",
+        lambda: MediaObjectStorage(bucket_name="test-bucket", client=FakeMinioClient()),
+    )
 
-    content_response = client.get(resolved_url)
-    assert content_response.status_code == 404, content_response.text
+    content_response = client.get(
+        resolved_url,
+        headers=content_headers(admin["token"], resolved_url),
+    )
+    assert content_response.status_code == 403, content_response.text
+    assert content_response.json()["code"] == "content.grant_invalid"
 
 
 def test_media_content_storage_download_failure_returns_bad_gateway(
@@ -534,9 +555,16 @@ def test_media_content_storage_download_failure_returns_bad_gateway(
             assert storage_key.endswith("/fixture.png")
             raise RuntimeError("storage unavailable")
 
-    monkeypatch.setattr(media_router, "get_minio_client", lambda: FakeMinioClient())
+    monkeypatch.setattr(
+        media_content_access,
+        "media_object_storage",
+        lambda: MediaObjectStorage(bucket_name="test-bucket", client=FakeMinioClient()),
+    )
 
-    content_response = client.get(resolved_url)
+    content_response = client.get(
+        resolved_url,
+        headers=content_headers(admin["token"], resolved_url),
+    )
     assert content_response.status_code == 502, content_response.text
 
 
@@ -544,14 +572,14 @@ def test_docs_collab_session_degraded_when_relay_is_unavailable(
     client_without_collab_relay: TestClient,
 ) -> None:
     admin = _bootstrap_admin_session(client_without_collab_relay)
-    workspace_slug = _first_workspace_slug(client_without_collab_relay, admin["token"])
     _doc, page = _create_native_doc_page(
-        client_without_collab_relay, admin["token"], workspace_slug
+        client_without_collab_relay,
+        admin["token"],
     )
     page_ref = make_page_ref(page["source_type"], page["source_page_id"])
 
     session_response = client_without_collab_relay.get(
-        f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/session",
+        f"/api/v1/docs/collab/pages/{page_ref}/session",
         headers=_auth_headers(admin["token"]),
     )
     assert session_response.status_code == 200, session_response.text
@@ -561,8 +589,9 @@ def test_docs_collab_session_degraded_when_relay_is_unavailable(
 
     with pytest.raises(WebSocketDisconnect) as relay_down:
         with client_without_collab_relay.websocket_connect(
-            f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/ws?token={admin['token']}"
+            f"/api/v1/docs/collab/pages/{page_ref}/ws"
         ) as websocket:
+            websocket.send_json({"type": "auth", "token": admin["token"]})
             websocket.receive_json()
     assert relay_down.value.code == 1013
 
@@ -635,8 +664,10 @@ def test_docs_collab_hub_relays_updates_and_flushes_server_side(
     redis_url: str,
 ) -> None:
     admin = _bootstrap_admin_session(client)
-    workspace_slug = _first_workspace_slug(client, admin["token"])
-    doc, page = _create_native_doc_page(client, admin["token"], workspace_slug)
+    doc, page = _create_native_doc_page(
+        client,
+        admin["token"],
+    )
     collab_blocks = _paragraph_blocks("Server-side relay flush")
     collab_update = blocks_to_yjs_state(collab_blocks)
     assert collab_update is not None
@@ -686,7 +717,7 @@ def test_docs_collab_hub_relays_updates_and_flushes_server_side(
     asyncio.run(exercise_hubs())
 
     refreshed_pages_response = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}/pages",
+        f"/api/v1/docs/items/{doc['id']}/pages",
         headers=_auth_headers(admin["token"]),
     )
     assert refreshed_pages_response.status_code == 200, refreshed_pages_response.text
@@ -701,14 +732,12 @@ def test_meeting_notes_collab_session_is_revoked_when_attendee_is_removed(
 ) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    workspace_slug = _first_workspace_slug(client, admin_token)
 
-    attendee = _create_user_with_workspaces(
+    attendee = _create_company_user(
         client,
         admin_token,
         email="notes-collab-attendee@open-work-hub.local",
         full_name="Notes Collab Attendee",
-        workspace_keys=[workspace_slug],
     )
     attendee_token = _login(
         client,
@@ -719,19 +748,18 @@ def test_meeting_notes_collab_session_is_revoked_when_attendee_is_removed(
     meeting = _create_meeting(
         client,
         admin_token,
-        workspace_slug=workspace_slug,
         title="Realtime notes ACL",
         attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
     )
 
     ensure_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}/notes/ensure",
+        f"/api/v1/meeting/meetings/{meeting['id']}/notes/ensure",
         headers=_auth_headers(admin_token),
     )
     assert ensure_response.status_code == 200, ensure_response.text
     notes = ensure_response.json()
     page_ref = make_page_ref("native_doc_page", notes["notes_page_id"])
-    session_path = f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/session"
+    session_path = f"/api/v1/docs/collab/pages/{page_ref}/session"
 
     attendee_session_response = client.get(
         session_path,
@@ -741,7 +769,7 @@ def test_meeting_notes_collab_session_is_revoked_when_attendee_is_removed(
     assert attendee_session_response.json()["can_edit"] is True
 
     remove_attendee_response = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}",
+        f"/api/v1/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin_token),
         json={"attendees": []},
     )
@@ -751,15 +779,14 @@ def test_meeting_notes_collab_session_is_revoked_when_attendee_is_removed(
         session_path,
         headers=_auth_headers(attendee_token),
     )
-    assert revoked_session_response.status_code == 404, revoked_session_response.text
+    assert revoked_session_response.status_code == 403, revoked_session_response.text
 
 
-def test_pms_target_doc_collab_session_uses_workspace_acl_and_page_ref(
+def test_pms_target_doc_collab_session_uses_space_acl_and_page_ref(
     client: TestClient,
 ) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    workspace_slug = "administrator"
 
     task_list = _create_task_list(client, admin_token, key="CLAB", name="Collab List")
 
@@ -767,12 +794,11 @@ def test_pms_target_doc_collab_session_uses_workspace_acl_and_page_ref(
     page = _create_doc_page(client, admin_token, space_doc["id"], title="Overview")
     assert page["realtime_collab"] is True
 
-    member = _create_user_with_workspaces(
+    member = _create_company_user(
         client,
         admin_token,
         email="space-collab-member@open-work-hub.local",
         full_name="Space Collab Member",
-        workspace_keys=[workspace_slug],
     )
     _add_task_list_member(client, admin_token, task_list["id"], member["user"]["id"], "member")
     member_token = _login(
@@ -783,7 +809,7 @@ def test_pms_target_doc_collab_session_uses_workspace_acl_and_page_ref(
 
     page_ref = make_page_ref("native_doc_page", page["id"])
     session_response = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/session",
+        f"/api/v1/docs/collab/pages/{page_ref}/session",
         headers=_auth_headers(member_token),
     )
     assert session_response.status_code == 200, session_response.text

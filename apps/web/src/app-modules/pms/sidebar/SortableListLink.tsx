@@ -1,18 +1,18 @@
-import { useCallback, useRef } from 'react';
-import type * as React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { List as ListIcon, MoreHorizontal } from 'lucide-react';
+import type * as React from 'react';
+import { useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
-import type { FlatDropZone } from '../api/pms-sidebar-reorder';
 import type { PmsTaskList } from '../api/pms-api';
 import { taskListRoleAllows } from '../api/pms-permissions';
+import type { FlatDropZone } from '../api/pms-sidebar-reorder';
+import { buildPmsTaskListToolPath } from '../views/pms-view-route';
 import { ListContextMenu } from './ListContextMenu';
 import { useSuppressClickAfterDrag } from './space-tree-drag';
-import { buildPmsTaskListToolPath } from '../views/pms-view-route';
 
 export type SortableListMenuState = {
   buttonRefs: React.MutableRefObject<Map<string, HTMLButtonElement>>;
@@ -24,7 +24,7 @@ export type SortableListMenuState = {
 type SortableListLinkProps = {
   list: PmsTaskList;
   activeNavItemId: string;
-  workspaceSlug: string | null;
+
   canDrag: boolean;
   dropZone: FlatDropZone | null;
   menu?: SortableListMenuState;
@@ -38,7 +38,6 @@ type SortableListLinkProps = {
 export function SortableListLink({
   list,
   activeNavItemId,
-  workspaceSlug,
   canDrag,
   dropZone,
   menu,
@@ -78,11 +77,10 @@ export function SortableListLink({
       navigate(
         buildPmsTaskListToolPath({
           taskListId: list.id,
-          workspaceSlug,
         }),
       );
     },
-    [list.id, navigate, suppressClick, workspaceSlug],
+    [list.id, navigate, suppressClick],
   );
   const style = {
     transform: CSS.Transform.toString(transform),

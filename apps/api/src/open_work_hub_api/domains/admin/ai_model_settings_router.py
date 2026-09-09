@@ -27,7 +27,6 @@ from open_work_hub_api.domains.ai.model_settings_service import (
 from open_work_hub_api.domains.auth.access import is_platform_admin_user, record_audit_log
 from open_work_hub_api.domains.auth.dependencies import AuthContext, require_permission
 
-
 router = APIRouter(prefix="/admin/ai-model-settings", tags=["admin"])
 
 

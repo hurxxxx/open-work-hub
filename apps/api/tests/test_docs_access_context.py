@@ -27,7 +27,7 @@ def test_native_ref_normalization_rejects_wrong_prefix_with_not_found_code() -> 
     assert page_error.value.detail.code == "docs.page_not_found"
 
 
-def test_share_token_workspace_bypass_only_allows_native_refs() -> None:
+def test_share_token_ref_parser_only_allows_native_docs() -> None:
     assert access_context.share_token_allows_item_without_docs_access("doc-1") is True
     assert access_context.share_token_allows_item_without_docs_access("native_doc__doc-1") is True
     assert access_context.share_token_allows_item_without_docs_access("file__doc-1") is False
@@ -39,14 +39,13 @@ def test_share_token_workspace_bypass_only_allows_native_refs() -> None:
     assert access_context.share_token_allows_page_without_docs_access("native_doc__page-1") is False
 
 
-def test_missing_docs_workspace_context_raises_access_error(
+def test_missing_docs_app_admission_raises_access_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(access_context, "get_current_workspace", lambda _db: None)
-    monkeypatch.setattr(access_context, "resolve_workspaces", lambda _db, _user: [])
+    monkeypatch.setattr(access_context, "can_use_app", lambda _db, **_kwargs: False)
 
     with pytest.raises(HTTPException) as exc_info:
-        access_context.ensure_docs_workspace_access(object(), SimpleNamespace(id="user-1"))
+        access_context.ensure_docs_app_access(object(), SimpleNamespace(id="user-1"))
 
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail.code == "docs.requests_workspace_context_required"
+    assert exc_info.value.detail.code == "platform.app_disabled"

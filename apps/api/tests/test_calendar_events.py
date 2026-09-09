@@ -22,16 +22,9 @@ def _auth_headers(token: str) -> dict[str, str]:
 
 
 def _bootstrap_admin_session(client: TestClient) -> dict:
-    response = client.post(
-        "/api/v1/auth/setup",
-        json={
-            "full_name": "Open Work Hub Admin",
-            "email": "admin@open-work-hub.local",
-            "password": "supersecret123",
-        },
-    )
-    assert response.status_code == 201, response.text
-    return response.json()
+    from test_meeting import _bootstrap_admin_session as setup
+
+    return setup(client)
 
 
 def _create_meeting(
@@ -43,7 +36,7 @@ def _create_meeting(
     end_at: datetime,
 ) -> dict:
     response = client.post(
-        "/api/v1/workspaces/administrator/meeting/meetings",
+        "/api/v1/meeting/meetings",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -60,17 +53,9 @@ def _create_meeting(
 
 
 def _create_task_list(client: TestClient, token: str) -> dict:
-    response = client.post(
-        "/api/v1/workspaces/administrator/pms/lists",
-        headers=_auth_headers(token),
-        json={
-            "key": "CAL",
-            "name": "Calendar Test List",
-            "description": "",
-        },
-    )
-    assert response.status_code == 201, response.text
-    return response.json()
+    from test_meeting import _create_task_list as create_list
+
+    return create_list(client, token, key="CAL", name="Calendar Test List")
 
 
 def _create_issue_with_due_date(
@@ -84,7 +69,7 @@ def _create_issue_with_due_date(
     title: str = "Task with due date",
 ) -> dict:
     create = client.post(
-        f"/api/v1/workspaces/administrator/pms/lists/{list_id}/tasks",
+        f"/api/v1/pms/lists/{list_id}/tasks",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -98,7 +83,7 @@ def _create_issue_with_due_date(
     issue = create.json()
     # Set due_date via update endpoint (setup endpoint doesn't take it directly)
     update = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_auth_headers(token),
         json={
             "due_date": due_date,
@@ -217,7 +202,7 @@ def test_calendar_events_returns_meeting_for_organizer(client: TestClient) -> No
     assert matching["sourceId"] == meeting["id"]
     assert matching["allDay"] is False
     assert matching["color"] == "#3b82f6"
-    assert matching["workspace"]["slug"] == "administrator"
+    assert "workspace" not in matching
 
 
 def test_calendar_events_excludes_meeting_starting_at_exclusive_end(client: TestClient) -> None:
@@ -307,7 +292,7 @@ def test_calendar_events_pms_all_day_end_is_exclusive(client: TestClient) -> Non
     items = {item["sourceId"]: item for item in response.json()["items"]}
     assert items[due_issue["id"]]["start"] == "2026-04-20"
     assert items[due_issue["id"]]["end"] == "2026-04-21"
-    assert items[due_issue["id"]]["workspace"]["slug"] == "administrator"
+    assert "workspace" not in items[due_issue["id"]]
     assert items[block_issue["id"]]["start"] == "2026-04-18"
     assert items[block_issue["id"]]["end"] == "2026-04-21"
 
@@ -326,3 +311,42 @@ def test_calendar_events_assignee_id_query_param_is_ignored(client: TestClient) 
     assert response.status_code == 200
     # And for sanity: the absence of assignee_id in the schema means the optional
     # parameter is never honored. This is the contract.
+
+
+def test_calendar_aggregates_each_admitted_source_independently(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+    meeting = _create_meeting(
+        client,
+        token,
+        start_at=datetime(2026, 4, 20, 10, 0),
+        end_at=datetime(2026, 4, 20, 11, 0),
+    )
+    planner = client.post(
+        "/api/v1/planner/events",
+        headers=_auth_headers(token),
+        json={
+            "title": "Personal event",
+            "start": "2026-04-20T12:00:00Z",
+            "end": "2026-04-20T13:00:00Z",
+            "allDay": False,
+        },
+    )
+    assert planner.status_code == 201, planner.text
+
+    def disable(app_id: str) -> None:
+        changed = client.put(
+            f"/api/v1/admin/apps/{app_id}/access-policy",
+            headers=_auth_headers(token),
+            json={"enabled": False, "audience": "all", "user_ids": [], "group_ids": []},
+        )
+        assert changed.status_code == 200, changed.text
+
+    disable("planner")
+    response = _get_calendar_events(client, token, sources="planner_event,meeting")
+    assert response.status_code == 200, response.text
+    assert [item["sourceId"] for item in response.json()["items"]] == [meeting["id"]]
+    disable("meeting")
+    response = _get_calendar_events(client, token, sources="planner_event,meeting")
+    assert response.status_code == 200, response.text
+    assert response.json()["items"] == []

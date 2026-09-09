@@ -1,3 +1,7 @@
+import {
+  getAppRouteChrome,
+  getAppRoutePattern,
+} from '@open-work-hub/contracts/app-routes';
 import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
@@ -11,7 +15,8 @@ const MailView = lazy(() =>
 
 export const mailGlobalRoutes: StaticRouteDefinition[] = [
   {
-    path: '/mail',
+    chrome: getAppRouteChrome('mail.root'),
+    path: getAppRoutePattern('mail.root'),
     element: lazyRoute(createElement(MailView)),
   },
 ];

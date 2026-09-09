@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import type { PmsSpace } from '@/src/app-modules/pms/public-api';
 import type {
   DocsContentFormat,
   DocsHubItem,
@@ -9,7 +10,6 @@ import type {
   ShareableUserItem,
 } from '../api/docs-api';
 import type { DropZone } from '../api/docs-page-reorder';
-import type { PmsSpace } from '@/src/app-modules/pms/public-api';
 
 export const useDocsViewState = () => {
   const [editorLoading, setEditorLoading] = useState(false);
@@ -18,7 +18,7 @@ export const useDocsViewState = () => {
   const [docMenuOpen, setDocMenuOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newDocTitle, setNewDocTitle] = useState('');
-  const [newDocLocation, setNewDocLocation] = useState<string>('workspace');
+  const [newDocLocation, setNewDocLocation] = useState<string>('private');
   const [newDocContentFormat, setNewDocContentFormat] =
     useState<DocsContentFormat>('block');
   const [showCreatePageModal, setShowCreatePageModal] = useState(false);
@@ -61,7 +61,6 @@ export const useDocsViewState = () => {
   const [linkCopied, setLinkCopied] = useState(false);
   const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [copiedDocId, setCopiedDocId] = useState<string | null>(null);
-  const [changingLocation, setChangingLocation] = useState(false);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{
     overId: string;
@@ -71,7 +70,6 @@ export const useDocsViewState = () => {
   return {
     activeDragId,
     availableSpaces,
-    changingLocation,
     contentEditorVersions,
     copiedDocId,
     creating,
@@ -98,7 +96,6 @@ export const useDocsViewState = () => {
     selectedDoc,
     setActiveDragId,
     setAvailableSpaces,
-    setChangingLocation,
     setContentEditorVersions,
     setCopiedDocId,
     setCreating,

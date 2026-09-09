@@ -15,7 +15,6 @@ from open_work_hub_api.core.telemetry import (
     get_tracer_provider,
     start_as_current_span,
 )
-from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.rag.contracts import (
     RagScopeKind,
     RagSyncLane,
@@ -51,21 +50,11 @@ def _session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
             RagSyncJob.__table__,
             RagVisibilityRecomputeJob.__table__,
         ],
     )
     session = Session(engine)
-    session.add(
-        Workspace(
-            id="ws-1",
-            key="ws-1",
-            name="Workspace 1",
-            description="",
-            active=True,
-        )
-    )
     session.commit()
     return session
 
@@ -75,7 +64,6 @@ def _versioned_session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
             RetrievalPartition.__table__,
             RetrievalProjectionHead.__table__,
             RetrievalProjectionEvent.__table__,
@@ -83,25 +71,11 @@ def _versioned_session() -> Session:
         ],
     )
     session = Session(engine)
-    session.add_all(
-        [
-            Workspace(
-                id=workspace_id,
-                key=workspace_id,
-                name=workspace_id,
-                description="",
-                active=True,
-            )
-            for workspace_id in ("ws-1", "ws-2")
-        ]
-    )
     session.add(
         RetrievalPartition(
             id="11111111-1111-1111-1111-111111111111",
             source_namespace="docs",
-            managed_workspace_id="ws-1",
-            candidate_scope_kind="workspace",
-            candidate_workspace_id="ws-1",
+            candidate_scope_kind="company",
             state="active",
             metadata_version=1,
             is_default_ingest=True,
@@ -126,7 +100,6 @@ def _record_doc_event(
         change_kind="delete" if desired_state == "deleted" else "content",
         desired_state=desired_state,
         content_checksum=content_checksum,
-        diagnostic_workspace_id="ws-1",
     )
 
 
@@ -158,7 +131,7 @@ def _registered_rag_outbox_adapters():
             load_projection=lambda db, resource_id, rag_service: None,
         )
     )
-    for scope_type in ("workspace_membership", "meeting", "pms_meeting"):
+    for scope_type in ("meeting", "pms_meeting"):
         register_rag_visibility_scope_adapter(
             RagVisibilityScopeAdapter(
                 scope_type=scope_type,
@@ -178,7 +151,6 @@ def test_enqueue_rag_sync_job_persists_resource_job() -> None:
         with session.begin():
             job = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="doc-1",
                 operation=RagSyncOperation.VISIBILITY_UPDATE,
@@ -192,7 +164,7 @@ def test_enqueue_rag_sync_job_persists_resource_job() -> None:
 
         stored = session.scalar(select(RagSyncJob).where(RagSyncJob.id == job.id))
         assert stored is not None
-        assert stored.workspace_id == "ws-1"
+        assert not hasattr(stored, "workspace_id")
         assert stored.lane == "backfill"
         assert stored.operation == "visibility_update"
         assert stored.content_checksum == "content-v1"
@@ -213,7 +185,6 @@ def test_enqueue_rag_sync_job_supports_company_scope_without_workspace() -> None
             job = enqueue_rag_sync_job(
                 session,
                 scope_kind=RagScopeKind.COMPANY,
-                workspace_id="ignored-workspace",
                 resource_type="doc",
                 resource_id="company-doc-1",
                 operation=RagSyncOperation.UPSERT,
@@ -222,21 +193,21 @@ def test_enqueue_rag_sync_job_supports_company_scope_without_workspace() -> None
         stored = session.scalar(select(RagSyncJob).where(RagSyncJob.id == job.id))
         assert stored is not None
         assert stored.scope_kind == "company"
-        assert stored.workspace_id is None
+        assert not hasattr(stored, "workspace_id")
         assert stored.resource_id == "company-doc-1"
     finally:
         session.close()
 
 
-def test_enqueue_rag_sync_job_requires_workspace_for_workspace_scope() -> None:
+def test_enqueue_rag_sync_job_rejects_removed_workspace_scope() -> None:
     session = _session()
     try:
-        with pytest.raises(ValueError, match="requires workspace_id"):
+        with pytest.raises(ValueError, match="workspace"):
             enqueue_rag_sync_job(
                 session,
-                workspace_id=None,
+                scope_kind="workspace",
                 resource_type="doc",
-                resource_id="doc-without-workspace",
+                resource_id="doc-1",
                 operation=RagSyncOperation.UPSERT,
             )
     finally:
@@ -257,7 +228,6 @@ def test_enqueue_rag_sync_job_accepts_extension_resource_keys() -> None:
         with session.begin():
             job = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="plugin_external_record",
                 resource_id=resource_id,
                 operation=RagSyncOperation.UPSERT,
@@ -280,7 +250,6 @@ def test_enqueue_rag_sync_job_rejects_unregistered_resource_type() -> None:
         ):
             enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="missing_resource",
                 resource_id="resource-1",
             )
@@ -301,7 +270,6 @@ def test_enqueue_rag_sync_job_rejects_upsert_without_projection_loader() -> None
         ):
             enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="delete_only_resource",
                 resource_id="resource-1",
                 operation=RagSyncOperation.UPSERT,
@@ -310,7 +278,6 @@ def test_enqueue_rag_sync_job_rejects_upsert_without_projection_loader() -> None
         with session.begin():
             job = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="delete_only_resource",
                 resource_id="resource-1",
                 operation=RagSyncOperation.DELETE,
@@ -327,9 +294,8 @@ def test_enqueue_rag_visibility_recompute_job_persists_cursor() -> None:
         with session.begin():
             job = enqueue_rag_visibility_recompute_job(
                 session,
-                workspace_id="ws-1",
-                scope_type="workspace_membership",
-                scope_id="binding-1",
+                scope_type="meeting",
+                scope_id="meeting-1",
                 cursor={"resource_type": "doc", "offset": 10},
                 trace_context={
                     "traceparent": "00-feedfacefeedfacefeedfacefeedface-beadbeadbeadbead-01"
@@ -340,8 +306,8 @@ def test_enqueue_rag_visibility_recompute_job_persists_cursor() -> None:
             select(RagVisibilityRecomputeJob).where(RagVisibilityRecomputeJob.id == job.id)
         )
         assert stored is not None
-        assert stored.scope_type == "workspace_membership"
-        assert stored.scope_id == "binding-1"
+        assert stored.scope_type == "meeting"
+        assert stored.scope_id == "meeting-1"
         assert stored.cursor == {"resource_type": "doc", "offset": 10}
         assert stored.trace_context == {
             "traceparent": "00-feedfacefeedfacefeedfacefeedface-beadbeadbeadbead-01"
@@ -350,17 +316,19 @@ def test_enqueue_rag_visibility_recompute_job_persists_cursor() -> None:
         session.close()
 
 
-def test_enqueue_rag_visibility_recompute_job_rejects_unregistered_scope_type() -> None:
+@pytest.mark.parametrize("scope_type", ["missing_scope", "workspace_membership"])
+def test_enqueue_rag_visibility_recompute_job_rejects_unregistered_scope_type(
+    scope_type: str,
+) -> None:
     session = _session()
     try:
         with pytest.raises(
             ValueError,
-            match="RAG visibility scope_type is not registered: missing_scope",
+            match=f"RAG visibility scope_type is not registered: {scope_type}",
         ):
             enqueue_rag_visibility_recompute_job(
                 session,
-                workspace_id="ws-1",
-                scope_type="missing_scope",
+                scope_type=scope_type,
                 scope_id="scope-1",
             )
     finally:
@@ -384,7 +352,6 @@ def test_enqueue_rag_sync_job_captures_current_trace_context() -> None:
             with session.begin():
                 job = enqueue_rag_sync_job(
                     session,
-                    workspace_id="ws-1",
                     resource_type="doc",
                     resource_id="doc-2",
                 )
@@ -413,7 +380,6 @@ def test_enqueue_rag_sync_job_allows_explicit_empty_trace_context() -> None:
             with session.begin():
                 job = enqueue_rag_sync_job(
                     session,
-                    workspace_id="ws-1",
                     resource_type="doc",
                     resource_id="doc-3",
                     trace_context={},
@@ -432,7 +398,6 @@ def test_enqueue_rag_sync_job_dedupes_pending_rows_and_upgrades_operation() -> N
         with session.begin():
             first = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="doc-4",
                 operation=RagSyncOperation.VISIBILITY_UPDATE,
@@ -440,7 +405,6 @@ def test_enqueue_rag_sync_job_dedupes_pending_rows_and_upgrades_operation() -> N
             )
             second = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="doc-4",
                 operation=RagSyncOperation.UPSERT,
@@ -449,7 +413,6 @@ def test_enqueue_rag_sync_job_dedupes_pending_rows_and_upgrades_operation() -> N
 
         rows = session.scalars(
             select(RagSyncJob).where(
-                RagSyncJob.workspace_id == "ws-1",
                 RagSyncJob.resource_type == "doc",
                 RagSyncJob.resource_id == "doc-4",
             )
@@ -475,7 +438,6 @@ def test_enqueue_rag_sync_job_snapshots_projection_event_and_merges_canonically(
             )
             first = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="versioned-doc",
                 content_checksum="content-v1",
@@ -488,7 +450,6 @@ def test_enqueue_rag_sync_job_snapshots_projection_event_and_merges_canonically(
             )
             latest = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-2",
                 resource_type="doc",
                 resource_id="versioned-doc",
                 operation=RagSyncOperation.DELETE,
@@ -496,7 +457,6 @@ def test_enqueue_rag_sync_job_snapshots_projection_event_and_merges_canonically(
             )
             ignored = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="versioned-doc",
                 content_checksum="content-v1",
@@ -508,7 +468,7 @@ def test_enqueue_rag_sync_job_snapshots_projection_event_and_merges_canonically(
         ).all()
         assert len(rows) == 1
         assert first.id == latest.id == ignored.id
-        assert latest.workspace_id == "ws-2"
+        assert not hasattr(latest, "workspace_id")
         assert latest.projection_event_sequence == version_two.event_sequence
         assert latest.projection_version == 2
         assert latest.retrieval_partition_id == version_two.retrieval_partition_id
@@ -531,7 +491,6 @@ def test_enqueue_rag_sync_job_rejects_forged_projection_event() -> None:
             with pytest.raises(ValueError, match="persisted event"):
                 enqueue_rag_sync_job(
                     session,
-                    workspace_id="ws-1",
                     resource_type="doc",
                     resource_id="forged-doc",
                     projection_event=replace(event, content_checksum="forged"),
@@ -551,7 +510,6 @@ def test_enqueue_rag_sync_job_rejects_same_version_pending_mismatch() -> None:
             )
             job = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="mismatched-pending-doc",
                 content_checksum="content-v1",
@@ -562,7 +520,6 @@ def test_enqueue_rag_sync_job_rejects_same_version_pending_mismatch() -> None:
             with pytest.raises(ValueError, match="same-version projection mismatch"):
                 enqueue_rag_sync_job(
                     session,
-                    workspace_id="ws-1",
                     resource_type="doc",
                     resource_id="mismatched-pending-doc",
                     content_checksum="content-v1",
@@ -596,7 +553,6 @@ def test_enqueue_rag_sync_job_publishes_only_after_commit(monkeypatch) -> None:
         with session.begin():
             job = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="doc-publish",
             )
@@ -615,7 +571,6 @@ def test_enqueue_rag_sync_job_ignores_nested_commit_before_outer_commit(monkeypa
         with session.begin():
             job = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="doc-nested-commit",
             )
@@ -636,7 +591,6 @@ def test_enqueue_rag_sync_job_keeps_publish_after_nested_rollback(monkeypatch) -
         with session.begin():
             job = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="doc-nested-rollback",
             )
@@ -676,9 +630,8 @@ def test_enqueue_rag_visibility_job_publishes_after_commit(monkeypatch) -> None:
         with session.begin():
             job = enqueue_rag_visibility_recompute_job(
                 session,
-                workspace_id="ws-1",
-                scope_type="workspace_membership",
-                scope_id="binding-publish",
+                scope_type="meeting",
+                scope_id="meeting-publish",
             )
 
         assert published == [("rag.recompute_visibility", [job.id], "rag_visibility_recompute")]
@@ -692,14 +645,12 @@ def test_enqueue_rag_sync_job_preserves_pending_delete_over_later_upsert() -> No
         with session.begin():
             first = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="doc-5",
                 operation=RagSyncOperation.DELETE,
             )
             second = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="doc-5",
                 operation=RagSyncOperation.UPSERT,
@@ -708,7 +659,6 @@ def test_enqueue_rag_sync_job_preserves_pending_delete_over_later_upsert() -> No
 
         rows = session.scalars(
             select(RagSyncJob).where(
-                RagSyncJob.workspace_id == "ws-1",
                 RagSyncJob.resource_type == "doc",
                 RagSyncJob.resource_id == "doc-5",
             )
@@ -728,14 +678,12 @@ def test_enqueue_rag_visibility_recompute_job_dedupes_scope_and_merges_doc_ids()
         with session.begin():
             first = enqueue_rag_visibility_recompute_job(
                 session,
-                workspace_id="ws-1",
                 scope_type="meeting",
                 scope_id="meeting-1",
                 cursor={"doc_ids": ["doc-1", "doc-2"]},
             )
             second = enqueue_rag_visibility_recompute_job(
                 session,
-                workspace_id="ws-1",
                 scope_type="meeting",
                 scope_id="meeting-1",
                 cursor={"doc_ids": ["doc-2", "doc-3"]},
@@ -743,7 +691,6 @@ def test_enqueue_rag_visibility_recompute_job_dedupes_scope_and_merges_doc_ids()
 
         rows = session.scalars(
             select(RagVisibilityRecomputeJob).where(
-                RagVisibilityRecomputeJob.workspace_id == "ws-1",
                 RagVisibilityRecomputeJob.scope_type == "meeting",
                 RagVisibilityRecomputeJob.scope_id == "meeting-1",
             )
@@ -762,14 +709,12 @@ def test_enqueue_rag_visibility_recompute_job_merges_task_ids() -> None:
         with session.begin():
             first = enqueue_rag_visibility_recompute_job(
                 session,
-                workspace_id="ws-1",
                 scope_type="pms_meeting",
                 scope_id="meeting-1",
                 cursor={"task_ids": ["issue-1", "issue-2"], "operation": "visibility_update"},
             )
             second = enqueue_rag_visibility_recompute_job(
                 session,
-                workspace_id="ws-1",
                 scope_type="pms_meeting",
                 scope_id="meeting-1",
                 cursor={"task_ids": ["issue-2", "issue-3"], "operation": "visibility_update"},
@@ -777,7 +722,6 @@ def test_enqueue_rag_visibility_recompute_job_merges_task_ids() -> None:
 
         rows = session.scalars(
             select(RagVisibilityRecomputeJob).where(
-                RagVisibilityRecomputeJob.workspace_id == "ws-1",
                 RagVisibilityRecomputeJob.scope_type == "pms_meeting",
                 RagVisibilityRecomputeJob.scope_id == "meeting-1",
             )
@@ -799,14 +743,12 @@ def test_enqueue_rag_sync_job_dedupe_keeps_lane_in_identity() -> None:
         with session.begin():
             realtime = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="doc-6",
                 lane=RagSyncLane.REALTIME,
             )
             backfill = enqueue_rag_sync_job(
                 session,
-                workspace_id="ws-1",
                 resource_type="doc",
                 resource_id="doc-6",
                 lane=RagSyncLane.BACKFILL,
@@ -814,7 +756,6 @@ def test_enqueue_rag_sync_job_dedupe_keeps_lane_in_identity() -> None:
 
         rows = session.scalars(
             select(RagSyncJob).where(
-                RagSyncJob.workspace_id == "ws-1",
                 RagSyncJob.resource_type == "doc",
                 RagSyncJob.resource_id == "doc-6",
             )

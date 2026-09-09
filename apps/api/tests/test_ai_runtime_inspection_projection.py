@@ -13,7 +13,6 @@ def test_runtime_run_inspection_response_scrubs_invocations_and_trace_payloads()
     now = datetime(2026, 1, 1, tzinfo=UTC)
     runtime_run = SimpleNamespace(
         id="run-1",
-        workspace_id="workspace-1",
         conversation_id="conversation-1",
         requested_by_user_id="user-1",
         legacy_snapshot_id="snapshot-1",

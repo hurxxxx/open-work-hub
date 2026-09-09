@@ -1,5 +1,3 @@
-import { useEffect, useReducer, useState, type FormEvent } from 'react';
-import { LazyMotion, domAnimation, m } from 'motion/react';
 import {
   ArrowRight,
   AtSign,
@@ -10,10 +8,12 @@ import {
   ShieldCheck,
   User,
 } from 'lucide-react';
+import { domAnimation, LazyMotion, m } from 'motion/react';
+import { useEffect, useReducer, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 import { useFeedback } from '@open-work-hub/ui/feedback/feedback-provider';
+import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 
 import { useAuth } from './auth-context';
 import {
@@ -29,7 +29,7 @@ import {
 } from './login-screen-model';
 
 const fieldClassName =
-  'w-full rounded-lg border border-app-border bg-app-bg-strong py-2.5 pr-4 app-text-body text-app-ink transition-all placeholder:text-app-ink/45 focus:border-app-accent focus:outline-none focus:ring-1 focus:ring-app-accent';
+  'w-full rounded-lg border border-app-border bg-app-bg-strong py-2.5 pr-4 app-text-body text-app-ink transition-all placeholder:text-app-ink/60 focus:border-app-accent focus:outline-none focus:ring-1 focus:ring-app-accent';
 
 function PasswordField({
   autoComplete,
@@ -105,7 +105,7 @@ function DevAccountsPanel({
         <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-app-ink/55">
           {t('login.seedAccounts')}
         </div>
-        <p className="mt-2 app-text-caption leading-5 text-app-ink/45">
+        <p className="mt-2 app-text-caption leading-5 text-app-ink/60">
           {t('login.devAccountsDescription')}
         </p>
       </div>
@@ -139,7 +139,7 @@ function DevAccountsPanel({
                       className="mt-0.5 shrink-0 text-app-accent"
                     />
                   </div>
-                  <div className="mt-2 line-clamp-2 text-[0.7rem] leading-4 text-app-ink/45">
+                  <div className="mt-2 line-clamp-2 text-[0.7rem] leading-4 text-app-ink/60">
                     {account.description}
                   </div>
                 </button>
@@ -331,7 +331,7 @@ function LoginFormCard({
               ? t('login.signUp')
               : t('login.signIn')}
         </h1>
-        <p className="app-text-body text-app-ink/45">
+        <p className="app-text-body text-app-ink/60">
           {isSetupMode
             ? t('login.setupDescription')
             : isSignupMode
@@ -352,7 +352,7 @@ function LoginFormCard({
         {isSetupMode || isSignupMode ? (
           <div className="space-y-1">
             <label
-              className="ml-1 app-text-caption font-medium text-app-ink/45"
+              className="ml-1 app-text-caption font-medium text-app-ink/60"
               htmlFor="auth-full-name"
             >
               {t('login.name')}
@@ -379,7 +379,7 @@ function LoginFormCard({
 
         <div className="space-y-1">
           <label
-            className="ml-1 app-text-caption font-medium text-app-ink/45"
+            className="ml-1 app-text-caption font-medium text-app-ink/60"
             htmlFor="auth-login-id"
           >
             {t('login.loginId')}
@@ -405,7 +405,7 @@ function LoginFormCard({
         {isSetupMode || isSignupMode ? (
           <div className="space-y-1">
             <label
-              className="ml-1 app-text-caption font-medium text-app-ink/45"
+              className="ml-1 app-text-caption font-medium text-app-ink/60"
               htmlFor="auth-email"
             >
               {t('login.email')}
@@ -431,7 +431,7 @@ function LoginFormCard({
         <div className="space-y-1">
           <div className="ml-1 flex items-center justify-between">
             <label
-              className="app-text-caption font-medium text-app-ink/45"
+              className="app-text-caption font-medium text-app-ink/60"
               htmlFor="auth-password"
             >
               {t('login.password')}
@@ -443,7 +443,9 @@ function LoginFormCard({
             ) : null}
           </div>
           <PasswordField
-            autoComplete={isSetupMode || isSignupMode ? 'new-password' : 'current-password'}
+            autoComplete={
+              isSetupMode || isSignupMode ? 'new-password' : 'current-password'
+            }
             id="auth-password"
             label={t('login.password')}
             minLength={isSetupMode || isSignupMode ? 8 : 1}
@@ -455,7 +457,7 @@ function LoginFormCard({
         {isSignupMode ? (
           <div className="space-y-1">
             <label
-              className="ml-1 app-text-caption font-medium text-app-ink/45"
+              className="ml-1 app-text-caption font-medium text-app-ink/60"
               htmlFor="auth-password-confirm"
             >
               {t('login.passwordConfirm')}

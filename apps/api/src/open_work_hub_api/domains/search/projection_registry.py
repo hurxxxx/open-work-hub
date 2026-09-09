@@ -5,18 +5,15 @@ from typing import Any, Protocol
 
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.search.entity_registry import normalize_search_entity_type
 
 
 class SearchProjectionAdapter(Protocol):
     entity_types: tuple[str, ...]
 
-    def load_workspace_documents(
+    def load_documents(
         self,
         db: Session,
-        *,
-        workspace: Workspace,
     ) -> list[dict[str, Any]]: ...
 
     def load_document(
@@ -31,16 +28,16 @@ class SearchProjectionAdapter(Protocol):
 @dataclass(frozen=True)
 class FunctionSearchProjectionAdapter:
     entity_types: tuple[str, ...]
-    workspace_loader: Any
+    company_loader: Any
     document_loader: Any
 
-    def load_workspace_documents(
+    def load_documents(
         self,
         db: Session,
-        *,
-        workspace: Workspace,
     ) -> list[dict[str, Any]]:
-        return self.workspace_loader(db, workspace=workspace)
+        return self.company_loader(
+            db,
+        )
 
     def load_document(
         self,
@@ -59,7 +56,9 @@ def register_search_projection_adapter(adapter: SearchProjectionAdapter) -> None
     for entity_type in adapter.entity_types:
         normalized_entity_type = normalize_search_entity_type(entity_type)
         if normalized_entity_type in _projection_adapters_by_entity_type:
-            raise ValueError(f"Search projection adapter already registered for {normalized_entity_type}")
+            raise ValueError(
+                f"Search projection adapter already registered for {normalized_entity_type}"
+            )
         _projection_adapters_by_entity_type[normalized_entity_type] = adapter
 
 

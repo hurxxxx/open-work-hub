@@ -52,7 +52,7 @@ describe('ChatbotConversationListPanel', () => {
           createdAt: '2026-07-25T10:00:00Z',
           id: 'conversation-1',
           scopeRef: 'docs',
-          scopeResourceId: 'workspace',
+          scopeResourceId: 'doc-1',
           title: '진행 중인 분석',
           updatedAt: '2026-07-25T10:00:00Z',
         },
@@ -60,7 +60,7 @@ describe('ChatbotConversationListPanel', () => {
           createdAt: '2026-07-25T09:00:00Z',
           id: 'conversation-2',
           scopeRef: 'docs',
-          scopeResourceId: 'workspace',
+          scopeResourceId: 'doc-1',
           title: '다른 분석',
           updatedAt: '2026-07-25T09:00:00Z',
         },
@@ -74,12 +74,10 @@ describe('ChatbotConversationListPanel', () => {
       <MemoryRouter>
         <ChatbotConversationListPanel
           activeConversationId="conversation-1"
-          currentWorkspaceSlug="research"
           navigationDisabled
-          routeAppId="docs"
-          routePathSuffix="assistant"
+          routeId="chatbot.root"
           scopeRef="docs"
-          scopeResourceId="workspace"
+          scopeResourceId="doc-1"
         />
       </MemoryRouter>,
     );
@@ -106,13 +104,11 @@ describe('ChatbotConversationListPanel', () => {
       <MemoryRouter>
         <ChatbotConversationListPanel
           activeConversationId={null}
-          currentWorkspaceSlug="research"
           navigationDisabled
           pendingConversationTitle="권역별 발생 건수를 비교해줘"
-          routeAppId="docs"
-          routePathSuffix="assistant"
+          routeId="chatbot.root"
           scopeRef="docs"
-          scopeResourceId="workspace"
+          scopeResourceId="doc-1"
         />
       </MemoryRouter>,
     );

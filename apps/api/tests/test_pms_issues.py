@@ -10,13 +10,8 @@ from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.pms.models import CustomFieldValue, TaskActivityLog
 from open_work_hub_api.domains.pms import service as pms_service
 from open_work_hub_api.domains.search import outbox as search_outbox
-from dev_accounts import create_workspace_user_session, dev_login
-from test_docs_hub import (
-    _create_doc_page,
-    _create_space_doc,
-    _list_doc_pages,
-    _list_space_docs,
-)
+from dev_accounts import create_company_user_session, dev_login
+from test_docs_hub import _create_doc_page, _create_space_doc, _list_doc_pages, _list_space_docs
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +33,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     archived_issue = _create_issue(client, token, task_list["id"], title="Archived issue")
 
     archive_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{archived_issue['id']}",
+        f"/api/v1/pms/tasks/{archived_issue['id']}",
         headers=_auth_headers(token),
         json={"archived": True},
     )
@@ -46,7 +41,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert archive_response.json()["archived"] is True
 
     active_only_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
         params={"archived": "false"},
     )
@@ -54,7 +49,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert [item["id"] for item in active_only_response.json()["items"]] == [active_issue["id"]]
 
     archived_only_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
         params={"archived": "true"},
     )
@@ -62,7 +57,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert [item["id"] for item in archived_only_response.json()["items"]] == [archived_issue["id"]]
 
     restore_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks/bulk",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks/bulk",
         headers=_auth_headers(token),
         json={"task_ids": [archived_issue["id"]], "archived": False},
     )
@@ -70,7 +65,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert restore_response.json() == {"updated_count": 1, "deleted_count": 0}
 
     archived_after_restore_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
         params={"archived": "true"},
     )
@@ -78,7 +73,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert archived_after_restore_response.json()["items"] == []
 
     active_after_restore_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
         params={"archived": "false"},
     )
@@ -96,7 +91,7 @@ def test_status_change_preserves_manual_board_position(client: TestClient) -> No
     _create_issue(client, token, task_list["id"], title="Second task")
 
     response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{first['id']}",
+        f"/api/v1/pms/tasks/{first['id']}",
         headers=_auth_headers(token),
         json={"status": "done"},
     )
@@ -130,7 +125,7 @@ def test_issue_list_sorts_by_task_dates_and_creation_date(client: TestClient) ->
         (second["id"], "2026-07-15"),
     ):
         response = client.patch(
-            f"/api/v1/workspaces/administrator/pms/tasks/{task_id}",
+            f"/api/v1/pms/tasks/{task_id}",
             headers=_auth_headers(token),
             json={"completed_date": completed_date},
         )
@@ -146,7 +141,7 @@ def test_issue_list_sorts_by_task_dates_and_creation_date(client: TestClient) ->
     }
     for (sort_by, sort_dir), expected_ids in expected_orders.items():
         response = client.get(
-            f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+            f"/api/v1/pms/lists/{task_list['id']}/tasks",
             headers=_auth_headers(token),
             params={"sort_by": sort_by, "sort_dir": sort_dir},
         )
@@ -166,14 +161,14 @@ def test_bulk_update_assigns_and_updates_labels_with_activity(client: TestClient
     _add_task_list_member(client, token, task_list["id"], teammate["user"]["id"], "member")
 
     labels_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/labels",
+        f"/api/v1/pms/lists/{task_list['id']}/labels",
         headers=_auth_headers(token),
     )
     assert labels_response.status_code == 200
     labels_by_name = {item["name"]: item for item in labels_response.json()["items"]}
 
     issue_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
         json={
             "title": "Bulk assign and labels",
@@ -187,7 +182,7 @@ def test_bulk_update_assigns_and_updates_labels_with_activity(client: TestClient
     issue = issue_response.json()
 
     bulk_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks/bulk",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks/bulk",
         headers=_auth_headers(token),
         json={
             "task_ids": [issue["id"]],
@@ -200,7 +195,7 @@ def test_bulk_update_assigns_and_updates_labels_with_activity(client: TestClient
     assert bulk_response.json() == {"updated_count": 1, "deleted_count": 0}
 
     detail_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_auth_headers(token),
     )
     assert detail_response.status_code == 200
@@ -223,13 +218,13 @@ def test_task_update_reuses_existing_label_links(client: TestClient) -> None:
     token = _bootstrap_admin(client)
     task_list = _create_task_list(client, token)
     labels_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/labels",
+        f"/api/v1/pms/lists/{task_list['id']}/labels",
         headers=_auth_headers(token),
     )
     assert labels_response.status_code == 200
     label_id = labels_response.json()["items"][0]["id"]
     issue_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
         json={
             "title": "Keep existing label",
@@ -242,7 +237,7 @@ def test_task_update_reuses_existing_label_links(client: TestClient) -> None:
     assert issue_response.status_code == 201
 
     response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue_response.json()['id']}",
+        f"/api/v1/pms/tasks/{issue_response.json()['id']}",
         headers=_auth_headers(token),
         json={"label_ids": [label_id]},
     )
@@ -268,7 +263,7 @@ def test_task_update_logs_more_than_six_assignees(client: TestClient) -> None:
     issue = _create_issue(client, token, task_list["id"], title="Many assignees")
 
     response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_auth_headers(token),
         json={"assignee_ids": assignee_ids},
     )
@@ -322,7 +317,7 @@ def test_concurrent_assignee_updates_are_idempotent(
     def assign_task():
         try:
             return client.patch(
-                f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}",
+                f"/api/v1/pms/tasks/{issue['id']}",
                 headers=_auth_headers(token),
                 json={"assignee_ids": [assignee_id]},
             )
@@ -345,7 +340,7 @@ def test_task_reorder_updates_positions_and_parent_in_one_request(
     third = _create_issue(client, token, task_list["id"], title="Third task")
 
     response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks/reorder",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks/reorder",
         headers=_auth_headers(token),
         json={
             "items": [
@@ -372,7 +367,7 @@ def test_task_reorder_updates_positions_and_parent_in_one_request(
     assert returned_by_id[second["id"]]["parent_id"] == third["id"]
 
     list_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200, list_response.text
@@ -397,7 +392,7 @@ def test_task_reorder_rejects_parent_cycles_without_partial_write(
     )
 
     response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks/reorder",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks/reorder",
         headers=_auth_headers(token),
         json={
             "items": [
@@ -413,7 +408,7 @@ def test_task_reorder_rejects_parent_cycles_without_partial_write(
 
     assert response.status_code == 409, response.text
     list_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200, list_response.text
@@ -433,7 +428,7 @@ def test_task_reorder_rejects_duplicate_task_ids_without_partial_write(
     second = _create_issue(client, token, task_list["id"], title="Second duplicate task")
 
     response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks/reorder",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks/reorder",
         headers=_auth_headers(token),
         json={
             "items": [
@@ -446,7 +441,7 @@ def test_task_reorder_rejects_duplicate_task_ids_without_partial_write(
 
     assert response.status_code == 400, response.text
     list_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200, list_response.text
@@ -466,7 +461,7 @@ def test_unlinking_subtask_places_it_after_its_former_parent(
     child = _create_issue(client, token, task_list["id"], title="Moved child")
 
     nest_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks/reorder",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks/reorder",
         headers=_auth_headers(token),
         json={
             "items": [
@@ -481,7 +476,7 @@ def test_unlinking_subtask_places_it_after_its_former_parent(
     assert nest_response.status_code == 200, nest_response.text
 
     unlink_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{child['id']}",
+        f"/api/v1/pms/tasks/{child['id']}",
         headers=_auth_headers(token),
         json={"parent_id": None},
     )
@@ -489,7 +484,7 @@ def test_unlinking_subtask_places_it_after_its_former_parent(
     assert unlink_response.json()["parent_id"] is None
 
     list_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200, list_response.text
@@ -508,7 +503,7 @@ def test_concurrent_subtask_unlinks_keep_root_positions_consistent(
     second_parent = _create_issue(client, token, task_list["id"], title="Second parent")
     second_child = _create_issue(client, token, task_list["id"], title="Second child")
     nest_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks/reorder",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks/reorder",
         headers=_auth_headers(token),
         json={
             "items": [
@@ -546,7 +541,7 @@ def test_concurrent_subtask_unlinks_keep_root_positions_consistent(
 
     def unlink_task(task_id: str):
         return client.patch(
-            f"/api/v1/workspaces/administrator/pms/tasks/{task_id}",
+            f"/api/v1/pms/tasks/{task_id}",
             headers=_auth_headers(token),
             json={"parent_id": None},
         )
@@ -556,7 +551,7 @@ def test_concurrent_subtask_unlinks_keep_root_positions_consistent(
     assert all(response.status_code == 200 for response in responses)
 
     list_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200, list_response.text
@@ -580,7 +575,7 @@ def test_unlink_and_root_reorder_do_not_deadlock(
     root_to_move = _create_issue(client, token, task_list["id"], title="Other root")
     child = _create_issue(client, token, task_list["id"], title="Child")
     nest_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks/reorder",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks/reorder",
         headers=_auth_headers(token),
         json={
             "items": [
@@ -643,7 +638,7 @@ def test_unlink_and_root_reorder_do_not_deadlock(
     def patch_task(task_id: str, payload: dict):
         try:
             return client.patch(
-                f"/api/v1/workspaces/administrator/pms/tasks/{task_id}",
+                f"/api/v1/pms/tasks/{task_id}",
                 headers=_auth_headers(token),
                 json=payload,
             )
@@ -676,28 +671,28 @@ def test_viewer_cannot_modify_issue_comment_or_folder(client: TestClient) -> Non
     viewer_token = _login(client, viewer["user"]["email"], viewer["temporary_password"])
 
     update_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_auth_headers(viewer_token),
         json={"title": "Viewer edit attempt"},
     )
     assert update_response.status_code == 403
 
     comment_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}/comments",
+        f"/api/v1/pms/tasks/{issue['id']}/comments",
         headers=_auth_headers(viewer_token),
         json={"body": "viewer comment"},
     )
     assert comment_response.status_code == 403
 
     folder_response = client.post(
-        "/api/v1/workspaces/administrator/pms/folders",
+        "/api/v1/pms/folders",
         headers=_auth_headers(viewer_token),
         json={"name": "Viewer folder", "team_id": task_list["team_id"]},
     )
     assert folder_response.status_code == 403
 
     space_doc_response = client.post(
-        "/api/v1/workspaces/administrator/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(viewer_token),
         json={
             "title": "Viewer collection",
@@ -733,7 +728,7 @@ def test_task_comment_mention_notification_identifies_task(client: TestClient) -
     )
 
     comment_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}/comments",
+        f"/api/v1/pms/tasks/{issue['id']}/comments",
         headers=_auth_headers(admin_session["token"]),
         json={
             "body": "Please check @Mentioned Member - Product",
@@ -768,11 +763,11 @@ def test_task_comment_mention_notification_identifies_task(client: TestClient) -
     assert "Mention target task" in notification["title"]
     assert "Mention target task" in notification["body"]
     assert issue["reference"] in notification["body"]
-    assert notification["reference_id"] == issue["id"]
-    assert (
-        notification["action_url"]
-        == f"/w/administrator/pms/lists/{task_list['id']}?task={issue['id']}"
-    )
+    assert notification["source_type"] == "pms_task"
+    assert notification["source_id"] == issue["id"]
+    assert notification["origin_app_id"] == "pms"
+    assert "origin_workspace_id" not in notification
+    assert notification["action_url"] == f"/apps/pms/lists/{task_list['id']}?task={issue['id']}"
 
 
 def test_task_comment_notification_identifies_task_by_title(client: TestClient) -> None:
@@ -796,7 +791,7 @@ def test_task_comment_notification_identifies_task_by_title(client: TestClient) 
     )
 
     comment_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}/comments",
+        f"/api/v1/pms/tasks/{issue['id']}/comments",
         headers=_auth_headers(admin_session["token"]),
         json={"body": "please review"},
     )
@@ -835,7 +830,7 @@ def test_task_assignment_notification_identifies_task_by_title(client: TestClien
     )
 
     assign_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_auth_headers(admin_session["token"]),
         json={"assignee_id": assignee["user"]["id"]},
     )
@@ -851,7 +846,10 @@ def test_task_assignment_notification_identifies_task_by_title(client: TestClien
     assert notification["title"] == "AI 서버 근크림 그리기 assigned to you"
     assert issue["reference"] not in notification["title"]
     assert notification["body"].startswith("Open Work Hub Admin assigned AI 서버 근크림 그리기")
-    assert notification["reference_id"] == issue["id"]
+    assert notification["source_type"] == "pms_task"
+    assert notification["source_id"] == issue["id"]
+    assert notification["origin_app_id"] == "pms"
+    assert "origin_workspace_id" not in notification
 
 
 def test_explicit_null_clears_nullable_issue_fields(client: TestClient) -> None:
@@ -869,7 +867,7 @@ def test_explicit_null_clears_nullable_issue_fields(client: TestClient) -> None:
     )
 
     clear_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_auth_headers(admin_session["token"]),
         json={
             "assignee_id": None,
@@ -891,11 +889,14 @@ def test_issue_assignees_reject_non_members(client: TestClient) -> None:
     task_list = _create_task_list(client, admin_session["token"])
     issue = _create_issue(client, admin_session["token"], task_list["id"], title="Assignee guard")
     outsider = _create_user(
-        client, admin_session["token"], email="outsider@open-work-hub.local", full_name="Outsider User"
+        client,
+        admin_session["token"],
+        email="outsider@open-work-hub.local",
+        full_name="Outsider User",
     )
 
     response = client.put(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}/assignees",
+        f"/api/v1/pms/tasks/{issue['id']}/assignees",
         headers=_auth_headers(admin_session["token"]),
         json={"user_ids": [outsider["user"]["id"]]},
     )
@@ -936,7 +937,7 @@ def test_issue_user_roles_support_assignees_and_followers(client: TestClient) ->
     )
 
     assignee_response = client.put(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}/assignees",
+        f"/api/v1/pms/tasks/{issue['id']}/assignees",
         headers=_auth_headers(admin_session["token"]),
         json={"user_ids": [admin_session["user"]["id"], teammate["user"]["id"]]},
     )
@@ -947,7 +948,7 @@ def test_issue_user_roles_support_assignees_and_followers(client: TestClient) ->
     ]
 
     follower_response = client.put(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}/followers",
+        f"/api/v1/pms/tasks/{issue['id']}/followers",
         headers=_auth_headers(admin_session["token"]),
         json={"user_ids": [follower["user"]["id"]]},
     )
@@ -957,7 +958,7 @@ def test_issue_user_roles_support_assignees_and_followers(client: TestClient) ->
     ]
 
     detail_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert detail_response.status_code == 200
@@ -968,14 +969,14 @@ def test_issue_user_roles_support_assignees_and_followers(client: TestClient) ->
 
     teammate_token = _login(client, teammate["user"]["email"], teammate["temporary_password"])
     assigned_response = client.get(
-        "/api/v1/workspaces/administrator/pms/tasks/assigned",
+        "/api/v1/pms/tasks/assigned",
         headers=_auth_headers(teammate_token),
     )
     assert assigned_response.status_code == 200
     assert issue["id"] in {item["id"] for item in assigned_response.json()["items"]}
 
     legacy_assignee_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_auth_headers(admin_session["token"]),
         json={"assignee_id": teammate["user"]["id"]},
     )
@@ -985,7 +986,7 @@ def test_issue_user_roles_support_assignees_and_followers(client: TestClient) ->
     assert compatibility_issue["assignee_ids"] == [teammate["user"]["id"]]
 
     outsider_response = client.put(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}/followers",
+        f"/api/v1/pms/tasks/{issue['id']}/followers",
         headers=_auth_headers(admin_session["token"]),
         json={"user_ids": [outsider["user"]["id"]]},
     )
@@ -993,109 +994,62 @@ def test_issue_user_roles_support_assignees_and_followers(client: TestClient) ->
     assert outsider_response.json()["code"] == "pms.followers_task_list_members_required"
 
 
-def test_pms_user_directory_only_returns_workspace_members(client: TestClient) -> None:
+def test_pms_user_directory_returns_company_users(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
     teammate = _create_user(
         client,
         admin_session["token"],
         email="pms-scope-member@open-work-hub.local",
-        full_name="PMS Scoped Same Workspace",
+        full_name="PMS Colleague",
     )
-    outsider = create_workspace_user_session(
+    outsider = create_company_user_session(
         client,
-        workspace_key="pms-other-workspace",
         login_id="pmsotherscope",
         email="pms-other-scope@open-work-hub.local",
-        full_name="PMS Scoped Other Workspace",
+        full_name="Another Company Colleague",
     )
 
     response = client.get(
-        "/api/v1/workspaces/administrator/pms/users",
+        "/api/v1/pms/users",
         headers=_auth_headers(admin_session["token"]),
     )
 
     assert response.status_code == 200, response.text
     item_ids = {item["id"] for item in response.json()}
     assert teammate["user"]["id"] in item_ids
-    assert outsider["user"]["id"] not in item_ids
+    assert outsider["user"]["id"] in item_ids
 
 
-def test_workspace_scoped_default_pms_space_stays_inside_requested_workspace(
+def test_pms_list_and_folder_creation_requires_explicit_space(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    headers = _auth_headers(admin["token"])
+    for path, payload in [
+        ("/api/v1/pms/lists", {"key": "NOSPACE", "name": "No space"}),
+        ("/api/v1/pms/folders", {"name": "No space"}),
+    ]:
+        response = client.post(path, headers=headers, json=payload)
+        assert response.status_code == 400, response.text
+    response = client.get("/api/v1/pms/spaces", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json() == []
+
+
+def test_ordinary_user_needs_direct_pms_space_membership(
     client: TestClient,
 ) -> None:
     admin_session = _bootstrap_admin_session(client)
-    _dev_login(client, "delivery-hub-admin")
-    workspace_admin = _create_workspace_admin(
-        client,
-        admin_session["token"],
-        email="administrator-context-admin@open-work-hub.local",
-        full_name="Administrator Context Admin",
-    )
-
-    admin_token = _login(
-        client,
-        workspace_admin["user"]["email"],
-        workspace_admin["temporary_password"],
-    )
-
-    before_admin_spaces = client.get(
-        "/api/v1/workspaces/administrator/pms/spaces",
-        headers=_auth_headers(admin_token),
-    )
-    assert before_admin_spaces.status_code == 200
-    assert before_admin_spaces.json() == []
-
-    before_delivery_spaces = client.get(
-        "/api/v1/workspaces/delivery-hub/pms/spaces",
-        headers=_auth_headers(admin_token),
-    )
-    assert before_delivery_spaces.status_code == 403
-
-    create_list_response = client.post(
-        "/api/v1/workspaces/administrator/pms/lists",
-        headers=_auth_headers(admin_token),
-        json={
-            "key": "ADMINCTX",
-            "name": "Administrator Context List",
-            "description": "Should bind to Administrator default space",
-        },
-    )
-    assert create_list_response.status_code == 201, create_list_response.text
-    created_list = create_list_response.json()
-
-    after_admin_spaces = client.get(
-        "/api/v1/workspaces/administrator/pms/spaces",
-        headers=_auth_headers(admin_token),
-    )
-    assert after_admin_spaces.status_code == 200
-    assert {item["id"] for item in after_admin_spaces.json()} == {created_list["team_id"]}
-
-    create_folder_response = client.post(
-        "/api/v1/workspaces/administrator/pms/folders",
-        headers=_auth_headers(admin_token),
-        json={"name": "Administrator Context Folder"},
-    )
-    assert create_folder_response.status_code == 201, create_folder_response.text
-    created_folder = create_folder_response.json()
-    assert created_folder["team_id"] == created_list["team_id"]
-
-
-def test_workspace_admin_needs_direct_pms_space_membership(
-    client: TestClient,
-) -> None:
-    admin_session = _bootstrap_admin_session(client)
-    workspace_admin = _create_workspace_admin(
+    ordinary_user = _create_ordinary_user(
         client,
         admin_session["token"],
         email="administrator-pms-admin@open-work-hub.local",
         full_name="Administrator PMS Admin",
     )
-    workspace_admin_token = _login(
+    ordinary_user_token = _login(
         client,
-        workspace_admin["user"]["email"],
-        workspace_admin["temporary_password"],
+        ordinary_user["user"]["email"],
+        ordinary_user["temporary_password"],
     )
-    workspace_member = _create_user(
+    colleague = _create_user(
         client,
         admin_session["token"],
         email="administrator-pms-member@open-work-hub.local",
@@ -1103,19 +1057,19 @@ def test_workspace_admin_needs_direct_pms_space_membership(
     )
 
     create_space_response = client.post(
-        "/api/v1/workspaces/administrator/pms/spaces",
+        "/api/v1/pms/spaces",
         headers=_auth_headers(admin_session["token"]),
-        json={"name": "Workspace Admin Managed Space"},
+        json={"name": "Ordinary User Managed Space"},
     )
     assert create_space_response.status_code == 201, create_space_response.text
     space = create_space_response.json()
 
     create_list_response = client.post(
-        "/api/v1/workspaces/administrator/pms/lists",
+        "/api/v1/pms/lists",
         headers=_auth_headers(admin_session["token"]),
         json={
             "key": "WADM",
-            "name": "Workspace Admin Visible List",
+            "name": "Ordinary User Visible List",
             "team_id": space["id"],
         },
     )
@@ -1123,44 +1077,44 @@ def test_workspace_admin_needs_direct_pms_space_membership(
     task_list = create_list_response.json()
 
     spaces_response = client.get(
-        "/api/v1/workspaces/administrator/pms/spaces",
-        headers=_auth_headers(workspace_admin_token),
+        "/api/v1/pms/spaces",
+        headers=_auth_headers(ordinary_user_token),
     )
     assert spaces_response.status_code == 200
     assert space["id"] not in {item["id"] for item in spaces_response.json()}
 
     lists_response = client.get(
-        "/api/v1/workspaces/administrator/pms/lists",
-        headers=_auth_headers(workspace_admin_token),
+        "/api/v1/pms/lists",
+        headers=_auth_headers(ordinary_user_token),
     )
     assert lists_response.status_code == 200
     assert task_list["id"] not in {item["id"] for item in lists_response.json()["items"]}
 
     list_detail_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}",
-        headers=_auth_headers(workspace_admin_token),
+        f"/api/v1/pms/lists/{task_list['id']}",
+        headers=_auth_headers(ordinary_user_token),
     )
     assert list_detail_response.status_code == 403
     assert list_detail_response.json()["code"] == "pms.task_list_access_required"
 
     add_member_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/spaces/{space['id']}/members",
-        headers=_auth_headers(workspace_admin_token),
-        json={"user_id": workspace_member["user"]["id"], "role": "member"},
+        f"/api/v1/pms/spaces/{space['id']}/members",
+        headers=_auth_headers(ordinary_user_token),
+        json={"user_id": colleague["user"]["id"], "role": "member"},
     )
     assert add_member_response.status_code == 403
     assert add_member_response.json()["code"] == "pms.space_access_required"
 
     grant_space_admin_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/spaces/{space['id']}/members",
+        f"/api/v1/pms/spaces/{space['id']}/members",
         headers=_auth_headers(admin_session["token"]),
-        json={"user_id": workspace_admin["user"]["id"], "role": "owner"},
+        json={"user_id": ordinary_user["user"]["id"], "role": "owner"},
     )
     assert grant_space_admin_response.status_code == 201, grant_space_admin_response.text
 
     spaces_after_grant_response = client.get(
-        "/api/v1/workspaces/administrator/pms/spaces",
-        headers=_auth_headers(workspace_admin_token),
+        "/api/v1/pms/spaces",
+        headers=_auth_headers(ordinary_user_token),
     )
     assert spaces_after_grant_response.status_code == 200
     visible_space = next(
@@ -1169,19 +1123,19 @@ def test_workspace_admin_needs_direct_pms_space_membership(
     assert visible_space["current_user_role"] == "owner"
 
     lists_after_grant_response = client.get(
-        "/api/v1/workspaces/administrator/pms/lists",
-        headers=_auth_headers(workspace_admin_token),
+        "/api/v1/pms/lists",
+        headers=_auth_headers(ordinary_user_token),
     )
     assert lists_after_grant_response.status_code == 200
     assert any(item["id"] == task_list["id"] for item in lists_after_grant_response.json()["items"])
 
     add_member_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/spaces/{space['id']}/members",
-        headers=_auth_headers(workspace_admin_token),
-        json={"user_id": workspace_member["user"]["id"], "role": "member"},
+        f"/api/v1/pms/spaces/{space['id']}/members",
+        headers=_auth_headers(ordinary_user_token),
+        json={"user_id": colleague["user"]["id"], "role": "member"},
     )
     assert add_member_response.status_code == 201, add_member_response.text
-    assert add_member_response.json()["user_id"] == workspace_member["user"]["id"]
+    assert add_member_response.json()["user_id"] == colleague["user"]["id"]
 
 
 def test_task_list_can_be_renamed_and_deleted_with_tasks_and_custom_fields(
@@ -1191,7 +1145,7 @@ def test_task_list_can_be_renamed_and_deleted_with_tasks_and_custom_fields(
     task_list = _create_task_list(client, token, key="DEL", name="Delete Me")
 
     rename_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}",
+        f"/api/v1/pms/lists/{task_list['id']}",
         headers=_auth_headers(token),
         json={"name": "Renamed List"},
     )
@@ -1200,46 +1154,46 @@ def test_task_list_can_be_renamed_and_deleted_with_tasks_and_custom_fields(
 
     task = _create_issue(client, token, task_list["id"], title="Delete with list")
     field_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/custom-fields",
+        f"/api/v1/pms/lists/{task_list['id']}/custom-fields",
         headers=_auth_headers(token),
         json={"name": "Impact", "field_type": "text", "sort_order": 0},
     )
     assert field_response.status_code == 201, field_response.text
     field = field_response.json()
     value_response = client.put(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/custom-field-values",
+        f"/api/v1/pms/tasks/{task['id']}/custom-field-values",
         headers=_auth_headers(token),
         json={"field_id": field["id"], "value": "High"},
     )
     assert value_response.status_code == 200, value_response.text
 
     archive_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}",
+        f"/api/v1/pms/lists/{task_list['id']}",
         headers=_auth_headers(token),
         json={"archived": True},
     )
     assert archive_response.status_code == 200, archive_response.text
 
     delete_response = client.delete(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}",
+        f"/api/v1/pms/lists/{task_list['id']}",
         headers=_auth_headers(token),
     )
     assert delete_response.status_code == 204, delete_response.text
 
     get_list_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}",
+        f"/api/v1/pms/lists/{task_list['id']}",
         headers=_auth_headers(token),
     )
     assert get_list_response.status_code == 404
 
     get_task_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}",
+        f"/api/v1/pms/tasks/{task['id']}",
         headers=_auth_headers(token),
     )
     assert get_task_response.status_code == 404
 
     lists_response = client.get(
-        "/api/v1/workspaces/administrator/pms/lists",
+        "/api/v1/pms/lists",
         headers=_auth_headers(token),
     )
     assert lists_response.status_code == 200
@@ -1261,7 +1215,6 @@ def test_task_list_member_cannot_delete_task_list(client: TestClient) -> None:
         email="list-delete-member@open-work-hub.local",
         full_name="List Delete Member",
     )
-    _grant_workspace_access(client, token, member["user"]["id"], "administrator")
     _add_task_list_member(client, token, task_list["id"], member["user"]["id"], "member")
     member_token = _login(
         client,
@@ -1270,7 +1223,7 @@ def test_task_list_member_cannot_delete_task_list(client: TestClient) -> None:
     )
 
     response = client.delete(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}",
+        f"/api/v1/pms/lists/{task_list['id']}",
         headers=_auth_headers(member_token),
     )
 
@@ -1315,7 +1268,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     outsider_token = _login(client, outsider["user"]["email"], outsider["temporary_password"])
 
     outsider_list_response = client.get(
-        "/api/v1/workspaces/administrator/docs/hub",
+        "/api/v1/docs/hub",
         headers=_auth_headers(outsider_token),
         params={"space_id": space_id},
     )
@@ -1323,7 +1276,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert outsider_list_response.json()["items"] == []
 
     outsider_create_response = client.post(
-        "/api/v1/workspaces/administrator/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(outsider_token),
         json={
             "title": "Forbidden",
@@ -1341,7 +1294,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
         full_name="Task List Editor",
     )
     _add_task_list_member(
-        client, admin_session["token"], task_list["id"], task_list_editor["user"]["id"], "member"
+        client, admin_session["token"], task_list["id"], task_list_editor["user"]["id"], "admin"
     )
     task_list_editor_token = _login(
         client,
@@ -1369,7 +1322,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert member_page["doc_id"] == collection["id"]
 
     member_folder_response = client.post(
-        "/api/v1/workspaces/administrator/pms/folders",
+        "/api/v1/pms/folders",
         headers=_auth_headers(task_list_editor_token),
         json={"name": "Member folder", "team_id": space_id},
     )
@@ -1385,7 +1338,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     )
 
     cross_collection_parent_response = client.post(
-        f"/api/v1/workspaces/administrator/docs/items/{second_collection['id']}/pages",
+        f"/api/v1/docs/items/{second_collection['id']}/pages",
         headers=_auth_headers(admin_session["token"]),
         json={
             "title": "Invalid child",
@@ -1396,7 +1349,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert cross_collection_parent_response.json()["code"] == "docs.parent_page_not_found"
 
     delete_collection_response = client.delete(
-        f"/api/v1/workspaces/administrator/docs/items/{collection['id']}",
+        f"/api/v1/docs/items/{collection['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert delete_collection_response.status_code == 204
@@ -1407,20 +1360,20 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert visible_ids == sorted([member_collection["id"], second_collection["id"]])
 
     deleted_collection_response = client.get(
-        f"/api/v1/workspaces/administrator/docs/items/{collection['id']}",
+        f"/api/v1/docs/items/{collection['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert deleted_collection_response.status_code == 200
     assert deleted_collection_response.json()["trashed_at"] is not None
 
     deleted_page_response = client.get(
-        f"/api/v1/workspaces/administrator/docs/pages/{first_page['id']}",
+        f"/api/v1/docs/pages/{first_page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert deleted_page_response.status_code == 403
 
     deleted_child_response = client.get(
-        f"/api/v1/workspaces/administrator/docs/pages/{child_page['id']}",
+        f"/api/v1/docs/pages/{child_page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert deleted_child_response.status_code == 403
@@ -1455,33 +1408,33 @@ def test_task_list_member_api_grants_space_scope_for_task_list_resources(
     )
 
     task_list_detail_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}",
+        f"/api/v1/pms/lists/{task_list['id']}",
         headers=_auth_headers(task_list_member_token),
     )
     assert task_list_detail_response.status_code == 200
 
     task_list_issue_detail_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_auth_headers(task_list_member_token),
     )
     assert task_list_issue_detail_response.status_code == 200
 
     space_lists_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/spaces/{space_id}/lists",
+        f"/api/v1/pms/spaces/{space_id}/lists",
         headers=_auth_headers(task_list_member_token),
     )
     assert space_lists_response.status_code == 200
     assert any(item["id"] == task_list["id"] for item in space_lists_response.json()["items"])
 
     space_folders_response = client.get(
-        "/api/v1/workspaces/administrator/pms/folders",
+        "/api/v1/pms/folders",
         headers=_auth_headers(task_list_member_token),
         params={"team_id": space_id},
     )
     assert space_folders_response.status_code == 200
 
     space_docs_response = client.get(
-        "/api/v1/workspaces/administrator/docs/hub",
+        "/api/v1/docs/hub",
         headers=_auth_headers(task_list_member_token),
         params={"space_id": space_id},
     )
@@ -1586,130 +1539,33 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
     assert page_link_response.status_code == 204
 
 
-def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: TestClient) -> None:
-    admin_session = _bootstrap_admin_session(client)
-    headers = _auth_headers(admin_session["token"])
-    task_list = _create_task_list(client, admin_session["token"])
+def test_space_soft_delete_hides_business_data_without_implicit_resurrection(
+    client: TestClient,
+) -> None:
+    admin = _bootstrap_admin_session(client)
+    headers = _auth_headers(admin["token"])
+    task_list = _create_task_list(client, admin["token"])
+    task = _create_issue(client, admin["token"], task_list["id"], title="Archived space task")
     space_id = task_list["team_id"]
-    assert space_id is not None
-
-    workspaces_response = client.get("/api/v1/admin/workspaces", headers=headers)
-    assert workspaces_response.status_code == 200
-    pms_workspace = next(
-        item for item in workspaces_response.json() if item["key"] == "administrator"
-    )
-    assert pms_workspace["team_count"] == 1
-
-    folder_response = client.post(
-        "/api/v1/workspaces/administrator/pms/folders",
+    response = client.delete(f"/api/v1/pms/spaces/{space_id}", headers=headers)
+    assert response.status_code == 204, response.text
+    response = client.get("/api/v1/pms/spaces", headers=headers)
+    assert response.status_code == 200, response.text
+    assert space_id not in {item["id"] for item in response.json()}
+    response = client.get(f"/api/v1/pms/tasks/{task['id']}", headers=headers)
+    assert response.status_code == 403, response.text
+    response = client.post(
+        "/api/v1/pms/lists",
         headers=headers,
-        json={"name": "Operations", "team_id": space_id},
+        json={"key": "RECOVER", "name": "Implicit", "team_id": space_id},
     )
-    assert folder_response.status_code == 201
+    assert response.status_code == 404, response.text
+    with get_session_factory()() as db:
+        from open_work_hub_api.domains.pms.space_models import Team
+        from open_work_hub_api.domains.pms.models import Task
 
-    collection = _create_space_doc(client, admin_session["token"], space_id, title="Runbook")
-    page = _create_doc_page(client, admin_session["token"], collection["id"], title="Overview")
-
-    delete_response = client.delete(
-        f"/api/v1/admin/teams/{space_id}",
-        headers=headers,
-    )
-    assert delete_response.status_code == 204
-
-    teams_response = client.get(
-        "/api/v1/admin/teams",
-        headers=headers,
-        params={"workspace_id": pms_workspace["id"]},
-    )
-    assert teams_response.status_code == 200
-    assert teams_response.json() == []
-
-    deleted_team_update_response = client.patch(
-        f"/api/v1/admin/teams/{space_id}",
-        headers=headers,
-        json={"name": "Archived Space", "description": ""},
-    )
-    assert deleted_team_update_response.status_code == 404
-
-    deleted_team_members_response = client.get(
-        f"/api/v1/admin/teams/{space_id}/members",
-        headers=headers,
-    )
-    assert deleted_team_members_response.status_code == 404
-
-    visible_lists_response = client.get(
-        "/api/v1/workspaces/administrator/pms/lists",
-        headers=headers,
-    )
-    assert visible_lists_response.status_code == 200
-    assert [
-        item for item in visible_lists_response.json()["items"] if item["team_id"] == space_id
-    ] == []
-
-    deleted_space_lists_response = client.get(
-        "/api/v1/workspaces/administrator/pms/lists",
-        headers=headers,
-        params={"team_id": space_id},
-    )
-    assert deleted_space_lists_response.status_code == 404
-
-    deleted_space_folders_response = client.get(
-        "/api/v1/workspaces/administrator/pms/folders",
-        headers=headers,
-        params={"team_id": space_id},
-    )
-    assert deleted_space_folders_response.status_code == 404
-
-    deleted_space_docs_response = client.get(
-        "/api/v1/workspaces/administrator/docs/hub",
-        headers=headers,
-        params={"space_id": space_id},
-    )
-    assert deleted_space_docs_response.status_code == 200
-    assert [item["id"] for item in deleted_space_docs_response.json()["items"]] == [
-        collection["id"]
-    ]
-
-    deleted_page_response = client.get(
-        f"/api/v1/workspaces/administrator/docs/pages/{page['id']}",
-        headers=headers,
-    )
-    assert deleted_page_response.status_code == 200
-
-    workspaces_after_delete_response = client.get("/api/v1/admin/workspaces", headers=headers)
-    assert workspaces_after_delete_response.status_code == 200
-    pms_workspace_after_delete = next(
-        item for item in workspaces_after_delete_response.json() if item["key"] == "administrator"
-    )
-    assert pms_workspace_after_delete["team_count"] == 0
-
-    recreated_task_list_response = client.post(
-        "/api/v1/workspaces/administrator/pms/lists",
-        headers=headers,
-        json={
-            "key": "PMS2",
-            "name": "Recovered List",
-            "description": "List after untrash",
-        },
-    )
-    assert recreated_task_list_response.status_code == 201
-    recreated_task_list = recreated_task_list_response.json()
-    assert recreated_task_list["team_id"] == space_id
-
-    teams_after_restore_response = client.get(
-        "/api/v1/admin/teams",
-        headers=headers,
-        params={"workspace_id": pms_workspace["id"]},
-    )
-    assert teams_after_restore_response.status_code == 200
-    assert [item["id"] for item in teams_after_restore_response.json()] == [space_id]
-
-    workspaces_after_restore_response = client.get("/api/v1/admin/workspaces", headers=headers)
-    assert workspaces_after_restore_response.status_code == 200
-    pms_workspace_after_restore = next(
-        item for item in workspaces_after_restore_response.json() if item["key"] == "administrator"
-    )
-    assert pms_workspace_after_restore["team_count"] == 1
+        assert db.get(Team, space_id).trashed_at is not None
+        assert db.get(Task, task["id"]) is not None
 
 
 def _bootstrap_admin(client: TestClient) -> str:
@@ -1762,14 +1618,14 @@ def test_assigned_issues_returns_only_current_users_open_issues(client: TestClie
         assignee_id=admin["user"]["id"],
     )
     close_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{closed_issue['id']}",
+        f"/api/v1/pms/tasks/{closed_issue['id']}",
         headers=_auth_headers(admin["token"]),
         json={"status": "done"},
     )
     assert close_response.status_code == 200
 
     response = client.get(
-        "/api/v1/workspaces/administrator/pms/tasks/assigned",
+        "/api/v1/pms/tasks/assigned",
         headers=_auth_headers(admin["token"]),
     )
     assert response.status_code == 200
@@ -1793,7 +1649,7 @@ def test_issue_list_paginates_beyond_one_hundred_tasks(client: TestClient) -> No
     ]
 
     first_page_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
         params={"page": 1, "page_size": 100},
     )
@@ -1803,7 +1659,7 @@ def test_issue_list_paginates_beyond_one_hundred_tasks(client: TestClient) -> No
     assert len(first_page["items"]) == 100
 
     second_page_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
         params={"page": 2, "page_size": 100},
     )
@@ -1827,7 +1683,7 @@ def test_assigned_issues_support_paged_reads(client: TestClient) -> None:
         )
 
     response = client.get(
-        "/api/v1/workspaces/administrator/pms/tasks/assigned",
+        "/api/v1/pms/tasks/assigned",
         headers=_auth_headers(admin["token"]),
         params={"page": 2, "page_size": 50},
     )
@@ -1839,7 +1695,7 @@ def test_assigned_issues_support_paged_reads(client: TestClient) -> None:
     assert len(payload["items"]) == 5
 
 
-def test_personal_pms_widget_aggregates_open_tasks_across_workspaces(
+def test_personal_pms_widget_aggregates_open_tasks_across_spaces(
     client: TestClient,
 ) -> None:
     admin = _bootstrap_admin_session(client)
@@ -1853,8 +1709,7 @@ def test_personal_pms_widget_aggregates_open_tasks_across_workspaces(
         client,
         admin["token"],
         key="PWAI",
-        name="Personal Widget General Workspace",
-        workspace_slug="general",
+        name="Personal Widget Additional Space",
     )
     administrator_task = _create_issue(
         client,
@@ -1867,9 +1722,8 @@ def test_personal_pms_widget_aggregates_open_tasks_across_workspaces(
         client,
         admin["token"],
         general_list["id"],
-        title="General Workspace widget task",
+        title="Additional space widget task",
         assignee_id=admin["user"]["id"],
-        workspace_slug="general",
     )
 
     response = client.get(
@@ -1880,12 +1734,13 @@ def test_personal_pms_widget_aggregates_open_tasks_across_workspaces(
     assert response.status_code == 200, response.text
     payload = response.json()
     tasks_by_id = {item["id"]: item for item in payload["items"]}
-    assert tasks_by_id[administrator_task["id"]]["workspace"]["slug"] == "administrator"
-    assert tasks_by_id[general_task["id"]]["workspace"]["slug"] == "general"
-    assert {item["slug"] for item in payload["workspaces"]} >= {
-        "administrator",
-        "general",
-    }
+    assert {administrator_task["id"], general_task["id"]} <= tasks_by_id.keys()
+    assert (
+        tasks_by_id[administrator_task["id"]]["list_id"]
+        != tasks_by_id[general_task["id"]]["list_id"]
+    )
+    assert all("workspace" not in item for item in payload["items"])
+    assert "workspaces" not in payload
 
 
 def test_today_overdue_tasks_return_only_current_users_due_open_tasks(
@@ -1927,7 +1782,7 @@ def test_today_overdue_tasks_return_only_current_users_due_open_tasks(
         due_date="2026-07-09",
     )
     assignee_response = client.put(
-        f"/api/v1/workspaces/administrator/pms/tasks/{multi_assignee_issue['id']}/assignees",
+        f"/api/v1/pms/tasks/{multi_assignee_issue['id']}/assignees",
         headers=_auth_headers(admin["token"]),
         json={"user_ids": [teammate["user"]["id"], admin["user"]["id"]]},
     )
@@ -1965,7 +1820,7 @@ def test_today_overdue_tasks_return_only_current_users_due_open_tasks(
         due_date="2026-07-08",
     )
     archive_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{archived_issue['id']}",
+        f"/api/v1/pms/tasks/{archived_issue['id']}",
         headers=_auth_headers(admin["token"]),
         json={"archived": True},
     )
@@ -1979,14 +1834,14 @@ def test_today_overdue_tasks_return_only_current_users_due_open_tasks(
         due_date="2026-07-08",
     )
     close_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{done_issue['id']}",
+        f"/api/v1/pms/tasks/{done_issue['id']}",
         headers=_auth_headers(admin["token"]),
         json={"status": "done"},
     )
     assert close_response.status_code == 200
 
     response = client.get(
-        "/api/v1/workspaces/administrator/pms/tasks/today-overdue",
+        "/api/v1/pms/tasks/today-overdue",
         headers=_auth_headers(admin["token"]),
         params={"today": "2026-07-09", "page": 1, "page_size": 50},
     )
@@ -2002,47 +1857,52 @@ def test_today_overdue_tasks_return_only_current_users_due_open_tasks(
     assert payload["total"] == 3
 
 
-def test_assigned_issues_honors_workspace_scoped_route(client: TestClient) -> None:
+def test_assigned_issues_rechecks_app_admission(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
     _dev_login(client, "delivery-hub-admin")
-    workspace_admin = _create_workspace_admin(
+    ordinary_user = _create_ordinary_user(
         client,
         admin_session["token"],
         email="administrator-assigned-admin@open-work-hub.local",
         full_name="Administrator Assigned Admin",
     )
-    workspace_admin_token = _login(
+    ordinary_user_token = _login(
         client,
-        workspace_admin["user"]["email"],
-        workspace_admin["temporary_password"],
+        ordinary_user["user"]["email"],
+        ordinary_user["temporary_password"],
     )
 
     task_list = _create_task_list(
         client,
-        workspace_admin_token,
+        ordinary_user_token,
         key="ADMINASGN",
         name="Administrator Assigned Route",
     )
     _create_issue(
         client,
-        workspace_admin_token,
+        ordinary_user_token,
         task_list["id"],
         title="Administrator scoped assigned issue",
-        assignee_id=workspace_admin["user"]["id"],
+        assignee_id=ordinary_user["user"]["id"],
     )
 
     response = client.get(
-        "/api/v1/workspaces/administrator/pms/tasks/assigned",
-        headers=_auth_headers(workspace_admin_token),
+        "/api/v1/pms/tasks/assigned",
+        headers=_auth_headers(ordinary_user_token),
     )
     assert response.status_code == 200
     assert [item["title"] for item in response.json()["items"]] == [
         "Administrator scoped assigned issue"
     ]
 
+    from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
+
+    with get_session_factory()() as db:
+        db.get(AppAccessPolicy, "pms").audience = "selected"
+        db.commit()
     denied_response = client.get(
-        "/api/v1/workspaces/delivery-hub/pms/tasks/assigned",
-        headers=_auth_headers(workspace_admin_token),
+        "/api/v1/pms/tasks/assigned",
+        headers=_auth_headers(ordinary_user_token),
     )
     assert denied_response.status_code == 403
 
@@ -2055,7 +1915,7 @@ def test_task_completed_date_can_be_edited_and_cleared(client: TestClient) -> No
 
     manual_completed_date = "2026-07-07"
     update_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}",
+        f"/api/v1/pms/tasks/{task['id']}",
         headers=_auth_headers(token),
         json={"completed_date": manual_completed_date},
     )
@@ -2063,7 +1923,7 @@ def test_task_completed_date_can_be_edited_and_cleared(client: TestClient) -> No
     assert update_response.json()["completed_date"] == manual_completed_date
 
     clear_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}",
+        f"/api/v1/pms/tasks/{task['id']}",
         headers=_auth_headers(token),
         json={"completed_date": None},
     )
@@ -2077,7 +1937,7 @@ def test_task_completion_status_sets_missing_completed_date_for_custom_done_stat
     token = _bootstrap_admin(client)
     task_list = _create_task_list(client, token, key="CMPAUTO", name="Completion Auto List")
     custom_status_response = client.post(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/statuses",
+        f"/api/v1/pms/lists/{task_list['id']}/statuses",
         headers=_auth_headers(token),
         json={
             "name": "QA Done",
@@ -2093,7 +1953,7 @@ def test_task_completion_status_sets_missing_completed_date_for_custom_done_stat
 
     before_update = datetime.now(UTC).date()
     update_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}",
+        f"/api/v1/pms/tasks/{task['id']}",
         headers=_auth_headers(token),
         json={"status": done_status},
     )
@@ -2112,7 +1972,7 @@ def test_bulk_completion_status_sets_missing_completed_date(client: TestClient) 
 
     before_update = datetime.now(UTC).date()
     bulk_response = client.patch(
-        f"/api/v1/workspaces/administrator/pms/lists/{task_list['id']}/tasks/bulk",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks/bulk",
         headers=_auth_headers(token),
         json={"task_ids": [task["id"]], "status": "done"},
     )
@@ -2121,7 +1981,7 @@ def test_bulk_completion_status_sets_missing_completed_date(client: TestClient) 
     assert bulk_response.json() == {"updated_count": 1, "deleted_count": 0}
 
     detail_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}",
+        f"/api/v1/pms/tasks/{task['id']}",
         headers=_auth_headers(token),
     )
     assert detail_response.status_code == 200, detail_response.text
@@ -2139,7 +1999,19 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
         },
     )
     assert response.status_code == 201
-    return response.json()
+    session = response.json()
+    from dev_accounts import configure_company_app_access
+    from open_work_hub_api.core.db import get_session_factory
+
+    with get_session_factory()() as db:
+        configure_company_app_access(db)
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers=_auth_headers(session["token"]),
+    )
+    assert me_response.status_code == 200, me_response.text
+    session["user"] = me_response.json()
+    return session
 
 
 def _create_task_list(
@@ -2148,12 +2020,16 @@ def _create_task_list(
     *,
     key: str = "PMS",
     name: str = "PMS List",
-    workspace_slug: str = "administrator",
 ) -> dict:
+    space_response = client.post(
+        "/api/v1/pms/spaces", headers=_auth_headers(token), json={"name": name}
+    )
+    assert space_response.status_code == 201, space_response.text
     response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/pms/lists",
+        "/api/v1/pms/lists",
         headers=_auth_headers(token),
         json={
+            "team_id": space_response.json()["id"],
             "key": key,
             "name": name,
             "description": "List for PMS issue tests",
@@ -2175,10 +2051,9 @@ def _create_issue(
     start_date: str | None = None,
     due_date: str | None = None,
     recurrence_rule: str | None = None,
-    workspace_slug: str = "administrator",
 ) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/tasks",
+        f"/api/v1/pms/lists/{list_id}/tasks",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -2209,13 +2084,18 @@ def _create_user(client: TestClient, token: str, *, email: str, full_name: str) 
     )
     assert response.status_code == 201
     payload = response.json()
-    _grant_workspace_access(client, token, payload["user"]["id"], "administrator")
+    response = client.patch(
+        f"/api/v1/admin/users/{payload['user']['id']}",
+        headers=_auth_headers(token),
+        json={"must_change_password": False},
+    )
+    assert response.status_code == 200, response.text
+    payload["user"] = response.json()
     return payload
 
 
-def _create_workspace_admin(client: TestClient, token: str, *, email: str, full_name: str) -> dict:
+def _create_ordinary_user(client: TestClient, token: str, *, email: str, full_name: str) -> dict:
     payload = _create_user(client, token, email=email, full_name=full_name)
-    _grant_workspace_access(client, token, payload["user"]["id"], "administrator", role="admin")
     return payload
 
 
@@ -2232,13 +2112,13 @@ def _add_task_list_member(
     client: TestClient, token: str, list_id: str, user_id: str, role: str
 ) -> dict:
     list_response = client.get(
-        f"/api/v1/workspaces/administrator/pms/lists/{list_id}",
+        f"/api/v1/pms/lists/{list_id}",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200
 
     response = client.post(
-        f"/api/v1/workspaces/administrator/pms/spaces/{list_response.json()['team_id']}/members",
+        f"/api/v1/pms/spaces/{list_response.json()['team_id']}/members",
         headers=_auth_headers(token),
         json={"user_id": user_id, "role": role},
     )
@@ -2246,65 +2126,14 @@ def _add_task_list_member(
     return response.json()
 
 
-def _add_team_member(client: TestClient, token: str, team_id: str, user_id: str) -> list[dict]:
-    current_members_response = client.get(
-        f"/api/v1/admin/teams/{team_id}/members",
+def _add_team_member(client: TestClient, token: str, team_id: str, user_id: str):
+    response = client.post(
+        f"/api/v1/pms/spaces/{team_id}/members",
         headers=_auth_headers(token),
+        json={"user_id": user_id, "role": "member"},
     )
-    assert current_members_response.status_code == 200
-    current_member_ids = [item["id"] for item in current_members_response.json()]
-
-    response = client.put(
-        f"/api/v1/admin/teams/{team_id}/members",
-        headers=_auth_headers(token),
-        json={"user_ids": sorted({*current_member_ids, user_id})},
-    )
-    assert response.status_code == 200
+    assert response.status_code == 201, response.text
     return response.json()
-
-
-def _grant_workspace_access(
-    client: TestClient,
-    token: str,
-    user_id: str,
-    workspace_key: str,
-    role: str = "member",
-) -> None:
-    workspaces_response = client.get(
-        "/api/v1/admin/workspaces",
-        headers=_auth_headers(token),
-    )
-    assert workspaces_response.status_code == 200
-    workspace = next(
-        (item for item in workspaces_response.json() if item["key"] == workspace_key),
-        None,
-    )
-    if workspace is None:
-        workspace = next(iter(workspaces_response.json()), None)
-    assert workspace is not None
-
-    bindings_response = client.get(
-        f"/api/v1/admin/workspaces/{workspace['id']}/bindings",
-        headers=_auth_headers(token),
-    )
-    assert bindings_response.status_code == 200
-    bindings = bindings_response.json()
-
-    user_bindings = [
-        {"subject_id": item["subject_id"], "role": item["role"]}
-        for item in bindings
-        if item["subject_type"] == "user"
-    ]
-    user_bindings = [item for item in user_bindings if item["subject_id"] != user_id] + [
-        {"subject_id": user_id, "role": role}
-    ]
-
-    update_response = client.put(
-        f"/api/v1/admin/workspaces/{workspace['id']}/bindings",
-        headers=_auth_headers(token),
-        json={"users": user_bindings},
-    )
-    assert update_response.status_code == 200
 
 
 def _create_unlinked_media(uploaded_by_id: str) -> dict[str, str]:

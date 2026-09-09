@@ -73,8 +73,8 @@ export interface AiGraphRunListResponse {
 
 type JsonRecord = Record<string, unknown>;
 
-function workspaceAiPath(workspaceSlug: string, suffix: string): string {
-  return `/api/v1/workspaces/${encodeURIComponent(workspaceSlug)}/ai/${suffix}`;
+function aiPath(suffix: string): string {
+  return `/api/v1/ai/${suffix}`;
 }
 
 export async function listAiArtifacts({
@@ -86,7 +86,6 @@ export async function listAiArtifacts({
   signal,
   status,
   token,
-  workspaceSlug,
 }: {
   appId?: string | null;
   conversationId?: string | null;
@@ -96,7 +95,6 @@ export async function listAiArtifacts({
   signal?: AbortSignal;
   status?: string;
   token: string;
-  workspaceSlug: string;
 }): Promise<AiArtifactListResponse> {
   const params = new URLSearchParams({
     limit: String(limit),
@@ -112,7 +110,7 @@ export async function listAiArtifacts({
   if (conversationId) params.set('conversation_id', conversationId);
 
   const raw = await apiFetchJson<unknown>(
-    `${workspaceAiPath(workspaceSlug, 'artifacts')}?${params.toString()}`,
+    `${aiPath('artifacts')}?${params.toString()}`,
     token,
     { signal },
   );
@@ -137,18 +135,13 @@ export async function getAiArtifact({
   artifactId,
   signal,
   token,
-  workspaceSlug,
 }: {
   artifactId: string;
   signal?: AbortSignal;
   token: string;
-  workspaceSlug: string;
 }): Promise<AiArtifact> {
   const raw = await apiFetchJson<unknown>(
-    workspaceAiPath(
-      workspaceSlug,
-      `artifacts/${encodeURIComponent(artifactId)}`,
-    ),
+    aiPath(`artifacts/${encodeURIComponent(artifactId)}`),
     token,
     { signal },
   );
@@ -163,18 +156,13 @@ export async function listAiArtifactSources({
   artifactId,
   signal,
   token,
-  workspaceSlug,
 }: {
   artifactId: string;
   signal?: AbortSignal;
   token: string;
-  workspaceSlug: string;
 }): Promise<AiArtifactSource[]> {
   const raw = await apiFetchJson<unknown>(
-    workspaceAiPath(
-      workspaceSlug,
-      `artifacts/${encodeURIComponent(artifactId)}/sources`,
-    ),
+    aiPath(`artifacts/${encodeURIComponent(artifactId)}/sources`),
     token,
     { signal },
   );
@@ -189,18 +177,16 @@ export async function listAiGraphRuns({
   conversationId,
   signal,
   token,
-  workspaceSlug,
 }: {
   appId?: string | null;
   conversationId: string;
   signal?: AbortSignal;
   token: string;
-  workspaceSlug: string;
 }): Promise<AiGraphRunListResponse> {
   const params = new URLSearchParams({ conversation_id: conversationId });
   if (appId) params.set('app_id', appId);
   const raw = await apiFetchJson<unknown>(
-    `${workspaceAiPath(workspaceSlug, 'graph-runs')}?${params.toString()}`,
+    `${aiPath('graph-runs')}?${params.toString()}`,
     token,
     { signal },
   );
@@ -218,15 +204,13 @@ export async function getAiGraphRun({
   runId,
   signal,
   token,
-  workspaceSlug,
 }: {
   runId: string;
   signal?: AbortSignal;
   token: string;
-  workspaceSlug: string;
 }): Promise<AiGraphRun> {
   const raw = await apiFetchJson<unknown>(
-    workspaceAiPath(workspaceSlug, `graph-runs/${encodeURIComponent(runId)}`),
+    aiPath(`graph-runs/${encodeURIComponent(runId)}`),
     token,
     { signal },
   );

@@ -21,7 +21,6 @@ from open_work_hub_api.domains.retrieval.evaluation import RetrievalEvaluationCa
 def _corpus_case() -> RetrievalQualityCorpusCase:
     return RetrievalQualityCorpusCase(
         query_id="heater-pressure",
-        workspace_id="workspace-1",
         user_id="user-1",
         query="히터 비상 정지 압력",
         relevant_resource_ids=["file-1"],
@@ -89,7 +88,6 @@ def test_main_uses_and_cleans_generation_scoped_qdrant_collection(
                 "cases": [
                     {
                         "query_id": f"query-{index}",
-                        "workspace_id": "workspace-1",
                         "user_id": "user-1",
                         "query": f"heater query {index}",
                         "relevant_resource_ids": ["file-1"],

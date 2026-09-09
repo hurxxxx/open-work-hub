@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { DropdownMenu, type DropdownItem } from '@open-work-hub/ui';
 import {
   Archive,
   ArrowLeft,
@@ -18,7 +16,9 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { DropdownMenu, type DropdownItem } from '@open-work-hub/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -26,7 +26,6 @@ import {
   formatDateTime,
   normalizeTimeZone,
 } from '@/src/platform/time/time-utils';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import {
   archiveBentoDocument,
   createBentoDocument,
@@ -44,25 +43,26 @@ import {
   type BentoVisibility,
 } from '../api/bento-api';
 import {
+  buildBentoHubPath,
+  buildBentoPresentationPath,
+} from '../bento-route-paths';
+import {
+  BentoImportError,
   buildBentoExportMessage,
   buildBentoLoadMessage,
   buildBentoSaveRequestMessage,
-  BentoImportError,
   currentBentoEmbedConfig,
   isBentoMessageOriginAllowed,
   parseBentoBridgeMessage,
   parseBentoHtmlDocument,
 } from './bento-embed-protocol';
 
-function hubPath(workspaceSlug: string | undefined): string {
-  return workspaceSlug ? buildWorkspaceAppPath(workspaceSlug, 'bento') : '/';
+function hubPath(): string {
+  return buildBentoHubPath();
 }
 
-function documentPath(
-  workspaceSlug: string | undefined,
-  documentId: string,
-): string {
-  return `${hubPath(workspaceSlug)}/${encodeURIComponent(documentId)}`;
+function documentPath(documentId: string): string {
+  return buildBentoPresentationPath(documentId);
 }
 
 function viewFromSearch(value: string | null): BentoHubView {
@@ -71,13 +71,18 @@ function viewFromSearch(value: string | null): BentoHubView {
 
 export function BentoView() {
   const { documentId } = useParams();
-  return documentId ? <BentoEditor /> : <BentoHub />;
+  const { token } = useAuth();
+  return documentId ? (
+    <BentoEditor key={`${token}:${documentId}`} />
+  ) : (
+    <BentoHub />
+  );
 }
 
 function BentoHub() {
   const { t, i18n } = useTranslation(['apps', 'shell']);
   const { token, user } = useAuth();
-  const { workspaceSlug } = useParams();
+
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -98,8 +103,8 @@ function BentoHub() {
     () => items.filter((item) => item.visibility === 'personal'),
     [items],
   );
-  const workspaceItems = useMemo(
-    () => items.filter((item) => item.visibility === 'workspace'),
+  const companyItems = useMemo(
+    () => items.filter((item) => item.visibility === 'company'),
     [items],
   );
 
@@ -108,11 +113,7 @@ function BentoHub() {
     setLoading(true);
     setError(null);
     try {
-      const response = await listBentoDocuments(
-        token,
-        { view, q: query },
-        workspaceSlug,
-      );
+      const response = await listBentoDocuments(token, { view, q: query });
       setItems(response.items);
     } catch (caught) {
       setError(
@@ -121,7 +122,7 @@ function BentoHub() {
     } finally {
       setLoading(false);
     }
-  }, [query, t, token, view, workspaceSlug]);
+  }, [query, t, token, view]);
 
   useEffect(() => {
     void load();
@@ -130,14 +131,19 @@ function BentoHub() {
   const handleCreate = useCallback(
     async (visibility: BentoVisibility) => {
       if (!token) return;
+      if (
+        visibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
       setError(null);
       try {
-        const created = await createBentoDocument(
-          token,
-          { title: t('apps:bento.untitled'), visibility },
-          workspaceSlug,
-        );
-        navigate(documentPath(workspaceSlug, created.id));
+        const created = await createBentoDocument(token, {
+          title: t('apps:bento.untitled'),
+          visibility,
+          company_admin_read_acknowledged: visibility === 'company',
+        });
+        navigate(documentPath(created.id));
       } catch (caught) {
         setError(
           caught instanceof Error
@@ -146,7 +152,7 @@ function BentoHub() {
         );
       }
     },
-    [navigate, t, token, workspaceSlug],
+    [navigate, t, token],
   );
 
   const handleImport = useCallback(
@@ -155,16 +161,12 @@ function BentoHub() {
       setError(null);
       try {
         const parsed = parseBentoHtmlDocument(await file.text());
-        const created = await createBentoDocument(
-          token,
-          {
-            title: parsed.title,
-            visibility: 'personal',
-            document_json: parsed.documentJson,
-          },
-          workspaceSlug,
-        );
-        navigate(documentPath(workspaceSlug, created.id));
+        const created = await createBentoDocument(token, {
+          title: parsed.title,
+          visibility: 'personal',
+          document_json: parsed.documentJson,
+        });
+        navigate(documentPath(created.id));
       } catch (caught) {
         setError(
           caught instanceof BentoImportError
@@ -177,7 +179,7 @@ function BentoHub() {
         if (importInputRef.current) importInputRef.current.value = '';
       }
     },
-    [navigate, t, token, workspaceSlug],
+    [navigate, t, token],
   );
 
   const handleAiGenerate = useCallback(async () => {
@@ -186,16 +188,12 @@ function BentoHub() {
     setAiGenerating(true);
     setAiError(null);
     try {
-      await generateBentoDocument(
-        token,
-        {
-          prompt,
-          slide_count: aiSlideCount,
-          language: i18n.language.startsWith('ko') ? 'ko' : 'en',
-          visibility: aiVisibility,
-        },
-        workspaceSlug,
-      );
+      await generateBentoDocument(token, {
+        prompt,
+        slide_count: aiSlideCount,
+        language: i18n.language.startsWith('ko') ? 'ko' : 'en',
+        visibility: aiVisibility,
+      });
       setAiPrompt('');
       setAiDialogOpen(false);
     } catch (caught) {
@@ -215,7 +213,6 @@ function BentoHub() {
     i18n.language,
     t,
     token,
-    workspaceSlug,
   ]);
 
   const updateItem = useCallback((updated: BentoDocumentItem) => {
@@ -233,12 +230,10 @@ function BentoHub() {
       if (!title || title === item.title) return;
       try {
         updateItem(
-          await updateBentoDocument(
-            token,
-            item.id,
-            { version: item.version, title },
-            workspaceSlug,
-          ),
+          await updateBentoDocument(token, item.id, {
+            version: item.version,
+            title,
+          }),
         );
       } catch (caught) {
         setError(
@@ -248,20 +243,24 @@ function BentoHub() {
         );
       }
     },
-    [t, token, updateItem, workspaceSlug],
+    [t, token, updateItem],
   );
 
   const changeVisibility = useCallback(
     async (item: BentoDocumentItem, visibility: BentoVisibility) => {
       if (!token || visibility === item.visibility) return;
+      if (
+        visibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
       try {
         updateItem(
-          await updateBentoDocument(
-            token,
-            item.id,
-            { version: item.version, visibility },
-            workspaceSlug,
-          ),
+          await updateBentoDocument(token, item.id, {
+            version: item.version,
+            visibility,
+            company_admin_read_acknowledged: visibility === 'company',
+          }),
         );
       } catch (caught) {
         setError(
@@ -271,14 +270,14 @@ function BentoHub() {
         );
       }
     },
-    [t, token, updateItem, workspaceSlug],
+    [t, token, updateItem],
   );
 
   const archiveItem = useCallback(
     async (item: BentoDocumentItem) => {
       if (!token) return;
       try {
-        await archiveBentoDocument(token, item.id, workspaceSlug);
+        await archiveBentoDocument(token, item.id);
         setItems((current) => current.filter((entry) => entry.id !== item.id));
       } catch (caught) {
         setError(
@@ -288,14 +287,14 @@ function BentoHub() {
         );
       }
     },
-    [t, token, workspaceSlug],
+    [t, token],
   );
 
   const restoreItem = useCallback(
     async (item: BentoDocumentItem) => {
       if (!token) return;
       try {
-        await restoreBentoDocument(token, item.id, workspaceSlug);
+        await restoreBentoDocument(token, item.id);
         setItems((current) => current.filter((entry) => entry.id !== item.id));
       } catch (caught) {
         setError(
@@ -305,14 +304,14 @@ function BentoHub() {
         );
       }
     },
-    [t, token, workspaceSlug],
+    [t, token],
   );
 
   const deleteItem = useCallback(
     async (item: BentoDocumentItem) => {
       if (!token || !window.confirm(t('apps:bento.deleteConfirm'))) return;
       try {
-        await permanentlyDeleteBentoDocument(token, item.id, workspaceSlug);
+        await permanentlyDeleteBentoDocument(token, item.id);
         setItems((current) => current.filter((entry) => entry.id !== item.id));
       } catch (caught) {
         setError(
@@ -322,7 +321,7 @@ function BentoHub() {
         );
       }
     },
-    [t, token, workspaceSlug],
+    [t, token],
   );
 
   const viewTitle =
@@ -424,7 +423,7 @@ function BentoHub() {
               timeZone={timeZone}
               locale={i18n.language}
               onCreate={() => void handleCreate('personal')}
-              onOpen={(item) => navigate(documentPath(workspaceSlug, item.id))}
+              onOpen={(item) => navigate(documentPath(item.id))}
               onRename={(item) => void renameItem(item)}
               onVisibilityChange={(item, visibility) =>
                 void changeVisibility(item, visibility)
@@ -434,19 +433,19 @@ function BentoHub() {
               onDelete={(item) => void deleteItem(item)}
             />
             <BentoSection
-              title={t('apps:bento.workspaceSectionTitle')}
+              title={t('apps:bento.companySectionTitle')}
               empty={t(
                 archived
                   ? 'apps:bento.archiveEmpty'
-                  : 'apps:bento.workspaceSectionEmpty',
+                  : 'apps:bento.companySectionEmpty',
               )}
               icon={Users}
-              items={workspaceItems}
+              items={companyItems}
               archived={archived}
               timeZone={timeZone}
               locale={i18n.language}
-              onCreate={() => void handleCreate('workspace')}
-              onOpen={(item) => navigate(documentPath(workspaceSlug, item.id))}
+              onCreate={() => void handleCreate('company')}
+              onOpen={(item) => navigate(documentPath(item.id))}
               onRename={(item) => void renameItem(item)}
               onVisibilityChange={(item, visibility) =>
                 void changeVisibility(item, visibility)
@@ -553,8 +552,8 @@ function BentoHub() {
                   <option value="personal">
                     {t('apps:bento.visibilityPersonal')}
                   </option>
-                  <option value="workspace">
-                    {t('apps:bento.visibilityWorkspace')}
+                  <option value="company">
+                    {t('apps:bento.visibilityCompany')}
                   </option>
                 </select>
               </label>
@@ -737,17 +736,16 @@ function BentoCard({
           onSelect: onRename,
         },
         {
-          id: 'personal',
-          label: t('bento.changeToPersonal'),
-          disabled: !item.can_manage || item.visibility === 'personal',
+          id: 'company',
           separatorBefore: true,
-          onSelect: () => onVisibilityChange('personal'),
+          label: t('bento.changeToCompany'),
+          disabled: !item.can_manage || item.visibility === 'company',
+          onSelect: () => onVisibilityChange('company'),
         },
         {
-          id: 'workspace',
-          label: t('bento.changeToWorkspace'),
-          disabled: !item.can_manage || item.visibility === 'workspace',
-          onSelect: () => onVisibilityChange('workspace'),
+          id: 'ownership-notice',
+          disabled: true,
+          label: t('bento.companyOwnershipNotice'),
         },
         {
           id: 'archive',
@@ -811,14 +809,14 @@ function BentoCard({
           })}
         </p>
         <div className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-app-border px-2 py-1 text-xs text-app-ink/55">
-          {item.visibility === 'workspace' ? (
+          {item.visibility === 'company' ? (
             <Users size={13} className="text-app-success" />
           ) : (
             <Lock size={13} />
           )}
           {t(
-            item.visibility === 'workspace'
-              ? 'bento.visibilityWorkspace'
+            item.visibility === 'company'
+              ? 'bento.visibilityCompany'
               : 'bento.visibilityPersonal',
           )}
         </div>
@@ -830,7 +828,7 @@ function BentoCard({
 function BentoEditor() {
   const { t, i18n } = useTranslation('apps');
   const { token } = useAuth();
-  const { workspaceSlug, documentId } = useParams();
+  const { documentId } = useParams();
   const navigate = useNavigate();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const detailRef = useRef<BentoDocumentDetail | null>(null);
@@ -859,6 +857,11 @@ function BentoEditor() {
     null,
   );
   const embedConfig = useMemo(() => currentBentoEmbedConfig(), []);
+  const canEdit = Boolean(detail?.can_edit);
+  useEffect(() => {
+    setIframeReady(false);
+    loadedDocumentRef.current = null;
+  }, [canEdit]);
 
   const applyDetail = useCallback((next: BentoDocumentDetail) => {
     detailRef.current = next;
@@ -877,20 +880,22 @@ function BentoEditor() {
   );
 
   const enqueuePatch = useCallback(
-    (patch: { document_json?: string; visibility?: BentoVisibility }) => {
+    (patch: {
+      document_json?: string;
+      visibility?: BentoVisibility;
+      company_admin_read_acknowledged?: boolean;
+    }) => {
       const operation = operationChainRef.current
         .catch(() => undefined)
         .then(async () => {
           const current = detailRef.current;
-          if (!token || !documentId || !current) return;
+          if (!token || !documentId || !current?.can_edit) return;
           setSaveStatus('saving');
           setError(null);
-          const updated = await updateBentoDocument(
-            token,
-            documentId,
-            { version: current.version, ...patch },
-            workspaceSlug,
-          );
+          const updated = await updateBentoDocument(token, documentId, {
+            version: current.version,
+            ...patch,
+          });
           applyDetail(updated);
           lastSavedJsonRef.current = updated.document_json;
           setSaveStatus('saved');
@@ -904,12 +909,16 @@ function BentoEditor() {
       operationChainRef.current = operation;
       return operation;
     },
-    [applyDetail, documentId, t, token, workspaceSlug],
+    [applyDetail, documentId, t, token],
   );
 
   const queueDocumentSave = useCallback(
     (documentJson: string, immediate = false) => {
-      if (documentJson === lastSavedJsonRef.current) return;
+      if (
+        !detailRef.current?.can_edit ||
+        documentJson === lastSavedJsonRef.current
+      )
+        return;
       if (pendingSaveTimerRef.current) {
         clearTimeout(pendingSaveTimerRef.current);
       }
@@ -928,12 +937,13 @@ function BentoEditor() {
     if (!token || !documentId) return undefined;
     let active = true;
     detailRef.current = null;
+    setIframeReady(false);
     loadedDocumentRef.current = null;
     lastSavedJsonRef.current = null;
     setDetail(null);
     setError(null);
     setSaveStatus('idle');
-    getBentoDocument(token, documentId, workspaceSlug)
+    getBentoDocument(token, documentId)
       .then((loaded) => {
         if (!active) return;
         applyDetail(loaded);
@@ -945,13 +955,13 @@ function BentoEditor() {
     return () => {
       active = false;
     };
-  }, [applyDetail, documentId, t, token, workspaceSlug]);
+  }, [applyDetail, documentId, t, token]);
 
   useEffect(() => {
     if (!iframeReady || !detail || !embedConfig) return;
     if (loadedDocumentRef.current === detail.id) return;
     loadedDocumentRef.current = detail.id;
-    postToBento(buildBentoLoadMessage(detail.document_json));
+    postToBento(buildBentoLoadMessage(detail.document_json, !detail.can_edit));
   }, [detail, embedConfig, iframeReady, postToBento]);
 
   useEffect(() => {
@@ -961,19 +971,11 @@ function BentoEditor() {
 
     const poll = async () => {
       try {
-        const job = await getBentoAiJob(
-          token,
-          activeAiEditJobId,
-          workspaceSlug,
-        );
+        const job = await getBentoAiJob(token, activeAiEditJobId);
         if (!active) return;
         if (job.status === 'succeeded') {
           if (job.result_document_id === documentId) {
-            const revised = await getBentoDocument(
-              token,
-              documentId,
-              workspaceSlug,
-            );
+            const revised = await getBentoDocument(token, documentId);
             if (!active) return;
             loadedDocumentRef.current = null;
             applyDetail(revised);
@@ -1007,7 +1009,7 @@ function BentoEditor() {
       active = false;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [activeAiEditJobId, applyDetail, documentId, t, token, workspaceSlug]);
+  }, [activeAiEditJobId, applyDetail, documentId, t, token]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -1030,6 +1032,7 @@ function BentoEditor() {
         return;
       }
       if (
+        detailRef.current?.can_edit &&
         (message.type === 'document-changed' ||
           message.type === 'save-request') &&
         message.documentJson
@@ -1087,33 +1090,47 @@ function BentoEditor() {
   }, [embedConfig, iframeReady, postToBento, t]);
 
   const goBack = useCallback(() => {
-    navigate(hubPath(workspaceSlug));
-  }, [navigate, workspaceSlug]);
+    navigate(hubPath());
+  }, [navigate]);
 
   const handleVisibilityChange = useCallback(
     (visibility: BentoVisibility) => {
       if (!detail || visibility === detail.visibility) return;
-      void enqueuePatch({ visibility });
+      if (
+        visibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
+      void enqueuePatch({
+        visibility,
+        company_admin_read_acknowledged: visibility === 'company',
+      });
     },
-    [detail, enqueuePatch],
+    [detail, enqueuePatch, t],
   );
 
   const handleArchive = useCallback(async () => {
     if (!token || !documentId) return;
     try {
       await operationChainRef.current.catch(() => undefined);
-      await archiveBentoDocument(token, documentId, workspaceSlug);
+      await archiveBentoDocument(token, documentId);
       goBack();
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : t('bento.archiveFailed'),
       );
     }
-  }, [documentId, goBack, t, token, workspaceSlug]);
+  }, [documentId, goBack, t, token]);
 
   const handleAiEdit = useCallback(async () => {
     const prompt = aiEditPrompt.trim();
-    if (!token || !documentId || !detail || prompt.length < 3 || aiEditing) {
+    if (
+      !token ||
+      !documentId ||
+      !detail?.can_edit ||
+      prompt.length < 3 ||
+      aiEditing
+    ) {
       return;
     }
     setAiEditing(true);
@@ -1126,32 +1143,25 @@ function BentoEditor() {
       }
       const currentDocumentJson = await requestCurrentDocument();
       let current = detailRef.current;
-      if (!current) throw new Error(t('bento.loadFailed'));
+      if (!current?.can_edit) throw new Error(t('bento.loadFailed'));
 
       if (currentDocumentJson !== lastSavedJsonRef.current) {
         setSaveStatus('saving');
-        const saved = await updateBentoDocument(
-          token,
-          documentId,
-          { version: current.version, document_json: currentDocumentJson },
-          workspaceSlug,
-        );
+        const saved = await updateBentoDocument(token, documentId, {
+          version: current.version,
+          document_json: currentDocumentJson,
+        });
         applyDetail(saved);
         detailRef.current = saved;
         lastSavedJsonRef.current = saved.document_json;
         current = saved;
       }
 
-      const job = await editBentoDocumentWithAi(
-        token,
-        documentId,
-        {
-          version: current.version,
-          prompt,
-          language: i18n.language.startsWith('ko') ? 'ko' : 'en',
-        },
-        workspaceSlug,
-      );
+      const job = await editBentoDocumentWithAi(token, documentId, {
+        version: current.version,
+        prompt,
+        language: i18n.language.startsWith('ko') ? 'ko' : 'en',
+      });
       setActiveAiEditJobId(job.id);
       setSaveStatus('saving');
       setAiEditPrompt('');
@@ -1174,7 +1184,6 @@ function BentoEditor() {
     requestCurrentDocument,
     t,
     token,
-    workspaceSlug,
   ]);
 
   return (
@@ -1211,7 +1220,7 @@ function BentoEditor() {
             setAiEditError(null);
             setAiEditOpen(true);
           }}
-          disabled={!detail || !iframeReady || aiEditing}
+          disabled={!detail?.can_edit || !iframeReady || aiEditing}
           title={t('bento.aiEdit')}
           className="inline-flex h-9 items-center gap-2 rounded-md bg-app-success px-3 text-sm font-semibold text-white hover:bg-app-success/90 disabled:opacity-40"
         >
@@ -1220,8 +1229,11 @@ function BentoEditor() {
         </button>
         <button
           type="button"
-          onClick={() => postToBento(buildBentoSaveRequestMessage())}
-          disabled={!iframeReady || aiEditing}
+          onClick={() => {
+            if (detailRef.current?.can_edit)
+              postToBento(buildBentoSaveRequestMessage());
+          }}
+          disabled={!detail?.can_edit || !iframeReady || aiEditing}
           title={t('bento.saveNow')}
           className="inline-flex size-9 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink/65 disabled:opacity-40"
         >
@@ -1251,18 +1263,15 @@ function BentoEditor() {
             }
             items={[
               {
-                id: 'personal',
-                label: t('bento.changeToPersonal'),
-                disabled:
-                  !detail.can_manage || detail.visibility === 'personal',
-                onSelect: () => handleVisibilityChange('personal'),
+                id: 'company',
+                label: t('bento.changeToCompany'),
+                disabled: !detail.can_manage || detail.visibility === 'company',
+                onSelect: () => handleVisibilityChange('company'),
               },
               {
-                id: 'workspace',
-                label: t('bento.changeToWorkspace'),
-                disabled:
-                  !detail.can_manage || detail.visibility === 'workspace',
-                onSelect: () => handleVisibilityChange('workspace'),
+                id: 'ownership-notice',
+                disabled: true,
+                label: t('bento.companyOwnershipNotice'),
               },
             ]}
           />
@@ -1298,8 +1307,9 @@ function BentoEditor() {
               )}
             </div>
           ) : null}
-          {embedConfig ? (
+          {embedConfig && detail ? (
             <iframe
+              key={`${detail.id}:${detail.can_edit}`}
               ref={iframeRef}
               title={t('bento.editorTitle')}
               src={embedConfig.src}
@@ -1315,7 +1325,7 @@ function BentoEditor() {
           ) : null}
         </div>
 
-        {aiEditOpen ? (
+        {aiEditOpen && detail?.can_edit ? (
           <aside className="relative z-20 flex w-[min(380px,92vw)] shrink-0 flex-col border-l border-app-border bg-app-bg shadow-xl">
             <div className="flex items-start gap-3 border-b border-app-border p-4">
               <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-app-success/10 text-app-success">

@@ -1,17 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type {
-  MeetingDetail,
-  MeetingUser,
-} from '../../api/meeting-api';
+import type { MeetingDetail, MeetingUser } from '../../api/meeting-api';
 import {
   useMeetingCreateFormWorkflow,
   useMeetingEditFormWorkflow,
@@ -71,20 +61,26 @@ function meeting(overrides: Partial<MeetingDetail> = {}): MeetingDetail {
   } as MeetingDetail;
 }
 
-function api(overrides: Partial<MeetingFormApiAdapter> = {}): MeetingFormApiAdapter {
+function api(
+  overrides: Partial<MeetingFormApiAdapter> = {},
+): MeetingFormApiAdapter {
   return {
     createMeeting: vi.fn().mockResolvedValue(meeting({ id: 'created-1' })),
-    updateMeeting: vi.fn().mockResolvedValue(meeting({ id: 'meeting-1', title: 'Updated' })),
+    updateMeeting: vi
+      .fn()
+      .mockResolvedValue(meeting({ id: 'meeting-1', title: 'Updated' })),
     uploadMeetingFile: vi.fn().mockResolvedValue(meeting({ id: 'created-1' })),
     listMeetingUsers: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
 
-function renderCreateWorkflow(options: {
-  api?: MeetingFormApiAdapter;
-  onCreated?: (meetingId: string) => void;
-} = {}) {
+function renderCreateWorkflow(
+  options: {
+    api?: MeetingFormApiAdapter;
+    onCreated?: (meetingId: string) => void;
+  } = {},
+) {
   const onCreated = options.onCreated ?? vi.fn();
   const initialRange = {
     start: new Date(2026, 4, 30, 9, 0),
@@ -95,7 +91,6 @@ function renderCreateWorkflow(options: {
     useMeetingCreateFormWorkflow({
       isOpen: true,
       onCreated,
-      workspaceSlug: 'hq',
       initialRange,
       api: options.api ?? api(),
     }),
@@ -135,11 +130,10 @@ describe('meeting form workflow', () => {
       await new Promise((resolve) => window.setTimeout(resolve, 130));
     });
 
-    expect(searchApi.listMeetingUsers).toHaveBeenCalledWith(
-      'token-1',
-      'hq',
-      { q: 'ada', limit: 30 },
-    );
+    expect(searchApi.listMeetingUsers).toHaveBeenCalledWith('token-1', {
+      q: 'ada',
+      limit: 30,
+    });
     await waitFor(() => {
       expect(result.current.state.users).toEqual([user('candidate')]);
     });
@@ -163,7 +157,6 @@ describe('meeting form workflow', () => {
 
     expect(createApi.createMeeting).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       expect.objectContaining({
         title: 'Planning',
         agenda: 'Agenda',
@@ -179,7 +172,7 @@ describe('meeting form workflow', () => {
     const successful = new File(['ok'], 'ok.txt', { type: 'text/plain' });
     const failed = new File(['bad'], 'bad.txt', { type: 'text/plain' });
     const createApi = api({
-      uploadMeetingFile: vi.fn((_token, _workspace, _meetingId, file: File) =>
+      uploadMeetingFile: vi.fn((_token, _meetingId, file: File) =>
         file.name === 'bad.txt'
           ? Promise.reject(new Error('virus scan failed'))
           : Promise.resolve(meeting({ id: 'created-1' })),
@@ -216,7 +209,6 @@ describe('meeting form workflow', () => {
         isOpen: true,
         meeting: currentMeeting,
         onSaved,
-        workspaceSlug: 'hq',
         api: editApi,
       }),
     );
@@ -246,7 +238,6 @@ describe('meeting form workflow', () => {
 
     expect(editApi.updateMeeting).toHaveBeenCalledWith(
       'token-1',
-      'hq',
       'meeting-1',
       expect.objectContaining({
         title: 'Updated title',

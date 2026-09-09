@@ -49,16 +49,14 @@ async function dispatchHealthRefreshResult({
   resolveHealthError,
   shouldDispatch = () => true,
   token,
-  workspaceSlug,
 }: {
   dispatch: AiHealthDispatch;
   resolveHealthError: ResolveHealthError;
   shouldDispatch?: () => boolean;
   token: string;
-  workspaceSlug?: string | null;
 }): Promise<void> {
   try {
-    const nextHealth = await getLlmHealth(token, { workspaceSlug });
+    const nextHealth = await getLlmHealth(token, {});
     if (shouldDispatch()) {
       dispatch({ type: 'refresh-succeeded', health: nextHealth });
     }
@@ -72,10 +70,7 @@ async function dispatchHealthRefreshResult({
   }
 }
 
-export function useChatbotHealth(
-  token: string | null,
-  workspaceSlug?: string | null,
-): AiHealthState & {
+export function useChatbotHealth(token: string | null): AiHealthState & {
   refreshHealth: () => Promise<void>;
 } {
   const { t } = useTranslation('apps');
@@ -99,9 +94,8 @@ export function useChatbotHealth(
       dispatch,
       resolveHealthError,
       token,
-      workspaceSlug,
     });
-  }, [resolveHealthError, token, workspaceSlug]);
+  }, [resolveHealthError, token]);
 
   useEffect(() => {
     if (!token) {
@@ -114,13 +108,12 @@ export function useChatbotHealth(
       resolveHealthError,
       shouldDispatch: () => !cancelled,
       token,
-      workspaceSlug,
     });
 
     return () => {
       cancelled = true;
     };
-  }, [resolveHealthError, token, workspaceSlug]);
+  }, [resolveHealthError, token]);
 
   return {
     ...state,

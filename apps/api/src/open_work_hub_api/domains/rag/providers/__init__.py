@@ -6,8 +6,8 @@ from open_work_hub_api.domains.rag.providers.base import (
     AsrClient,
     EmbeddingClient,
     OcrClient,
-    RagProviderConfigurationError,
     RagProviderBundle,
+    RagProviderConfigurationError,
     RerankClient,
     VectorIndexClient,
 )

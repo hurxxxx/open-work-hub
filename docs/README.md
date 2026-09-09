@@ -4,9 +4,15 @@ Use the narrowest owner doc. Code and tests are final for implemented behavior.
 
 | Area | Start |
 | --- | --- |
+| Development installation / 개발 환경 설치 | [INSTALL.md](../INSTALL.md) |
 | Agent routing/validation/MR | [agents/domain.md](agents/domain.md) |
+| App-specific owner docs | [apps/README.md](apps/README.md) |
 | App registration/RBAC/bootstrap | [domains/app-platform/README.md](domains/app-platform/README.md) |
-| AI Gateway/model routing | [domains/ai/gateway.md](domains/ai/gateway.md) |
+| Indexed source authorization | [domains/source-access/README.md](domains/source-access/README.md) |
+| Authenticated content delivery | [domains/content-access/README.md](domains/content-access/README.md) |
+| Global notifications | [domains/notifications/README.md](domains/notifications/README.md) |
+| AI Gateway/execution/write policy | [domains/ai/README.md](domains/ai/README.md) |
+| Inference Gateway | [domains/inference-gateway/README.md](domains/inference-gateway/README.md) |
 | Retrieval/RAG | [domains/retrieval/README.md](domains/retrieval/README.md), [domains/rag/README.md](domains/rag/README.md) |
 | Organization/directory | [domains/organization/README.md](domains/organization/README.md) |
 | Platform integrations/API keys | [domains/integrations/README.md](domains/integrations/README.md) |

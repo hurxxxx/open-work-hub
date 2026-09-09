@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from dataclasses import dataclass
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import y_py as Y
@@ -16,15 +16,14 @@ from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.collaboration.yjs_runtime import (
     COLLAB_CLOSE_CODE_RELAY_UNAVAILABLE,
-    CollabConnectionLimitExceeded,
     CollabBus,
+    CollabConnectionLimitExceeded,
     CollabRoomRuntime,
     RedisCollabBus,
     hash_bytes,
     release_yroom_thread_bound_state,
 )
 from open_work_hub_api.domains.whiteboard.scene_state import persist_runtime_yjs_state
-
 
 logger = logging.getLogger(__name__)
 

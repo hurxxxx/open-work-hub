@@ -48,11 +48,11 @@ def create_meeting_minutes_doc(
 ) -> NativeDoc:
     doc, _page = create_native_doc_for_user(
         db,
-        workspace_id=meeting.workspace_id,
         owner_id=owner_id,
         title=f"회의록: {meeting.title} ({meeting.start_at:%Y-%m-%d})",
         first_page_title="회의록",
         content_blocks=build_minutes_blocks(summary_text, transcript_text),
+        ownership_kind="company",
         source_app="meeting",
         source_kind="app_generated",
         source_ref=meeting.id,

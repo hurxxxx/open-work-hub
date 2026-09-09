@@ -16,24 +16,21 @@ class BentoDocument(Base):
     __tablename__ = "bento_documents"
     __table_args__ = (
         CheckConstraint(
-            "visibility in ('personal', 'workspace')",
+            "visibility in ('personal', 'company')",
             name="ck_bento_documents_visibility",
         ),
-        Index("ix_bento_documents_workspace_id", "workspace_id"),
         Index("ix_bento_documents_owner_id", "owner_id"),
         Index("ix_bento_documents_archived_at", "archived_at"),
         Index("ix_bento_documents_updated_at", "updated_at"),
         Index("ix_bento_documents_visibility", "visibility"),
         Index(
-            "ix_bento_documents_workspace_archived_updated",
-            "workspace_id",
+            "ix_bento_documents_archived_updated",
             "archived_at",
             "updated_at",
         ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), nullable=False)
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     visibility: Mapped[str] = mapped_column(String(20), default="personal", nullable=False)
@@ -47,8 +44,6 @@ class BentoDocument(Base):
         nullable=False,
     )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    workspace = relationship("Workspace")
     owner = relationship("User")
 
 
@@ -61,18 +56,16 @@ class BentoAiJob(Base):
             name="ck_bento_ai_jobs_status",
         ),
         CheckConstraint(
-            "visibility IN ('personal', 'workspace')",
+            "visibility IN ('personal', 'company')",
             name="ck_bento_ai_jobs_visibility",
         ),
         Index(
-            "ix_bento_ai_jobs_workspace_user_created",
-            "workspace_id",
+            "ix_bento_ai_jobs_user_created",
             "requested_by_id",
             "created_at",
         ),
         Index(
-            "ix_bento_ai_jobs_workspace_status_created",
-            "workspace_id",
+            "ix_bento_ai_jobs_status_created",
             "status",
             "created_at",
         ),
@@ -88,9 +81,6 @@ class BentoAiJob(Base):
 
     id: Mapped[str] = mapped_column(
         ForeignKey("ai_graph_runs.id", ondelete="CASCADE"), primary_key=True
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
     )
     requested_by_id: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False

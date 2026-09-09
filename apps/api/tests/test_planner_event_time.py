@@ -13,9 +13,7 @@ from open_work_hub_api.domains.planner.event_time import (
 
 
 def test_parse_iso_or_date_normalizes_offset_datetimes_to_naive_utc() -> None:
-    assert parse_iso_or_date("2026-05-04T10:00:00+09:00") == datetime(
-        2026, 5, 4, 1, 0
-    )
+    assert parse_iso_or_date("2026-05-04T10:00:00+09:00") == datetime(2026, 5, 4, 1, 0)
     assert parse_iso_or_date("2026-05-04") == datetime(2026, 5, 4, 0, 0)
 
 
@@ -119,7 +117,4 @@ def test_invalid_event_bounds_raise_localized_http_errors() -> None:
 
 def test_local_date_string_handles_aware_and_naive_utc_values() -> None:
     assert local_date_string(datetime(2026, 5, 5, 15, 0)) == "2026-05-06"
-    assert (
-        local_date_string(parse_iso_or_date("2026-05-06T00:30:00+09:00"))
-        == "2026-05-06"
-    )
+    assert local_date_string(parse_iso_or_date("2026-05-06T00:30:00+09:00")) == "2026-05-06"

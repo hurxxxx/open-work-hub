@@ -5,16 +5,15 @@ from datetime import UTC, datetime
 from open_work_hub_api.domains.search.result_projection import build_search_hit
 
 
-def test_search_hit_normalizes_legacy_pms_deep_link() -> None:
+def test_search_hit_preserves_canonical_pms_deep_link() -> None:
     timestamp = datetime(2026, 1, 1, tzinfo=UTC).replace(tzinfo=None)
     hit = build_search_hit(
         {
             "entity_type": "pms_task",
             "entity_id": "task-1",
-            "workspace_id": "workspace-1",
             "title": "Task",
             "summary": "Summary",
-            "deep_link": "/tool/pms-list-list-1?workspace=hq&task=task-1",
+            "deep_link": "/apps/pms/lists/list-1?task=task-1",
             "created_at": timestamp,
             "source_updated_at": timestamp,
         },
@@ -22,7 +21,7 @@ def test_search_hit_normalizes_legacy_pms_deep_link() -> None:
         doc_page_lookup=lambda _doc_id: [],
     )
 
-    assert hit.deep_link == "/w/hq/pms/lists/list-1?task=task-1"
+    assert hit.deep_link == "/apps/pms/lists/list-1?task=task-1"
 
 
 def test_search_hit_snippet_centers_query_matches_in_body() -> None:
@@ -31,7 +30,6 @@ def test_search_hit_snippet_centers_query_matches_in_body() -> None:
         {
             "entity_type": "file",
             "entity_id": "file-1",
-            "workspace_id": "workspace-1",
             "title": "roadmap.pptx",
             "summary": "generic heater system introduction " * 12,
             "body": (
@@ -39,7 +37,7 @@ def test_search_hit_snippet_centers_query_matches_in_body() -> None:
                 + "OPEN Alliance TC1 TC12 ethernet validation evidence"
                 + (" common appendix" * 40)
             ),
-            "deep_link": "/w/workspace-1/files?file=file-1",
+            "deep_link": "/apps/files?file=file-1",
             "created_at": timestamp,
             "source_updated_at": timestamp,
         },
@@ -58,10 +56,9 @@ def test_search_hit_snippet_uses_utf16_highlight_offsets() -> None:
         {
             "entity_type": "file",
             "entity_id": "file-1",
-            "workspace_id": "workspace-1",
             "title": "emoji.txt",
             "summary": "😀 OPEN Alliance evidence",
-            "deep_link": "/w/workspace-1/files?file=file-1",
+            "deep_link": "/apps/files?file=file-1",
             "created_at": timestamp,
             "source_updated_at": timestamp,
         },
@@ -79,10 +76,9 @@ def test_search_hit_snippet_offsets_survive_length_changing_casefold() -> None:
         {
             "entity_type": "file",
             "entity_id": "file-1",
-            "workspace_id": "workspace-1",
             "title": "unicode.txt",
             "summary": "ß OPEN evidence",
-            "deep_link": "/w/workspace-1/files?file=file-1",
+            "deep_link": "/apps/files?file=file-1",
             "created_at": timestamp,
             "source_updated_at": timestamp,
         },

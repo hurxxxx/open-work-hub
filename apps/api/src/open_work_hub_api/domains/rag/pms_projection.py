@@ -5,7 +5,6 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from open_work_hub_api.domains.auth.models import Team, Workspace
 from open_work_hub_api.domains.pms.models import (
     Task,
     TaskAssignee,
@@ -14,10 +13,10 @@ from open_work_hub_api.domains.pms.models import (
     TaskLabel,
     TaskUserAccess,
 )
+from open_work_hub_api.domains.pms.space_models import Team
 from open_work_hub_api.domains.rag.contracts import RagProjection
 from open_work_hub_api.domains.rag.projection_builders import build_text_projection
 from open_work_hub_api.domains.source_access.resource_types import PMS_TASK_RESOURCE_TYPE
-
 
 PMS_TASK_SOURCE_KIND = "pms_task"
 
@@ -52,7 +51,6 @@ def load_task_projection(
             Team.id == task_list.team_id,
             Team.active.is_(True),
             Team.trashed_at.is_(None),
-            Team.workspace.has(Workspace.active.is_(True)),
         )
     )
     if team is None:
@@ -82,7 +80,6 @@ def build_task_projection(task: Task, *, team: Team) -> RagProjection:
     ]
 
     return build_text_projection(
-        workspace_id=team.workspace_id,
         resource_type=PMS_TASK_RESOURCE_TYPE,
         resource_id=task.id,
         source_kind=PMS_TASK_SOURCE_KIND,
@@ -127,7 +124,6 @@ def _build_summary(task: Task, *, label_names: list[str]) -> str | None:
 
 def _build_visibility_refs(task: Task, *, team: Team) -> list[str]:
     refs = {
-        f"workspace:{team.workspace_id}",
         f"team:{team.id}",
         f"list:{task.list_id}",
     }

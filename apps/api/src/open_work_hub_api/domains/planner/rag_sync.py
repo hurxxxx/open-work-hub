@@ -12,5 +12,5 @@ def enqueue_planner_event_rag_sync(
     event: PlannerEvent,
     operation: RagSyncOperation,
 ) -> None:
-    """Personal planner events are not projected into workspace search/RAG."""
+    """Personal planner events are not projected into company search/RAG."""
     del db, event, operation

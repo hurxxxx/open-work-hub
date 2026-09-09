@@ -1,10 +1,10 @@
+import { useAppAdmission } from '@/src/platform/apps/app-bootstrap-context';
 import type { ReactNode } from 'react';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { NoAccessNotice } from '@/src/components/common/NoAccessNotice';
 import { ResourcePickerDialog } from '@/src/components/picker/ResourcePickerDialog';
-import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   useResourcePickerLoad,
@@ -20,8 +20,8 @@ import {
   getDocsHubPickerDelayMs,
   projectDocsHubPickerItems,
   type DocsHubPickerAction,
-  type DocsHubPickerParams,
   type DocsHubPickerItemIdGetter,
+  type DocsHubPickerParams,
   type DocsHubPickerSearchMode,
   type DocsHubPickerSelection,
 } from '../api/docs-hub-picker-model';
@@ -33,14 +33,14 @@ export interface DocsHubPickerCopy {
   empty: string;
   loadFailed: string;
   attachFailed: string;
-  noAccessWorkspaceLabel?: string;
+  noAccessAppLabel?: string;
   noAccessAction?: string;
   untitled?: string;
 }
 
 export interface DocsHubPickerAdapter {
   searchMode: DocsHubPickerSearchMode;
-  access: 'workspace-membership' | 'token-only';
+  access: 'app-admission' | 'token-only';
   copy: DocsHubPickerCopy;
   getDocId?: DocsHubPickerItemIdGetter;
   renderMeta: (item: DocsHubItem) => ReactNode;
@@ -57,7 +57,7 @@ export interface DocsHubPickerAdapter {
 export interface DocsHubPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  workspaceSlug?: string | null;
+
   excludeDocIds?: readonly string[];
   onPick: (selection: DocsHubPickerSelection) => Promise<void> | void;
   adapter: DocsHubPickerAdapter;
@@ -66,17 +66,13 @@ export interface DocsHubPickerModalProps {
 export function DocsHubPickerModal({
   isOpen,
   onClose,
-  workspaceSlug = null,
   excludeDocIds = EMPTY_EXCLUDED_DOC_IDS,
   onPick,
   adapter,
 }: DocsHubPickerModalProps) {
   const { t } = useTranslation('apps');
-  const { token, user } = useAuth();
-  const canAccess =
-    adapter.access === 'workspace-membership'
-      ? hasWorkspaceMembership(user, workspaceSlug)
-      : true;
+  const { token } = useAuth();
+  const canAccess = useAppAdmission('docs');
   const getDocId = adapter.getDocId;
   const {
     dispatch,
@@ -98,7 +94,9 @@ export function DocsHubPickerModal({
     getPickFailedMessage: (err) =>
       adapter.getAttachFailedMessage
         ? adapter.getAttachFailedMessage(err)
-        : err instanceof Error ? err.message : adapter.copy.attachFailed,
+        : err instanceof Error
+          ? err.message
+          : adapter.copy.attachFailed,
     initialState: INITIAL_DOCS_HUB_PICKER_STATE,
     onClose,
     onPick: (doc) => onPick(buildDocsHubPickerSelection(doc, getDocId)),
@@ -108,22 +106,18 @@ export function DocsHubPickerModal({
 
   const loadDocs = useCallback(async () => {
     if (!token) return [];
-    const response = await listDocsHub(
-      token,
-      {
-        ...buildDocsHubPickerParams({
-          query: requestQuery,
-          searchMode: adapter.searchMode,
-          pageSize: adapter.pageSize,
-        }),
-        ...adapter.listParams,
-      },
-      workspaceSlug,
-    );
+    const response = await listDocsHub(token, {
+      ...buildDocsHubPickerParams({
+        query: requestQuery,
+        searchMode: adapter.searchMode,
+        pageSize: adapter.pageSize,
+      }),
+      ...adapter.listParams,
+    });
     return adapter.filterLoadedItems
       ? adapter.filterLoadedItems(response.items)
       : response.items;
-  }, [adapter, requestQuery, token, workspaceSlug]);
+  }, [adapter, requestQuery, token]);
 
   useResourcePickerLoad<DocsHubItem, DocsHubPickerAction>({
     actions: {
@@ -151,13 +145,14 @@ export function DocsHubPickerModal({
   });
 
   const visibleItems = useMemo(
-    () => projectDocsHubPickerItems({
-      items,
-      query,
-      excludeDocIds: [...excludeDocIds],
-      searchMode: adapter.searchMode,
-      getDocId,
-    }),
+    () =>
+      projectDocsHubPickerItems({
+        items,
+        query,
+        excludeDocIds: [...excludeDocIds],
+        searchMode: adapter.searchMode,
+        getDocId,
+      }),
     [adapter.searchMode, excludeDocIds, getDocId, items, query],
   );
 
@@ -165,7 +160,7 @@ export function DocsHubPickerModal({
     <ResourcePickerDialog
       accessNotice={
         <NoAccessNotice
-          workspaceLabel={adapter.copy.noAccessWorkspaceLabel ?? adapter.copy.title}
+          appLabel={adapter.copy.noAccessAppLabel ?? adapter.copy.title}
           action={adapter.copy.noAccessAction ?? adapter.copy.title}
         />
       }

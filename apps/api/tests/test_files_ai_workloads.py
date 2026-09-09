@@ -64,12 +64,14 @@ def test_files_workloads_are_composed_into_canonical_registry() -> None:
 
         registry.compile_capabilities()
 
-        assert registry.resolve_llm_workload(
-            FILES_GROUNDED_CHAT_WORKLOAD_ID
-        ).task_kind == FILES_GROUNDED_CHAT_TASK_KIND
-        assert registry.resolve_llm_workload(
-            FILES_RAG_QUERY_REWRITE_WORKLOAD_ID
-        ).task_kind == FILES_RAG_QUERY_REWRITE_TASK_KIND
+        assert (
+            registry.resolve_llm_workload(FILES_GROUNDED_CHAT_WORKLOAD_ID).task_kind
+            == FILES_GROUNDED_CHAT_TASK_KIND
+        )
+        assert (
+            registry.resolve_llm_workload(FILES_RAG_QUERY_REWRITE_WORKLOAD_ID).task_kind
+            == FILES_RAG_QUERY_REWRITE_TASK_KIND
+        )
         with pytest.raises(LookupError, match="Unknown LLM workload"):
             registry.resolve_llm_workload("files.unknown")
     finally:

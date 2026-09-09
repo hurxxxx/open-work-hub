@@ -1,5 +1,5 @@
-import { useEffect, useReducer } from 'react';
 import type { FormEvent } from 'react';
+import { useEffect, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { syncLocale } from '@/src/platform/i18n';
@@ -181,10 +181,6 @@ export function useProfilePageController({
     });
   };
 
-  const saveDefaultWorkspacePreference = async (value: string) => {
-    await saveProfilePreference({ type: 'defaultWorkspace', value });
-  };
-
   return {
     dispatch,
     handlePasswordSubmit,
@@ -193,7 +189,6 @@ export function useProfilePageController({
     handleSectionChange,
     i18nLanguage: i18n.language,
     saveDateFormatPreference,
-    saveDefaultWorkspacePreference,
     saveLocalePreference,
     saveThemePreference,
     saveTimeZonePreference,

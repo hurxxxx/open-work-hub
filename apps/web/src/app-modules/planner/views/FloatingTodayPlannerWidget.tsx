@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import { Button, InlineNotice } from '@open-work-hub/ui';
 import {
   CalendarDays,
   CalendarPlus,
@@ -8,28 +7,28 @@ import {
   Loader2,
   MapPin,
 } from 'lucide-react';
-import { Button, InlineNotice } from '@open-work-hub/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { listCalendarEvents } from '@/src/platform/calendar/calendar-api';
 import type {
   CalendarEvent,
   CalendarSourceFilter,
   CalendarSourceType,
 } from '@/src/platform/calendar/calendar-types';
-import { listCalendarEvents } from '@/src/platform/calendar/calendar-api';
 import { useCalendarEvents } from '@/src/platform/calendar/use-calendar-events';
-import { useAuth } from '@/src/platform/auth/auth-provider';
+import { dispatchFloatingPmsOpen } from '@/src/platform/personal-widgets/floating-panel-events';
 import {
   formatDateOnly,
   formatDateTime,
   normalizeTimeZone,
   parseApiDateTime,
 } from '@/src/platform/time/time-utils';
-import { dispatchFloatingPmsOpen } from '@/src/platform/personal-widgets/floating-panel-events';
 
 import { MeetingPreviewModal } from './calendar/MeetingPreviewModal';
-import { PlannerEventModal } from './PlannerEventModal';
-import { resolvePlannerCalendarEventClick } from './planner-calendar-controller';
 import {
   addDateKeyDays,
   buildCreateRangeForDateKey,
@@ -39,6 +38,12 @@ import {
   type TodayPlannerDayId,
   type TodayPlannerEntry,
 } from './floating-today-planner-model';
+import { resolvePlannerCalendarEventClick } from './planner-calendar-controller';
+import {
+  plannerCalendarEventId,
+  plannerEventToCalendarEvent,
+} from './planner-calendar-event-projection';
+import { PlannerEventModal } from './PlannerEventModal';
 
 const CLOCK_TICK_MS = 60_000;
 
@@ -97,8 +102,6 @@ export function FloatingTodayPlannerWidget({
     typeof buildCreateRangeForDateKey
   > | null>(null);
   const [previewMeetingId, setPreviewMeetingId] = useState<string | null>(null);
-  const [previewMeetingWorkspaceSlug, setPreviewMeetingWorkspaceSlug] =
-    useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const previousReloadSeq = useRef(reloadSeq);
   const now = useMemo(() => new Date(clockTick), [clockTick]);
@@ -106,12 +109,13 @@ export function FloatingTodayPlannerWidget({
     () => buildTodayPlannerRange(now, timeZone),
     [now, timeZone],
   );
-  const { events, loading, error, refresh } = useCalendarEvents({
-    from: range.from,
-    sources: TODAY_PLANNER_SOURCES,
-    to: range.to,
-    useMockData: false,
-  });
+  const { events, loading, error, refresh, removeEvent, upsertEvent } =
+    useCalendarEvents({
+      from: range.from,
+      sources: TODAY_PLANNER_SOURCES,
+      to: range.to,
+      useMockData: false,
+    });
   const groups = useMemo(
     () => buildTodayPlannerDayGroups(events, range.days, timeZone, now),
     [events, now, range.days, timeZone],
@@ -156,13 +160,31 @@ export function FloatingTodayPlannerWidget({
     refresh();
   }, [refresh, reloadSeq]);
 
-  const handlePlannerChanged = useCallback(() => {
+  const closePlannerEvent = useCallback(() => {
     setPlannerEventModalOpen(false);
     setPlannerEventId(null);
     setPlannerEventRange(null);
-    refresh();
-    onChanged?.();
-  }, [onChanged, refresh]);
+  }, []);
+
+  const handlePlannerEventSaved = useCallback(
+    (event: Parameters<typeof plannerEventToCalendarEvent>[0]) => {
+      upsertEvent(plannerEventToCalendarEvent(event));
+      closePlannerEvent();
+      refresh();
+      onChanged?.();
+    },
+    [closePlannerEvent, onChanged, refresh, upsertEvent],
+  );
+
+  const handlePlannerEventDeleted = useCallback(
+    (eventId: string) => {
+      removeEvent(plannerCalendarEventId(eventId));
+      closePlannerEvent();
+      refresh();
+      onChanged?.();
+    },
+    [closePlannerEvent, onChanged, refresh, removeEvent],
+  );
 
   const openCreatePlannerEvent = useCallback(() => {
     const dateKey = activeGroup?.dateKey ?? range.todayKey;
@@ -182,7 +204,6 @@ export function FloatingTodayPlannerWidget({
       }
       if (action.type === 'previewMeeting') {
         setPreviewMeetingId(action.meetingId);
-        setPreviewMeetingWorkspaceSlug(action.workspaceSlug);
         return;
       }
       if (action.type === 'openTask') {
@@ -190,7 +211,6 @@ export function FloatingTodayPlannerWidget({
           mode: 'openTask',
           taskId: action.taskId,
           taskListId: action.taskListId,
-          workspaceSlug: action.workspaceSlug,
         });
         return;
       }
@@ -299,7 +319,7 @@ export function FloatingTodayPlannerWidget({
       <div className="flex shrink-0 justify-end border-t border-app-border px-4 py-3">
         <Button
           className="gap-1.5"
-          onClick={() => navigate('/planner')}
+          onClick={() => navigate(buildAppHref({ routeId: 'planner.root' }))}
           variant="secondary"
         >
           <ExternalLink aria-hidden="true" size={14} />
@@ -316,10 +336,8 @@ export function FloatingTodayPlannerWidget({
         }}
         onClose={() => {
           setPreviewMeetingId(null);
-          setPreviewMeetingWorkspaceSlug(null);
         }}
         overlayClassName="z-[119]"
-        workspaceSlug={previewMeetingWorkspaceSlug ?? undefined}
       />
       <PlannerEventModal
         contentClassName="z-[120]"
@@ -331,8 +349,8 @@ export function FloatingTodayPlannerWidget({
           setPlannerEventId(null);
           setPlannerEventRange(null);
         }}
-        onDeleted={handlePlannerChanged}
-        onSaved={handlePlannerChanged}
+        onDeleted={handlePlannerEventDeleted}
+        onSaved={handlePlannerEventSaved}
         overlayClassName="z-[119]"
       />
     </div>
@@ -389,14 +407,6 @@ function TodayPlannerEntryRow({
               >
                 {t(SOURCE_LABEL_KEYS[event.sourceType])}
               </span>
-              {event.workspace ? (
-                <span
-                  className="app-text-micro max-w-36 truncate rounded-full bg-app-surface-sidebar px-2 py-0.5 text-app-ink/50"
-                  title={event.workspace.name}
-                >
-                  {event.workspace.name}
-                </span>
-              ) : null}
               {location ? (
                 <span className="app-text-micro inline-flex min-w-0 items-center gap-1 text-app-ink/45">
                   <MapPin aria-hidden="true" size={12} />

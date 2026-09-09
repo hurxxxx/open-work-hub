@@ -17,7 +17,6 @@ from open_work_hub_api.core.worker_queue_contract import (
 )
 from open_work_hub_api.domains.rag.contracts import RagSyncLane
 
-
 RAG_SYNC_PUBLICATION_KIND = "sync"
 RAG_VISIBILITY_PUBLICATION_KIND = "visibility"
 _PENDING_RAG_PUBLISHES_KEY = "rag_publish_after_commit"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import exists, or_, select
+from sqlalchemy import exists, or_, select, true
 
 from open_work_hub_api.domains.meeting.models import Meeting, MeetingAttendee
 from open_work_hub_api.domains.retrieval.partition_adapter_ids import (
@@ -11,6 +11,8 @@ from open_work_hub_api.domains.source_access.resource_types import MEETING_RESOU
 
 
 def meeting_read_predicate(policy):
+    if policy.is_platform_admin:
+        return true()
     return or_(
         Meeting.organizer_id == policy.user.id,
         exists(
@@ -28,7 +30,6 @@ def can_read_meeting(policy, meeting_id: str) -> bool:
             select(Meeting.id)
             .where(
                 Meeting.id == meeting_id,
-                Meeting.workspace_id == policy.workspace.id,
                 meeting_read_predicate(policy),
             )
             .limit(1)
@@ -42,7 +43,6 @@ def has_accessible_meeting(policy) -> bool:
         policy.db.scalar(
             select(Meeting.id)
             .where(
-                Meeting.workspace_id == policy.workspace.id,
                 meeting_read_predicate(policy),
             )
             .limit(1)
@@ -52,11 +52,12 @@ def has_accessible_meeting(policy) -> bool:
 
 
 class MeetingSourceAccessAdapter:
+    app_id = "meeting"
     adapter_id = MEETING_RETRIEVAL_PARTITION_ADAPTER_ID
     partition_adapter_id = MEETING_RETRIEVAL_PARTITION_ADAPTER_ID
     source_namespace = "meeting"
     resource_types = (MEETING_RESOURCE_TYPE,)
-    allowed_candidate_scopes = ("workspace",)
+    allowed_candidate_scopes = ("company",)
     allowed_transitions: tuple[str, ...] = ()
     transition_mode = "source_owned"
     keyword_acl_entity_types = ("meeting",)
@@ -105,6 +106,12 @@ class MeetingSourceAccessAdapter:
         return has_accessible_meeting(policy)
 
     def keyword_acl_branches(self, policy):
+        if policy.is_platform_admin:
+            return [
+                policy._keyword_entity_branch(
+                    "meeting", [policy._keyword_acl_clause("visibility", "company")]
+                )
+            ]
         return [
             policy._keyword_entity_branch(
                 "meeting",

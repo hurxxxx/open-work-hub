@@ -20,8 +20,8 @@ export interface CoreAppModuleManifest<
   globalRoutePaths?: readonly string[];
   navItems: readonly TNavItem[];
   staticGlobalRoutePaths?: readonly string[];
-  staticWorkspaceRoutePaths?: readonly string[];
-  workspaceRoutePaths: readonly string[];
+  staticAppRoutePaths?: readonly string[];
+  appRoutePaths: readonly string[];
 }
 
 export interface CoreStaticRouteDefinition<TAppId extends string = string> {
@@ -29,7 +29,7 @@ export interface CoreStaticRouteDefinition<TAppId extends string = string> {
   path: string;
 }
 
-export interface CoreWorkspaceRouteDefinition<TAppId extends string = string> {
+export interface CoreAppRouteDefinition<TAppId extends string = string> {
   appId: TAppId;
   path: string;
 }
@@ -71,7 +71,7 @@ export interface CoreAppModuleRegistration<
   TNavItem extends CoreNavItem<TAppId>,
   TManifest extends CoreAppModuleManifest<TAppId, TNavItem>,
   TStaticRoute extends CoreStaticRouteDefinition<TAppId>,
-  TWorkspaceRoute extends CoreWorkspaceRouteDefinition<TAppId>,
+  TAppRoute extends CoreAppRouteDefinition<TAppId>,
   TToolViewRoute extends CoreToolViewRouteDefinition<TAppId, TNavItem>,
   TBackgroundWorkSource extends CoreBackgroundWorkSource,
   TSidebarConfig,
@@ -85,7 +85,7 @@ export interface CoreAppModuleRegistration<
   shellNavResolver?: TShellNavResolver;
   shellProviders?: readonly TShellProvider[];
   toolViewRoutes?: readonly TToolViewRoute[];
-  workspaceRoutes?: readonly TWorkspaceRoute[];
+  appRoutes?: readonly TAppRoute[];
 }
 
 export interface CoreAppModuleRegistry<
@@ -94,7 +94,7 @@ export interface CoreAppModuleRegistry<
   TManifest extends CoreAppModuleManifest<TAppId, TNavItem>,
   TAppBarItem,
   TStaticRoute extends CoreStaticRouteDefinition<TAppId>,
-  TWorkspaceRoute extends CoreWorkspaceRouteDefinition<TAppId>,
+  TAppRoute extends CoreAppRouteDefinition<TAppId>,
   TToolViewRoute extends CoreToolViewRouteDefinition<TAppId, TNavItem>,
   TBackgroundWorkSource extends CoreBackgroundWorkSource,
   TSidebarConfig,
@@ -117,8 +117,8 @@ export interface CoreAppModuleRegistry<
   sidebarConfigByAppId: ReadonlyMap<TAppId, TSidebarConfig>;
   toolViewRouteById: ReadonlyMap<string, TToolViewRoute>;
   toolViewRoutes: readonly TToolViewRoute[];
-  workspaceRoutes: readonly TWorkspaceRoute[];
-  workspaceRoutesByAppId: ReadonlyMap<TAppId, readonly TWorkspaceRoute[]>;
+  appRoutes: readonly TAppRoute[];
+  appRoutesByAppId: ReadonlyMap<TAppId, readonly TAppRoute[]>;
 }
 
 export interface CoreAppModuleRegistryApi<
@@ -127,7 +127,7 @@ export interface CoreAppModuleRegistryApi<
   TManifest extends CoreAppModuleManifest<TAppId, TNavItem>,
   TAppBarItem,
   TStaticRoute extends CoreStaticRouteDefinition<TAppId>,
-  TWorkspaceRoute extends CoreWorkspaceRouteDefinition<TAppId>,
+  TAppRoute extends CoreAppRouteDefinition<TAppId>,
   TToolViewRoute extends CoreToolViewRouteDefinition<TAppId, TNavItem>,
   TBackgroundWorkSource extends CoreBackgroundWorkSource,
   TSidebarConfig,
@@ -147,7 +147,7 @@ export interface CoreAppModuleRegistryApi<
     TManifest,
     TAppBarItem,
     TStaticRoute,
-    TWorkspaceRoute,
+    TAppRoute,
     TToolViewRoute,
     TBackgroundWorkSource,
     TSidebarConfig,
@@ -156,19 +156,19 @@ export interface CoreAppModuleRegistryApi<
   >;
   APP_SHELL_PROVIDERS: readonly TShellProvider[];
   APP_TOOL_VIEW_ROUTES: readonly TToolViewRoute[];
-  APP_WORKSPACE_ROUTES: readonly TWorkspaceRoute[];
+  APP_ROUTES: readonly TAppRoute[];
   NAV_ITEMS: readonly TNavItem[];
   assertAppModuleStaticRouteContract: (
     appId: TAppId,
     routes: {
       globalRoutes?: readonly CoreRoutePathDefinition[];
-      workspaceRoutes?: readonly CoreRoutePathDefinition[];
+      appRoutes?: readonly CoreRoutePathDefinition[];
     },
   ) => void;
   getAppModuleGlobalRoutes: (appId: TAppId) => readonly TStaticRoute[];
   getAppModuleManifest: (appId: TAppId) => TManifest | null;
   getAppModuleSidebarConfig: (appId: string) => TSidebarConfig | null;
-  getAppModuleWorkspaceRoutes: (appId: TAppId) => readonly TWorkspaceRoute[];
+  getAppModuleAppRoutes: (appId: TAppId) => readonly TAppRoute[];
   getAppShellNavResolver: (appId: TAppId) => TShellNavResolver | null;
   getNavItem: (itemId: string) => TNavItem | null;
   getToolViewRoute: ({
@@ -185,7 +185,7 @@ type CoreAppModuleRegistryInput<
   TNavItem extends CoreNavItem<TAppId>,
   TManifest extends CoreAppModuleManifest<TAppId, TNavItem>,
   TStaticRoute extends CoreStaticRouteDefinition<TAppId>,
-  TWorkspaceRoute extends CoreWorkspaceRouteDefinition<TAppId>,
+  TAppRoute extends CoreAppRouteDefinition<TAppId>,
   TToolViewRoute extends CoreToolViewRouteDefinition<TAppId, TNavItem>,
   TBackgroundWorkSource extends CoreBackgroundWorkSource,
   TSidebarConfig,
@@ -198,7 +198,7 @@ type CoreAppModuleRegistryInput<
       TNavItem,
       TManifest,
       TStaticRoute,
-      TWorkspaceRoute,
+      TAppRoute,
       TToolViewRoute,
       TBackgroundWorkSource,
       TSidebarConfig,
@@ -213,7 +213,7 @@ function normalizeRegistration<
   TNavItem extends CoreNavItem<TAppId>,
   TManifest extends CoreAppModuleManifest<TAppId, TNavItem>,
   TStaticRoute extends CoreStaticRouteDefinition<TAppId>,
-  TWorkspaceRoute extends CoreWorkspaceRouteDefinition<TAppId>,
+  TAppRoute extends CoreAppRouteDefinition<TAppId>,
   TToolViewRoute extends CoreToolViewRouteDefinition<TAppId, TNavItem>,
   TBackgroundWorkSource extends CoreBackgroundWorkSource,
   TSidebarConfig,
@@ -225,7 +225,7 @@ function normalizeRegistration<
     TNavItem,
     TManifest,
     TStaticRoute,
-    TWorkspaceRoute,
+    TAppRoute,
     TToolViewRoute,
     TBackgroundWorkSource,
     TSidebarConfig,
@@ -237,7 +237,7 @@ function normalizeRegistration<
   TNavItem,
   TManifest,
   TStaticRoute,
-  TWorkspaceRoute,
+  TAppRoute,
   TToolViewRoute,
   TBackgroundWorkSource,
   TSidebarConfig,
@@ -399,7 +399,7 @@ export function createCoreAppModuleRegistry<
   TManifest extends CoreAppModuleManifest<TAppId, TNavItem>,
   TAppBarItem,
   TStaticRoute extends CoreStaticRouteDefinition<TAppId>,
-  TWorkspaceRoute extends CoreWorkspaceRouteDefinition<TAppId>,
+  TAppRoute extends CoreAppRouteDefinition<TAppId>,
   TToolViewRoute extends CoreToolViewRouteDefinition<TAppId, TNavItem>,
   TBackgroundWorkSource extends CoreBackgroundWorkSource,
   TSidebarConfig,
@@ -411,7 +411,7 @@ export function createCoreAppModuleRegistry<
     TNavItem,
     TManifest,
     TStaticRoute,
-    TWorkspaceRoute,
+    TAppRoute,
     TToolViewRoute,
     TBackgroundWorkSource,
     TSidebarConfig,
@@ -424,7 +424,7 @@ export function createCoreAppModuleRegistry<
   TManifest,
   TAppBarItem,
   TStaticRoute,
-  TWorkspaceRoute,
+  TAppRoute,
   TToolViewRoute,
   TBackgroundWorkSource,
   TSidebarConfig,
@@ -434,10 +434,10 @@ export function createCoreAppModuleRegistry<
   const registrations = inputs.map(normalizeRegistration);
   const manifestByAppId = new Map<TAppId, TManifest>();
   const navItemById = new Map<string, TNavItem>();
-  const workspaceRoutePaths = new Set<string>();
+  const appRoutePaths = new Set<string>();
   const globalRoutePaths = new Set<string>();
-  const workspaceRoutes: TWorkspaceRoute[] = [];
-  const workspaceRoutesByAppId = new Map<TAppId, TWorkspaceRoute[]>();
+  const appRoutes: TAppRoute[] = [];
+  const appRoutesByAppId = new Map<TAppId, TAppRoute[]>();
   const appGlobalRoutes: TStaticRoute[] = [];
   const globalRoutesByAppId = new Map<TAppId, TStaticRoute[]>();
   const toolViewRoutes: TToolViewRoute[] = [];
@@ -467,40 +467,35 @@ export function createCoreAppModuleRegistry<
       navItemById.set(navItem.id, navItem);
     }
 
-    const appWorkspaceRoutes = [...(registration.workspaceRoutes ?? [])];
-    const declaredWorkspaceRoutePaths = new Set(manifest.workspaceRoutePaths);
-    const registeredWorkspaceRoutePaths = new Set<string>();
-    for (const route of appWorkspaceRoutes) {
+    const appAppRoutes = [...(registration.appRoutes ?? [])];
+    const declaredAppRoutePaths = new Set(manifest.appRoutePaths);
+    const registeredAppRoutePaths = new Set<string>();
+    for (const route of appAppRoutes) {
       if (route.appId !== appId) {
         throw new Error(
-          `Workspace route ${route.path} belongs to ${route.appId} but is registered with manifest ${appId}`,
+          `App route ${route.path} belongs to ${route.appId} but is registered with manifest ${appId}`,
         );
       }
-      assertUniqueRoutePath('workspace', route.path, workspaceRoutePaths);
-      assertDeclaredRoutePath(
-        'Workspace',
-        appId,
-        route.path,
-        declaredWorkspaceRoutePaths,
-      );
-      workspaceRoutes.push(route);
-      registeredWorkspaceRoutePaths.add(route.path);
+      assertUniqueRoutePath('app', route.path, appRoutePaths);
+      assertDeclaredRoutePath('App', appId, route.path, declaredAppRoutePaths);
+      appRoutes.push(route);
+      registeredAppRoutePaths.add(route.path);
     }
     assertRegisteredRoutePaths(
-      'Workspace',
+      'App',
       appId,
-      declaredWorkspaceRoutePaths,
-      registeredWorkspaceRoutePaths,
+      declaredAppRoutePaths,
+      registeredAppRoutePaths,
     );
-    if (appWorkspaceRoutes.length > 0) {
-      workspaceRoutesByAppId.set(appId, appWorkspaceRoutes);
+    if (appAppRoutes.length > 0) {
+      appRoutesByAppId.set(appId, appAppRoutes);
     }
 
-    const appRoutes = [...(registration.globalRoutes ?? [])];
+    const staticAppRoutes = [...(registration.globalRoutes ?? [])];
     const registeredAppRoutes: TStaticRoute[] = [];
     const declaredGlobalRoutePaths = new Set(manifest.globalRoutePaths ?? []);
     const registeredGlobalRoutePaths = new Set<string>();
-    for (const route of appRoutes) {
+    for (const route of staticAppRoutes) {
       assertUniqueRoutePath('global', route.path, globalRoutePaths);
       assertDeclaredRoutePath(
         'Global',
@@ -519,7 +514,7 @@ export function createCoreAppModuleRegistry<
       declaredGlobalRoutePaths,
       registeredGlobalRoutePaths,
     );
-    if (appRoutes.length > 0) {
+    if (staticAppRoutes.length > 0) {
       globalRoutesByAppId.set(appId, registeredAppRoutes);
     }
 
@@ -588,8 +583,8 @@ export function createCoreAppModuleRegistry<
     shellProviders,
     toolViewRouteById,
     toolViewRoutes,
-    workspaceRoutes,
-    workspaceRoutesByAppId,
+    appRoutes,
+    appRoutesByAppId,
   };
 }
 
@@ -599,7 +594,7 @@ export function createCoreAppModuleRegistryApi<
   TManifest extends CoreAppModuleManifest<TAppId, TNavItem>,
   TAppBarItem,
   TStaticRoute extends CoreStaticRouteDefinition<TAppId>,
-  TWorkspaceRoute extends CoreWorkspaceRouteDefinition<TAppId>,
+  TAppRoute extends CoreAppRouteDefinition<TAppId>,
   TToolViewRoute extends CoreToolViewRouteDefinition<TAppId, TNavItem>,
   TBackgroundWorkSource extends CoreBackgroundWorkSource,
   TSidebarConfig,
@@ -611,7 +606,7 @@ export function createCoreAppModuleRegistryApi<
     TNavItem,
     TManifest,
     TStaticRoute,
-    TWorkspaceRoute,
+    TAppRoute,
     TToolViewRoute,
     TBackgroundWorkSource,
     TSidebarConfig,
@@ -624,7 +619,7 @@ export function createCoreAppModuleRegistryApi<
   TManifest,
   TAppBarItem,
   TStaticRoute,
-  TWorkspaceRoute,
+  TAppRoute,
   TToolViewRoute,
   TBackgroundWorkSource,
   TSidebarConfig,
@@ -637,7 +632,7 @@ export function createCoreAppModuleRegistryApi<
     TManifest,
     TAppBarItem,
     TStaticRoute,
-    TWorkspaceRoute,
+    TAppRoute,
     TToolViewRoute,
     TBackgroundWorkSource,
     TSidebarConfig,
@@ -653,11 +648,11 @@ export function createCoreAppModuleRegistryApi<
     APP_MODULE_REGISTRY: registry,
     APP_SHELL_PROVIDERS: registry.shellProviders,
     APP_TOOL_VIEW_ROUTES: registry.toolViewRoutes,
-    APP_WORKSPACE_ROUTES: registry.workspaceRoutes,
+    APP_ROUTES: registry.appRoutes,
     NAV_ITEMS: registry.navItems,
     assertAppModuleStaticRouteContract: (
       appId,
-      { globalRoutes = EMPTY_ROUTES, workspaceRoutes = EMPTY_ROUTES },
+      { globalRoutes = EMPTY_ROUTES, appRoutes = EMPTY_ROUTES },
     ) => {
       const manifest = registry.manifestByAppId.get(appId);
       if (!manifest) {
@@ -667,10 +662,10 @@ export function createCoreAppModuleRegistryApi<
       }
 
       assertStaticRoutePaths(
-        'Static workspace',
+        'Static app',
         appId,
-        manifest.staticWorkspaceRoutePaths ?? [],
-        workspaceRoutes,
+        manifest.staticAppRoutePaths ?? [],
+        appRoutes,
       );
       assertStaticRoutePaths(
         'Static global',
@@ -685,8 +680,8 @@ export function createCoreAppModuleRegistryApi<
       registry.manifestByAppId.get(appId) ?? null,
     getAppModuleSidebarConfig: (appId) =>
       registry.sidebarConfigByAppId.get(appId as TAppId) ?? null,
-    getAppModuleWorkspaceRoutes: (appId) =>
-      registry.workspaceRoutesByAppId.get(appId) ?? [],
+    getAppModuleAppRoutes: (appId) =>
+      registry.appRoutesByAppId.get(appId) ?? [],
     getAppShellNavResolver: (appId) =>
       registry.shellNavResolverByAppId.get(appId) ?? null,
     getNavItem: (itemId) => registry.navItemById.get(itemId) ?? null,

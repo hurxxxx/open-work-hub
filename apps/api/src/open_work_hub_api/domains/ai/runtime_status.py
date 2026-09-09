@@ -22,7 +22,6 @@ from open_work_hub_api.domains.ai.model_settings_service import (
 )
 from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 
-
 RuntimeProbe = Literal["configured", "live"]
 _ConfigKey = tuple[str, str, str, str]
 

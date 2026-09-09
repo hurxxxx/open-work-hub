@@ -14,13 +14,11 @@ export type FloatingPmsOpenEventDetail =
       preserveActivePanel?: boolean;
       sourceTodoId?: string | null;
       title?: string | null;
-      workspaceSlug?: string | null;
     }
   | {
       mode: 'openTask';
       taskId: string;
       taskListId?: string | null;
-      workspaceSlug?: string | null;
     };
 
 export type PersonalTodoPmsTaskCreatedEventDetail = {

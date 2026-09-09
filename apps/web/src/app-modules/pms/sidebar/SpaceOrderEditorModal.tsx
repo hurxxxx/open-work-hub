@@ -1,6 +1,5 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { Dialog } from '@open-work-hub/ui/primitives/dialog';
 import { Button } from '@open-work-hub/ui/primitives/button';
+import { Dialog } from '@open-work-hub/ui/primitives/dialog';
 import {
   ArrowDown,
   ArrowUp,
@@ -8,6 +7,7 @@ import {
   FolderOpen,
   List as ListIcon,
 } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { DocsHubItem } from '@/src/app-modules/docs/public-api';
@@ -31,6 +31,7 @@ import {
 interface SpaceOrderEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
+  spaceId: string;
   spaceName: string;
   folders: PmsFolder[];
   lists: PmsTaskList[];
@@ -198,6 +199,7 @@ function SpaceOrderEditorModalSession(
 }
 
 function useSpaceOrderEditorModalElement({
+  spaceId,
   onClose,
   spaceName,
   folders,
@@ -212,7 +214,7 @@ function useSpaceOrderEditorModalElement({
     [folders, locale],
   );
   const [draft, setDraft] = useState(() =>
-    createSpaceOrderDraft({ lists, docs }),
+    createSpaceOrderDraft({ spaceId, lists, docs }),
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

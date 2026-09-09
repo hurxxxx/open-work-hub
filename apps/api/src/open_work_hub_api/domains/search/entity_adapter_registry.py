@@ -6,8 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.core.workspace_app_registry import WorkspaceAppRegistration
-from open_work_hub_api.domains.auth.models import Workspace
+from open_work_hub_api.core.app_registry import AppRegistration
 from open_work_hub_api.domains.search.entity_registry import (
     SearchEntityDescriptor,
     get_search_entity_descriptor,
@@ -38,12 +37,12 @@ class SearchIndexLifecycleHooks:
 
 @dataclass(frozen=True)
 class SearchEntityAdapter:
-    owner_app: WorkspaceAppRegistration
+    owner_app: AppRegistration
     entity_type: str
     resource_type: str
     label: str
     label_key: str
-    workspace_loader: Any
+    company_loader: Any
     document_loader: Any
     partition_adapter_id: str | None = None
     active: bool = True
@@ -73,15 +72,15 @@ class SearchEntityAdapter:
             label_key=self.label_key,
         )
 
-    def load_workspace_documents(
+    def load_documents(
         self,
         db: Session,
-        *,
-        workspace: Workspace,
     ) -> list[dict[str, Any]]:
         if not self.active:
             return []
-        return self.workspace_loader(db, workspace=workspace)
+        return self.company_loader(
+            db,
+        )
 
     def load_document(
         self,
@@ -96,7 +95,7 @@ class SearchEntityAdapter:
 
 
 @dataclass(frozen=True)
-class WorkspaceKeywordSearchScope:
+class CompanyKeywordSearchScope:
     descriptors: tuple[SearchEntityDescriptor, ...]
 
     @property
@@ -150,11 +149,11 @@ def search_entity_adapters() -> tuple[SearchEntityAdapter, ...]:
     return tuple(_adapters_by_entity_type.values())
 
 
-def resolve_workspace_keyword_search_scope(
+def resolve_keyword_search_scope(
     enabled_app_ids: Collection[str],
     *,
     include_inactive_entity_types: Collection[str] = (),
-) -> WorkspaceKeywordSearchScope:
+) -> CompanyKeywordSearchScope:
     from open_work_hub_api.domains.search.default_entity_adapters import (
         ensure_search_entity_adapters_registered,
     )
@@ -166,7 +165,7 @@ def resolve_workspace_keyword_search_scope(
         for entity_type in include_inactive_entity_types
         if normalize_search_entity_type(entity_type)
     }
-    return WorkspaceKeywordSearchScope(
+    return CompanyKeywordSearchScope(
         descriptors=tuple(
             adapter.descriptor
             for adapter in _adapters_by_entity_type.values()
@@ -187,7 +186,7 @@ def _normalize_adapter(adapter: SearchEntityAdapter) -> SearchEntityAdapter:
     label = str(adapter.label).strip()
     label_key = str(adapter.label_key).strip()
     partition_adapter_id = str(adapter.partition_adapter_id or "").strip() or None
-    if not isinstance(owner_app, WorkspaceAppRegistration):
+    if not isinstance(owner_app, AppRegistration):
         raise ValueError("Search entity adapter must declare owner_app registration")
     if not entity_type:
         raise ValueError("Search entity adapter must declare entity_type")
@@ -197,8 +196,8 @@ def _normalize_adapter(adapter: SearchEntityAdapter) -> SearchEntityAdapter:
         raise ValueError(f"Search entity adapter {entity_type} must declare label")
     if not label_key:
         raise ValueError(f"Search entity adapter {entity_type} must declare label_key")
-    if not callable(adapter.workspace_loader):
-        raise ValueError(f"Search entity adapter {entity_type} must declare workspace_loader")
+    if not callable(adapter.company_loader):
+        raise ValueError(f"Search entity adapter {entity_type} must declare company_loader")
     if not callable(adapter.document_loader):
         raise ValueError(f"Search entity adapter {entity_type} must declare document_loader")
     return SearchEntityAdapter(
@@ -207,7 +206,7 @@ def _normalize_adapter(adapter: SearchEntityAdapter) -> SearchEntityAdapter:
         resource_type=resource_type,
         label=label,
         label_key=label_key,
-        workspace_loader=adapter.workspace_loader,
+        company_loader=adapter.company_loader,
         document_loader=adapter.document_loader,
         partition_adapter_id=partition_adapter_id,
         active=bool(adapter.active),
@@ -277,12 +276,12 @@ def _normalize_string_tuple(values: tuple[str, ...]) -> tuple[str, ...]:
 __all__ = [
     "SearchIndexLifecycleHooks",
     "SearchEntityAdapter",
-    "WorkspaceKeywordSearchScope",
+    "CompanyKeywordSearchScope",
     "get_search_entity_adapter",
     "has_search_entity_adapter",
     "register_search_entity_adapter",
     "reset_search_entity_adapters",
-    "resolve_workspace_keyword_search_scope",
+    "resolve_keyword_search_scope",
     "search_entity_adapters",
     "search_date_filter_fields",
     "search_people_roles",

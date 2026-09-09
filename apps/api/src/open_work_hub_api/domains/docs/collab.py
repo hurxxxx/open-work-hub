@@ -2,33 +2,28 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from dataclasses import dataclass
-from datetime import UTC, datetime
 import json
 import logging
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
+import y_py as Y
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload, selectinload
-import y_py as Y
 from ypy_websocket.yroom import YRoom
 from ypy_websocket.yutils import YMessageType
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.domains.auth.access import (
-    load_active_workspace_by_key,
-    resolve_workspace_role,
-    workspace_role_allows,
-)
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.collaboration.yjs_runtime import (
     COLLAB_CLOSE_CODE_RELAY_UNAVAILABLE,
-    CollabConnectionLimitExceeded,
     CollabBus,
+    CollabConnectionLimitExceeded,
     CollabRoomRuntime,
     RedisCollabBus,
     hash_bytes,
@@ -36,21 +31,15 @@ from open_work_hub_api.domains.collaboration.yjs_runtime import (
 )
 from open_work_hub_api.domains.docs.collab_codec import blocks_to_yjs_state, yjs_state_to_blocks
 from open_work_hub_api.domains.docs.models import (
-    DocMeetingAccess,
     DocsCollabDocument,
     NativeDoc,
     NativeDocPage,
     NativeDocUserShare,
 )
 from open_work_hub_api.domains.docs.rag_sync import enqueue_native_doc_rag_sync
-from open_work_hub_api.domains.source_access.targets import (
-    TargetRef,
-    project_target_access,
-)
 from open_work_hub_api.domains.docs.timestamps import touch_native_doc
 from open_work_hub_api.domains.media.service import sync_embedded_media
 from open_work_hub_api.domains.rag.contracts import RagSyncOperation
-
 
 logger = logging.getLogger(__name__)
 
@@ -164,93 +153,21 @@ def _load_native_page_for_collab(db: Session, page_id: str) -> NativeDocPage | N
     )
 
 
-def _resolve_native_page_context(
-    db: Session,
-    user: User,
-    workspace_slug: str,
-    page_id: str,
-) -> CollabPageContext:
-    workspace = load_active_workspace_by_key(db, workspace_slug)
-    if workspace is None:
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
-    if not workspace_role_allows(resolve_workspace_role(db, user, workspace.id), "member"):
-        raise localized_http_exception(status_code=403, code="workspace.access_required")
+def _resolve_native_page_context(db: Session, user: User, page_id: str) -> CollabPageContext:
+    from open_work_hub_api.domains.docs.access_context import native_page_context_from_page_or_404
 
-    page = _load_native_page_for_collab(db, page_id)
-    if (
-        page is None
-        or page.doc is None
-        or page.trashed_at is not None
-        or page.doc.trashed_at is not None
-    ):
-        raise localized_http_exception(status_code=404, code="docs.page_not_found")
-    if page.doc.workspace_id != workspace.id:
-        raise localized_http_exception(status_code=404, code="docs.page_not_found")
+    context = native_page_context_from_page_or_404(
+        db, page_id=page_id, user=user, share_token=None, require="view"
+    )
+    page = context.page
     if page.content_format != "block":
         raise localized_http_exception(status_code=404, code="docs.page_not_found")
-
-    if page.doc.owner_id == user.id:
-        can_view = True
-        can_edit = True
-    else:
-        direct_share = next(
-            (share for share in page.doc.user_shares if share.user_id == user.id), None
-        )
-        meeting_grant = db.scalar(
-            select(DocMeetingAccess).where(
-                DocMeetingAccess.doc_id == page.doc_id,
-                DocMeetingAccess.user_id == user.id,
-                DocMeetingAccess.revoked_at.is_(None),
-                (DocMeetingAccess.expires_at.is_(None) | (DocMeetingAccess.expires_at > _utcnow())),
-            )
-        )
-        target_access_level = None
-        for target in page.doc.targets:
-            projection = project_target_access(
-                db=db,
-                user=user,
-                workspace=workspace,
-                ref=TargetRef(
-                    app=target.target_app,
-                    type=target.target_type,
-                    id=target.target_id,
-                ),
-            )
-            candidate = (
-                "edit"
-                if projection.can_edit or projection.can_manage
-                else "read"
-                if projection.can_view
-                else None
-            )
-            if candidate == "edit":
-                target_access_level = "edit"
-                break
-            if target_access_level is None and candidate == "read":
-                target_access_level = "read"
-        access_level = None
-        for candidate in (
-            getattr(direct_share, "access_level", None),
-            getattr(meeting_grant, "access_level", None),
-            target_access_level,
-        ):
-            if candidate == "edit":
-                access_level = "edit"
-                break
-            if access_level is None and candidate == "read":
-                access_level = "read"
-        can_view = access_level in {"read", "edit"}
-        can_edit = access_level == "edit"
-
-    if not can_view:
-        raise localized_http_exception(status_code=404, code="docs.page_not_found")
-
     return CollabPageContext(
         page_ref=make_page_ref(PAGE_SOURCE_NATIVE_DOC, page.id),
         source_type=PAGE_SOURCE_NATIVE_DOC,
         source_page_id=page.id,
         room_key=make_room_key(PAGE_SOURCE_NATIVE_DOC, page.id),
-        can_edit=can_edit,
+        can_edit=context.access.can_edit,
         content_blocks=page.content_blocks,
         default_actor_user_id=page.created_by_id,
     )
@@ -259,12 +176,11 @@ def _resolve_native_page_context(
 def resolve_collab_page_context(
     db: Session,
     user: User,
-    workspace_slug: str,
     page_ref: str,
 ) -> CollabPageContext:
     source_type, source_page_id = split_page_ref(page_ref)
     if source_type == PAGE_SOURCE_NATIVE_DOC:
-        return _resolve_native_page_context(db, user, workspace_slug, source_page_id)
+        return _resolve_native_page_context(db, user, source_page_id)
     raise localized_http_exception(status_code=404, code="docs.page_not_found")
 
 

@@ -6,7 +6,9 @@ import os
 from pathlib import Path
 import sys
 from types import SimpleNamespace
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
+
+import pytest
 
 
 def _load_script_module():
@@ -91,6 +93,36 @@ def test_live_e2e_requires_positive_loopback_development_data_plane_identity() -
             }
         else:
             raise AssertionError(f"unsafe development binding accepted: {attribute}")
+
+
+def test_http_files_api_accepts_only_the_authenticated_content_grant_route() -> None:
+    live = _load_script_module()
+    api = live.HttpFilesApi(
+        base_url="http://127.0.0.1:8001",
+        token="test-session-token",
+    )
+    try:
+        accepted = api._validated_content_url("/api/v1/content#grant=signed-token")
+        assert accepted == (
+            "http://127.0.0.1:8001/api/v1/content",
+            "signed-token",
+        )
+
+        for rejected in (
+            "/api/v1/files/content/file-1#grant=signed-token",
+            "/api/v1/content#grant=signed-token&grant=other",
+            "/api/v1/content#grant=signed-token&extra=1",
+            "/api/v1/content?grant=signed-token",
+            "http://example.test/api/v1/content#grant=signed-token",
+        ):
+            try:
+                api._validated_content_url(rejected)
+            except live.LiveE2EContractError as error:
+                assert error.code == "invalid_download_url"
+            else:
+                raise AssertionError(f"unsafe content URL was accepted: {rejected}")
+    finally:
+        api.close()
 
 
 def test_canary_selection_is_bounded_hashed_and_report_is_private(
@@ -206,8 +238,7 @@ def test_content_probe_is_derived_from_body_and_never_requires_a_filename() -> N
 
 class _FakeLiveState:
     def __init__(self) -> None:
-        self.scope = "workspace"
-        self.workspace = "workspace-a"
+        self.admitted = set()
         self.metadata_version = 1
         self.partition_id = "partition-stable"
         self.corpus_id = "corpus-e2e"
@@ -221,36 +252,36 @@ class _FakeLiveApi:
         self.principal = principal
 
     def identity(self):
-        memberships = {
-            "actor": {"workspace-a": "admin", "workspace-b": "admin"},
-            "observer-a": {"workspace-a": "member"},
-            "observer-b": {"workspace-b": "member"},
-        }[self.principal]
         return {
             "id": f"id-{self.principal}",
-            "system_roles": [],
-            "workspaces": [
-                {"id": f"id-{slug}", "slug": slug, "role": role}
-                for slug, role in memberships.items()
-            ],
+            "system_roles": ["platform_admin"] if self.principal == "actor" else [],
         }
 
-    def preflight(self, workspace_slug: str) -> None:
-        assert workspace_slug in {"workspace-a", "workspace-b"}
+    def validate_acl_group(self, group_id):
+        assert group_id == "e2e-group" and not self.state.admitted
 
-    def create_corpus(self, workspace_slug: str, name: str):
-        assert self.principal == "actor" and workspace_slug == "workspace-a"
+    def replace_acl_group_members(self, group_id, user_ids):
+        assert self.principal == "actor" and group_id == "e2e-group"
+        self.state.admitted = set(user_ids)
+
+    def assert_app_denied(self):
+        assert self.principal != "actor" and f"id-{self.principal}" not in self.state.admitted
+
+    def preflight(self) -> None:
+        assert self.principal == "actor" or f"id-{self.principal}" in self.state.admitted
+
+    def create_corpus(self, name: str):
+        assert self.principal == "actor"
         assert "private" not in name
         return {
             "id": self.state.corpus_id,
-            "managed_workspace_id": "id-workspace-a",
-            "access_scope_kind": "workspace",
+            "access_scope_kind": "company",
             "retrieval_partition_id": self.state.partition_id,
             "metadata_version": 1,
         }
 
-    def upload(self, workspace_slug: str, corpus_id: str, canary):
-        assert workspace_slug == "workspace-a" and corpus_id == self.state.corpus_id
+    def upload(self, corpus_id: str, canary):
+        assert self.principal == "actor" and corpus_id == self.state.corpus_id
         file_id = f"file-{len(self.state.files) + 1}"
         self.state.files[file_id] = {
             "sha256": canary.content_sha256,
@@ -259,14 +290,13 @@ class _FakeLiveApi:
         }
         return {"id": file_id, "filename": canary.upload_name, "rag_status": "pending"}
 
-    def wait_ready(self, workspace_slug: str, file_ids, **_kwargs):
-        assert workspace_slug == self.state.workspace
+    def wait_ready(self, file_ids, **_kwargs):
         assert set(file_ids) == set(self.state.files)
         return {file_id: "ready" for file_id in file_ids}
 
-    def search(self, workspace_slug: str, *, query: str, strategy: str, page: int, page_size: int):
+    def search(self, *, query: str, strategy: str, page: int, page_size: int):
         assert query and query not in {"private body", "alpha private evidence"}
-        visible = self.state.scope == "company" or workspace_slug == self.state.workspace
+        visible = self.principal == "actor" or f"id-{self.principal}" in self.state.admitted
         ids = sorted(self.state.files) if visible and not self.state.deleted else []
         start = (page - 1) * page_size
         methods = {
@@ -299,48 +329,20 @@ class _FakeLiveApi:
             "trace_id": None,
         }
 
-    def fresh_download(self, workspace_slug: str, file_id: str):
-        assert self.state.scope == "company" or workspace_slug == self.state.workspace
+    def fresh_download(self, file_id: str):
+        assert self.principal == "actor" or f"id-{self.principal}" in self.state.admitted
         row = self.state.files[file_id]
         return (
-            f"http://127.0.0.1:8001/api/v1/files/content/{file_id}"
-            f"?epoch={self.state.metadata_version}",
+            f"http://127.0.0.1:8001/api/v1/content#grant=test-{self.state.metadata_version}",
             row["sha256"],
             int(row["size_bytes"]),
         )
 
     def assert_stale_download_denied(self, url: str) -> None:
-        epoch = int(urlparse(url).query.split("=", 1)[1])
-        assert self.state.deleted or epoch < self.state.metadata_version
+        assert parse_qs(urlparse(url).fragment)["grant"]
+        assert self.state.deleted or f"id-{self.principal}" not in self.state.admitted
 
-    def transition(
-        self,
-        workspace_slug: str,
-        corpus_id: str,
-        *,
-        expected_metadata_version: int,
-        access_scope_kind: str,
-        target_workspace_id: str | None,
-        request_id: str,
-    ):
-        assert self.principal == "actor" and corpus_id == self.state.corpus_id
-        assert workspace_slug == self.state.workspace
-        assert expected_metadata_version == self.state.metadata_version
-        assert request_id
-        self.state.metadata_version += 1
-        self.state.scope = access_scope_kind
-        if target_workspace_id is not None:
-            self.state.workspace = target_workspace_id.removeprefix("id-")
-        return {
-            "id": corpus_id,
-            "managed_workspace_id": f"id-{self.state.workspace}",
-            "access_scope_kind": self.state.scope,
-            "retrieval_partition_id": self.state.partition_id,
-            "metadata_version": self.state.metadata_version,
-        }
-
-    def bulk_delete(self, workspace_slug: str, file_ids) -> None:
-        assert workspace_slug == self.state.workspace
+    def bulk_delete(self, file_ids) -> None:
         assert set(file_ids) == set(self.state.files)
         self.state.deleted = True
 
@@ -372,7 +374,7 @@ class _FakeProjectionInspector:
     def cleanup_target(self, *, corpus_id: str):
         assert corpus_id == self.state.corpus_id
         active_ids = () if self.state.deleted else tuple(sorted(self.state.files))
-        return self.state.workspace, active_ids
+        return active_ids
 
     def wait_removed(self, *, corpus_id: str, file_ids, **_kwargs):
         assert self.state.deleted
@@ -408,19 +410,18 @@ def test_live_flow_exercises_search_acl_transitions_download_and_cleanup_without
     report = live.run_live_e2e(
         source=source,
         canaries=canaries,
-        workspace_a="workspace-a",
-        workspace_b="workspace-b",
+        acl_group_id="e2e-group",
         actor_api=_FakeLiveApi(state, principal="actor"),
-        workspace_a_observer_api=_FakeLiveApi(state, principal="observer-a"),
-        workspace_b_observer_api=_FakeLiveApi(state, principal="observer-b"),
+        observer_a_api=_FakeLiveApi(state, principal="observer-a"),
+        observer_b_api=_FakeLiveApi(state, principal="observer-b"),
         inspector=_FakeProjectionInspector(state),
         timeout_seconds=10,
         poll_interval_seconds=0.01,
     )
 
     assert report["status"] == "passed"
-    assert report["acl"]["workspace_company_workspace_and_a_to_b"] is True
-    assert report["transitions"]["projection_unchanged"] is True
+    assert report["acl"]["company_group_admission_and_revocation"] is True
+    assert report["admission_changes"]["projection_unchanged"] is True
     assert report["cleanup"]["opensearch_record_count"] == 0
     assert report["cleanup"]["qdrant_record_count"] == 0
     serialized = json.dumps(report, ensure_ascii=False)
@@ -457,17 +458,16 @@ def test_transition_projection_drift_fails_closed_and_still_cleans_canaries(
         live.run_live_e2e(
             source=source,
             canaries=canaries,
-            workspace_a="workspace-a",
-            workspace_b="workspace-b",
+            acl_group_id="e2e-group",
             actor_api=_FakeLiveApi(state, principal="actor"),
-            workspace_a_observer_api=_FakeLiveApi(state, principal="observer-a"),
-            workspace_b_observer_api=_FakeLiveApi(state, principal="observer-b"),
+            observer_a_api=_FakeLiveApi(state, principal="observer-a"),
+            observer_b_api=_FakeLiveApi(state, principal="observer-b"),
             inspector=DriftingInspector(state),
             timeout_seconds=10,
             poll_interval_seconds=0.01,
         )
     except live.LiveE2EContractError as error:
-        assert error.code == "transition_reindexed_projection"
+        assert error.code == "admission_reindexed_projection"
     else:
         raise AssertionError("projection drift was accepted")
     assert state.deleted is True
@@ -493,23 +493,22 @@ def test_upload_commit_then_client_failure_recovers_unknown_file_ids(
     state = _FakeLiveState()
 
     class ResponseLostAfterCommit(_FakeLiveApi):
-        def upload(self, workspace_slug: str, corpus_id: str, canary):
-            super().upload(workspace_slug, corpus_id, canary)
+        def upload(self, corpus_id: str, canary):
+            super().upload(corpus_id, canary)
             raise live.LiveE2EContractError("simulated_upload_response_loss")
 
-        def bulk_delete(self, workspace_slug: str, file_ids) -> None:
-            super().bulk_delete(workspace_slug, file_ids)
+        def bulk_delete(self, file_ids) -> None:
+            super().bulk_delete(file_ids)
             raise live.LiveE2EContractError("simulated_delete_response_loss")
 
     try:
         live.run_live_e2e(
             source=source,
             canaries=canaries,
-            workspace_a="workspace-a",
-            workspace_b="workspace-b",
+            acl_group_id="e2e-group",
             actor_api=ResponseLostAfterCommit(state, principal="actor"),
-            workspace_a_observer_api=_FakeLiveApi(state, principal="observer-a"),
-            workspace_b_observer_api=_FakeLiveApi(state, principal="observer-b"),
+            observer_a_api=_FakeLiveApi(state, principal="observer-a"),
+            observer_b_api=_FakeLiveApi(state, principal="observer-b"),
             inspector=_FakeProjectionInspector(state),
             timeout_seconds=10,
             poll_interval_seconds=0.01,
@@ -522,48 +521,72 @@ def test_upload_commit_then_client_failure_recovers_unknown_file_ids(
     assert state.deleted is True
 
 
-def test_workspace_move_commit_then_client_failure_recovers_from_current_manager(
+def test_group_membership_commit_then_client_failure_cleans_canaries_and_revokes_test_grants(
     tmp_path: Path,
 ) -> None:
     live = _load_script_module()
     source = tmp_path / "source"
     source.mkdir()
     (source / "private.txt").write_text(
-        "private evidence remains searchable after extraction",
-        encoding="utf-8",
+        "private evidence remains searchable after extraction", encoding="utf-8"
     )
     canaries = live.select_live_canaries(
-        source,
-        max_canaries=1,
-        max_total_bytes=1024,
-        workers=1,
-        run_nonce=b"transition-loss-test-nonce",
+        source, max_canaries=1, max_total_bytes=1024, workers=1, run_nonce=b"group-loss-test-nonce"
     )
     state = _FakeLiveState()
 
-    class MoveResponseLostAfterCommit(_FakeLiveApi):
-        def transition(self, *args, **kwargs):
-            response = super().transition(*args, **kwargs)
-            if kwargs.get("target_workspace_id") == "id-workspace-b":
-                raise live.LiveE2EContractError("simulated_move_response_loss")
-            return response
+    class ResponseLostAfterGroupCommit(_FakeLiveApi):
+        def replace_acl_group_members(self, group_id, user_ids):
+            super().replace_acl_group_members(group_id, user_ids)
+            if user_ids == ["id-observer-b"]:
+                raise live.LiveE2EContractError("simulated_group_response_loss")
 
-    try:
+    with pytest.raises(live.LiveE2EContractError, match="simulated_group_response_loss"):
         live.run_live_e2e(
             source=source,
             canaries=canaries,
-            workspace_a="workspace-a",
-            workspace_b="workspace-b",
-            actor_api=MoveResponseLostAfterCommit(state, principal="actor"),
-            workspace_a_observer_api=_FakeLiveApi(state, principal="observer-a"),
-            workspace_b_observer_api=_FakeLiveApi(state, principal="observer-b"),
+            acl_group_id="e2e-group",
+            actor_api=ResponseLostAfterGroupCommit(state, principal="actor"),
+            observer_a_api=_FakeLiveApi(state, principal="observer-a"),
+            observer_b_api=_FakeLiveApi(state, principal="observer-b"),
             inspector=_FakeProjectionInspector(state),
             timeout_seconds=10,
             poll_interval_seconds=0.01,
         )
-    except live.LiveE2EContractError as error:
-        assert error.code == "simulated_move_response_loss"
-    else:
-        raise AssertionError("lost transition response was accepted")
-    assert state.workspace == "workspace-b"
     assert state.deleted is True
+    assert state.admitted == set()
+
+
+@pytest.mark.parametrize(
+    ("policy", "members"),
+    [
+        ({"enabled": False, "audience": "selected", "group_ids": ["e2e-group"]}, []),
+        ({"enabled": True, "audience": "all", "group_ids": ["e2e-group"]}, []),
+        ({"enabled": True, "audience": "selected", "group_ids": []}, []),
+        ({"enabled": True, "audience": "selected", "group_ids": ["e2e-group"]}, ["existing-user"]),
+    ],
+)
+def test_http_acl_preflight_rejects_non_dedicated_group_without_mutation(
+    monkeypatch, policy, members
+) -> None:
+    live = _load_script_module()
+    api = live.HttpFilesApi(base_url="http://127.0.0.1:8001", token="test-session-token")
+    calls = []
+
+    def request(method, path, **kwargs):
+        calls.append((method, path))
+        assert method == "GET"
+        return policy if path.endswith("/access-policy") else {"user_ids": members}
+
+    monkeypatch.setattr(api, "_json_request", request)
+    try:
+        with pytest.raises(
+            live.LiveE2EContractError, match="dedicated_empty_admission_group_required"
+        ):
+            api.validate_acl_group("e2e-group")
+        assert calls == [
+            ("GET", "/api/v1/admin/apps/files/access-policy"),
+            ("GET", "/api/v1/admin/groups/e2e-group/members"),
+        ]
+    finally:
+        api.close()

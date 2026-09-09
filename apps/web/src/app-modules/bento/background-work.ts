@@ -1,7 +1,9 @@
 import type { BackgroundWorkSource } from '@/src/platform/background-work/background-work-session';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
-
 import { cancelBentoAiJob, listBentoAiJobs } from './api/bento-api';
+import {
+  buildBentoHubPath,
+  buildBentoPresentationPath,
+} from './bento-route-paths';
 
 export const bentoAiBackgroundWorkSource: Omit<BackgroundWorkSource, 'appId'> =
   {
@@ -9,8 +11,8 @@ export const bentoAiBackgroundWorkSource: Omit<BackgroundWorkSource, 'appId'> =
     requiredNavItemId: 'bento-all',
     pollIntervalMs: 3000,
     idlePollIntervalMs: 20000,
-    async list({ token, workspaceSlug, t }) {
-      const jobs = await listBentoAiJobs(token, workspaceSlug);
+    async list({ token, t }) {
+      const jobs = await listBentoAiJobs(token);
       return jobs.map((job) => ({
         id: job.id,
         sourceId: 'bento-ai',
@@ -30,13 +32,13 @@ export const bentoAiBackgroundWorkSource: Omit<BackgroundWorkSource, 'appId'> =
               : undefined),
         status: job.status,
         href: job.result_document_id
-          ? `${buildWorkspaceAppPath(workspaceSlug, 'bento')}/${encodeURIComponent(job.result_document_id)}`
-          : buildWorkspaceAppPath(workspaceSlug, 'bento'),
+          ? buildBentoPresentationPath(job.result_document_id)
+          : buildBentoHubPath(),
         cancellable: job.cancellable,
         updatedAt: job.updated_at,
       }));
     },
-    async cancel({ token, workspaceSlug, item }) {
-      await cancelBentoAiJob(token, item.id, workspaceSlug);
+    async cancel({ token, item }) {
+      await cancelBentoAiJob(token, item.id);
     },
   };

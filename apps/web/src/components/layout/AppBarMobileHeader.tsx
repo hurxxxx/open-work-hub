@@ -1,4 +1,5 @@
 import { ChevronDown, Menu, Search } from 'lucide-react';
+import type { MouseEventHandler } from 'react';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { getInitials } from './app-bar-model';
@@ -7,27 +8,27 @@ import { AppBarNotificationButton } from './AppBarNotificationButton';
 export function AppBarMobileHeader({
   activeAppTitle,
   canOpenMobileAppMenu,
-  canOpenWorkspaceSearch,
+  canOpenSearch,
   currentUser,
-  currentWorkspaceName,
   labels,
   onOpenAccount,
   onOpenMobileAppMenu,
   onOpenMobileNavigation,
-  onOpenWorkspaceSearch,
+  onOpenSearch,
   onToggleNotifications,
+  notificationPanelOpen,
   notificationsEnabled,
   unreadCount,
 }: {
   activeAppTitle: string;
   canOpenMobileAppMenu?: boolean;
-  canOpenWorkspaceSearch: boolean;
+  canOpenSearch: boolean;
   currentUser: AuthUser;
-  currentWorkspaceName: string;
   labels: {
     accountTitle: string;
     mobileMenuTitle: string;
     mobileNavigationOpen: string;
+    primaryNavigation: string;
     notificationsTitle: string;
     searchOpen: string;
     searchTitle: string;
@@ -35,30 +36,32 @@ export function AppBarMobileHeader({
   onOpenAccount: () => void;
   onOpenMobileAppMenu?: () => void;
   onOpenMobileNavigation: () => void;
-  onOpenWorkspaceSearch: () => void;
-  onToggleNotifications: () => void;
+  onOpenSearch: () => void;
+  onToggleNotifications: MouseEventHandler<HTMLButtonElement>;
+  notificationPanelOpen: boolean;
   notificationsEnabled: boolean;
   unreadCount: number;
 }) {
   const mobileTitle = (
-    <>
-      <div className="app-text-body-sm truncate font-semibold text-app-ink">
+    <div className="min-w-0">
+      <div className="app-text-body-sm truncate font-semibold text-white">
         <span>{activeAppTitle}</span>
         {canOpenMobileAppMenu ? (
           <ChevronDown
+            aria-hidden
             size={13}
-            className="ml-1 inline-block align-[-2px] text-app-ink/70"
+            className="ml-1 inline-block align-[-2px] text-white/70"
           />
         ) : null}
       </div>
-      <div className="app-text-caption truncate text-app-ink/70">
-        {currentWorkspaceName}
-      </div>
-    </>
+    </div>
   );
 
   return (
-    <div className="flex h-14 shrink-0 items-center gap-2 border-b border-app-border bg-app-bg-strong px-3 text-app-ink lg:hidden">
+    <nav
+      aria-label={labels.primaryNavigation}
+      className="flex h-14 shrink-0 items-center gap-2 border-b border-white/10 bg-app-bg-strong px-3 text-white lg:hidden"
+    >
       <button
         aria-label={labels.mobileNavigationOpen}
         className="flex size-10 items-center justify-center rounded-xl border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
@@ -71,7 +74,7 @@ export function AppBarMobileHeader({
       {canOpenMobileAppMenu ? (
         <button
           aria-label={labels.mobileMenuTitle}
-          className="min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-app-surface-hover focus:outline-none focus:ring-2 focus:ring-app-accent/35"
+          className="min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-app-accent/35"
           onClick={onOpenMobileAppMenu}
           type="button"
         >
@@ -81,11 +84,11 @@ export function AppBarMobileHeader({
         <div className="min-w-0 flex-1 px-1.5 py-1">{mobileTitle}</div>
       )}
 
-      {canOpenWorkspaceSearch ? (
+      {canOpenSearch ? (
         <button
           aria-label={labels.searchOpen}
-          className="flex size-10 items-center justify-center rounded-xl text-app-ink/60 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-          onClick={onOpenWorkspaceSearch}
+          className="flex size-10 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          onClick={onOpenSearch}
           title={labels.searchTitle}
           type="button"
         >
@@ -96,10 +99,11 @@ export function AppBarMobileHeader({
       {notificationsEnabled ? (
         <AppBarNotificationButton
           badgeClassName="right-1.5 top-1.5"
-          className="flex size-10 items-center justify-center text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink"
+          className="flex size-10 items-center justify-center text-white/70 hover:bg-white/10 hover:text-white"
           iconSize={19}
           label={labels.notificationsTitle}
           onClick={onToggleNotifications}
+          open={notificationPanelOpen}
           unreadCount={unreadCount}
         />
       ) : null}
@@ -113,6 +117,6 @@ export function AppBarMobileHeader({
       >
         {getInitials(currentUser.display_name || currentUser.full_name, 'ID')}
       </button>
-    </div>
+    </nav>
   );
 }

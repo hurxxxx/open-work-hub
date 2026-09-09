@@ -1,3 +1,4 @@
+import { createBootstrapApp } from '../../../tests/fixtures/company';
 import { Home, Settings, Users } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 
@@ -10,42 +11,46 @@ const appBarItems: readonly AppBarItem[] = [
 ];
 
 describe('mobile navigation model', () => {
-  it('uses ordered dynamic categories and links the first enabled ready leaf', () => {
+  it('uses category order while exposing every enabled ready leaf', () => {
     const items = projectMobileNavigationItems({
       appBarItems,
       fixedAppIds: ['home'],
-      workspaceApps: [
+      apps: [
         {
+          ...createBootstrapApp('home'),
           app_id: 'home',
           enabled: true,
           icon_key: 'home',
           nav_items: [],
-          route_base: '/home',
+          route_base: '/apps/home',
           title: 'Home',
         },
         {
+          ...createBootstrapApp('docs'),
           app_id: 'docs',
           enabled: true,
           icon_key: 'file-text',
           nav_items: [],
-          route_base: '/docs',
+          route_base: '/apps/docs',
           title: 'Docs',
         },
         {
+          ...createBootstrapApp('pms'),
           app_id: 'pms',
           coming_soon: true,
           enabled: true,
           icon_key: 'list-checks',
           nav_items: [],
-          route_base: '/pms',
+          route_base: '/apps/pms',
           title: 'PMS',
         },
         {
+          ...createBootstrapApp('web-search'),
           app_id: 'web-search',
           enabled: true,
           icon_key: 'globe',
           nav_items: [],
-          route_base: '/web-search',
+          route_base: '/apps/web-search',
           title: 'Web Search',
         },
       ],
@@ -55,10 +60,12 @@ describe('mobile navigation model', () => {
           icon_key: 'briefcase',
           items: [
             {
+              coming_soon: false,
+              position: 0,
               app_id: 'web-search',
               enabled: true,
               icon_key: 'globe',
-              route_base: '/web-search',
+              route_base: '/apps/web-search',
               title: 'Web Search',
             },
           ],
@@ -71,17 +78,21 @@ describe('mobile navigation model', () => {
           icon_key: 'users',
           items: [
             {
+              coming_soon: false,
+              position: 0,
               app_id: 'pms',
               enabled: true,
               icon_key: 'list-checks',
-              route_base: '/pms',
+              route_base: '/apps/pms',
               title: 'PMS',
             },
             {
+              coming_soon: false,
+              position: 1,
               app_id: 'docs',
               enabled: true,
               icon_key: 'file-text',
-              route_base: '/docs',
+              route_base: '/apps/docs',
               title: 'Docs',
             },
           ],
@@ -118,20 +129,20 @@ describe('mobile navigation model', () => {
       },
       {
         activeAppIds: ['docs'],
-        id: 'team-space-id',
+        id: 'docs',
         linkAppId: 'docs',
-        title: 'Team space',
-        type: 'category',
+        title: 'Docs',
+        type: 'app',
       },
       {
         activeAppIds: ['web-search'],
-        id: 'custom-business-id',
+        id: 'web-search',
         linkAppId: 'web-search',
-        title: 'Custom business tools',
-        type: 'category',
+        title: 'Web Search',
+        type: 'app',
       },
     ]);
-    expect(items[1]?.icon).toBe(Users);
+    expect(items[1]?.icon).not.toBe(Users);
   });
 
   it('projects every registry-derived fixed app without duplicating categories', () => {
@@ -142,10 +153,12 @@ describe('mobile navigation model', () => {
           icon_key: 'briefcase',
           items: [
             {
+              coming_soon: false,
+              position: 0,
               app_id: 'fixed-feature',
               enabled: true,
               icon_key: 'sparkles',
-              route_base: '/fixed-feature',
+              route_base: '/apps/fixed-feature',
               title: 'Fixed feature',
             },
           ],
@@ -156,21 +169,23 @@ describe('mobile navigation model', () => {
       ],
       appBarItems,
       fixedAppIds: ['home', 'fixed-feature'],
-      workspaceApps: [
+      apps: [
         {
+          ...createBootstrapApp('home'),
           app_id: 'home',
           enabled: true,
           icon_key: 'home',
           nav_items: [],
-          route_base: '/home',
+          route_base: '/apps/home',
           title: 'Home',
         },
         {
+          ...createBootstrapApp('fixed-feature'),
           app_id: 'fixed-feature',
           enabled: true,
           icon_key: 'sparkles',
           nav_items: [],
-          route_base: '/fixed-feature',
+          route_base: '/apps/fixed-feature',
           title: 'Fixed feature',
         },
       ],

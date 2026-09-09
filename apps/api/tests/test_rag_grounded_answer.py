@@ -5,11 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from open_work_hub_api.domains.rag import application as rag_application
-from open_work_hub_api.domains.rag.contracts import (
-    RagAnswerMode,
-    RagProjection,
-    RagQueryRequest,
-)
+from open_work_hub_api.domains.rag.contracts import RagAnswerMode, RagProjection, RagQueryRequest
 from open_work_hub_api.domains.rag import grounded_answer
 from open_work_hub_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
 from open_work_hub_api.domains.rag.grounded_answer_assembly import GroundedAnswerAssembler
@@ -19,7 +15,7 @@ from open_work_hub_api.domains.rag.query_service import RagQueryService
 from open_work_hub_api.domains.rag.service import RagService
 
 
-def test_workspace_rag_query_wraps_provider_failures_as_unavailable(monkeypatch) -> None:
+def test_company_rag_query_wraps_provider_failures_as_unavailable(monkeypatch) -> None:
     class _FailingQueryService:
         def query(self, request, *, post_filter, grounded_answer_synthesizer=None):
             del request, post_filter, grounded_answer_synthesizer
@@ -27,7 +23,7 @@ def test_workspace_rag_query_wraps_provider_failures_as_unavailable(monkeypatch)
 
     monkeypatch.setattr(
         rag_application,
-        "list_workspace_rag_sources",
+        "list_rag_sources",
         lambda *args, **kwargs: [
             {
                 "source_kind": "manual",
@@ -39,8 +35,8 @@ def test_workspace_rag_query_wraps_provider_failures_as_unavailable(monkeypatch)
     )
     monkeypatch.setattr(
         rag_application,
-        "resolve_workspace_runtime_enabled_app_ids",
-        lambda db, workspace_id: {"chatbot", "docs"},
+        "allowed_app_ids",
+        lambda db, **_kwargs: {"chatbot", "docs"},
     )
     monkeypatch.setattr(
         rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: "rag-test"
@@ -55,9 +51,8 @@ def test_workspace_rag_query_wraps_provider_failures_as_unavailable(monkeypatch)
     )
 
     with pytest.raises(rag_application.RagUnavailableError) as exc_info:
-        rag_application.query_workspace_rag(
+        rag_application.query_rag(
             db=object(),
-            workspace=SimpleNamespace(id="ws-1"),
             user=SimpleNamespace(id="user-1"),
             query="budget risk",
             answer_mode=RagAnswerMode.SEARCH_ONLY,
@@ -86,14 +81,13 @@ def test_query_service_marks_grounded_answer_as_degraded_when_synthesizer_return
 
     rag_service.sync_projection(
         RagProjection(
-            workspace_id="ws-1",
             resource_type="doc",
             resource_id="doc-1",
             source_kind="manual",
             title="Budget Review",
             summary="Quarterly budget risk and spending review",
             text_content="Budget risk increased after service repricing.",
-            visibility_refs=["workspace:ws-1"],
+            visibility_refs=["company_public"],
         ),
         collection="rag-grounded-answer",
     )
@@ -110,7 +104,6 @@ def test_query_service_marks_grounded_answer_as_degraded_when_synthesizer_return
     response = rag_query.query(
         RagQueryRequest(
             collection="rag-grounded-answer",
-            workspace_id="ws-1",
             query="budget risk",
             answer_mode=RagAnswerMode.GROUNDED_ANSWER,
             source_kinds=["manual"],
@@ -212,7 +205,6 @@ def test_llm_grounded_answer_rejects_truncated_completion(monkeypatch) -> None:
 def _llm_synthesizer() -> LlmGroundedAnswerSynthesizer:
     return LlmGroundedAnswerSynthesizer(
         db=object(),
-        workspace_id="ws-1",
         actor_user_id="user-1",
         principal_kind="user",
         principal_id="user-1",
@@ -225,7 +217,6 @@ def _hit():
         source_kind="docs_native_doc",
         resource_type="docs_native_doc",
         resource_id="doc-1",
-        workspace_id="ws-1",
         title="복지제도 기준",
         summary="복지제도 기준",
         excerpt="건강검진, 가족수당, 경조비, 장기근속 포상",

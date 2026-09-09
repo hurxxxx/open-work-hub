@@ -1,15 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { APP_WORKSPACE_API_ROUTE_POLICY } from '@/src/app/shell/workspace-api-routes';
-import {
-  configureWorkspaceApiRoutePolicy,
-  resetWorkspaceApiRoutePolicy,
-} from '@/src/platform/api/workspace-api-path-policy';
-
-import {
-  listWorkspaceRetrievalSources,
-  queryWorkspaceRetrieval,
-} from './retrieval-api';
+import { listRetrievalSources, queryRetrieval } from './retrieval-api';
 
 function jsonResponse(payload: unknown): Response {
   return new Response(JSON.stringify(payload), {
@@ -19,17 +10,11 @@ function jsonResponse(payload: unknown): Response {
 }
 
 describe('retrieval-api', () => {
-  beforeEach(() => {
-    resetWorkspaceApiRoutePolicy();
-    configureWorkspaceApiRoutePolicy(APP_WORKSPACE_API_ROUTE_POLICY);
-  });
-
   afterEach(() => {
-    resetWorkspaceApiRoutePolicy();
     vi.unstubAllGlobals();
   });
 
-  it('queries the workspace retrieval endpoint through the workspace path policy', async () => {
+  it('queries the retrieval endpoint through the app API policy', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         query: 'release plan',
@@ -52,18 +37,17 @@ describe('retrieval-api', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await queryWorkspaceRetrieval(
+    await queryRetrieval(
       {
         query: 'release plan',
         sources: ['keyword'],
         top_k: 3,
       },
       'token-1',
-      'delivery-hub',
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/workspaces/delivery-hub/retrieval/query',
+      '/api/v1/retrieval/query',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
@@ -80,14 +64,14 @@ describe('retrieval-api', () => {
     );
   });
 
-  it('lists retrieval sources through the workspace path policy', async () => {
+  it('lists retrieval sources through the app API policy', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ sources: [] }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await listWorkspaceRetrievalSources('token-1', 'delivery-hub');
+    await listRetrievalSources('token-1');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/workspaces/delivery-hub/retrieval/sources',
+      '/api/v1/retrieval/sources',
       expect.objectContaining({ method: 'GET' }),
     );
   });

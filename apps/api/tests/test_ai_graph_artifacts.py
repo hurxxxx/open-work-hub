@@ -11,6 +11,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from company_admission_fixture import company_authority_tables, seed_company_app_access
+from open_work_hub_api.core.db import Base
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.ai_artifacts.contracts import (
     AiArtifactCreate,
     AiArtifactIndexGenerationCreate,
@@ -74,6 +77,7 @@ def session_factory() -> sessionmaker[Session]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    Base.metadata.create_all(engine, tables=company_authority_tables())
     for table in (
         Conversation.__table__,
         ConversationTurn.__table__,
@@ -88,7 +92,33 @@ def session_factory() -> sessionmaker[Session]:
         AiArtifactIndexGeneration.__table__,
     ):
         table.create(engine)
-    return sessionmaker(bind=engine, expire_on_commit=False)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    with factory() as db:
+        seed_company_app_access(db)
+        for user_id in ("user-1", "user-2"):
+            db.add(
+                User(
+                    id=user_id,
+                    login_id=user_id,
+                    email=f"{user_id}@example.test",
+                    full_name=user_id,
+                    password_hash="fixture",
+                )
+            )
+        db.commit()
+    return factory
+
+
+@pytest.fixture(autouse=True)
+def allow_runtime_graph_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "open_work_hub_api.domains.ai_graph.runtime.enforce_graph_run_app_policy",
+        lambda *_args, **_kwargs: True,
+    )
+
+
+async def _allow_policy() -> None:
+    return None
 
 
 def _linear_spec() -> AiGraphSpec:
@@ -108,7 +138,6 @@ def _linear_spec() -> AiGraphSpec:
 
 def _run_request(*, inputs: dict | None = None) -> AiGraphRunRequest:
     return AiGraphRunRequest(
-        workspace_id="workspace-1",
         requested_by_user_id="user-1",
         app_id="docs",
         graph=_linear_spec(),
@@ -124,7 +153,6 @@ def _artifact_create(
     payload: dict | None = None,
 ) -> AiArtifactCreate:
     return AiArtifactCreate(
-        workspace_id="workspace-1",
         owner_user_id="user-1",
         app_id="docs",
         artifact_type=artifact_type,
@@ -205,11 +233,11 @@ def test_langgraph_conditional_route_executes_only_selected_branch() -> None:
             config={"configurable": {"thread_id": "run-1"}},
             context=AiGraphRuntimeContext(
                 run_id="run-1",
-                workspace_id="workspace-1",
                 requested_by_user_id="user-1",
                 app_id="docs",
                 conversation_id=None,
                 progress_callback=progress,
+                policy_callback=_allow_policy,
             ),
         )
 
@@ -267,7 +295,6 @@ def test_graph_llm_adapter_uses_registered_gateway_only(monkeypatch) -> None:
         AiGraphLlmRequest(
             workload_id="report.generate",
             app_id="docs",
-            workspace_id="workspace-1",
             source="worker.test",
             messages=[{"role": "user", "content": "report"}],
             graph_run_id="run-1",
@@ -351,8 +378,8 @@ def test_dispatch_outbox_can_be_claimed_retried_and_acked(
         assert _artifact_ids_by_run(
             db,
             [prepared.graph_run.id],
-            workspace_id="workspace-1",
             user_id="user-1",
+            enabled_app_ids=frozenset({"docs"}),
         ) == {prepared.graph_run.id: completed.id}
 
 
@@ -362,19 +389,17 @@ def test_dispatch_rejects_incoherent_artifact_before_staging_rows(
     with session_factory() as db:
         mismatched = _artifact_create().model_copy(
             update={
-                "workspace_id": "workspace-2",
                 "owner_user_id": "user-2",
                 "app_id": "another-app",
                 "conversation_id": "conversation-2",
-                "visibility": "workspace",
+                "visibility": "company",
+                "company_admin_read_acknowledged": True,
                 "graph_run_id": "already-bound",
             }
         )
         with pytest.raises(
             ValueError,
-            match=(
-                "workspace_id, app_id, owner_user_id, conversation_id, visibility, graph_run_id"
-            ),
+            match=("app_id, owner_user_id, conversation_id, visibility, graph_run_id"),
         ):
             stage_graph_dispatch(
                 db,
@@ -430,8 +455,9 @@ def test_graph_run_artifact_lookup_enforces_acl_and_prefers_completed_artifact(
             _artifact_create().model_copy(
                 update={
                     "graph_run_id": preferred_run.id,
-                    "workspace_id": "workspace-2",
-                    "visibility": "workspace",
+                    "app_id": "other-app",
+                    "visibility": "company",
+                    "company_admin_read_acknowledged": True,
                 }
             )
         )
@@ -448,7 +474,8 @@ def test_graph_run_artifact_lookup_enforces_acl_and_prefers_completed_artifact(
                 update={
                     "graph_run_id": shared_run.id,
                     "owner_user_id": "user-2",
-                    "visibility": "workspace",
+                    "visibility": "company",
+                    "company_admin_read_acknowledged": True,
                 }
             )
         )
@@ -457,8 +484,8 @@ def test_graph_run_artifact_lookup_enforces_acl_and_prefers_completed_artifact(
         assert _artifact_ids_by_run(
             db,
             [preferred_run.id, private_foreign_run.id, shared_run.id],
-            workspace_id="workspace-1",
             user_id="user-1",
+            enabled_app_ids=frozenset({"docs"}),
         ) == {
             preferred_run.id: preferred.id,
             shared_run.id: shared.id,
@@ -535,6 +562,10 @@ def test_graph_executor_registry_resolves_exact_graph_version(
         "get_session_factory",
         lambda: session_factory,
     )
+    monkeypatch.setattr(
+        "open_work_hub_api.domains.ai_graph.execution_policy.can_use_app",
+        lambda *_args, **_kwargs: True,
+    )
     reset_ai_graph_executors()
     try:
         register_ai_graph_executor(
@@ -546,6 +577,76 @@ def test_graph_executor_registry_resolves_exact_graph_version(
         with pytest.raises(LookupError, match="@2"):
             execute_registered_ai_graph(run_v2.id)
         assert calls == [f"v1:{run_v1.id}"]
+    finally:
+        reset_ai_graph_executors()
+
+
+def test_graph_executor_registry_cancels_before_provider_when_app_is_disabled(
+    monkeypatch,
+    session_factory: sessionmaker[Session],
+) -> None:
+    import open_work_hub_api.domains.ai_graph.execution_registry as registry_module
+
+    request = _run_request()
+    with session_factory() as db:
+        run = AiGraphRunRepository(db).create(request)
+        db.commit()
+        run_id = run.id
+
+    monkeypatch.setattr(
+        registry_module,
+        "get_session_factory",
+        lambda: session_factory,
+    )
+    monkeypatch.setattr(
+        "open_work_hub_api.domains.ai_graph.execution_policy.can_use_app",
+        lambda *_args, **_kwargs: False,
+    )
+    provider_calls: list[str] = []
+    reset_ai_graph_executors()
+    try:
+        register_ai_graph_executor(
+            request.graph.graph_id,
+            request.graph.graph_version,
+            lambda current_run_id: provider_calls.append(current_run_id) or "executed",
+        )
+
+        assert execute_registered_ai_graph(run_id) == "app_disabled"
+        assert provider_calls == []
+        with session_factory() as db:
+            cancelled = db.get(AiGraphRun, run_id)
+            assert cancelled is not None
+            assert cancelled.status == "cancelled"
+            assert cancelled.stage == "registry.policy_gate"
+            assert cancelled.error_code == "app_execution_disabled"
+    finally:
+        reset_ai_graph_executors()
+
+
+def test_graph_executor_registry_never_reexecutes_terminal_run(
+    monkeypatch,
+    session_factory: sessionmaker[Session],
+) -> None:
+    import open_work_hub_api.domains.ai_graph.execution_registry as registry_module
+
+    request = _run_request()
+    with session_factory() as db:
+        run = AiGraphRunRepository(db).create(request)
+        run.status = "completed"
+        run_id = run.id
+        db.commit()
+
+    monkeypatch.setattr(registry_module, "get_session_factory", lambda: session_factory)
+    calls: list[str] = []
+    reset_ai_graph_executors()
+    try:
+        register_ai_graph_executor(
+            request.graph.graph_id,
+            request.graph.graph_version,
+            lambda current_run_id: calls.append(current_run_id) or "executed",
+        )
+        assert execute_registered_ai_graph(run_id) == "completed"
+        assert calls == []
     finally:
         reset_ai_graph_executors()
 
@@ -769,11 +870,11 @@ def test_run_graph_resumes_completed_checkpoint_after_stale_lease_without_reexec
             },
             context=AiGraphRuntimeContext(
                 run_id=run_id,
-                workspace_id=request.workspace_id,
                 requested_by_user_id=request.requested_by_user_id,
                 app_id=request.app_id,
                 conversation_id=request.conversation_id,
                 progress_callback=lambda _node_id: asyncio.sleep(0),
+                policy_callback=_allow_policy,
             ),
         )
 
@@ -803,7 +904,6 @@ def test_artifact_persists_grid_query_lineage_and_becomes_immutable(
     with session_factory() as db:
         generation = AiIndexGenerationRepository(db).create_staging(
             AiIndexGenerationCreate(
-                workspace_id="workspace-1",
                 app_id="docs",
                 generation_key="docs-20260726",
                 backend="pgvector",
@@ -882,10 +982,9 @@ def test_artifact_persists_grid_query_lineage_and_becomes_immutable(
             )
 
 
-def test_ownerless_artifacts_must_be_workspace_visible() -> None:
-    with pytest.raises(ValidationError, match="workspace visibility"):
+def test_ownerless_artifacts_must_be_company_visible() -> None:
+    with pytest.raises(ValidationError, match="company visibility"):
         AiArtifactCreate(
-            workspace_id="workspace-1",
             app_id="docs",
             artifact_type="analysis",
             title="system analysis",
@@ -905,9 +1004,9 @@ def test_completed_artifact_owner_can_change_only_visibility(
 
         shared, changed = repository.set_completed_visibility(
             artifact.artifact_number,
-            workspace_id="workspace-1",
             owner_user_id="user-1",
-            visibility="workspace",
+            visibility="company",
+            company_admin_read_acknowledged=True,
             expected_app_id="docs",
             expected_artifact_type="report",
         )
@@ -915,14 +1014,14 @@ def test_completed_artifact_owner_can_change_only_visibility(
 
         assert changed is True
         assert shared.id == artifact.id
-        assert shared.visibility == "workspace"
+        assert shared.visibility == "company"
         assert shared.content_text == "# 보고서"
         assert shared.content_sha256 == content_sha256
         unchanged, changed = repository.set_completed_visibility(
             artifact.id,
-            workspace_id="workspace-1",
             owner_user_id="user-1",
-            visibility="workspace",
+            visibility="company",
+            company_admin_read_acknowledged=True,
         )
         assert unchanged is shared
         assert changed is False
@@ -942,37 +1041,116 @@ def test_artifact_visibility_change_requires_completed_owned_artifact(
         with pytest.raises(AiArtifactNotFoundError):
             repository.set_completed_visibility(
                 completed.id,
-                workspace_id="workspace-1",
                 owner_user_id="another-user",
-                visibility="workspace",
+                visibility="company",
+                company_admin_read_acknowledged=True,
             )
         with pytest.raises(AiArtifactNotFoundError):
             repository.set_completed_visibility(
                 completed.id,
-                workspace_id="another-workspace",
                 owner_user_id="user-1",
-                visibility="workspace",
+                visibility="company",
+                company_admin_read_acknowledged=True,
+                expected_app_id="other-app",
             )
         with pytest.raises(AiArtifactNotFoundError):
             repository.set_completed_visibility(
                 building.id,
-                workspace_id="workspace-1",
                 owner_user_id="user-1",
-                visibility="workspace",
+                visibility="company",
+                company_admin_read_acknowledged=True,
             )
         with pytest.raises(AiArtifactNotFoundError):
             repository.set_completed_visibility(
                 completed.id,
-                workspace_id="workspace-1",
                 owner_user_id="user-1",
-                visibility="workspace",
+                visibility="company",
+                company_admin_read_acknowledged=True,
                 expected_app_id="another-app",
             )
         with pytest.raises(AiArtifactNotFoundError):
             repository.set_completed_visibility(
                 completed.id,
-                workspace_id="workspace-1",
                 owner_user_id="user-1",
-                visibility="workspace",
+                visibility="company",
+                company_admin_read_acknowledged=True,
                 expected_artifact_type="analysis",
             )
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [{"owner_user_id": "other-user"}, {"app_id": "other-app"}, {"artifact_type": "analysis"}],
+)
+def test_artifact_supersession_cannot_cross_owner_app_or_type(session_factory, changed):
+    with session_factory() as db:
+        repository = AiArtifactRepository(db)
+        parent = repository.create_completed(_artifact_create())
+        db.commit()
+        request = _artifact_create().model_copy(
+            update={"supersedes_artifact_id": parent.id, **changed}
+        )
+        with pytest.raises(ValueError, match="same owner/app/type"):
+            repository.create_building(request)
+        assert db.query(AiArtifact).count() == 1
+
+
+def test_artifact_supersession_preserves_chain_with_same_owner_app_type(session_factory):
+    with session_factory() as db:
+        repository = AiArtifactRepository(db)
+        parent = repository.create_completed(_artifact_create())
+        child = repository.create_building(
+            _artifact_create().model_copy(update={"supersedes_artifact_id": parent.id})
+        )
+        assert child.supersedes_artifact_id == parent.id
+
+
+def test_artifact_company_publication_requires_acknowledgement_and_is_irreversible(session_factory):
+    from fastapi import HTTPException
+    from sqlalchemy import select
+    from open_work_hub_api.domains.auth.models import AuditLog
+
+    with session_factory() as db:
+        repository = AiArtifactRepository(db)
+        artifact = repository.create_completed(_artifact_create())
+        with pytest.raises(HTTPException) as denied:
+            repository.set_completed_visibility(
+                artifact.id, owner_user_id="user-1", visibility="company"
+            )
+        assert denied.value.status_code == 409
+        assert artifact.visibility == "private"
+        published, changed = repository.set_completed_visibility(
+            artifact.id,
+            owner_user_id="user-1",
+            visibility="company",
+            company_admin_read_acknowledged=True,
+        )
+        assert changed
+        assert published.visibility == "company"
+        db.flush()
+        audit = db.scalar(
+            select(AuditLog).where(
+                AuditLog.entity_id == artifact.id, AuditLog.action == "content.publish_to_company"
+            )
+        )
+        assert audit is not None
+        assert audit.actor_user_id == "user-1"
+        assert audit.payload["company_admin_read_acknowledged"] is True
+        with pytest.raises(HTTPException) as denied:
+            repository.set_completed_visibility(
+                artifact.id, owner_user_id="user-1", visibility="private"
+            )
+        assert denied.value.status_code == 409
+        assert artifact.visibility == "company"
+
+
+def test_company_artifact_creation_requires_explicit_acknowledgement():
+    with pytest.raises(ValidationError, match="acknowledg"):
+        AiArtifactCreate(
+            owner_user_id="user-1",
+            app_id="docs",
+            artifact_type="report",
+            title="Company report",
+            content_text="report",
+            visibility="company",
+        )

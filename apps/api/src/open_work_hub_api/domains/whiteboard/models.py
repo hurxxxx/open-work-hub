@@ -4,12 +4,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
+    JSON,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     LargeBinary,
     String,
     UniqueConstraint,
@@ -31,12 +32,18 @@ def empty_scene() -> dict[str, Any]:
 class Whiteboard(Base):
     __tablename__ = "whiteboards"
     __table_args__ = (
+        CheckConstraint(
+            "ownership_kind IN ('personal', 'company')", name="ck_whiteboard_ownership"
+        ),
         Index("ix_whiteboards_owner_created", "owner_id", "created_at"),
-        Index("ix_whiteboards_workspace_updated", "workspace_id", "updated_at"),
+        Index("ix_whiteboards_updated", "updated_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    company_visible: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    ownership_kind: Mapped[str] = mapped_column(
+        String(16), default="personal", nullable=False, index=True
+    )
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(200))
     source_app: Mapped[str] = mapped_column(
@@ -58,14 +65,16 @@ class Whiteboard(Base):
         nullable=False,
     )
     trashed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
-
-    workspace = relationship("Workspace")
     owner = relationship("User")
     targets: Mapped[list["WhiteboardTarget"]] = relationship(
         back_populates="whiteboard",
         cascade="all, delete-orphan",
     )
     user_shares: Mapped[list["WhiteboardUserShare"]] = relationship(
+        back_populates="whiteboard",
+        cascade="all, delete-orphan",
+    )
+    group_shares: Mapped[list["WhiteboardGroupShare"]] = relationship(
         back_populates="whiteboard",
         cascade="all, delete-orphan",
     )
@@ -217,3 +226,22 @@ class WhiteboardUserItemPref(Base):
     last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     user = relationship("User")
     whiteboard = relationship("Whiteboard")
+
+
+class WhiteboardGroupShare(Base):
+    __tablename__ = "whiteboard_group_shares"
+    __table_args__ = (
+        CheckConstraint(
+            "access_level IN ('read', 'edit')", name="ck_whiteboard_group_share_access"
+        ),
+    )
+    whiteboard_id: Mapped[str] = mapped_column(
+        ForeignKey("whiteboards.id", ondelete="CASCADE"), primary_key=True
+    )
+    group_id: Mapped[str] = mapped_column(
+        ForeignKey("groups.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    access_level: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    whiteboard: Mapped[Whiteboard] = relationship(back_populates="group_shares")

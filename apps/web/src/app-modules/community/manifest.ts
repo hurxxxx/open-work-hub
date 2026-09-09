@@ -1,15 +1,14 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import { MessagesSquare } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
 export const communityManifest: AppModuleManifest = {
   appBarItem: { id: 'community', title: 'community', icon: MessagesSquare },
-  surfaces: { launcher: { globalPath: '/community' } },
   contract: {
     owner: 'community-platform',
     permissions: [],
     apiDomain: 'community',
-    resourceScope: 'company',
     aiCapabilities: [],
     writeAuditActions: [
       'community.channel.create',
@@ -37,6 +36,9 @@ export const communityManifest: AppModuleManifest = {
       appId: 'community',
     },
   ],
-  workspaceRoutePaths: [],
-  globalRoutePaths: ['/community', '/community/posts/:postId'],
+  appRoutePaths: [],
+  globalRoutePaths: [
+    getAppRoutePattern('community.root'),
+    getAppRoutePattern('community.post'),
+  ],
 };

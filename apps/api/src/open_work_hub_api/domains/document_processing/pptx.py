@@ -1,21 +1,20 @@
 from __future__ import annotations
 
+import re
+import zipfile
 from collections.abc import Iterable
 from io import BytesIO
 from pathlib import Path
-import re
 from xml.etree import ElementTree
-import zipfile
 
 from .contracts import (
+    _MAX_EXTRACT_SECONDS,
+    _MAX_EXTRACTED_CHARS,
     DocumentExtractBundle,
     EvidenceBlock,
     UnsupportedDocumentType,
     _ExtractionBudget,
-    _MAX_EXTRACT_SECONDS,
-    _MAX_EXTRACTED_CHARS,
 )
-
 
 _DRAWING_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 _TEXT_TAG = f"{_DRAWING_NS}t"
@@ -57,7 +56,9 @@ def _dedupe_keep_order(values: Iterable[str]) -> list[str]:
     return out
 
 
-def _natural_office_xml_paths(names: Iterable[str], pattern: re.Pattern[str]) -> list[tuple[int, str]]:
+def _natural_office_xml_paths(
+    names: Iterable[str], pattern: re.Pattern[str]
+) -> list[tuple[int, str]]:
     matches: list[tuple[int, str]] = []
     for name in names:
         match = pattern.match(name)
@@ -192,9 +193,7 @@ class PptxOpenXmlExtractor:
         blocks: list[EvidenceBlock] = []
 
         table_paragraph_ids = {
-            id(paragraph)
-            for table in root.iter(_TABLE_TAG)
-            for paragraph in table.iter(_PARA_TAG)
+            id(paragraph) for table in root.iter(_TABLE_TAG) for paragraph in table.iter(_PARA_TAG)
         }
         for paragraph in root.iter(_PARA_TAG):
             if id(paragraph) in table_paragraph_ids:

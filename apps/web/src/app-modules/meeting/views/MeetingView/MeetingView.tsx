@@ -1,23 +1,22 @@
-import { useCallback, useEffect, useMemo, useReducer } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { Plus, Loader2, Users, Video, FileText } from 'lucide-react';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import { Button } from '@open-work-hub/ui';
+import { FileText, Loader2, Plus, Users, Video } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useReducer } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { listMeetings } from '../../api/meeting-api';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 
-import { MeetingList } from './MeetingList';
 import { MeetingCreateModal } from './MeetingCreateModal';
+import { MeetingList } from './MeetingList';
 import {
   INITIAL_MEETING_LIST_VIEW_STATE,
   MEETING_CREATE_EVENT,
   MEETING_TABS,
   consumeMeetingCreateSearchParam,
   createMeetingTabSearchParams,
-  getLegacyMeetingRedirectId,
   meetingListViewReducer,
   resolveMeetingScope,
   resolveMeetingTab,
@@ -29,7 +28,7 @@ export function MeetingView() {
   const { token, user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
   const navigate = useNavigate();
-  const { workspaceSlug } = useParams();
+
   const [searchParams, setSearchParams] = useSearchParams();
   const [state, dispatch] = useReducer(
     meetingListViewReducer,
@@ -37,23 +36,13 @@ export function MeetingView() {
   );
   const activeTab = resolveMeetingTab(searchParams.get('tab'));
 
-  useEffect(() => {
-    if (!workspaceSlug) return;
-    const legacyId = getLegacyMeetingRedirectId(searchParams);
-    if (!legacyId) return;
-    navigate(
-      buildWorkspaceAppPath(workspaceSlug, 'meeting', `/${legacyId}`),
-      { replace: true },
-    );
-  }, [navigate, searchParams, workspaceSlug]);
-
   const scope = useMemo(() => resolveMeetingScope(activeTab), [activeTab]);
 
   useEffect(() => {
-    if (!token || !workspaceSlug) return;
+    if (!token) return;
     let cancelled = false;
     dispatch({ type: 'load-started' });
-    listMeetings(token, workspaceSlug, { scope })
+    listMeetings(token, { scope })
       .then((response) => {
         if (cancelled) return;
         dispatch({ type: 'load-succeeded', items: response.items });
@@ -68,7 +57,7 @@ export function MeetingView() {
     return () => {
       cancelled = true;
     };
-  }, [scope, t, token, workspaceSlug]);
+  }, [scope, t, token]);
 
   // Listen for the SubSidebar "+" dropdown event so the New Meeting entry
   // there opens this view's create modal directly, mirroring the planner
@@ -90,38 +79,46 @@ export function MeetingView() {
 
   const handleSelect = useCallback(
     (id: string) => {
-      if (!workspaceSlug) return;
-      navigate(buildWorkspaceAppPath(workspaceSlug, 'meeting', `/${id}`));
+      navigate(
+        buildAppHref({
+          routeId: 'meeting.detail',
+          pathParams: { meetingId: id },
+        }),
+      );
     },
-    [navigate, workspaceSlug],
+    [navigate],
   );
 
   const handleTabChange = useCallback(
     (tab: MeetingTab) => {
-      setSearchParams(
-        createMeetingTabSearchParams({ searchParams, tab }),
-        { replace: true },
-      );
+      setSearchParams(createMeetingTabSearchParams({ searchParams, tab }), {
+        replace: true,
+      });
     },
     [searchParams, setSearchParams],
   );
 
-  const handleCreated = useCallback((id: string) => {
-    if (!workspaceSlug) return;
-    dispatch({ type: 'create-closed' });
-    navigate(buildWorkspaceAppPath(workspaceSlug, 'meeting', `/${id}`));
-  }, [navigate, workspaceSlug]);
-
-  if (!workspaceSlug) {
-    return null;
-  }
+  const handleCreated = useCallback(
+    (id: string) => {
+      dispatch({ type: 'create-closed' });
+      navigate(
+        buildAppHref({
+          routeId: 'meeting.detail',
+          pathParams: { meetingId: id },
+        }),
+      );
+    },
+    [navigate],
+  );
 
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-app-border bg-app-surface px-6 py-4">
         <div className="flex items-center gap-3">
           <Users size={20} className="text-app-ink/60 dark:text-app-ink/70" />
-          <h1 className="app-text-title-md text-app-ink">{t('meeting.meetings')}</h1>
+          <h1 className="app-text-title-md text-app-ink">
+            {t('meeting.meetings')}
+          </h1>
         </div>
         <Button
           variant="primary"
@@ -184,7 +181,6 @@ export function MeetingView() {
         isOpen={state.createOpen}
         onClose={() => dispatch({ type: 'create-closed' })}
         onCreated={handleCreated}
-        workspaceSlug={workspaceSlug}
       />
     </div>
   );

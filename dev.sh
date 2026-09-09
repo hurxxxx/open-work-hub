@@ -129,6 +129,7 @@ if (( minimal_infra )); then
   export OPEN_WORK_HUB_OPF_REQUIRED=false
   export OPEN_WORK_HUB_RAG_ENABLED=false
   export OPEN_WORK_HUB_RAG_PRELOAD_ON_STARTUP=false
+  export OPEN_WORK_HUB_HERMES_ENABLED=false
   export OPEN_WORK_HUB_API_RECORDING_SPOOL_DIR="$OPEN_WORK_HUB_DEV_RUNTIME_DIR/recording-spool"
 fi
 
@@ -169,7 +170,7 @@ show_project_status() {
       fi
       ;;
     worker)
-      process_lines="$(pgrep -af "celery -A open_work_hub_worker.celery_app:celery_app worker" || true)"
+      process_lines="$(find_worker_processes worker)"
       if [[ -n "$process_lines" ]]; then
         echo "worker running"
         echo "$process_lines"
@@ -191,6 +192,19 @@ project_selected() {
   return 1
 }
 
+find_worker_processes() {
+  local role="${1:-}"
+  local pid args
+  while read -r pid args; do
+    # A sibling production container can expose the same Celery command line.
+    # The project-local interpreter path identifies this checkout's workers.
+    if [[ "$args" == *"$ROOT_DIR/apps/worker/"* ]] &&
+       { [[ -z "$role" ]] || [[ "$args" == *"celery_app $role"* ]]; }; then
+      printf '%s %s\n' "$pid" "$args"
+    fi
+  done < <(pgrep -af "celery -A open_work_hub_worker.celery_app:celery_app" || true)
+}
+
 require_free_port() {
   local port="$1"
   local label="$2"
@@ -202,7 +216,7 @@ require_free_port() {
     echo >&2
     echo "$listeners" >&2
     echo >&2
-    echo "Stop the existing process or change the port before running ./dev.sh again." >&2
+    echo "Stop the existing process before running ./dev.sh again; no fallback port will be selected." >&2
     exit 1
   fi
 }
@@ -252,6 +266,19 @@ start_dev_infra() {
     if [[ "$(printf '%s' "${OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
       desired+=(livekit)
     fi
+    if [[ "$(dev_lower "${OPEN_WORK_HUB_HERMES_ENABLED:-false}")" == "true" ]]; then
+      if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+        echo "OPENROUTER_API_KEY is required when Hermes is enabled." >&2
+        exit 1
+      fi
+      desired+=(
+        hermes-bootstrap
+        hermes-gateway
+        hermes-dashboard
+        hermes-terminal-egress
+        hermes-terminal-broker
+      )
+    fi
     if dev_use_local_postgres; then
       desired+=(postgres)
     fi
@@ -288,6 +315,9 @@ start_dev_infra() {
   local opensearch_port="${OPEN_WORK_HUB_INFRA_OPENSEARCH_PORT:-59210}"
   local qdrant_port="${OPEN_WORK_HUB_INFRA_QDRANT_PORT:-16333}"
   local livekit_port="${OPEN_WORK_HUB_LIVEKIT_PORT:-7880}"
+  local hermes_runtime_port="${OPEN_WORK_HUB_HERMES_RUNTIME_PORT:-18642}"
+  local hermes_management_port="${OPEN_WORK_HUB_HERMES_MANAGEMENT_PORT:-19119}"
+  local hermes_terminal_broker_port="${OPEN_WORK_HUB_HERMES_TERMINAL_BROKER_PORT:-18765}"
   local services=()
   local skipped=()
   local svc
@@ -300,8 +330,26 @@ start_dev_infra() {
       opensearch) port="$opensearch_port" ;;
       qdrant) port="$qdrant_port" ;;
       livekit) port="$livekit_port" ;;
+      hermes-bootstrap|hermes-gateway) port="$hermes_runtime_port" ;;
+      hermes-dashboard) port="$hermes_management_port" ;;
+      hermes-terminal-broker) port="$hermes_terminal_broker_port" ;;
     esac
     if [[ -n "$port" && -n "$(find_listener "$port")" ]]; then
+      if [[ "$svc" == "hermes-terminal-broker" ]]; then
+        local broker_container="open-work-hub-dev-hermes-terminal-broker"
+        local broker_running
+        local broker_binding
+        broker_running="$(dev_docker inspect -f '{{.State.Running}}' "$broker_container" 2>/dev/null || true)"
+        broker_binding="$(dev_docker port "$broker_container" 18765/tcp 2>/dev/null || true)"
+        if [[ "$broker_running" != "true" || "$broker_binding" != "127.0.0.1:${port}" ]]; then
+          echo "Cannot start Hermes Terminal broker: fixed port ${port} is already in use." >&2
+          echo >&2
+          find_listener "$port" >&2
+          echo >&2
+          echo "Stop the existing process; no fallback port will be selected." >&2
+          exit 1
+        fi
+      fi
       skipped+=("${svc}(:${port})")
     else
       services+=("$svc")
@@ -387,12 +435,10 @@ stop_project_processes() {
       fi
       ;;
     worker)
-      pgrep -af "celery -A open_work_hub_worker.celery_app:celery_app" 2>/dev/null | while read -r pid args; do
-        if [[ "$args" == *"$ROOT_DIR/apps/worker"* ]]; then
-          kill_if_running "$pid"
-          stopped=1
-        fi
-      done
+      while read -r pid args; do
+        kill_if_running "$pid"
+        stopped=1
+      done < <(find_worker_processes)
       ;;
   esac
 
@@ -438,6 +484,10 @@ fi
 if (( infra_enabled )); then
   start_dev_infra
 fi
+
+# The provider credential belongs to the isolated Hermes containers. API,
+# worker, web, and migration subprocesses only receive Hermes control tokens.
+unset OPENROUTER_API_KEY
 
 for project in "${projects[@]}"; do
   case "$project" in

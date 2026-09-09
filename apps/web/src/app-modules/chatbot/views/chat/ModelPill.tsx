@@ -1,3 +1,4 @@
+import { ChevronDown, RefreshCcw } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -7,7 +8,6 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, RefreshCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type {
   AiBackendMode,

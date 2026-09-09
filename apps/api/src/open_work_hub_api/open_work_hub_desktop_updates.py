@@ -37,7 +37,9 @@ class DesktopUpdateStaticFiles(StaticFiles):
 
 
 def open_work_hub_desktop_update_dirs(settings: Settings) -> dict[str, Path]:
-    return open_work_hub_desktop_update_serving_policy().update_dirs(settings.open_work_hub_desktop_update_dirs)
+    return open_work_hub_desktop_update_serving_policy().update_dirs(
+        settings.open_work_hub_desktop_update_dirs
+    )
 
 
 def prepare_open_work_hub_desktop_update_dirs(settings: Settings) -> dict[str, Path]:

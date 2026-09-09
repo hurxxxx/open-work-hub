@@ -22,7 +22,6 @@ from open_work_hub_api.domains.search.models import SearchIndexJob
 from open_work_hub_api.domains.search.schemas import SearchEntityType
 from open_work_hub_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
 
-
 FileRagStatus = Literal[
     "disabled",
     "pending",
@@ -139,8 +138,7 @@ def _generation_covered_file_ids(
         .join(
             RetrievalProjectionHead,
             and_(
-                RetrievalProjectionHead.resource_type
-                == RetrievalProjectionEvent.resource_type,
+                RetrievalProjectionHead.resource_type == RetrievalProjectionEvent.resource_type,
                 RetrievalProjectionHead.resource_id == RetrievalProjectionEvent.resource_id,
                 RetrievalProjectionHead.projection_version
                 == RetrievalProjectionEvent.projection_version,

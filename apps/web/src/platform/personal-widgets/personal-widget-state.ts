@@ -3,6 +3,7 @@ export type PersonalWidgetId = 'todo' | 'memo';
 
 export interface PersonalWidgetPreferences {
   activeWidget: PersonalWidgetId;
+  activeDockPanelId?: string;
   mode: PersonalWidgetMode;
 }
 
@@ -13,6 +14,10 @@ export interface PersonalWidgetTodoLike {
 }
 
 export const PERSONAL_WIDGET_STORAGE_KEY = 'open-work-hub.personalWidget.v1';
+
+export function personalWidgetStorageKey(userId: string): string {
+  return `${PERSONAL_WIDGET_STORAGE_KEY}.${encodeURIComponent(userId)}`;
+}
 
 export const DEFAULT_PERSONAL_WIDGET_PREFERENCES: PersonalWidgetPreferences = {
   activeWidget: 'todo',
@@ -28,6 +33,10 @@ export function parsePersonalWidgetPreferences(
   try {
     const parsed = JSON.parse(rawValue) as Partial<PersonalWidgetPreferences>;
     return {
+      ...(typeof parsed.activeDockPanelId === 'string' &&
+      parsed.activeDockPanelId
+        ? { activeDockPanelId: parsed.activeDockPanelId }
+        : {}),
       activeWidget: isPersonalWidgetId(parsed.activeWidget)
         ? parsed.activeWidget
         : 'todo',

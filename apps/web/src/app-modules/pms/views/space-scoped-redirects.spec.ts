@@ -40,11 +40,6 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-const user = {
-  default_workspace_id: 'default-workspace',
-  workspaces: [{ id: 'default-workspace', slug: 'default' }],
-};
-
 describe('PMS space scoped redirects', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,7 +53,6 @@ describe('PMS space scoped redirects', () => {
         createElement(SpaceDocsView, {
           docId: 'doc-1',
           spaceId: 'space-1',
-          workspaceSlug: 'delivery-hub',
         }),
       ),
     );
@@ -76,18 +70,16 @@ describe('PMS space scoped redirects', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Gantt|간트/ }));
     expect(mocks.navigate).toHaveBeenCalledWith(
-      '/w/delivery-hub/pms/spaces/space-1?tab=gantt',
+      '/apps/pms/spaces/space-1?tab=gantt',
     );
   });
 
-  it('uses the explicit workspace slug for space whiteboard deep links', () => {
+  it('preserves the explicit PMS space on whiteboard deep links', () => {
     expect(
       resolveSpaceWhiteboardsRedirectPath({
         spaceId: 'space-1',
-        user,
         whiteboardId: 'board-1',
-        workspaceSlug: 'delivery-hub',
       }),
-    ).toBe('/w/delivery-hub/whiteboard/board-1?space_id=space-1');
+    ).toBe('/apps/whiteboard/boards/board-1?space_id=space-1');
   });
 });

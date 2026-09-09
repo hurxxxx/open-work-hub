@@ -1,9 +1,13 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
+import { authenticatedContentObjectUrl } from '@/src/platform/browser/browser-download';
 
 export type MediaUploadResponse = ApiSchema<'MediaUploadResponse'>;
 
-export async function uploadMedia(token: string, file: File): Promise<MediaUploadResponse> {
+export async function uploadMedia(
+  token: string,
+  file: File,
+): Promise<MediaUploadResponse> {
   const formData = new FormData();
   formData.append('file', file);
   return apiFetchJson<MediaUploadResponse>('/api/v1/media/upload', token, {
@@ -20,11 +24,31 @@ export async function resolveMediaUrls(
 ): Promise<Record<string, string>> {
   if (urls.length === 0) return {};
   try {
-    const data = await apiFetchJson<MediaResolveResponse>('/api/v1/media/resolve', token, {
-      method: 'POST',
-      body: JSON.stringify({ urls }),
-    });
-    return data.resolved;
+    const data = await apiFetchJson<MediaResolveResponse>(
+      '/api/v1/media/resolve',
+      token,
+      {
+        method: 'POST',
+        body: JSON.stringify({ urls }),
+      },
+    );
+    const resolvedEntries = await Promise.all(
+      Object.entries(data.resolved).map(async ([mediaUrl, contentUrl]) => {
+        try {
+          return [
+            mediaUrl,
+            await authenticatedContentObjectUrl(token, contentUrl),
+          ] as const;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    return Object.fromEntries(
+      resolvedEntries.filter(
+        (entry): entry is readonly [string, string] => entry !== null,
+      ),
+    );
   } catch (error) {
     if (error instanceof ApiRequestError) {
       return {};

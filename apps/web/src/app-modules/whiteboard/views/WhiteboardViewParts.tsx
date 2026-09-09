@@ -1,5 +1,4 @@
-import { useEffect, useReducer, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
+import { DropdownMenu, type DropdownItem } from '@open-work-hub/ui';
 import {
   Loader2,
   Lock,
@@ -9,11 +8,12 @@ import {
   Star,
   Users,
 } from 'lucide-react';
-import { DropdownMenu, type DropdownItem } from '@open-work-hub/ui';
+import { useEffect, useReducer, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
-  formatDateTime as formatZonedDateTime,
   formatRelativeTime,
+  formatDateTime as formatZonedDateTime,
 } from '@/src/platform/time/time-utils';
 import type {
   WhiteboardHubItem,
@@ -75,8 +75,8 @@ export function buildWhiteboardVisibilityMenuItems({
       disabled: true,
       label: t('whiteboard.visibilityCurrent', {
         visibility: t(
-          currentVisibility === 'workspace'
-            ? 'whiteboard.visibilityWorkspace'
+          currentVisibility === 'company'
+            ? 'whiteboard.visibilityCompany'
             : 'whiteboard.visibilityPersonal',
         ),
       }),
@@ -94,15 +94,21 @@ export function buildWhiteboardVisibilityMenuItems({
       onSelect: () => onChange('personal'),
     },
     {
-      id: 'workspace',
-      disabled: !canManage || currentVisibility === 'workspace',
+      id: 'company',
+      disabled: !canManage || currentVisibility === 'company',
       label: (
         <span className="inline-flex items-center gap-2">
           <Users size={14} />
-          {t('whiteboard.changeToWorkspace')}
+          {t('whiteboard.changeToCompany')}
         </span>
       ),
-      onSelect: () => onChange('workspace'),
+      onSelect: () => onChange('company'),
+    },
+    {
+      id: 'scope-notice',
+      separatorBefore: true,
+      disabled: true,
+      label: t('whiteboard.visibilityScopeNotice'),
     },
     {
       id: 'manage-required',
@@ -116,11 +122,9 @@ export function buildWhiteboardVisibilityMenuItems({
 function WhiteboardPreview({
   item,
   token,
-  workspaceSlug,
 }: {
   item: WhiteboardHubItem;
   token: string | null;
-  workspaceSlug?: string | null;
 }) {
   const { t } = useTranslation('apps');
   const targetRef = useRef<HTMLDivElement | null>(null);
@@ -160,7 +164,7 @@ function WhiteboardPreview({
     if (status !== 'loading' || !token) return undefined;
     let cancelled = false;
     whiteboardPreviewLoader
-      .load(token, item, workspaceSlug)
+      .load(token, item)
       .then((url) => {
         if (cancelled) return;
         dispatchPreview({ type: 'previewLoaded', previewUrl: url, sourceKey });
@@ -172,7 +176,7 @@ function WhiteboardPreview({
     return () => {
       cancelled = true;
     };
-  }, [item, sourceKey, status, token, workspaceSlug]);
+  }, [item, sourceKey, status, token]);
 
   return (
     <div
@@ -205,14 +209,13 @@ function WhiteboardPreview({
 export function WhiteboardCard({
   item,
   token,
-  workspaceSlug,
   timeZone,
   onOpen,
   onVisibilityChange,
 }: {
   item: WhiteboardHubItem;
   token: string | null;
-  workspaceSlug?: string | null;
+
   timeZone: string;
   onOpen: (item: WhiteboardHubItem) => void;
   onVisibilityChange: (
@@ -221,9 +224,9 @@ export function WhiteboardCard({
   ) => void;
 }) {
   const { t, i18n } = useTranslation('apps');
-  const visibility: WhiteboardVisibility = item.is_private
-    ? 'personal'
-    : 'workspace';
+  const visibility: WhiteboardVisibility = item.company_visible
+    ? 'company'
+    : 'personal';
   return (
     <article
       role="button"
@@ -238,11 +241,7 @@ export function WhiteboardCard({
       className="group flex min-h-[300px] flex-col overflow-hidden rounded-lg border border-app-border bg-app-surface text-left shadow-sm transition hover:-translate-y-0.5 hover:border-app-accent/45 hover:shadow-md"
     >
       <div className="relative">
-        <WhiteboardPreview
-          item={item}
-          token={token}
-          workspaceSlug={workspaceSlug}
-        />
+        <WhiteboardPreview item={item} token={token} />
         <div
           className="absolute right-2 top-2"
           onClick={(event) => event.stopPropagation()}
@@ -298,21 +297,21 @@ export function WhiteboardCard({
             })}
           </p>
           <p className="app-text-body-sm mt-1 truncate text-app-ink/45">
-            {item.location_label || t('whiteboard.fallbackWorkspace')}
+            {item.location_label || t('whiteboard.fallbackCompany')}
           </p>
           <p className="app-text-body-sm mt-1 truncate text-app-ink/45">
             {item.created_by_name || t('whiteboard.unknown')}
           </p>
           <div className="mt-3 inline-flex max-w-full items-center gap-1.5 rounded-md border border-app-border px-2 py-1 text-xs text-app-ink/55">
-            {visibility === 'workspace' ? (
+            {visibility === 'company' ? (
               <Users size={13} className="shrink-0 text-app-warning" />
             ) : (
               <Lock size={13} className="shrink-0 text-app-ink/45" />
             )}
             <span className="truncate">
               {t(
-                visibility === 'workspace'
-                  ? 'whiteboard.visibilityWorkspace'
+                visibility === 'company'
+                  ? 'whiteboard.visibilityCompany'
                   : 'whiteboard.visibilityPersonal',
               )}
             </span>
@@ -369,9 +368,9 @@ export function WhiteboardListTable({
           </thead>
           <tbody className="divide-y divide-app-border">
             {items.map((item) => {
-              const visibility: WhiteboardVisibility = item.is_private
-                ? 'personal'
-                : 'workspace';
+              const visibility: WhiteboardVisibility = item.company_visible
+                ? 'company'
+                : 'personal';
               return (
                 <tr
                   key={item.id}
@@ -400,8 +399,7 @@ export function WhiteboardListTable({
                     <span className="inline-flex max-w-[220px] items-center gap-2 truncate">
                       <MapPin size={14} className="shrink-0 text-app-ink/35" />
                       <span className="truncate">
-                        {item.location_label ||
-                          t('whiteboard.fallbackWorkspace')}
+                        {item.location_label || t('whiteboard.fallbackCompany')}
                       </span>
                     </span>
                   </td>

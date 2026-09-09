@@ -8,7 +8,6 @@ from sqlalchemy import select
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.principal import user_principal
 from open_work_hub_api.domains.auth.access import load_user_graph
-from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.docs import service as docs_service
 from open_work_hub_api.domains.docs.models import NativeDocPage
 from open_work_hub_api.domains.docs.page_mutations import (
@@ -25,10 +24,9 @@ from dev_accounts import dev_login
 def test_create_native_page_module_creates_html_page(client: TestClient) -> None:
     session = dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
-        user, workspace = _load_user_and_workspace(db, session["user"]["id"])
+        user = _load_user(db, session["user"]["id"])
         doc, _page = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=user.id,
             title="Page mutation doc",
         )
@@ -36,9 +34,7 @@ def test_create_native_page_module_creates_html_page(client: TestClient) -> None
 
         result = create_native_page(
             db,
-            workspace=workspace,
             principal=user_principal(
-                workspace_id=workspace.id,
                 user_id=user.id,
                 source="test.docs.page_mutations.create",
             ),
@@ -66,10 +62,9 @@ def test_create_native_page_module_rejects_content_format_mismatch(
 ) -> None:
     session = dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
-        user, workspace = _load_user_and_workspace(db, session["user"]["id"])
+        user = _load_user(db, session["user"]["id"])
         doc, _page = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=user.id,
             title="Mismatch doc",
         )
@@ -78,9 +73,7 @@ def test_create_native_page_module_rejects_content_format_mismatch(
         with pytest.raises(HTTPException) as exc:
             create_native_page(
                 db,
-                workspace=workspace,
                 principal=user_principal(
-                    workspace_id=workspace.id,
                     user_id=user.id,
                     source="test.docs.page_mutations.mismatch",
                 ),
@@ -102,23 +95,20 @@ def test_create_native_page_module_preserves_approved_call_id_idempotency(
 ) -> None:
     session = dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
-        user, workspace = _load_user_and_workspace(db, session["user"]["id"])
+        user = _load_user(db, session["user"]["id"])
         doc, _page = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=user.id,
             title="Idempotent doc",
         )
         db.commit()
         principal = user_principal(
-            workspace_id=workspace.id,
             user_id=user.id,
             source="test.docs.page_mutations.idempotent",
         )
 
         created = create_native_page(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             command=CreateNativePageCommand(
@@ -132,7 +122,6 @@ def test_create_native_page_module_preserves_approved_call_id_idempotency(
         )
         replayed = create_native_page(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             command=CreateNativePageCommand(
@@ -155,22 +144,19 @@ def test_create_native_page_module_preserves_approved_call_id_idempotency(
 def test_update_native_page_module_updates_metadata(client: TestClient) -> None:
     session = dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
-        user, workspace = _load_user_and_workspace(db, session["user"]["id"])
+        user = _load_user(db, session["user"]["id"])
         doc, _page = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=user.id,
             title="Mutable doc",
         )
         db.commit()
         principal = user_principal(
-            workspace_id=workspace.id,
             user_id=user.id,
             source="test.docs.page_mutations.update",
         )
         parent = create_native_page(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             command=CreateNativePageCommand(
@@ -180,7 +166,6 @@ def test_update_native_page_module_updates_metadata(client: TestClient) -> None:
         )
         child = create_native_page(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             command=CreateNativePageCommand(
@@ -209,22 +194,19 @@ def test_update_native_page_module_updates_metadata(client: TestClient) -> None:
 def test_delete_native_page_module_trashes_subtree(client: TestClient) -> None:
     session = dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
-        user, workspace = _load_user_and_workspace(db, session["user"]["id"])
+        user = _load_user(db, session["user"]["id"])
         doc, _page = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=user.id,
             title="Delete subtree doc",
         )
         db.commit()
         principal = user_principal(
-            workspace_id=workspace.id,
             user_id=user.id,
             source="test.docs.page_mutations.delete",
         )
         parent = create_native_page(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             command=CreateNativePageCommand(
@@ -234,7 +216,6 @@ def test_delete_native_page_module_trashes_subtree(client: TestClient) -> None:
         )
         child = create_native_page(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             command=CreateNativePageCommand(
@@ -277,10 +258,9 @@ def test_delete_native_page_module_trashes_subtree(client: TestClient) -> None:
 def test_create_native_page_module_rejects_doc_prefixed_parent_id(client: TestClient) -> None:
     session = dev_login(client, "delivery-hub-admin")
     with get_session_factory()() as db:
-        user, workspace = _load_user_and_workspace(db, session["user"]["id"])
+        user = _load_user(db, session["user"]["id"])
         doc, _page = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=user.id,
             title="Bad parent prefix doc",
         )
@@ -289,9 +269,7 @@ def test_create_native_page_module_rejects_doc_prefixed_parent_id(client: TestCl
         with pytest.raises(HTTPException) as exc_info:
             create_native_page(
                 db,
-                workspace=workspace,
                 principal=user_principal(
-                    workspace_id=workspace.id,
                     user_id=user.id,
                     source="test.docs.page_mutations.bad_parent_prefix",
                 ),
@@ -307,9 +285,7 @@ def test_create_native_page_module_rejects_doc_prefixed_parent_id(client: TestCl
     assert exc_info.value.detail.code == "docs.page_not_found"
 
 
-def _load_user_and_workspace(db, user_id: str):
+def _load_user(db, user_id: str):
     user = load_user_graph(db, user_id)
-    workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
     assert user is not None
-    assert workspace is not None
-    return user, workspace
+    return user

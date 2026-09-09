@@ -11,10 +11,9 @@ def test_block_doc_rejects_initial_content_text(
 ) -> None:
     session = dev_login(client)
     token = session["token"]
-    workspace_slug = session["user"]["workspaces"][0]["slug"]
 
     create_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(token),
         json={
             "title": "Block Doc",
@@ -31,11 +30,10 @@ def test_doc_pages_own_content_format_and_allow_mixed_docs(
 ) -> None:
     session = dev_login(client)
     token = session["token"]
-    workspace_slug = session["user"]["workspaces"][0]["slug"]
     html = "<!doctype html><html><body><h1>HTML Guide</h1><script>hidden()</script></body></html>"
 
     create_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(token),
         json={
             "title": "Mixed Doc",
@@ -47,7 +45,7 @@ def test_doc_pages_own_content_format_and_allow_mixed_docs(
     assert doc["content_format"] == "block"
 
     pages_response = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}/pages",
+        f"/api/v1/docs/items/{doc['id']}/pages",
         headers=_auth_headers(token),
     )
     assert pages_response.status_code == 200, pages_response.text
@@ -56,7 +54,7 @@ def test_doc_pages_own_content_format_and_allow_mixed_docs(
     assert block_page["realtime_collab"] is True
 
     create_html_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}/pages",
+        f"/api/v1/docs/items/{doc['id']}/pages",
         headers=_auth_headers(token),
         json={"title": "Uploaded HTML", "content_format": "html", "content_text": html},
     )
@@ -68,14 +66,14 @@ def test_doc_pages_own_content_format_and_allow_mixed_docs(
     assert html_page["realtime_collab"] is False
 
     mixed_doc_response = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items/{doc['id']}",
+        f"/api/v1/docs/items/{doc['id']}",
         headers=_auth_headers(token),
     )
     assert mixed_doc_response.status_code == 200, mixed_doc_response.text
     assert mixed_doc_response.json()["content_format"] == "mixed"
 
     block_patch_response = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/docs/pages/{html_page['id']}",
+        f"/api/v1/docs/pages/{html_page['id']}",
         headers=_auth_headers(token),
         json={"content_blocks": [{"type": "paragraph", "content": "blocked"}]},
     )
@@ -83,7 +81,7 @@ def test_doc_pages_own_content_format_and_allow_mixed_docs(
     assert block_patch_response.json()["code"] == "docs.content_format_mismatch"
 
     html_patch_response = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/docs/pages/{html_page['id']}",
+        f"/api/v1/docs/pages/{html_page['id']}",
         headers=_auth_headers(token),
         json={"content_text": html},
     )
@@ -91,7 +89,7 @@ def test_doc_pages_own_content_format_and_allow_mixed_docs(
     assert html_patch_response.json()["content_text"] == html
 
     block_text_patch_response = client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/docs/pages/{block_page['id']}",
+        f"/api/v1/docs/pages/{block_page['id']}",
         headers=_auth_headers(token),
         json={"content_text": html},
     )
@@ -100,7 +98,7 @@ def test_doc_pages_own_content_format_and_allow_mixed_docs(
 
     page_ref = make_page_ref(html_page["source_type"], html_page["source_page_id"])
     collab_response = client.get(
-        f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/session",
+        f"/api/v1/docs/collab/pages/{page_ref}/session",
         headers=_auth_headers(token),
     )
     assert collab_response.status_code == 404
@@ -111,10 +109,9 @@ def test_markdown_doc_format_is_rejected(
 ) -> None:
     session = dev_login(client)
     token = session["token"]
-    workspace_slug = session["user"]["workspaces"][0]["slug"]
 
     create_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(token),
         json={
             "title": "Markdown Doc",
@@ -125,18 +122,24 @@ def test_markdown_doc_format_is_rejected(
 
 
 def test_content_text_extracts_indexable_html_and_block_content() -> None:
-    assert extract_page_text(
-        content_format="html",
-        content_blocks=None,
-        content_text="<h1>Visible</h1><script>hidden</script><style>.x{}</style><p>Body</p>",
-        block_extractor=lambda _blocks: "unused",
-    ) == "Visible Body"
-    assert extract_page_text(
-        content_format="block",
-        content_blocks=[{"type": "paragraph"}],
-        content_text=None,
-        block_extractor=lambda blocks: f"blocks:{len(blocks or [])}",
-    ) == "blocks:1"
+    assert (
+        extract_page_text(
+            content_format="html",
+            content_blocks=None,
+            content_text="<h1>Visible</h1><script>hidden</script><style>.x{}</style><p>Body</p>",
+            block_extractor=lambda _blocks: "unused",
+        )
+        == "Visible Body"
+    )
+    assert (
+        extract_page_text(
+            content_format="block",
+            content_blocks=[{"type": "paragraph"}],
+            content_text=None,
+            block_extractor=lambda blocks: f"blocks:{len(blocks or [])}",
+        )
+        == "blocks:1"
+    )
 
 
 def _auth_headers(token: str) -> dict[str, str]:

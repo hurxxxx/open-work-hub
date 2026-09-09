@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Literal, TypeVar
 
 from open_work_hub_api.domains.ai.runtime.external_egress import (
@@ -10,7 +10,6 @@ from open_work_hub_api.domains.ai.runtime.external_egress import (
     ExternalEgressReason,
     ExternalProvider,
 )
-
 
 ExternalCapabilityRequestStatus = Literal["disabled", "ready"]
 ExternalCapabilityDisabledReason = Literal[

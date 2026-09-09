@@ -1,3 +1,4 @@
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import { Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -16,7 +17,10 @@ export function NoMailAccountState() {
         </p>
         <Link
           className={`${actionButtonClassName} mt-4`}
-          to="/mail?view=settings"
+          to={buildAppHref({
+            routeId: 'mail.root',
+            queryParams: { view: 'settings' },
+          })}
         >
           <Settings size={16} />
           <span>{t('mail.account.openSettings')}</span>

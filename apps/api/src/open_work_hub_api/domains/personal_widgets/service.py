@@ -11,7 +11,6 @@ from open_work_hub_api.domains.auth.security import new_id
 from .models import PersonalMemo, PersonalTodoItem, utcnow_naive
 from .schemas import PersonalMemoOut, PersonalTodoItemOut, PersonalTodoListResponse
 
-
 TODO_SORT_STEP = 1000
 
 
@@ -65,9 +64,7 @@ def list_todos(
 
 def create_todo(db: Session, *, user: User, title: str) -> PersonalTodoItemOut:
     max_sort_order = db.scalar(
-        select(func.max(PersonalTodoItem.sort_order)).where(
-            PersonalTodoItem.user_id == user.id
-        )
+        select(func.max(PersonalTodoItem.sort_order)).where(PersonalTodoItem.user_id == user.id)
     )
     row = PersonalTodoItem(
         id=new_id(),

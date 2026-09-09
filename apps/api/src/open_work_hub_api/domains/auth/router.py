@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request, status
@@ -21,45 +21,39 @@ from open_work_hub_api.domains.auth.access import (
     SYSTEM_PLATFORM_ADMIN,
     ensure_dev_login_seed_data,
     ensure_seed_data,
-    ensure_workspace_default_pms_space,
     get_dev_login_user,
     list_dev_login_account_catalog,
     list_dev_login_accounts,
-    load_active_workspace_by_id,
     load_user_graph,
     normalize_locale,
     normalize_time_zone,
     record_audit_log,
-    resolve_workspace_role,
     replace_user_system_roles,
     serialize_auth_user,
+)
+from open_work_hub_api.domains.auth.app_bar_preferences import (
+    normalize_app_bar_pinned_app_ids,
 )
 from open_work_hub_api.domains.auth.date_format_preferences import (
     default_date_format_value,
     normalize_date_format_payload,
     validate_date_format_value,
 )
-from open_work_hub_api.domains.auth.app_bar_preferences import (
-    normalize_app_bar_pinned_app_ids,
-)
 from open_work_hub_api.domains.auth.dependencies import (
     AuthContext,
     require_auth_context,
-    require_permission,
 )
 from open_work_hub_api.domains.auth.models import (
     AuthSession,
     DesktopSessionLink,
     User,
-    Workspace,
-    WorkspaceUserBinding,
 )
 from open_work_hub_api.domains.auth.security import (
     derive_login_id_from_email,
-    hash_token,
     hash_password,
-    issue_session_token,
+    hash_token,
     is_valid_login_id,
+    issue_session_token,
     new_id,
     normalize_email,
     normalize_login_id,
@@ -132,13 +126,6 @@ class DevLoginAccountResponse(BaseModel):
     category: str
 
 
-class WorkspaceSummaryResponse(BaseModel):
-    id: str
-    slug: str
-    name: str
-    role: str
-
-
 class AppBarLayoutPreference(BaseModel):
     pinned_app_ids: list[str] = Field(default_factory=list)
 
@@ -167,9 +154,10 @@ class AuthUserResponse(BaseModel):
     time_zone: str
     date_format: str
     app_bar_layout: AppBarLayoutPreference
-    default_workspace_id: str | None
     system_roles: list[str]
-    workspaces: list[WorkspaceSummaryResponse]
+    group_ids: list[str]
+    managed_organization_unit_ids: list[str]
+    is_department_head: bool
     must_change_password: bool
     last_login_at: datetime | None
     created_at: datetime
@@ -286,6 +274,13 @@ class DevLoginRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(..., min_length=8, max_length=128)
     new_password: str = Field(..., min_length=8, max_length=128)
+    new_password_confirm: str = Field(..., min_length=8, max_length=128)
+
+    @model_validator(mode="after")
+    def validate_password_confirmation(self) -> "ChangePasswordRequest":
+        if self.new_password != self.new_password_confirm:
+            raise _password_confirmation_mismatch_error()
+        return self
 
 
 class UpdatePreferencesRequest(BaseModel):
@@ -296,7 +291,6 @@ class UpdatePreferencesRequest(BaseModel):
     time_zone: str | None = Field(default=None, min_length=1, max_length=64)
     date_format: Literal["korean", "iso", "us", "european", "locale"] | None = None
     app_bar_layout: AppBarLayoutPreference | None = None
-    default_workspace_id: str | None = Field(default=None, max_length=36)
 
     @model_validator(mode="before")
     @classmethod
@@ -341,14 +335,6 @@ class UpdatePreferencesRequest(BaseModel):
     @classmethod
     def validate_date_format(cls, value: str | None) -> str | None:
         return validate_date_format_value(value)
-
-    @field_validator("default_workspace_id")
-    @classmethod
-    def validate_default_workspace_id(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        normalized = value.strip()
-        return normalized or None
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -416,10 +402,7 @@ def _ensure_development_environment() -> None:
 
 def is_local_dev_admin_login_available(request: Request) -> bool:
     settings = get_settings()
-    if (
-        is_production_like_environment(settings.environment)
-        or not settings.allow_dev_admin_login
-    ):
+    if is_production_like_environment(settings.environment) or not settings.allow_dev_admin_login:
         return False
 
     client_host = request.client.host if request.client else None
@@ -517,19 +500,6 @@ def setup_first_user(
     db.add(user)
     db.flush()
     replace_user_system_roles(db, user.id, [SYSTEM_PLATFORM_ADMIN])
-    default_workspaces = db.scalars(
-        select(Workspace).where(Workspace.key.in_(["administrator", "general"]))
-    ).all()
-    for default_workspace in default_workspaces:
-        db.add(
-            WorkspaceUserBinding(
-                id=new_id(),
-                workspace_id=default_workspace.id,
-                user_id=user.id,
-                role="admin",
-            )
-        )
-        ensure_workspace_default_pms_space(db, default_workspace)
     record_audit_log(
         db,
         actor_user_id=user.id,
@@ -570,13 +540,6 @@ def signup(
             code="auth.user_already_exists",
         )
 
-    default_workspace = db.scalar(select(Workspace).where(Workspace.key == "general"))
-    if default_workspace is None:
-        raise localized_http_exception(
-            status_code=500,
-            code="auth.default_identity_seed_incomplete",
-        )
-
     user = User(
         id=new_id(),
         login_id=payload.login_id,
@@ -593,15 +556,6 @@ def signup(
     )
     db.add(user)
     db.flush()
-    db.add(
-        WorkspaceUserBinding(
-            id=new_id(),
-            workspace_id=default_workspace.id,
-            user_id=user.id,
-            role="member",
-        )
-    )
-    ensure_workspace_default_pms_space(db, default_workspace)
     record_audit_log(
         db,
         actor_user_id=user.id,
@@ -718,42 +672,6 @@ def dev_login(
     )
     db.commit()
     return _issue_auth_response(db, user, request)
-
-
-@router.post("/impersonations/{user_id}", response_model=AuthSessionResponse)
-def impersonate_user(
-    user_id: str,
-    request: Request,
-    context: AuthContext = Depends(require_permission("user.impersonate")),
-    db: Session = Depends(get_db_session),
-) -> AuthSessionResponse:
-    target_user = db.scalar(select(User).where(User.id == user_id))
-    if target_user is None:
-        raise localized_http_exception(status_code=404, code="auth.user_not_found")
-    _ensure_active_user(target_user)
-
-    impersonator_user_id = context.impersonator_user_id or context.user.id
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="auth.impersonate",
-        entity_kind="user",
-        entity_id=target_user.id,
-        summary=f"User impersonation started: {context.user.email} -> {target_user.email}",
-        payload={
-            "impersonator_user_id": impersonator_user_id,
-            "impersonator_email": context.user.email,
-            "target_user_id": target_user.id,
-            "target_email": target_user.email,
-            "source_session_id": context.session.id,
-        },
-    )
-    return _issue_auth_response(
-        db,
-        target_user,
-        request,
-        impersonator_user_id=impersonator_user_id,
-    )
 
 
 @router.get("/me", response_model=AuthUserResponse)
@@ -915,28 +833,8 @@ def update_preferences(
         context.user.date_format = payload.date_format
     if "app_bar_layout" in payload.model_fields_set:
         context.user.app_bar_layout = (
-            payload.app_bar_layout.model_dump()
-            if payload.app_bar_layout is not None
-            else None
+            payload.app_bar_layout.model_dump() if payload.app_bar_layout is not None else None
         )
-    if "default_workspace_id" in payload.model_fields_set:
-        if payload.default_workspace_id is None:
-            context.user.default_workspace_id = None
-        else:
-            workspace = load_active_workspace_by_id(db, payload.default_workspace_id)
-            if workspace is None:
-                raise localized_http_exception(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    code="workspace.not_found",
-                )
-            if resolve_workspace_role(db, context.user, workspace.id) is None:
-                raise localized_http_exception(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    code="workspace.membership_required",
-                    workspace=workspace.key,
-                )
-            context.user.default_workspace_id = workspace.id
-
     db.add(context.user)
     record_audit_log(
         db,
@@ -951,14 +849,7 @@ def update_preferences(
             "time_zone": payload.time_zone,
             "date_format": payload.date_format,
             "app_bar_layout": (
-                payload.app_bar_layout.model_dump()
-                if payload.app_bar_layout is not None
-                else None
-            ),
-            "default_workspace_id": (
-                payload.default_workspace_id
-                if "default_workspace_id" in payload.model_fields_set
-                else None
+                payload.app_bar_layout.model_dump() if payload.app_bar_layout is not None else None
             ),
             "display_name": payload.display_name,
         },

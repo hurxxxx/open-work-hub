@@ -5,9 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from open_work_hub_api.domains.ai.tool_approval_gate import (
-    validate_replayed_approval,
-)
+from open_work_hub_api.domains.ai.tool_approval_gate import validate_replayed_approval
 
 
 def test_validate_replayed_approval_allows_matching_tool_and_call_id() -> None:

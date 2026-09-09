@@ -1,3 +1,4 @@
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -15,6 +16,11 @@ import {
   registerRecordingBackgroundSync,
 } from './recording-background-sync';
 import {
+  RecordingRecorderRuntime,
+  type RecordingRecorderRuntimeOptions,
+} from './recording-recorder-runtime';
+import type { RecordingRecoveryContinueSessionInput } from './recording-recovery-session-plan';
+import {
   appendChunk,
   buildRecordingScopeKey,
   buildSessionBlob,
@@ -28,15 +34,10 @@ import {
   sessionTarget,
   updateSessionProgress,
   upsertSession,
-  type RecordingTargetRef,
   type RecordingSessionSource,
   type RecordingSessionState,
+  type RecordingTargetRef,
 } from './recording-session-db';
-import {
-  RecordingRecorderRuntime,
-  type RecordingRecorderRuntimeOptions,
-} from './recording-recorder-runtime';
-import type { RecordingRecoveryContinueSessionInput } from './recording-recovery-session-plan';
 import {
   requestRecordingWakeLock,
   wakeLockSupported,
@@ -54,7 +55,6 @@ interface ImportAudioInput extends StartRecordingInput {
 }
 
 interface RecorderOptions {
-  workspaceSlug: string;
   token: string | null;
   initialTarget?: RecordingTargetRef | null;
   source?: RecordingSessionSource;
@@ -122,7 +122,6 @@ function sessionStartedAt(session: RecordingSessionState | null): Date | null {
 }
 
 export function useResilientRecorder({
-  workspaceSlug,
   token,
   initialTarget = null,
   source,
@@ -130,6 +129,8 @@ export function useResilientRecorder({
   onRecordingSaved,
 }: RecorderOptions) {
   const { t } = useTranslation('apps');
+  const { user } = useAuth();
+  const userId = user?.id ?? '';
   const [recorderState, setRecorderState] = useState<RecorderState>('idle');
   const [isBusy, setIsBusy] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -155,7 +156,7 @@ export function useResilientRecorder({
   const stoppingRef = useRef<Set<string>>(new Set());
   const runtimeContextRef = useRef({
     token,
-    workspaceSlug,
+    userId,
     initialTarget,
     source,
     title,
@@ -164,12 +165,12 @@ export function useResilientRecorder({
   });
   const runtimeRef = useRef<RecordingRecorderRuntime<Recording> | null>(null);
   const scopeKey = useMemo(
-    () => buildRecordingScopeKey(workspaceSlug, initialTarget),
-    [initialTarget, workspaceSlug],
+    () => buildRecordingScopeKey(userId, initialTarget),
+    [initialTarget, userId],
   );
   runtimeContextRef.current = {
     token,
-    workspaceSlug,
+    userId,
     initialTarget,
     source,
     title,
@@ -193,34 +194,33 @@ export function useResilientRecorder({
         getPendingChunks,
         markChunkUploaded,
         updateSessionProgress,
-        getSession,
-        listIncompleteSessions,
+        getSession: async (id) => {
+          const session = await getSession(id);
+          return session?.userId === runtimeContextRef.current.userId
+            ? session
+            : null;
+        },
+        listIncompleteSessions: (options) =>
+          listIncompleteSessions({
+            ...options,
+            userId: runtimeContextRef.current.userId,
+          }),
         markSessionComplete,
         clearSession,
       },
       client: {
         headUpload: (stagingId) =>
-          headRecordingTusUpload(
-            requireToken(),
-            runtimeContextRef.current.workspaceSlug,
-            stagingId,
-          ),
+          headRecordingTusUpload(requireToken(), stagingId),
         uploadChunk: (stagingId, offset, blob, sha256) =>
           uploadRecordingTusChunk(
             requireToken(),
-            runtimeContextRef.current.workspaceSlug,
             stagingId,
             offset,
             blob,
             sha256,
           ),
         completeUpload: (stagingId, payload) =>
-          completeRecordingUpload(
-            requireToken(),
-            runtimeContextRef.current.workspaceSlug,
-            stagingId,
-            payload,
-          ),
+          completeRecordingUpload(requireToken(), stagingId, payload),
       },
       environment: {
         now: () => Date.now(),
@@ -514,7 +514,7 @@ export function useResilientRecorder({
       }
       const idempotencyKey = createId();
       const effectiveTitle = input.title ?? title ?? null;
-      const staging = await initRecordingUpload(token, workspaceSlug, {
+      const staging = await initRecordingUpload(token, {
         idempotency_key: idempotencyKey,
         mime_type: selectedMimeType,
         title: effectiveTitle,
@@ -525,7 +525,7 @@ export function useResilientRecorder({
       });
       const sessionState: RecordingSessionState = {
         stagingId: staging.id,
-        workspaceSlug,
+        userId,
         scopeKey,
         idempotencyKey,
         mimeType: selectedMimeType,
@@ -543,11 +543,6 @@ export function useResilientRecorder({
         uploadCompletedAt: null,
         interruptedAt: null,
         interruptionReason: null,
-        meetingId:
-          initialTarget?.app === 'meeting' &&
-          initialTarget.type === 'meeting'
-            ? initialTarget.id
-            : null,
       };
       await upsertSession(sessionState);
       await startMediaRecorder(
@@ -658,7 +653,7 @@ export function useResilientRecorder({
       }
       const target = session ? sessionTarget(session) : initialTarget;
       const startedAt = sessionStartedAt(session);
-      const recording = await importRecording(token, workspaceSlug, blob, {
+      const recording = await importRecording(token, blob, {
         title: session?.title ?? title ?? null,
         startedAt,
         durationSec: session?.startedAt
@@ -690,7 +685,7 @@ export function useResilientRecorder({
     setRecorderState('uploading');
     try {
       const startedAt = new Date();
-      const recording = await importRecording(token, workspaceSlug, file, {
+      const recording = await importRecording(token, file, {
         title: input.title ?? title ?? file.name,
         startedAt,
         source: input.source ?? 'manual_upload',
@@ -720,7 +715,7 @@ export function useResilientRecorder({
     setIsBusy(true);
     try {
       if (remoteExists) {
-        await discardRecordingUpload(token, workspaceSlug, stagingId);
+        await discardRecordingUpload(token, stagingId);
       }
       await clearSession(stagingId);
       if (activeSessionIdRef.current === stagingId) {
@@ -753,8 +748,8 @@ export function useResilientRecorder({
   }
 
   async function resumeRecoverableUploads() {
-    if (!token || !workspaceSlug) return;
-    await recorderRuntime.resumeRecoverableUploads({ workspaceSlug, scopeKey });
+    if (!token) return;
+    await recorderRuntime.resumeRecoverableUploads({ scopeKey });
   }
 
   acquireWakeLockRef.current = () => {

@@ -38,9 +38,7 @@ def plan_invocation_dependencies(
         invocation_ids = set(indexed_invocations)
         for invocation in graph.invocations:
             if invocation.agent_id in invocation.must_run_after:
-                raise GraphInvocationDependencyError(
-                    f"{invocation.agent_id} depends on itself"
-                )
+                raise GraphInvocationDependencyError(f"{invocation.agent_id} depends on itself")
             missing_dependencies = sorted(set(invocation.must_run_after) - invocation_ids)
             if missing_dependencies:
                 raise GraphInvocationDependencyError(
@@ -57,9 +55,7 @@ def plan_invocation_dependencies(
             (
                 agent_id
                 for agent_id in remaining_agent_ids
-                if set(indexed_invocations[agent_id][1].must_run_after).issubset(
-                    planned_agent_ids
-                )
+                if set(indexed_invocations[agent_id][1].must_run_after).issubset(planned_agent_ids)
             ),
             key=lambda agent_id: indexed_invocations[agent_id][0],
         )

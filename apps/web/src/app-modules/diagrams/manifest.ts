@@ -1,3 +1,4 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import { Archive, User, Workflow } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
@@ -8,7 +9,6 @@ export const diagramsManifest: AppModuleManifest = {
     owner: 'diagrams-platform',
     permissions: [],
     apiDomain: 'diagrams',
-    workspaceApiPrefixes: ['/api/v1/diagrams'],
     aiCapabilities: [],
     writeAuditActions: [],
     appLocalTests: [
@@ -43,8 +43,8 @@ export const diagramsManifest: AppModuleManifest = {
       pathSuffix: '?view=archived',
     },
   ],
-  workspaceRoutePaths: [
-    '/w/:workspaceSlug/diagrams',
-    '/w/:workspaceSlug/diagrams/:diagramId',
+  appRoutePaths: [
+    getAppRoutePattern('diagrams.root'),
+    getAppRoutePattern('diagrams.diagram'),
   ],
 };

@@ -42,8 +42,6 @@ class DmMessageAttachmentItem(BaseModel):
     content_type: str
     size_bytes: int
     is_image: bool
-    download_url: str
-    preview_url: str | None = None
     created_at: datetime
 
 

@@ -6,33 +6,16 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from open_work_hub_api.core.db import get_session_factory
-from open_work_hub_api.domains.auth.models import PlatformAppVisibility
+from open_work_hub_api.domains.auth.models import CompanyAppControl
 
-from test_meeting import (
-    _auth_headers,
-    _bootstrap_admin_session,
-    _create_user_with_workspaces,
-    _login,
-)
+from test_meeting import _auth_headers, _bootstrap_admin_session, _create_company_user, _login
 
 
-def _workspace_slug_for_key(client: TestClient, token: str, key: str) -> str:
-    response = client.get(
-        "/api/v1/admin/workspaces",
-        headers=_auth_headers(token),
-    )
-    assert response.status_code == 200, response.text
-    workspace = next(item for item in response.json() if item["key"] == key)
-    return workspace.get("slug", key)
-
-
-def _set_platform_app_visibility(app_id: str, visible: bool) -> None:
+def _set_company_app_control(app_id: str, enabled: bool) -> None:
     with get_session_factory()() as db:
-        row = db.scalar(
-            select(PlatformAppVisibility).where(PlatformAppVisibility.app_id == app_id)
-        )
+        row = db.scalar(select(CompanyAppControl).where(CompanyAppControl.app_id == app_id))
         assert row is not None
-        row.visible = visible
+        row.enabled = enabled
         db.add(row)
         db.commit()
 
@@ -64,18 +47,17 @@ def _create_planner_event(
     return response.json()
 
 
-def _create_workspace_meeting(
+def _create_company_meeting(
     client: TestClient,
     token: str,
     *,
-    workspace_slug: str,
     title: str = "Sync",
     attendees: list[dict] | None = None,
     start_at: datetime,
     end_at: datetime,
 ) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings",
+        "/api/v1/meeting/meetings",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -112,6 +94,9 @@ def test_planner_event_crud_happy_path(client: TestClient) -> None:
     assert created["endHasTime"] is True
     assert created["start"] == "2026-05-04T01:00:00+00:00"
     assert created["end"] == "2026-05-04T03:30:00+00:00"
+    assert created["calendarStart"] == created["start"]
+    assert created["calendarEnd"] == created["end"]
+    assert created["calendarAllDay"] is False
 
     detail = client.get(
         f"/api/v1/planner/events/{created['id']}",
@@ -137,6 +122,9 @@ def test_planner_event_crud_happy_path(client: TestClient) -> None:
     assert updated_body["endHasTime"] is False
     assert updated_body["start"] == "2026-05-06"
     assert updated_body["end"] == "2026-05-08"
+    assert updated_body["calendarStart"] == "2026-05-06"
+    assert updated_body["calendarEnd"] == "2026-05-08"
+    assert updated_body["calendarAllDay"] is True
     assert updated_body["location"] == "부산"
 
     listing = client.get(
@@ -163,12 +151,11 @@ def test_planner_event_crud_happy_path(client: TestClient) -> None:
 def test_planner_event_owner_only_access(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    member = _create_user_with_workspaces(
+    member = _create_company_user(
         client,
         admin_token,
         email="planner-member@open-work-hub.local",
         full_name="Planner Member",
-        workspace_keys=["administrator"],
     )
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
@@ -202,12 +189,11 @@ def test_planner_event_owner_only_access(client: TestClient) -> None:
 def test_calendar_events_include_only_current_user_planner_events(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    member = _create_user_with_workspaces(
+    member = _create_company_user(
         client,
         admin_token,
         email="planner-public@open-work-hub.local",
         full_name="Planner Public",
-        workspace_keys=["administrator"],
     )
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
@@ -244,7 +230,7 @@ def test_calendar_events_include_only_current_user_planner_events(client: TestCl
     assert item["sourceType"] == "planner_event"
     assert item["sourceId"] == own_event["id"]
     assert item["metadata"]["plannerEventId"] == own_event["id"]
-    assert item["workspace"] is None
+    assert "workspace" not in item
     assert item["metadata"]["location"] == "판교"
     assert item["metadata"]["plannerAllDay"] is False
     assert item["metadata"]["plannerStartHasTime"] is True
@@ -267,6 +253,9 @@ def test_planner_event_accepts_partial_or_unspecified_times(client: TestClient) 
     assert start_only["endHasTime"] is False
     assert start_only["start"] == "2026-05-12T00:00:00+00:00"
     assert start_only["end"] == "2026-05-12"
+    assert start_only["calendarStart"] == "2026-05-12T00:00:00+00:00"
+    assert start_only["calendarEnd"] == "2026-05-12T00:30:00+00:00"
+    assert start_only["calendarAllDay"] is False
 
     end_only = _create_planner_event(
         client,
@@ -279,6 +268,9 @@ def test_planner_event_accepts_partial_or_unspecified_times(client: TestClient) 
     assert end_only["endHasTime"] is True
     assert end_only["start"] == "2026-05-13"
     assert end_only["end"] == "2026-05-13T09:00:00+00:00"
+    assert end_only["calendarStart"] == "2026-05-13T08:30:00+00:00"
+    assert end_only["calendarEnd"] == "2026-05-13T09:00:00+00:00"
+    assert end_only["calendarAllDay"] is False
 
     no_time = _create_planner_event(
         client,
@@ -291,6 +283,9 @@ def test_planner_event_accepts_partial_or_unspecified_times(client: TestClient) 
     assert no_time["endHasTime"] is False
     assert no_time["start"] == "2026-05-14"
     assert no_time["end"] == "2026-05-14"
+    assert no_time["calendarStart"] == "2026-05-14"
+    assert no_time["calendarEnd"] == "2026-05-15"
+    assert no_time["calendarAllDay"] is True
 
     calendar = client.get(
         "/api/v1/calendar/events",
@@ -304,23 +299,70 @@ def test_planner_event_accepts_partial_or_unspecified_times(client: TestClient) 
     assert calendar.status_code == 200, calendar.text
     by_title = {item["title"]: item for item in calendar.json()["items"]}
     assert by_title["시작만 있는 일정"]["allDay"] is False
+    assert by_title["시작만 있는 일정"]["start"] == start_only["calendarStart"]
+    assert by_title["시작만 있는 일정"]["end"] == start_only["calendarEnd"]
     assert by_title["시작만 있는 일정"]["metadata"]["plannerEndHasTime"] is False
     assert by_title["종료만 있는 일정"]["allDay"] is False
+    assert by_title["종료만 있는 일정"]["start"] == end_only["calendarStart"]
+    assert by_title["종료만 있는 일정"]["end"] == end_only["calendarEnd"]
     assert by_title["종료만 있는 일정"]["metadata"]["plannerStartHasTime"] is False
     assert by_title["시간 미정 일정"]["allDay"] is True
+    assert by_title["시간 미정 일정"]["start"] == no_time["calendarStart"]
+    assert by_title["시간 미정 일정"]["end"] == no_time["calendarEnd"]
     assert by_title["시간 미정 일정"]["metadata"]["plannerAllDay"] is False
+
+
+def test_planner_event_calendar_bounds_use_server_timezone_rules(
+    client: TestClient,
+) -> None:
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+    preferences = client.patch(
+        "/api/v1/auth/preferences",
+        headers=_auth_headers(token),
+        json={"time_zone": "Africa/Cairo"},
+    )
+    assert preferences.status_code == 200, preferences.text
+
+    event = _create_planner_event(
+        client,
+        token,
+        title="DST 자정 경계",
+        start="2024-04-26",
+        end="2024-04-25T22:10:00+00:00",
+    )
+
+    # Cairo skipped local 00:00 on this date. Python ZoneInfo resolves the
+    # canonical stored day start, and clients consume it without recreating
+    # timezone-gap semantics in the browser.
+    assert event["calendarStart"] == "2024-04-25T22:00:00+00:00"
+    assert event["calendarEnd"] == "2024-04-25T22:10:00+00:00"
+    assert event["calendarAllDay"] is False
+
+    calendar = client.get(
+        "/api/v1/calendar/events",
+        headers=_auth_headers(token),
+        params={
+            "from": "2024-04-25T00:00:00+00:00",
+            "to": "2024-04-27T00:00:00+00:00",
+            "sources": "planner_event",
+        },
+    )
+    assert calendar.status_code == 200, calendar.text
+    projected = next(item for item in calendar.json()["items"] if item["sourceId"] == event["id"])
+    assert projected["start"] == event["calendarStart"]
+    assert projected["end"] == event["calendarEnd"]
+    assert projected["allDay"] == event["calendarAllDay"]
 
 
 def test_meeting_availability_masks_other_users_personal_events(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    meeting_workspace_slug = _workspace_slug_for_key(client, admin_token, "administrator")
-    attendee = _create_user_with_workspaces(
+    attendee = _create_company_user(
         client,
         admin_token,
         email="availability-user@open-work-hub.local",
         full_name="Availability User",
-        workspace_keys=["administrator"],
     )
     attendee_token = _login(client, attendee["user"]["email"], attendee["temporary_password"])
 
@@ -341,10 +383,9 @@ def test_meeting_availability_masks_other_users_personal_events(client: TestClie
         all_day=True,
         location="부산",
     )
-    _create_workspace_meeting(
+    _create_company_meeting(
         client,
         admin_token,
-        workspace_slug=meeting_workspace_slug,
         title="Sync",
         attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
         start_at=datetime(2026, 5, 18, 8, 0, tzinfo=UTC).replace(tzinfo=None),
@@ -359,7 +400,7 @@ def test_meeting_availability_masks_other_users_personal_events(client: TestClie
     )
 
     response = client.get(
-        f"/api/v1/workspaces/{meeting_workspace_slug}/meeting/availability",
+        "/api/v1/meeting/availability",
         headers=_auth_headers(admin_token),
         params=[
             ("user_ids", attendee["user"]["id"]),
@@ -382,9 +423,9 @@ def test_meeting_availability_masks_other_users_personal_events(client: TestClie
     assert meeting_block["masked"] is True
     assert meeting_block["title"] is None
 
-    _set_platform_app_visibility("planner", False)
+    _set_company_app_control("planner", False)
     planner_disabled = client.get(
-        f"/api/v1/workspaces/{meeting_workspace_slug}/meeting/availability",
+        "/api/v1/meeting/availability",
         headers=_auth_headers(admin_token),
         params=[
             ("user_ids", attendee["user"]["id"]),
@@ -397,20 +438,25 @@ def test_meeting_availability_masks_other_users_personal_events(client: TestClie
     assert [block["sourceType"] for block in disabled_blocks] == ["meeting"]
 
 
-def test_meeting_availability_rejects_users_outside_workspace(client: TestClient) -> None:
+def test_meeting_availability_rejects_inactive_company_users(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
-    meeting_workspace_slug = _workspace_slug_for_key(client, admin_token, "administrator")
-    outsider = _create_user_with_workspaces(
+    outsider = _create_company_user(
         client,
         admin_token,
         email="availability-outsider@open-work-hub.local",
         full_name="Availability Outsider",
-        workspace_keys=[],
     )
 
+    suspended = client.patch(
+        f"/api/v1/admin/users/{outsider['user']['id']}",
+        headers=_auth_headers(admin_token),
+        json={"status": "suspended"},
+    )
+    assert suspended.status_code == 200, suspended.text
+
     response = client.get(
-        f"/api/v1/workspaces/{meeting_workspace_slug}/meeting/availability",
+        "/api/v1/meeting/availability",
         headers=_auth_headers(admin_token),
         params=[
             ("user_ids", outsider["user"]["id"]),
@@ -419,4 +465,4 @@ def test_meeting_availability_rejects_users_outside_workspace(client: TestClient
         ],
     )
     assert response.status_code == 422
-    assert response.json()["code"] == "meeting.requested_users_workspace_required"
+    assert response.json()["code"] == "meeting.requested_users_active_required"

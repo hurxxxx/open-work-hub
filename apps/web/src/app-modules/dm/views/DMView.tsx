@@ -1,3 +1,4 @@
+import { DmAttachmentImage } from './DmAttachmentImage';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -48,12 +49,12 @@ import {
   useRealtimeEvent,
   type RealtimeEvent,
 } from '@/src/platform/realtime/realtime-provider';
+import { UserOptionRow } from '@/src/platform/users/UserSearchMultiSelect';
 import {
   addDmConversationParticipants,
-  createGroupDmThread,
   createDmThread,
+  createGroupDmThread,
   getDmAttachmentDownloadUrl,
-  getDmAttachmentPreviewUrl,
   leaveDmConversation,
   listDmMessages,
   listDmThreads,
@@ -63,19 +64,17 @@ import {
   sendDmMessage,
   updateDmConversationTitle,
   uploadDmAttachment,
-  type DmMessageAttachment,
   type DmMessage,
+  type DmMessageAttachment,
   type DmThread,
   type DmUser,
 } from '../api/dm-api';
 import {
-  imagePreviewUrlForAttachment,
-  type DmImageViewerState,
-} from './dm-attachment-url';
-import {
   createDmAttachmentActionWorkflow,
   triggerDmAttachmentBrowserDownload,
 } from './dm-attachment-action-workflow';
+import type { DmImageViewerState } from './dm-attachment-url';
+import { uploadDmComposerAttachments } from './dm-composer-attachment-upload';
 import {
   DM_COMPOSER_ATTACHMENT_INITIAL_STATE,
   applyDmComposerFileDragOver,
@@ -88,7 +87,6 @@ import {
   readyDmAttachmentIds,
   uploadingDmAttachmentCount,
 } from './dm-composer-attachments';
-import { uploadDmComposerAttachments } from './dm-composer-attachment-upload';
 import {
   DM_MESSAGES_INITIAL_STATE,
   appendDmThreadMessage,
@@ -146,7 +144,6 @@ import {
   dmInitials,
   dmThreadDisplayName,
 } from './dm-thread-list-model';
-import { UserOptionRow } from '@/src/platform/users/UserSearchMultiSelect';
 import { formatDmMessageTime } from './dm-time';
 import { useDmUserSearch } from './useDmUserSearch';
 
@@ -377,9 +374,9 @@ function useDMViewElement({
     dmComposerAttachmentReducer,
     DM_COMPOSER_ATTACHMENT_INITIAL_STATE,
   );
-  const [imageViewer, setImageViewer] = useState<DmImageViewerState | null>(
-    null,
-  );
+  const [imageViewer, setImageViewer] = useState<
+    (DmImageViewerState & { contextKey: string }) | null
+  >(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectedThreadIdRef = useRef(threadId);
@@ -517,6 +514,17 @@ function useDMViewElement({
   );
   const uploadingAttachmentCount =
     uploadingDmAttachmentCount(pendingAttachments);
+  const attachmentContextKey = [token, selectedThread?.id].join(':');
+  const activeImageViewer =
+    imageViewer?.contextKey === attachmentContextKey ? imageViewer : null;
+  const attachmentContextRef = useRef<string | null>(attachmentContextKey);
+  attachmentContextRef.current = attachmentContextKey;
+  useEffect(() => {
+    attachmentContextRef.current = attachmentContextKey;
+    return () => {
+      attachmentContextRef.current = null;
+    };
+  }, [attachmentContextKey]);
   const attachmentActionWorkflow = useMemo(
     () =>
       createDmAttachmentActionWorkflow({
@@ -524,12 +532,13 @@ function useDMViewElement({
           ? {
               getDownloadUrl: (attachmentId) =>
                 getDmAttachmentDownloadUrl(token, attachmentId),
-              getPreviewUrl: (attachmentId) =>
-                getDmAttachmentPreviewUrl(token, attachmentId),
             }
           : null,
+        isCurrent: () => attachmentContextRef.current === attachmentContextKey,
         browser: {
-          download: (spec) => triggerDmAttachmentBrowserDownload(spec),
+          download: async (spec) => {
+            if (token) await triggerDmAttachmentBrowserDownload(token, spec);
+          },
         },
         busyAttachmentId: attachmentActionId,
         dispatchAttachmentAction: dispatchComposerAttachments,
@@ -538,9 +547,10 @@ function useDMViewElement({
           previewFailed: t('dm.errors.attachmentPreviewFailed'),
         },
         setError,
-        setImageViewer,
+        setImageViewer: (viewer) =>
+          setImageViewer({ ...viewer, contextKey: attachmentContextKey }),
       }),
-    [attachmentActionId, t, token],
+    [attachmentActionId, attachmentContextKey, t, token],
   );
   const captureThreadScroll = useCallback(
     (captureThreadId: string | null) => {
@@ -2105,8 +2115,6 @@ function useDMViewElement({
                                 {attachments.map((attachment) => {
                                   const loading =
                                     attachmentActionId === attachment.id;
-                                  const previewUrl =
-                                    imagePreviewUrlForAttachment(attachment);
                                   return (
                                     <div
                                       className={`overflow-hidden rounded-md border ${
@@ -2116,7 +2124,7 @@ function useDMViewElement({
                                       }`}
                                       key={attachment.id}
                                     >
-                                      {previewUrl ? (
+                                      {attachment.is_image ? (
                                         <button
                                           aria-label={t(
                                             'dm.openImageAttachment',
@@ -2131,10 +2139,11 @@ function useDMViewElement({
                                           }
                                           type="button"
                                         >
-                                          <img
+                                          <DmAttachmentImage
+                                            token={token}
+                                            attachmentId={attachment.id}
                                             alt={attachment.filename}
                                             className="max-h-72 w-full object-contain"
-                                            src={previewUrl}
                                           />
                                         </button>
                                       ) : null}
@@ -2452,15 +2461,16 @@ function useDMViewElement({
             setImageViewer(null);
           }
         }}
-        open={Boolean(imageViewer)}
-        title={imageViewer?.filename ?? t('dm.imageViewerTitle')}
+        open={Boolean(activeImageViewer)}
+        title={activeImageViewer?.filename ?? t('dm.imageViewerTitle')}
       >
-        {imageViewer ? (
+        {activeImageViewer ? (
           <div className="flex min-h-0 justify-center overflow-hidden bg-slate-950">
-            <img
-              alt={imageViewer.filename}
+            <DmAttachmentImage
+              token={token}
+              attachmentId={activeImageViewer.attachmentId}
+              alt={activeImageViewer.filename}
               className="max-h-[70vh] max-w-full object-contain"
-              src={imageViewer.url}
             />
           </div>
         ) : null}

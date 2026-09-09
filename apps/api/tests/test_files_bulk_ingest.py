@@ -12,13 +12,10 @@ import pytest
 from sqlalchemy import create_engine, event, func, select
 from sqlalchemy.orm import Session
 
+from company_admission_fixture import company_authority_tables, seed_company_app_access
+
 from open_work_hub_api.core.db import Base
-from open_work_hub_api.domains.auth.models import (
-    User,
-    UserSystemRole,
-    Workspace,
-    WorkspaceUserBinding,
-)
+from open_work_hub_api.domains.auth.models import User, UserSystemRole
 from open_work_hub_api.domains.files import bulk_ingest, service as files_service
 from open_work_hub_api.domains.files.models import (
     FileManagerBulkIngestEntry,
@@ -28,7 +25,6 @@ from open_work_hub_api.domains.files.models import (
     FileManagerFolder,
     FileManagerStorageCleanupJob,
 )
-from open_work_hub_api.domains.organization.models import OrganizationUnit
 from open_work_hub_api.domains.rag.models import RagSyncJob
 from open_work_hub_api.domains.retrieval.models import (
     RetrievalPartition,
@@ -38,7 +34,6 @@ from open_work_hub_api.domains.retrieval.models import (
 from open_work_hub_api.domains.search.models import SearchIndexJob
 
 
-WORKSPACE_ID = "workspace-a"
 ADMIN_ID = "admin-a"
 MEMBER_ID = "member-a"
 _SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "manage_files_bulk_ingest.py"
@@ -57,11 +52,7 @@ def db() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
-            OrganizationUnit.__table__,
-            User.__table__,
-            UserSystemRole.__table__,
-            WorkspaceUserBinding.__table__,
+            *company_authority_tables(),
             RetrievalPartition.__table__,
             FileManagerCorpus.__table__,
             FileManagerFolder.__table__,
@@ -76,13 +67,9 @@ def db() -> Session:
         ],
     )
     with Session(engine) as session:
+        seed_company_app_access(session)
         session.add_all(
             [
-                Workspace(
-                    id=WORKSPACE_ID,
-                    key="기술연구소",
-                    name="기술연구소",
-                ),
                 User(
                     id=ADMIN_ID,
                     login_id="operator",
@@ -101,20 +88,9 @@ def db() -> Session:
                     status="active",
                     login_blocked=False,
                 ),
-                WorkspaceUserBinding(
-                    id="binding-a",
-                    workspace_id=WORKSPACE_ID,
-                    user_id=ADMIN_ID,
-                    role="admin",
-                ),
-                WorkspaceUserBinding(
-                    id="binding-member",
-                    workspace_id=WORKSPACE_ID,
-                    user_id=MEMBER_ID,
-                    role="member",
-                ),
             ]
         )
+        session.add(UserSystemRole(id="operator-role", user_id=ADMIN_ID, role="platform_admin"))
         session.commit()
         yield session
 
@@ -126,7 +102,6 @@ def test_create_run_is_idempotent_and_reserves_stable_target_ids(db: Session) ->
     ]
     run = bulk_ingest.create_run(
         db,
-        workspace=_workspace(db),
         actor=_actor(db),
         corpus_name="기술연구소 안전 적재",
         root_folder_name="프로젝트 RAG",
@@ -146,7 +121,6 @@ def test_create_run_is_idempotent_and_reserves_stable_target_ids(db: Session) ->
 
     same = bulk_ingest.create_run(
         db,
-        workspace=_workspace(db),
         actor=_actor(db),
         corpus_name="ignored-on-retry",
         root_folder_name="ignored-on-retry",
@@ -164,12 +138,25 @@ def test_create_run_is_idempotent_and_reserves_stable_target_ids(db: Session) ->
     assert db.scalar(select(func.count(FileManagerBulkIngestEntry.id))) == 2
 
 
-def test_control_plane_admin_can_assign_member_as_ingest_owner(db: Session) -> None:
+def test_control_plane_admin_can_assign_only_an_authorized_ingest_owner(db: Session) -> None:
     owner = db.get(User, MEMBER_ID)
     assert owner is not None
+    with pytest.raises(bulk_ingest.FilesBulkIngestError, match="run_owner_access_required"):
+        bulk_ingest.create_run(
+            db,
+            actor=_actor(db),
+            owner=owner,
+            corpus_name="Denied",
+            root_folder_name="Denied",
+            idempotency_key="denied-owner",
+            manifest_sha256="c" * 64,
+            source_root_sha256="d" * 64,
+            entries=[_manifest_entry("root.txt", b"root")],
+        )
+    db.add(UserSystemRole(id="delegated-operator-role", user_id=owner.id, role="platform_admin"))
+    db.flush()
     run = bulk_ingest.create_run(
         db,
-        workspace=_workspace(db),
         actor=_actor(db),
         owner=owner,
         corpus_name="기술연구소 안전 적재",
@@ -199,7 +186,6 @@ def test_operator_corpus_rejects_ordinary_upload_and_accepts_bound_run(
     root_sha256 = bulk_ingest.source_root_identity(tmp_path)
     run = bulk_ingest.create_run(
         db,
-        workspace=_workspace(db),
         actor=_actor(db),
         corpus_name="Managed",
         root_folder_name="Root",
@@ -217,14 +203,13 @@ def test_operator_corpus_rejects_ordinary_upload_and_accepts_bound_run(
     with pytest.raises(files_service.FileCorpusAccessDenied):
         files_service.upload_file(
             db,
-            workspace=_workspace(db),
             user=_actor(db),
             filename="ordinary.txt",
             content_type="text/plain",
             content=BytesIO(b"ordinary"),
             size_bytes=8,
             folder_id=run.root_folder_id,
-            visibility="workspace",
+            visibility="company",
             corpus_id=run.corpus_id,
         )
     db.rollback()
@@ -249,7 +234,7 @@ def test_operator_corpus_rejects_ordinary_upload_and_accepts_bound_run(
     uploaded = db.get(FileManagerFile, entry.target_file_id)
     assert uploaded is not None
     assert uploaded.corpus_id == run.corpus_id
-    assert uploaded.visibility == "workspace"
+    assert uploaded.visibility == "company"
     folder = db.get(FileManagerFolder, uploaded.folder_id)
     assert folder is not None and folder.name == "nested"
 
@@ -277,7 +262,6 @@ def test_purge_is_cursor_batched_and_idempotent(
     ]
     run = bulk_ingest.create_run(
         db,
-        workspace=_workspace(db),
         actor=_actor(db),
         corpus_name="Managed",
         root_folder_name="Root",
@@ -296,7 +280,6 @@ def test_purge_is_cursor_batched_and_idempotent(
         db.add(
             FileManagerFile(
                 id=entry.target_file_id,
-                workspace_id=WORKSPACE_ID,
                 retrieval_partition_id=run.corpus.retrieval_partition_id,
                 corpus_id=run.corpus_id,
                 folder_id=run.root_folder_id,
@@ -305,7 +288,7 @@ def test_purge_is_cursor_batched_and_idempotent(
                 content_type=entry.content_type,
                 size_bytes=entry.size_bytes,
                 storage_key=f"files/{entry.target_file_id}/source.txt",
-                visibility="workspace",
+                visibility="company",
                 extraction_status="ready",
                 extraction_content_checksum=entry.content_sha256,
                 extraction_text="derived",
@@ -426,8 +409,6 @@ def test_inventory_manifest_is_private_and_stdout_is_aggregate_only(
             "create-run",
             "--manifest",
             str(manifest_path),
-            "--workspace-key",
-            "기술연구소",
             "--actor-login-id",
             "operator",
             "--run-key",
@@ -449,7 +430,6 @@ def test_storage_verification_fails_closed_for_missing_bucket(
 ) -> None:
     run = bulk_ingest.create_run(
         db,
-        workspace=_workspace(db),
         actor=_actor(db),
         corpus_name="Managed",
         root_folder_name="Root",
@@ -465,7 +445,6 @@ def test_storage_verification_fails_closed_for_missing_bucket(
     db.add(
         FileManagerFile(
             id=entry.target_file_id,
-            workspace_id=WORKSPACE_ID,
             retrieval_partition_id=run.corpus.retrieval_partition_id,
             corpus_id=run.corpus_id,
             folder_id=run.root_folder_id,
@@ -474,7 +453,7 @@ def test_storage_verification_fails_closed_for_missing_bucket(
             content_type="text/plain",
             size_bytes=6,
             storage_key=f"files/{entry.target_file_id}/source.txt",
-            visibility="workspace",
+            visibility="company",
         )
     )
     db.commit()
@@ -527,12 +506,6 @@ def _manifest_entry(path: str, content: bytes) -> bulk_ingest.ManifestEntry:
         content_sha256=sha256(content).hexdigest(),
         content_type="text/plain",
     )
-
-
-def _workspace(db: Session) -> Workspace:
-    workspace = db.get(Workspace, WORKSPACE_ID)
-    assert workspace is not None
-    return workspace
 
 
 def _actor(db: Session) -> User:

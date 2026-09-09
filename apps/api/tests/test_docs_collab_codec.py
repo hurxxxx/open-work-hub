@@ -73,9 +73,7 @@ def test_blocknote_codec_maps_state_to_decode_payload() -> None:
     codec = BlockNoteCollabCodec(runner=runner)
 
     assert codec.yjs_state_to_blocks(raw_state) == blocks
-    assert runner.calls == [
-        ("decode", {"yjs_state": base64.b64encode(raw_state).decode("ascii")})
-    ]
+    assert runner.calls == [("decode", {"yjs_state": base64.b64encode(raw_state).decode("ascii")})]
 
 
 def test_blocknote_codec_rejects_invalid_yjs_state_payload() -> None:

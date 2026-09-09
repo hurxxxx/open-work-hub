@@ -10,12 +10,7 @@ from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.docs.models import NativeDoc
 from open_work_hub_api.domains.pms import service as pms_service
-from open_work_hub_api.domains.pms.access import (
-    _ensure_task_list_active,
-    _ensure_task_readable,
-)
 from open_work_hub_api.domains.pms.models import Task, TaskDocLink
-from open_work_hub_api.domains.pms.source_access import resolve_pms_task_workspace_id
 from open_work_hub_api.domains.source_access import can_read_native_doc, can_read_pms_task
 
 
@@ -152,24 +147,9 @@ def load_readable_doc_for_task_link(db: Session, *, user: User, doc_id: str) -> 
     return doc
 
 
-def ensure_task_linkable_from_doc(
-    db: Session,
-    *,
-    user: User,
-    task_id: str,
-    workspace_id: str,
-) -> None:
-    if can_read_pms_task(db, user=user, task_id=task_id):
-        return
-    task = _ensure_task_readable(db, user, task_id)
-    if resolve_pms_task_workspace_id(db, task_id=task_id) != workspace_id:
+def ensure_task_linkable_from_doc(db: Session, *, user: User, task_id: str) -> None:
+    if not can_read_pms_task(db, user=user, task_id=task_id):
         raise localized_http_exception(status_code=403, code="pms.task_access_required")
-    if task.archived:
-        raise localized_http_exception(status_code=403, code="pms.task_access_required")
-    if task.task_list is None:
-        raise localized_http_exception(status_code=404, code="pms.task_list_not_found")
-    _ensure_task_list_active(task.task_list)
-    raise localized_http_exception(status_code=403, code="pms.task_access_required")
 
 
 def attach_doc_to_task(
@@ -237,7 +217,6 @@ def attach_task_to_doc(
         db,
         user=user,
         task_id=task_id,
-        workspace_id=doc.workspace_id,
     )
     existing = db.scalar(
         select(TaskDocLink).where(TaskDocLink.doc_id == doc.id, TaskDocLink.task_id == task_id)
@@ -271,7 +250,6 @@ def detach_task_from_doc(
         db,
         user=user,
         task_id=task_id,
-        workspace_id=doc.workspace_id,
     )
     db.delete(link)
     db.commit()

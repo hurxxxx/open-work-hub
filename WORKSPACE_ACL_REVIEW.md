@@ -1,0 +1,201 @@
+# 회사·그룹·앱 권한 재설계 검토보고서
+
+기준일: 2026-09-08 UTC. 기존 라우트·데이터 호환을 유지하지 않는 전면 재설계다.
+전역 워크스페이스는 제거하고 회사 계정, 사용자·그룹, 회사 앱 사용 정책, 앱별 자원 ACL로 구분한다.
+
+**릴리스 상태:** 잔재·서버 권한 보완 `8c21d2c8`와 실제 사용자 테스트에서 찾은 추가
+UI·실시간 세션·Bento 격리 수정 `59ea8780`을 커밋·푸시했다.
+최신 전체 CI 56을 통과한 [릴리스 MR 23](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/merge_requests/23)을
+병합하고 운영 `2f1aa0a49a99292e561eece1d8a33934e6fde384`로 배포했다.
+2026-09-08 17:23 UTC까지 운영 앱·Bento와 개발 서비스 복구 후 공개 검증을 완료했다.
+아래 실제 업무 UAT는 개발 환경의 증거이며 인증된 운영 업무 UAT를 대체하지 않는다.
+
+## 설계 평가
+
+이 기업용 시스템에서는 전역 워크스페이스 제거가 더 단순하다. 같은 회사의 공지·커뮤니티·채팅과
+개인 일정까지 별도의 전역 공간 선택을 요구하면 전사 공유 예외가 계속 늘어난다. 조직은 인사
+소속이며 별도 테넌트가 아니다. PMS의 스페이스 같은 업무 분리는 필요한 앱이 소유한다.
+다른 앱도 같은 원칙으로 내부 자원과 역할을 설계하되 플랫폼의 사용자·그룹·앱 입장 계약을 재사용한다.
+
+| 개념 | 책임과 경계 |
+| --- | --- |
+| 회사 앱 사용 정책 | 앱의 활성 여부와 허용 사용자·그룹을 결정한다. 메뉴 숨김만으로 보안 처리하지 않는다. |
+| 정규 조직 그룹 | 주 소속 인사 배치에 따라 정확히 해당 조직에 속한다. 조직장·상위 조직이라는 이유만으로 하위 업무 권한을 얻지 않는다. |
+| 수동 그룹 | 관리자가 직접 관리하며 정규 조직과 함께 권한 주체로 사용할 수 있다. 조직 이동이 수동 멤버십을 없애지 않는다. |
+| 앱 내부 공간 | PMS 스페이스와 그 안의 owner/admin/member/viewer 같은 업무 역할이다. 전역 실행 컨텍스트로 전파하지 않는다. |
+| 개인 콘텐츠 | 플랫폼 관리자라는 이유만으로 타인의 개인 본문을 읽거나 수정할 수 없다. |
+| 회사 소유 콘텐츠 | 명시적 게시 동의 후 회사 관리자의 읽기 대상이 된다. 회사 소유, 전사 공개, 프로젝트 연결, 선택 공유는 서로 다른 속성이다. 회사 소유를 개인 소유로 되돌리지 않는다. |
+
+다중 고객사 완전 격리가 필요해지면 별도 회사/배포 경계를 설계해야 한다. 조직이나 PMS 스페이스를
+다시 전역 테넌트로 사용하면 현재 단순화의 의미가 사라진다. 복수 정규 소속·겸직, 마지막 PMS
+소유자 퇴사 시 이관, 회사 콘텐츠 보존·삭제, 계정 복구 승인 책임은 별도 운영 정책이 필요하다.
+현재 단일 주 소속 모델과 수동 그룹은 외부 HR 연계 전체를 구현했다는 뜻이 아니다.
+
+정책의 단일 원본은 [App Platform](docs/domains/app-platform/README.md),
+[Organization](docs/domains/organization/README.md), [ADR 0012](adr/0012-company-app-access-without-workspaces.md)다.
+
+## 발견과 개선
+
+| 문제 | 실제 영향과 개선 |
+| --- | --- |
+| PMS 그룹 사용자의 직접 owner 승격 | 그룹 member/admin이 폴더·리스트를 만들 때 직접 owner가 생겨 회수 후에도 접근했다. 자동 승격을 제거하고 실제 유효 역할을 반환한다. 최초 스페이스 생성자의 owner 부여만 유지한다. |
+| 메일 비동기 작업의 권한 회수 누락 | 사용자 정지·앱 대상 회수 후에도 provider 조회/저장이 가능했다. claim, 외부 호출 전, 응답 후 저장 전에 현재 권한을 확인하고 회수된 작업을 재시도 없이 취소한다. 이미 진행 중인 외부 통신 자체를 즉시 끊는다는 주장은 하지 않는다. |
+| 동시 조직 이동의 순환 | 두 트랜잭션이 각각 성공해 조직 트리가 순환했다. 계층 전용 트랜잭션 잠금 후 최신 관계를 검증한다. 실제 PostgreSQL 동시성 테스트로 한 요청만 성공함을 확인했다. |
+| Docs/Whiteboard 공유 범위 오표시 | 그룹·링크·프로젝트 공유도 개인 전용으로 표시됐다. 소유권과 모든 공유 관계를 구분하고 전사 공개는 실제 company audience를 기준으로 표시한다. |
+| 공개와 대표 연결의 혼동 | 공개 checkbox와 대표 프로젝트 연결을 분리했다. 대표 연결 해제는 다른 사용자·그룹·프로젝트 권한이나 전사 공개를 일괄 회수하지 않는다. |
+| 정책상 불가능한 메뉴 | PMS 일반 관리자에게 owner/admin 승격을, Bento/Diagrams에 개인 소유 복귀를 노출했다. 실제 서버 계약에 맞는 선택지만 제공한다. |
+| 프로젝트 게시 동의 누락 | 실제 PMS 새 보드 생성이 409로 실패했다. PMS/Meeting의 보드 생성·선택, PMS 사이드바 Docs 생성과 작업 설명 승격에서 동의 후 ACK를 전달한다. 취소하면 쓰기 요청이 없고 선택기는 유지된다. |
+| 앱 내부 작업 역할과 게시 역할 혼동 | viewer의 새 리스트 버튼은 실제 클릭 시 403이었다. viewer 생성 버튼을 제거하고, member는 리스트·폴더·작업 생성/편집, 프로젝트 Docs 게시에는 admin 권한을 요구한다. 한국어·영어 설명도 맞췄다. |
+| 정렬이 문서 게시 범위를 바꿀 위험 | 단순 task 문서 참조, 읽기 전용 문서, 다른 프로젝트가 대표인 문서를 공간 정렬 대상에서 제외한다. 저장 직전에도 최신 문서 목록과 대표 연결을 확인한다. |
+| 선택기·작업의 늦은 응답 | 이전 picker의 응답이 새 picker를 닫거나 다른 task의 문서 목록을 덮을 수 있었다. 세션/작업/권한 세대가 바뀌면 결과와 오류를 폐기한다. 보드 슬롯 연결 중에는 생성·교체를 직렬화하고 can_share 없는 보드는 후보에서 제외한다. |
+| 소유자가 아닌 사용자의 편집 화면 | Bento/Diagrams 서버는 수정을 거부하지만 편집 도구를 노출했다. 공식 읽기 전용 player/lightbox, 제목 readonly, 최신 can_edit 저장·AI guard, 계정/문서/모드별 iframe 재생성을 적용했다. Drawio 메시지는 origin과 정확한 iframe Window를 함께 검사한다. |
+| Bento의 브라우저 복구 저장소 | 공식 런타임의 IndexedDB 백업·이력·자산은 계정 경계를 알지 못한다. 공개 비활성 설정이 없어 모든 실제 문서를 opaque sandbox의 공식 런타임으로 열고 저장소 접근을 브라우저가 차단하게 했다. 바깥 편집기에는 실제 문서를 로드하지 않는다. 기존 Bento 원점의 저장 기록은 Clear-Site-Data로 정리한다. Hub 원점은 별개다. |
+| 정지된 사용자의 열린 화면 잔존 | 실제 정지 후 서버 GET은 401이지만 PMS가 남았다. 서버가 권한 변경 이벤트를 보내기 전에 폐기 세션의 WebSocket을 닫기 때문이다. 권한 종료 코드에서 기존 계정 재조회 경계를 실행해 화면을 가리고 세션을 제거한다. 일반 네트워크 단절의 재접속은 유지한다. |
+| 누락 번역·대비·입력 방식 | 관리자 사용자 표의 raw 번역 키를 수정했다. hover가 없는 환경에서도 PMS 추가 버튼을 사용할 수 있게 했다. 작은 이니셜의 흰 글자 대비 2.36/2.47:1을 5.27/5.36:1로 개선했다. |
+| 남은 구조·설명·검색 파생 데이터 | 제거된 필드/라우트/범위 타입, 중복 선언, 테스트 정상 입력, 안내·AI 지침·ADR 참조를 현행 계약으로 정리했다. 검색 진단 adapter의 없는 속성 접근을 고쳤고, 개발 파생 캐시를 현재 원본 3개로 재구축하여 폐기 6개·구 매핑을 제거했다. |
+
+Bento 고정 버전의 공개 API 한계와 메시지/스토리지 경계는 [Bento 문서](docs/apps/bento/README.md),
+공식 Drawio 읽기 전용 설정은 [Diagrams 문서](docs/apps/diagrams/README.md)에 기록했다.
+Bento private 함수나 브라우저 IndexedDB API를 monkey patch하지 않는다. 다운로드 HTML은 실행하지
+않고 파일로만 전달하며, 가져오기는 문서 JSON만 읽는다.
+
+## 실제 사용자 테스트
+
+시나리오 원본 [Core Platform User Acceptance](docs/product/core-platform-user-acceptance.md)을 현재
+정책과 추가 게시 진입점에 맞게 수정했다. `agent-browser 0.35.0`의 실제 브라우저를 사용했다.
+A는 개발 플랫폼 관리자, B는 일반 소유자, C는 그룹을 통한 사용자, D는 별도 일반 사용자다.
+B/C/D는 실제 회원가입으로 만들었고 업무 데이터·권한은 화면으로 구성했다. 보충 GET과 모의
+컴포넌트/서버 테스트는 실제 화면 조작과 구분한다. 비밀번호·토큰·원시 응답은 보고서에 넣지 않는다.
+
+아래 공개 개발 검증은 2026-09-08 14:23 UTC 이후 `8c21d2c8`와 이 후속 수정의 실행 결과다.
+문제 재현 → 수정 → 재검증은 해당 행에 표시했다. 일부 하위 분기 통과를 전체 시나리오 통과로
+확대하지 않는다. Bento의 새 별도 이미지 검증은 운영 이미지를 미리 바꾸지 않고 로컬 개발 원점에서 수행했다.
+
+| 시나리오/분기 | 실제 관측 및 결과 |
+| --- | --- |
+| LIVE-00/01 | 공개 개발 Web/API/Worker preflight, B/C/D 회원가입 201, 회사/개인 앱 진입. 전역 workspace 선택·가입 없음. |
+| LIVE-02 | C 로그아웃 후 뒤로/앞으로 가기에서 로그인 화면 유지, DM 본문 미노출, 재로그인 성공. 동일 브라우저의 다른 계정 전환 전체 행렬은 재실행하지 않았다. |
+| LIVE-03/04/05 | A 관리자 그룹 화면 성공, B 관리자 경로 거부/GET 403. Whiteboard 선택 그룹·빈 대상·개인 대상 회수 시 열린 제목/캔버스가 새로고침 없이 사라지고 서버 403. 정확한 기존 앱 정책으로 복원했다. Mail 실제 연동 계정이 없어 provider 동기화 분기는 BLOCKED. |
+| LIVE-06 | C의 주 소속 X→Y를 화면 저장·재조회하고 X 정규 그룹에는 C 없음, Y에는 C만, 수동 그룹에는 B/C 유지 확인. 무관한 조직 생성 중 B의 미저장 Docs 제목 유지. 조직장·상위 조직 변경의 추가 UI 행렬은 NOT RUN. |
+| LIVE-07 | C의 group member/admin 각각 폴더·리스트 201, 실제 역할 유지, 직접 member 목록에 C가 owner로 생기지 않음. 그룹 비활성화 시 접근 회수. 비소유 admin의 역할 메뉴 제한, B owner의 네 역할 확인. D viewer의 403 생성 버튼을 수정 후 0개로 확인. |
+| LIVE-08 Docs | 개인 문서의 그룹 읽기는 C만 가능하고 A/D 직접 화면은 찾을 수 없음. 그룹 비활성화 후 C의 열린 제목·편집 요소가 즉시 0개. PMS 사이드바 게시 ACK 후 201. 회사 공개·대표 Alpha/Beta 변경·공개 해제·대표 해제를 따로 조작하고 A의 회사 읽기, D의 전사 공개에 따른 접근 변화 확인. C는 두 공간에 모두 속하므로 Alpha-only 권한 유지의 독립 증거는 아니다. |
+| LIVE-08 Whiteboard | 새 PMS 보드의 수정 전 409를 재현. 수정 후 취소는 요청 없음/포커스 복귀, 동의는 201. 기존 보드 선택 취소는 picker 유지/PUT 없음, 동의 후 200. 회사 공개·연결 해제·링크 편집→읽기·재생성·비활성·앱 회수의 수행 분기에서 접근/편집 도구 회수를 확인했다. 링크는 비활성화했다. |
+| LIVE-08 Bento | 로컬 개발 새 bridge에서 소유자의 제목 변경 PATCH 200, 재접속 유지, 내보내기 파일 다운로드·가져오기 201. A 회사 열람은 공식 발표 player이며 Esc 후 편집기로 돌아가지 않음, 저장/AI 비활성, 읽기 사본 내보내기 성공. A가 가져온 개인 문서 URL을 열면 실제 GET 404·iframe 0개. |
+| LIVE-08 Diagrams | 이전 개인 생성·제목 저장과 A의 실제 404, 명시적 회사 게시를 확인했다. 수정 후 소유자의 실제 사각형 생성·저장 PATCH 200. A의 공식 chromeless viewer에서 저장한 도형 표시, 제목 readonly·복원/편집 관리 도구 미노출, 실제 드래그 후 PATCH 0개를 확인했다. 프레임 내부 키보드의 전체 행렬을 통과했다는 주장은 하지 않는다. |
+| 추가 게시/정렬 분기 | PMS 사이드바 Docs와 PMS 보드 생성/선택은 실제 실행. Meeting 보드와 task 설명 승격, 참조 문서 정렬 제외, 의도적으로 응답을 지연시킨 picker 경합은 회귀 테스트 증거이며 해당 실제 사용자 분기는 NOT RUN. |
+| LIVE-09 | Files 업로드·재조회·다운로드·삭제 성공. 원본과 다운로드 SHA-256 일치. signed-grant 세션/만료/재사용은 별도 서버 테스트 증거다. |
+| LIVE-10 | B Community 글 201, A 댓글 201, 새 B 세션에서 두 번째 댓글이 새로고침 없이 정확히 1개 반영. 서로 다른 두 댓글의 알림 2개, 읽음 처리/재조회 유지, bot DM 없음. 글 삭제. 첫 관측 중 브라우저 OOM은 재시험 결과와 구분한다. |
+| LIVE-11 | B Planner 생성 201·수정·dock 반영·재조회·삭제 204. A의 B 일정 직접 경로에서 실제 404와 제목 미노출. |
+| LIVE-12 | B/C DM 왕복, C unread 2개, B가 새로고침 없이 답장 수신. C 이미지 미리보기 1×1 및 다운로드 checksum 일치. 비참여 A의 thread/preview GET 404, D의 thread GET 404. D 첨부파일 별도 요청은 NOT RUN. |
+| LIVE-13/14 | 회사 master 비활성은 A도 403, B 열린 보드 제거, 다른 Docs 앱은 200. 기존 master/audience/grants 정확히 복원. 그룹 비활성 취소는 무효과·포커스 복귀, 확인은 열린 PMS/Docs 접근 회수. |
+| LIVE-15 | D 정지 시 처음에는 서버 401·열린 PMS 잔존. 수정 후 같은 조작으로 reload 없이 Alpha 제목 0개·로그인 화면으로 이동. 재활성 후 재로그인, 재발급 시 이전 세션 종료. 임시 비밀번호로 앱 직접 진입해도 비밀번호 변경 화면만 표시, 변경 204 후 PMS 진입 성공. |
+| LIVE-16 | 공개 개발 390×844 PMS viewer에서 생성 버튼 0개, 문서 가로 넘침 없음, Tab으로 앱 전환 포커스. 최종 axe 4.12.1 WCAG A/AA 위반 0·미완결 0·통과 21, 해당 세션 uncaught error 없음. 새 이니셜 대비도 실제 색으로 계산했다. 모든 앱/모달의 전체 키보드 행렬은 아니다. |
+| LIVE-17 | 워밍 후 실제 로그인 10회 모두 3초 이내, 최대 0.945초. 순서대로 0.503/0.945/0.450/0.462/0.443/0.617/0.461/0.446/0.418/0.446초. 입력·제출부터 사용 가능한 런처까지 측정했다. cold Vite 로딩 지연/초기 빈 화면을 이 수치로 통과 처리하지 않는다. |
+
+Recording 정상 ASR 및 명시적/중복 Docs 게시 성공은 외부 추론 서비스가 준비되지 않아 BLOCKED다.
+앞선 실제 합성 녹음 실패·Docs 미생성은 성공 게시 증거가 아니다. 실제 bootstrap 장애·재시도,
+검색 결과와 권한 회수의 동시 UI 행렬, queue/provider 경합은 이번 실제 브라우저 전체 통과로 주장하지 않는다.
+서버·worker·동시성 테스트가 담당하는 경계는 시나리오 원본에 별도로 연결했다.
+
+## 자동 검증과 환경 한계
+
+- [최신 전체 CI 56 / job 87](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/jobs/87)는
+  `59ea878064a2fea7bfe210415e8e0ee3c070e29b` 소스, target `2ac0f8da56eae7e74f439d164f6707d240728a3c`,
+  merge tree `5648da0114c73233a956fb01a45f1d0dbf190ebe`에서 2026-09-08 17:13 UTC에 성공했다.
+  maintainer 전용 `release-validation-context.md` artifact의 `Selected: full`, `Status: passed`와
+  실제 병합 커밋 `2f1aa0a49a99292e561eece1d8a33934e6fde384`의 tree 일치를 확인했다.
+  `pnpm ci:all`: API 2,421 통과·기존 skip 1, Web 1,433(300 files), 계약 60, core-web 31,
+  브라우저 E2E 19 통과. 환경·구조·i18n·lint·typecheck·OpenAPI·빌드도 포함하며 생략한 suite는 없다.
+  기존 skip은 이 checkout에 desktop DM manifest가 없는 크기 계약 비교 1개다.
+- [전체 CI 54 / job 85](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/pipelines/54)는
+  `8c21d2c8` 소스, target `2ac0f8da`, merge tree `0fcb20d106cbaeb925f36612df03695747315cd0`에서 성공했다.
+  `pnpm ci:all`: API 2,421 통과·기존 skip 1, Web 1,400, 계약 60, core-web 31, 브라우저 19,
+  앱 구조·i18n·lint·typecheck·OpenAPI·환경 계약·빌드 포함. 후속 UI/bridge 수정 이전 증거다.
+- 후속 집중 검사: 게시/정렬/picker/편집 protocol 58개, 이후 수정한 bridge·실시간 계정 경계·auth
+  검사 30개, 최종 bridge/실시간/PMS 늦은 응답 검사 32개 통과. 중복 실행 수치를 합산하지 않는다.
+  테스트 타입 검사도 통과했다. 최종 소스 전체 결과는 위 CI 56 증거를 기준으로 한다.
+- CI 초기 실패는 runner의 canonical validation image 부재였다. 정식 build script를 재실행해
+  `open-work-hub-validation:node22-python312` 이미지
+  `sha256:e4fa4ccf8cfce4fb93947befccca1a62f33d5f6ef886f06d413e3a3a02f64041`을 복원했다.
+  Playwright 1.59.1/Chromium v1217 검증이 포함된다. 첫 이미지 빌드의 Chromium SIGSEGV 원인은 미확정이며
+  같은 명령의 재실행이 성공했다. CI·검사·테스트 제외를 완화하지 않았다.
+- 이 호스트의 GitLab·Java 서비스와 브라우저/빌드가 메모리를 공유한다. 이번 브라우저 실행 중
+  cgroup oom_kill이 118→122로 증가했고 중단된 관측은 PASS로 기록하지 않았다. 무거운 편집기는
+  한 브라우저씩 확인하고, 전체 CI/운영 빌드 전에는 자체 브라우저와 개발 supervisor를 중지한다.
+  최신 전체 CI부터 운영 빌드·공개 브라우저 검증까지는 122로 유지됐다.
+- 기존 Starlette deprecation 및 y_py 다른 스레드 종료 경고, 큰 Web chunk 안내는 별도 잔여다.
+  테스트 통과가 모든 보안 취약점의 부재를 증명하지는 않는다.
+
+## 배포와 복구
+
+이전 [MR 22](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/merge_requests/22),
+[CI 53](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/pipelines/53)을 통해 회사 스키마 재설계가
+배포됐다. 운영 활성 DB는 `company_20260908`, 제품 테이블 161개와 Alembic 테이블이다.
+이전 DB·저장소·불변 이미지·0600 환경 백업은 복구용으로 보존했고 기존 세션을 이관하지 않았다.
+이번 후속 보완은 새 DB 마이그레이션이나 환경 키 변경을 포함하지 않는다.
+
+이번 배포 전 운영 PMS 스페이스/직접 owner 및 impersonation 세션 행은 각각 0개임을
+읽기 전용 집계로 확인했다. 따라서 운영의 과거 잘못된 PMS owner를 정리하는 데이터 변경은 없다.
+운영 계정의 실제 로그인 비밀번호가 제공되지 않아 인증된 운영 업무 UAT는 실행하지 않는다.
+배포 후 검증은 실제 리비전·health/readiness·공개 로그인·비로그인 거부·모바일 접근성을 구분한다.
+
+승격은 보호된 `dev -> main` MR에서 최신 소스/대상/merge tree에 결합된 전체 증거를 확인한다.
+`dev`는 삭제하지 않는다. 운영 checkout을 fast-forward한 뒤 정식 `pnpm app:prod:deploy`로
+이미지·마이그레이션·서비스 교체·smoke를 수행한다. 직접 app Compose로 배포 검사를 우회하지 않는다.
+
+**Bento는 별도 infra 이미지다.** Web v2와 Bento bridge v2를 함께 배포하고 실제 이미지 ID와
+bridge hash를 확인해야 한다. app deploy/rollback 명령은 Bento를 자동 교체하지 않는다.
+이전 Bento 이미지 ID를 보존하고 프로토콜 복구 시 두 이미지를 함께 맞춘다.
+상세 단일 절차는 [Bento](docs/apps/bento/README.md)와
+[Release 복구 계약](docs/domains/release/README.md#incompatible-database-and-configuration-cutovers)에 있다.
+
+### 이번 배포의 실제 증거
+
+- 보호된 `dev`와 최신 소스/대상/tree를 확인한 뒤 MR 23을 17:15 UTC에 병합했다.
+  squash와 소스 브랜치 삭제를 사용하지 않았고, 깨끗한 `prod/main`을 fast-forward했다.
+- 정식 `pnpm app:prod:deploy`가 종료 코드 0으로 완료됐다. 새 API·Worker는 17:21:15 UTC에
+  시작했고 API·Worker·Scheduler 모두 healthy다. 실제 공통 이미지
+  `sha256:908372592dc7a4e285f8e95fceb60d23293f055bb1b945b0f178c14dd0839b85`의 revision은
+  `2f1aa0a49a99292e561eece1d8a33934e6fde384`다. 로컬·공개 health/readiness/revision/bootstrap/login
+  smoke를 모두 통과했다. 새 마이그레이션 없는 현재 DB에서 정식 migration gate도 실행했다.
+- 별도 infra의 `bento` 서비스만 `docker compose --env-file .env -f ops/compose/open-work-hub-prod.infra.yml
+  up -d --no-deps --build bento`로 갱신했다. 17:21:54 UTC 시작, healthy 및 `nginx -t` 통과.
+  새 이미지 ID는 `sha256:f366ecb8631874372b009e423eea52c9ce772039d91f376f6086f2ff4451adb8`이다.
+  소스·컨테이너·공개 HTTP의 bridge SHA-256이 모두
+  `f24ccadafe29c1b3790ef7a20cb6a0e25c3bdda8e0de294d50a54b8b87bbcdf0`로 일치한다.
+  해당 소스의 protocol은 v2이며 공개 bridge/health가 200과 `Clear-Site-Data: "storage"`를 반환했다.
+- 이전 앱 `sha256:878426eec1d3d69cc869a1e4fa4d7f93b8733cdfd6e1da595a5c62823cd6ac89`는
+  `open-work-hub-app:prod-previous`로, 이전 Bento
+  `sha256:d9cc6362d348921e3b378380ab8738f4d67c3386c27c5102704d058c8cb5ba4b`는
+  `open-work-hub-bento:pre-59ea8780`로 보존했다. 복구 준비를 확인했으며 실제 rollback은 실행하지 않았다.
+- 실제 운영 `agent-browser`에서 데스크톱 로그인 입력 요소, 개발 seed 로그인 버튼 미노출,
+  PMS 직접 진입 시 로그인 경계를 확인했다. 비로그인 auth/me·admin/users·pms/spaces는 모두 401.
+  390×844 로그인 화면은 가로 넘침 없음, Tab 첫 포커스는 아이디, axe WCAG A/AA 위반 0·미완결 0·
+  통과 21이며 해당 세션 uncaught error는 없었다. 인증된 운영 문서의 bridge handshake/저장은 NOT RUN이다.
+- 개발 supervisor를 복구했다. 시작 직후 첫 smoke는 아직 Web이 뜨지 않아 실패했고, 실제 Web/API
+  listener가 열린 뒤 `pnpm dev:public-smoke` 재실행이 성공했다. 공개 root/login/health/readiness/bootstrap과
+  로컬·공개 개발 런타임 일치를 확인했다. 실제 seed 관리자 로그인 후 회사/개인 앱 런처 표시와
+  auth/me 200도 확인했다. 개발 Bento도 healthy이며 bridge hash가 위 배포 소스와 일치한다.
+  기존 앱 정책과 시험 계정 차단 상태는 유지했다.
+
+## 테스트 자료 정리와 잔여
+
+- 이번 prefix는 `UAT-20260908t142346z`다. 기존 다른 실행의 자료는 삭제하지 않았다.
+- Files·Planner·Community 자료는 실제 UI로 삭제했다. Whiteboard 공유 링크는 모두 비활성,
+  회사 공개도 껐다. Docs 두 문서의 회사 공개는 꺼져 있다.
+- 수동 그룹 `8732c2e6-a4f2-4344-8f2d-6e6881e54a94`는 비활성화했고 C의 열린 개인 문서가 즉시
+  사라짐을 확인했다. C 주 소속은 없음으로 복원 후 계정을 정지했다. 시험 조직 X/Y는 비활성화했다.
+  D는 비밀번호 변경/활성 복구를 검증한 뒤 테스트 정리로 로그인 차단했다.
+- PMS Alpha `0f04ad93-8b7a-4949-8679-97e1852712eb`, Beta `503cbfbe-1ac0-47f3-8322-0e346b935824`,
+  그룹 생성 폴더/리스트, D의 명시적 viewer 행은 검증 자료로 남아 있다. 자동 owner 승격과 구분한다.
+- Docs `c5a454df-dcea-4fd4-ad0c-bc73479ab627`/`7c5bd7eb-ec68-44b9-8e19-0d0c5901e8e7`,
+  Whiteboard `2ce4e2d8-5338-4899-9653-17cc21efcafc`/`0490b25c-5d63-4d71-9c21-9d7215488c94`,
+  DM `75523515-f801-4d18-975e-6276861693d2`와 첨부는 접근 제한된 검증 자료로 남긴다.
+- Bento `bf09f8d3-cc3c-47e2-bf0c-ee9cb7b045c5`/`11d9bcb8-e104-4aa1-9e46-f38b9542a722`와
+  Diagrams `323b036a-cb4e-4f04-a6bf-8581938c2624`는 실제 UI로 보관했다. B도 로그인 차단했다.
+  이전 실행의 실패 녹음 `24e0a02f-529d-43dc-9d69-388d5deae1b2`도 미정리 기록으로 유지한다.
+- 대리 로그인 발급 API는 제거됐지만 `auth_sessions.impersonator_user_id`와 일부 소비·감사
+  코드는 남아 있다. 외부 발급 경로는 발견하지 못했으며 완전 제거에는 별도 마이그레이션이 필요하다.
+- Docs/Whiteboard 목록 제목은 다음 조회까지 남을 수 있다. 본문 회수·신규 API·검색의 현재 ACL
+  검사와 목록 갱신 지연은 구분한다. 플랫폼 관리자의 개인 콘텐츠 보호는 DB/스토리지 운영자나
+  계정 복구 담당자에 대한 암호학적 비밀 보장을 의미하지 않는다.

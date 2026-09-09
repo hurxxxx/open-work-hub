@@ -41,14 +41,16 @@ export function MeetingCreateAttendeesSection({
   labels,
   state,
 }: MeetingCreateAttendeesSectionProps) {
-  const selectedUsers = state.visibleAttendees.map((attendee): UserOptionLike => {
-    const user = state.userLookup.get(attendee.user_id);
-    return {
-      id: attendee.user_id,
-      email: user?.email ?? '',
-      full_name: user?.full_name ?? attendee.user_id,
-    };
-  });
+  const selectedUsers = state.visibleAttendees.map(
+    (attendee): UserOptionLike => {
+      const user = state.userLookup.get(attendee.user_id);
+      return {
+        id: attendee.user_id,
+        email: user?.email ?? '',
+        full_name: user?.full_name ?? attendee.user_id,
+      };
+    },
+  );
 
   return (
     <div className="space-y-2">

@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useReducer,
-  useRef,
-  type RefObject,
-} from 'react';
+import { SpaceGroupBindings } from './SpaceGroupBindings';
 import { Button, Dialog, useConfirm } from '@open-work-hub/ui';
 import {
   Check,
@@ -18,6 +10,15 @@ import {
   UserMinus,
   UserPlus,
 } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useReducer,
+  useRef,
+  type RefObject,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -35,14 +36,14 @@ import { MemberSuggestionDropdown } from './MemberSuggestionDropdown';
 import { initials } from './pms-constants';
 import { dispatchPmsSpaceMembersChanged } from './pms-events';
 import {
-  SPACE_MEMBER_ROW_MENU_ESTIMATED_HEIGHT,
-  SPACE_MEMBER_ROLE_LABEL_KEYS,
-  SPACE_MEMBERS_INITIAL_STATE,
   canMutateSpaceMember,
-  inviteCandidates as selectInviteCandidates,
   roleOptionConfigForUser,
-  spaceMemberRowMenuPosition,
+  inviteCandidates as selectInviteCandidates,
+  SPACE_MEMBER_ROLE_LABEL_KEYS,
+  SPACE_MEMBER_ROW_MENU_ESTIMATED_HEIGHT,
+  SPACE_MEMBERS_INITIAL_STATE,
   spaceMemberIds,
+  spaceMemberRowMenuPosition,
   spaceMembersModalReducer,
   visibleSpaceMembers,
   type RoleValue,
@@ -53,7 +54,7 @@ interface SpaceMembersModalProps {
   onClose: () => void;
   spaceId: string | null;
   spaceName: string;
-  workspaceSlug?: string | null;
+
   canManage: boolean;
   currentUserRole?: string | null;
   onChanged?: () => void;
@@ -64,20 +65,20 @@ interface SpaceMembersModalProps {
  * string hash. Keeps colors stable across renders for the same user.
  */
 const AVATAR_COLORS = [
-  'bg-rose-500',
-  'bg-pink-500',
-  'bg-fuchsia-500',
-  'bg-purple-500',
-  'bg-violet-500',
-  'bg-indigo-500',
-  'bg-blue-500',
-  'bg-sky-500',
-  'bg-cyan-500',
-  'bg-teal-500',
-  'bg-emerald-500',
-  'bg-green-500',
-  'bg-amber-500',
-  'bg-orange-500',
+  'bg-rose-700',
+  'bg-pink-700',
+  'bg-fuchsia-700',
+  'bg-purple-700',
+  'bg-violet-700',
+  'bg-indigo-700',
+  'bg-blue-700',
+  'bg-sky-700',
+  'bg-cyan-700',
+  'bg-teal-700',
+  'bg-emerald-700',
+  'bg-green-700',
+  'bg-amber-700',
+  'bg-orange-700',
 ];
 
 function avatarColor(seed: string): string {
@@ -255,7 +256,6 @@ function useSpaceMembersModalContentElement({
   onClose,
   spaceId,
   spaceName,
-  workspaceSlug,
   canManage,
   currentUserRole = null,
   onChanged,
@@ -306,9 +306,9 @@ function useSpaceMembersModalContentElement({
     dispatch({ type: 'loadStart' });
     try {
       const [memberRes, users] = await Promise.all([
-        listSpaceMembers(token, spaceId, workspaceSlug),
+        listSpaceMembers(token, spaceId),
         canManage
-          ? listPmsUsers(token, workspaceSlug)
+          ? listPmsUsers(token)
           : Promise.resolve([] as PmsUserSummary[]),
       ]);
       dispatch({
@@ -325,7 +325,7 @@ function useSpaceMembersModalContentElement({
             : t('pms.spaceMembers.errors.loadFailed'),
       });
     }
-  }, [token, spaceId, workspaceSlug, canManage, t]);
+  }, [token, spaceId, canManage, t]);
 
   useEffect(() => {
     void refresh();
@@ -355,15 +355,10 @@ function useSpaceMembersModalContentElement({
     dispatch({ type: 'setBusyUserId', busyUserId: user.id });
     dispatch({ type: 'setError', error: null });
     try {
-      await addSpaceMember(
-        token,
-        spaceId,
-        {
-          user_id: user.id,
-          role: 'member',
-        },
-        workspaceSlug,
-      );
+      await addSpaceMember(token, spaceId, {
+        user_id: user.id,
+        role: 'member',
+      });
       await refresh();
       dispatchPmsSpaceMembersChanged(spaceId);
       onChanged?.();
@@ -386,7 +381,7 @@ function useSpaceMembersModalContentElement({
     dispatch({ type: 'setBusyUserId', busyUserId: userId });
     dispatch({ type: 'setError', error: null });
     try {
-      await updateSpaceMemberRole(token, spaceId, userId, role, workspaceSlug);
+      await updateSpaceMemberRole(token, spaceId, userId, role);
       await refresh();
       dispatchPmsSpaceMembersChanged(spaceId);
       onChanged?.();
@@ -418,7 +413,7 @@ function useSpaceMembersModalContentElement({
     dispatch({ type: 'setBusyUserId', busyUserId: member.user_id });
     dispatch({ type: 'setError', error: null });
     try {
-      await removeSpaceMember(token, spaceId, member.user_id, workspaceSlug);
+      await removeSpaceMember(token, spaceId, member.user_id);
       await refresh();
       dispatchPmsSpaceMembersChanged(spaceId);
       onChanged?.();
@@ -462,6 +457,15 @@ function useSpaceMembersModalContentElement({
         }
       >
         <div className="space-y-6 text-app-ink">
+          {token && spaceId ? (
+            <SpaceGroupBindings
+              key={spaceId}
+              token={token}
+              resourceId={spaceId}
+              canManage={canManage}
+              canManageAdmins={canManageAdmins}
+            />
+          ) : null}
           {!canManage ? (
             <div className="app-text-caption rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink/60 dark:text-app-ink/70">
               {t('pms.spaceMembers.readOnlyNotice')}

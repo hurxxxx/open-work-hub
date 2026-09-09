@@ -8,7 +8,11 @@ from open_work_hub_api.domains.mail.clients import (
     MailConnectionSettings,
     validate_connection_settings,
 )
-from open_work_hub_api.domains.mail.crypto import MailCredentialError, decrypt_secret, encrypt_secret
+from open_work_hub_api.domains.mail.crypto import (
+    MailCredentialError,
+    decrypt_secret,
+    encrypt_secret,
+)
 from open_work_hub_api.domains.mail.models import MailAccount
 from open_work_hub_api.domains.mail.schemas import (
     MailAccountConnectionRequest,

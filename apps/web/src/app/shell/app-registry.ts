@@ -1,18 +1,19 @@
-import type { ComponentType, ReactNode } from 'react';
+import { APP_CONTRACTS } from '@open-work-hub/contracts/app-contracts';
 import {
   createCoreAppModuleRegistry,
   createCoreAppModuleRegistryApi,
   type CoreAppModuleRegistration,
   type CoreAppModuleRegistry,
 } from '@open-work-hub/core-web/app-registry';
+import type { ComponentType, ReactNode } from 'react';
 
+import type { BackgroundWorkSource } from '@/src/platform/background-work/background-work-session';
 import {
   DEFAULT_APP_MODULES,
   DEFAULT_FEATURE_MODULES,
-  DEFAULT_PLATFORM_MODULE_MANIFESTS,
+  DEFAULT_SHELL_MODULES,
 } from './app-module-manifests';
 import { compileFeatureModuleRegistry } from './feature-module-registry';
-import type { BackgroundWorkSource } from '@/src/platform/background-work/background-work-session';
 import type {
   AppBarItem,
   AppModuleId,
@@ -23,8 +24,8 @@ import type {
   StaticRouteDefinition,
 } from './navigation-types';
 import type {
+  AppRouteDefinition,
   ToolViewRouteDefinition,
-  WorkspaceRouteDefinition,
 } from './route-types';
 import type { AppSidebarConfig } from './sidebar-types';
 
@@ -35,7 +36,7 @@ export type AppModuleRegistration = CoreAppModuleRegistration<
   NavItem,
   AppModuleManifest,
   StaticRouteDefinition,
-  WorkspaceRouteDefinition,
+  AppRouteDefinition,
   ToolViewRouteDefinition,
   BackgroundWorkSource,
   AppSidebarConfig,
@@ -49,7 +50,7 @@ export type AppModuleRegistry = CoreAppModuleRegistry<
   AppModuleManifest,
   AppBarItem,
   StaticRouteDefinition,
-  WorkspaceRouteDefinition,
+  AppRouteDefinition,
   ToolViewRouteDefinition,
   BackgroundWorkSource,
   AppSidebarConfig,
@@ -74,7 +75,7 @@ export function createAppModuleRegistry(
     AppModuleManifest,
     AppBarItem,
     StaticRouteDefinition,
-    WorkspaceRouteDefinition,
+    AppRouteDefinition,
     ToolViewRouteDefinition,
     BackgroundWorkSource,
     AppSidebarConfig,
@@ -92,7 +93,7 @@ export function createAppModuleRegistryApi(
     AppModuleManifest,
     AppBarItem,
     StaticRouteDefinition,
-    WorkspaceRouteDefinition,
+    AppRouteDefinition,
     ToolViewRouteDefinition,
     BackgroundWorkSource,
     AppSidebarConfig,
@@ -102,6 +103,9 @@ export function createAppModuleRegistryApi(
 }
 
 const APP_MODULE_REGISTRY_API = createAppModuleRegistryApi(DEFAULT_APP_MODULES);
+const SHELL_MODULE_REGISTRY_API = createAppModuleRegistryApi(
+  DEFAULT_SHELL_MODULES,
+);
 const FEATURE_MODULE_REGISTRY = compileFeatureModuleRegistry(
   DEFAULT_FEATURE_MODULES,
   {
@@ -111,35 +115,43 @@ const FEATURE_MODULE_REGISTRY = compileFeatureModuleRegistry(
       ),
     reservedModuleIds: APP_MODULE_REGISTRY_API.APP_MODULE_MANIFESTS.map(
       (manifest) => manifest.appBarItem.id,
+    ).concat(
+      SHELL_MODULE_REGISTRY_API.APP_MODULE_MANIFESTS.map(
+        (manifest) => manifest.appBarItem.id,
+      ),
     ),
   },
 );
 
 export const APP_MODULE_MANIFESTS: readonly AppModuleManifest[] =
   APP_MODULE_REGISTRY_API.APP_MODULE_MANIFESTS;
-export const APP_BAR_ITEMS: readonly AppBarItem[] =
-  APP_MODULE_REGISTRY_API.APP_BAR_ITEMS;
+export const SHELL_MODULE_MANIFESTS: readonly AppModuleManifest[] =
+  SHELL_MODULE_REGISTRY_API.APP_MODULE_MANIFESTS;
+export const APP_BAR_ITEMS: readonly AppBarItem[] = [
+  ...APP_MODULE_REGISTRY_API.APP_BAR_ITEMS,
+  ...SHELL_MODULE_REGISTRY_API.APP_BAR_ITEMS,
+];
 export const APP_BACKGROUND_WORK_SOURCES: readonly BackgroundWorkSource[] = [
   ...APP_MODULE_REGISTRY_API.APP_BACKGROUND_WORK_SOURCES,
   ...FEATURE_MODULE_REGISTRY.backgroundWorkSources,
 ];
 export const APP_SHELL_PROVIDERS: readonly ShellProviderComponent[] =
   APP_MODULE_REGISTRY_API.APP_SHELL_PROVIDERS;
-export const NAV_ITEMS: readonly NavItem[] = APP_MODULE_REGISTRY_API.NAV_ITEMS;
-export const APP_WORKSPACE_ROUTES: readonly WorkspaceRouteDefinition[] =
-  APP_MODULE_REGISTRY_API.APP_WORKSPACE_ROUTES;
+export const NAV_ITEMS: readonly NavItem[] = [
+  ...APP_MODULE_REGISTRY_API.NAV_ITEMS,
+  ...SHELL_MODULE_REGISTRY_API.NAV_ITEMS,
+];
+export const APP_ROUTES: readonly AppRouteDefinition[] =
+  APP_MODULE_REGISTRY_API.APP_ROUTES;
 export const APP_GLOBAL_ROUTES: readonly StaticRouteDefinition[] =
   APP_MODULE_REGISTRY_API.APP_GLOBAL_ROUTES;
 export const APP_TOOL_VIEW_ROUTES: readonly ToolViewRouteDefinition[] =
   APP_MODULE_REGISTRY_API.APP_TOOL_VIEW_ROUTES;
-export const WORKSPACE_AI_TOOL_APP_IDS: readonly string[] =
+export const AI_TOOL_APP_IDS: readonly string[] =
   FEATURE_MODULE_REGISTRY.aiToolAppIds;
 
 function deriveFeatureGuideToolIds(): ReadonlySet<string> {
-  const registeredToolIds = new Set<string>([
-    ...NAV_ITEMS.map((item) => item.id),
-    ...APP_TOOL_VIEW_ROUTES.flatMap((route) => route.toolIds ?? []),
-  ]);
+  const registeredToolIds = new Set<string>(NAV_ITEMS.map((item) => item.id));
   const declaredToolIds = [
     ...APP_MODULE_MANIFESTS.flatMap(
       (manifest) => manifest.surfaces?.featureGuides?.toolIds ?? [],
@@ -163,56 +175,47 @@ function deriveFeatureGuideToolIds(): ReadonlySet<string> {
 
 export const APP_FEATURE_GUIDE_TOOL_IDS = deriveFeatureGuideToolIds();
 
-const platformManifestAppId = (
-  manifest: (typeof DEFAULT_PLATFORM_MODULE_MANIFESTS)[number],
-): AppModuleId =>
-  ('appBarItem' in manifest
-    ? manifest.appBarItem.id
-    : manifest.moduleId) as AppModuleId;
 export const APP_LAUNCHER_GLOBAL_PATHS: LauncherGlobalPaths = new Map(
-  DEFAULT_PLATFORM_MODULE_MANIFESTS.flatMap((manifest) => {
-    const globalPath = manifest.surfaces?.launcher?.globalPath;
-    return globalPath
-      ? ([[platformManifestAppId(manifest), globalPath]] as const)
-      : [];
-  }),
+  APP_CONTRACTS.map((app) => [app.app_id, app.route_base] as const),
 );
-const fixedLauncherManifests = DEFAULT_PLATFORM_MODULE_MANIFESTS.filter(
-  (manifest) => manifest.surfaces?.launcher?.fixed,
-);
-const defaultPinnedLauncherManifests = [...DEFAULT_PLATFORM_MODULE_MANIFESTS]
-  .filter(
-    (manifest) => manifest.surfaces?.launcher?.defaultPinOrder !== undefined,
-  )
-  .sort(
-    (left, right) =>
-      (left.surfaces?.launcher?.defaultPinOrder ?? 0) -
-      (right.surfaces?.launcher?.defaultPinOrder ?? 0),
-  );
-const conflictingLauncherManifest = defaultPinnedLauncherManifests.find(
-  (manifest) => manifest.surfaces?.launcher?.fixed,
-);
-if (conflictingLauncherManifest) {
-  throw new Error(
-    `Fixed launcher app cannot be pinned by default: ${platformManifestAppId(conflictingLauncherManifest)}`,
-  );
-}
 export const APP_BAR_FIXED_APP_IDS: readonly AppModuleId[] =
-  fixedLauncherManifests.map(platformManifestAppId);
+  APP_CONTRACTS.filter((app) => app.launcher.placement === 'fixed').map(
+    (app) => app.app_id,
+  );
 export const APP_BAR_PINNED_BY_DEFAULT_APP_IDS: readonly AppModuleId[] =
-  defaultPinnedLauncherManifests.map(platformManifestAppId);
+  APP_CONTRACTS.filter((app) => app.launcher.pinned_by_default).map(
+    (app) => app.app_id,
+  );
 
-export const getAppModuleManifest =
-  APP_MODULE_REGISTRY_API.getAppModuleManifest;
-export const getNavItem = APP_MODULE_REGISTRY_API.getNavItem;
-export const getAppModuleSidebarConfig =
-  APP_MODULE_REGISTRY_API.getAppModuleSidebarConfig;
-export const getAppShellNavResolver =
-  APP_MODULE_REGISTRY_API.getAppShellNavResolver;
-export const assertAppModuleStaticRouteContract =
-  APP_MODULE_REGISTRY_API.assertAppModuleStaticRouteContract;
+export const getAppModuleManifest = (appId: AppModuleId) =>
+  APP_MODULE_REGISTRY_API.getAppModuleManifest(appId) ??
+  SHELL_MODULE_REGISTRY_API.getAppModuleManifest(appId);
+export const getNavItem = (navItemId: string) =>
+  APP_MODULE_REGISTRY_API.getNavItem(navItemId) ??
+  SHELL_MODULE_REGISTRY_API.getNavItem(navItemId);
+export const getAppModuleSidebarConfig = (appId: AppModuleId) =>
+  APP_MODULE_REGISTRY_API.getAppModuleSidebarConfig(appId) ??
+  SHELL_MODULE_REGISTRY_API.getAppModuleSidebarConfig(appId);
+export const getAppShellNavResolver = (appId: AppModuleId) =>
+  APP_MODULE_REGISTRY_API.getAppShellNavResolver(appId) ??
+  SHELL_MODULE_REGISTRY_API.getAppShellNavResolver(appId);
+export const assertAppModuleStaticRouteContract = (
+  appId: AppModuleId,
+  routes: Parameters<
+    typeof APP_MODULE_REGISTRY_API.assertAppModuleStaticRouteContract
+  >[1],
+) => {
+  const registry = APP_MODULE_REGISTRY_API.getAppModuleManifest(appId)
+    ? APP_MODULE_REGISTRY_API
+    : SHELL_MODULE_REGISTRY_API;
+  return registry.assertAppModuleStaticRouteContract(appId, routes);
+};
 export const getToolViewRoute = APP_MODULE_REGISTRY_API.getToolViewRoute;
-export const getAppModuleWorkspaceRoutes =
-  APP_MODULE_REGISTRY_API.getAppModuleWorkspaceRoutes;
-export const getAppModuleGlobalRoutes =
-  APP_MODULE_REGISTRY_API.getAppModuleGlobalRoutes;
+export const getAppModuleAppRoutes = (appId: AppModuleId) =>
+  APP_MODULE_REGISTRY_API.getAppModuleAppRoutes(appId).length > 0
+    ? APP_MODULE_REGISTRY_API.getAppModuleAppRoutes(appId)
+    : SHELL_MODULE_REGISTRY_API.getAppModuleAppRoutes(appId);
+export const getAppModuleGlobalRoutes = (appId: AppModuleId) =>
+  APP_MODULE_REGISTRY_API.getAppModuleGlobalRoutes(appId).length > 0
+    ? APP_MODULE_REGISTRY_API.getAppModuleGlobalRoutes(appId)
+    : SHELL_MODULE_REGISTRY_API.getAppModuleGlobalRoutes(appId);

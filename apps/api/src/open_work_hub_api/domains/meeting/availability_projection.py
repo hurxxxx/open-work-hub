@@ -7,16 +7,16 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
-from open_work_hub_api.domains.auth.models import User, Workspace, WorkspaceUserBinding
-from open_work_hub_api.domains.auth.workspace_app_gate import is_platform_app_enabled
+from open_work_hub_api.domains.auth.app_gate import can_use_app
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.meeting.models import Meeting, MeetingAttendee
 from open_work_hub_api.domains.meeting.schemas import (
     MeetingAvailabilityBlock,
     MeetingAvailabilityItem,
     MeetingAvailabilityResponse,
 )
+from open_work_hub_api.domains.planner.app_catalog import PLANNER_APP
 from open_work_hub_api.domains.planner.event_time import local_date_string, utc_iso
-from open_work_hub_api.domains.planner.app_catalog import PLANNER_WORKSPACE_APP
 from open_work_hub_api.domains.planner.models import PlannerEvent
 
 
@@ -24,25 +24,16 @@ def dedupe_requested_user_ids(user_ids: Iterable[str]) -> list[str]:
     return list(dict.fromkeys(user_ids))
 
 
-def workspace_meeting_user_ids_subquery(workspace_id: str):
-    return (
-        select(WorkspaceUserBinding.user_id.label("user_id"))
-        .where(WorkspaceUserBinding.workspace_id == workspace_id)
-        .subquery()
-    )
-
-
-def load_requested_workspace_users(
+def load_requested_users(
     db: Session,
     *,
-    workspace_id: str,
     requested_user_ids: list[str],
 ) -> dict[str, User]:
-    member_user_ids = workspace_meeting_user_ids_subquery(workspace_id)
     users = db.scalars(
         select(User)
-        .join(member_user_ids, member_user_ids.c.user_id == User.id)
-        .where(User.status == "active", User.id.in_(requested_user_ids))
+        .where(
+            User.status == "active", User.login_blocked.is_(False), User.id.in_(requested_user_ids)
+        )
         .order_by(User.full_name.asc(), User.email.asc())
     ).all()
     users_by_id = {member.id: member for member in users}
@@ -50,7 +41,7 @@ def load_requested_workspace_users(
     if missing:
         raise localized_http_exception(
             status_code=422,
-            code="meeting.requested_users_workspace_required",
+            code="meeting.requested_users_active_required",
             user_ids=", ".join(missing),
         )
     return users_by_id
@@ -89,7 +80,6 @@ def build_meeting_busy_blocks(
 def load_meeting_busy_blocks(
     db: Session,
     *,
-    workspace_id: str,
     requested_user_ids: list[str],
     from_at: datetime,
     to_at: datetime,
@@ -99,7 +89,7 @@ def load_meeting_busy_blocks(
     )
     meetings = db.scalars(
         select(Meeting)
-        .where(Meeting.workspace_id == workspace_id)
+        .where()
         .where(
             or_(
                 Meeting.organizer_id.in_(requested_user_ids),
@@ -142,7 +132,6 @@ def project_planner_event_busy_block(
 def load_planner_event_busy_blocks(
     db: Session,
     *,
-    workspace_id: str,
     requested_user_ids: list[str],
     viewer_id: str,
     from_at: datetime,
@@ -205,7 +194,6 @@ def build_availability_response(
 def build_meeting_availability(
     db: Session,
     *,
-    workspace: Workspace,
     viewer: User,
     user_ids: list[str],
     from_at: datetime,
@@ -215,23 +203,20 @@ def build_meeting_availability(
     if not unique_user_ids:
         return MeetingAvailabilityResponse(items=[])
 
-    users_by_id = load_requested_workspace_users(
+    users_by_id = load_requested_users(
         db,
-        workspace_id=workspace.id,
         requested_user_ids=unique_user_ids,
     )
     meeting_blocks = load_meeting_busy_blocks(
         db,
-        workspace_id=workspace.id,
         requested_user_ids=unique_user_ids,
         from_at=from_at,
         to_at=to_at,
     )
     planner_blocks: dict[str, list[MeetingAvailabilityBlock]] = {}
-    if is_platform_app_enabled(db, PLANNER_WORKSPACE_APP.app_id):
+    if can_use_app(db, user_id=viewer.id, app_id=PLANNER_APP.app_id):
         planner_blocks = load_planner_event_busy_blocks(
             db,
-            workspace_id=workspace.id,
             requested_user_ids=unique_user_ids,
             viewer_id=viewer.id,
             from_at=from_at,

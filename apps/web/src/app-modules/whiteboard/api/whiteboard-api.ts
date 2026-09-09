@@ -1,18 +1,17 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-import {
-  normalizeWhiteboardScene as normalizeWhiteboardSceneValue,
-  type WhiteboardScene,
-} from './whiteboard-scene-codec';
 import {
   whiteboardApiRoutes,
   type WhiteboardHubRouteParams,
 } from './whiteboard-routes';
+import {
+  normalizeWhiteboardScene as normalizeWhiteboardSceneValue,
+  type WhiteboardScene,
+} from './whiteboard-scene-codec';
 
 export type { WhiteboardScene } from './whiteboard-scene-codec';
-export type WhiteboardVisibility = 'personal' | 'workspace';
+export type WhiteboardVisibility = 'personal' | 'company';
 
 export class WhiteboardApiError extends Error {
   constructor(
@@ -27,14 +26,9 @@ async function request<T>(
   path: string,
   token: string,
   init: RequestInit = {},
-  workspaceSlug?: string | null,
 ): Promise<T> {
   try {
-    return await apiFetchJson<T>(
-      rewriteWorkspaceApiPath(path, workspaceSlug),
-      token,
-      init,
-    );
+    return await apiFetchJson<T>(path, token, init);
   } catch (error) {
     if (error instanceof ApiRequestError) {
       throw new WhiteboardApiError(error.status, error.message);
@@ -77,6 +71,10 @@ export type WhiteboardContextSlotResponse = Omit<
 > & {
   item: WhiteboardDetail | null;
 };
+export type WhiteboardContextSlotCreatePayload =
+  ApiSchema<'CreateWhiteboardContextSlotRequest'>;
+export type WhiteboardContextSlotAttachPayload =
+  ApiSchema<'AttachWhiteboardContextSlotRequest'>;
 export type ShareableUserItem = ApiSchema<'ShareableUserItem'>;
 export type WhiteboardUserShareItem = ApiSchema<'WhiteboardUserShareItem'>;
 export type WhiteboardLinkShareItem = ApiSchema<'WhiteboardLinkShareItem'>;
@@ -105,13 +103,11 @@ export function normalizeWhiteboardScene(value: unknown): WhiteboardScene {
 export function listWhiteboardHub(
   token: string,
   params: WhiteboardHubRouteParams = {},
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardHubResponse> {
   return request<WhiteboardHubResponse>(
     whiteboardApiRoutes.hub(params),
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -119,42 +115,33 @@ export function createWhiteboard(
   token: string,
   payload: {
     title: string;
+    company_visible?: boolean;
+    company_admin_read_acknowledged?: boolean;
     scene?: WhiteboardScene | null;
     source_app?: string;
     source_kind?: string;
     source_ref?: string | null;
     generation_kind?: string;
     primary_target?: {
+      company_admin_read_acknowledged?: boolean;
       app: string;
       type: string;
       id: string;
       sort_order?: number;
     } | null;
   },
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardDetail> {
-  return request<WhiteboardDetail>(
-    whiteboardApiRoutes.items(),
-    token,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-    workspaceSlug,
-  );
+  return request<WhiteboardDetail>(whiteboardApiRoutes.items(), token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getWhiteboard(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardDetail> {
-  return request<WhiteboardDetail>(
-    whiteboardApiRoutes.item(itemId),
-    token,
-    {},
-    workspaceSlug,
-  );
+  return request<WhiteboardDetail>(whiteboardApiRoutes.item(itemId), token, {});
 }
 
 export function getSharedWhiteboard(
@@ -174,17 +161,11 @@ export function updateWhiteboard(
     title?: string;
     scene?: WhiteboardScene | null;
   },
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardDetail> {
-  return request<WhiteboardDetail>(
-    whiteboardApiRoutes.item(itemId),
-    token,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    },
-    workspaceSlug,
-  );
+  return request<WhiteboardDetail>(whiteboardApiRoutes.item(itemId), token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function updateSharedWhiteboard(
@@ -208,13 +189,11 @@ export function updateSharedWhiteboard(
 export function getWhiteboardCollabSession(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardCollabSession> {
   return request<WhiteboardCollabSession>(
     whiteboardApiRoutes.collabSession(itemId),
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -225,7 +204,6 @@ export function saveWhiteboardCollabSnapshot(
     scene?: WhiteboardScene | null;
     yjs_state?: string | null;
   },
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardCollabSnapshotResponse> {
   return request<WhiteboardCollabSnapshotResponse>(
     whiteboardApiRoutes.collabSnapshot(itemId),
@@ -234,33 +212,23 @@ export function saveWhiteboardCollabSnapshot(
       method: 'PUT',
       body: JSON.stringify(payload),
     },
-    workspaceSlug,
   );
 }
 
-export function deleteWhiteboard(
-  token: string,
-  itemId: string,
-  workspaceSlug?: string | null,
-): Promise<void> {
-  return request<void>(
-    whiteboardApiRoutes.item(itemId),
-    token,
-    { method: 'DELETE' },
-    workspaceSlug,
-  );
+export function deleteWhiteboard(token: string, itemId: string): Promise<void> {
+  return request<void>(whiteboardApiRoutes.item(itemId), token, {
+    method: 'DELETE',
+  });
 }
 
 export function restoreWhiteboard(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(
     whiteboardApiRoutes.itemRestore(itemId),
     token,
     { method: 'POST' },
-    workspaceSlug,
   );
 }
 
@@ -268,12 +236,12 @@ export function updateWhiteboardTarget(
   token: string,
   itemId: string,
   payload: {
+    company_admin_read_acknowledged?: boolean;
     app: string;
     type: string;
     id: string;
     sort_order?: number;
   },
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(
     whiteboardApiRoutes.itemTarget(itemId),
@@ -282,60 +250,47 @@ export function updateWhiteboardTarget(
       method: 'PUT',
       body: JSON.stringify(payload),
     },
-    workspaceSlug,
   );
 }
 
 export function deleteWhiteboardTarget(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardDetail> {
   return request<WhiteboardDetail>(
     whiteboardApiRoutes.itemTarget(itemId),
     token,
     { method: 'DELETE' },
-    workspaceSlug,
   );
 }
 
 export function permanentlyDeleteWhiteboard(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<void> {
-  return request<void>(
-    whiteboardApiRoutes.itemPermanent(itemId),
-    token,
-    { method: 'DELETE' },
-    workspaceSlug,
-  );
+  return request<void>(whiteboardApiRoutes.itemPermanent(itemId), token, {
+    method: 'DELETE',
+  });
 }
 
 export function toggleWhiteboardFavorite(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<{ is_favorite: boolean }> {
   return request<{ is_favorite: boolean }>(
     whiteboardApiRoutes.itemFavorite(itemId),
     token,
     { method: 'PATCH' },
-    workspaceSlug,
   );
 }
 
 export function recordWhiteboardView(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<void> {
-  return request<void>(
-    whiteboardApiRoutes.itemView(itemId),
-    token,
-    { method: 'POST' },
-    workspaceSlug,
-  );
+  return request<void>(whiteboardApiRoutes.itemView(itemId), token, {
+    method: 'POST',
+  });
 }
 
 export function recordSharedWhiteboardView(
@@ -350,84 +305,62 @@ export function recordSharedWhiteboardView(
 export function getWhiteboardContextSlot(
   token: string,
   context: { app: string; type: string; id: string },
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardContextSlotResponse> {
   return request<WhiteboardContextSlotResponse>(
     whiteboardApiRoutes.contextSlot(context),
     token,
     {},
-    workspaceSlug,
   );
 }
 
 export function createWhiteboardContextSlot(
   token: string,
-  payload: { app: string; type: string; id: string; title?: string },
-  workspaceSlug?: string | null,
+  payload: WhiteboardContextSlotCreatePayload,
 ): Promise<WhiteboardDetail> {
-  return request<WhiteboardDetail>(
-    whiteboardApiRoutes.contextSlot(),
-    token,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-    workspaceSlug,
-  );
+  return request<WhiteboardDetail>(whiteboardApiRoutes.contextSlot(), token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function attachWhiteboardContextSlot(
   token: string,
-  payload: { app: string; type: string; id: string; whiteboard_id: string },
-  workspaceSlug?: string | null,
+  payload: WhiteboardContextSlotAttachPayload,
 ): Promise<WhiteboardDetail> {
-  return request<WhiteboardDetail>(
-    whiteboardApiRoutes.contextSlot(),
-    token,
-    {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    },
-    workspaceSlug,
-  );
+  return request<WhiteboardDetail>(whiteboardApiRoutes.contextSlot(), token, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function detachWhiteboardContextSlot(
   token: string,
   context: { app: string; type: string; id: string },
-  workspaceSlug?: string | null,
 ): Promise<void> {
-  return request<void>(
-    whiteboardApiRoutes.contextSlot(context),
-    token,
-    { method: 'DELETE' },
-    workspaceSlug,
-  );
+  return request<void>(whiteboardApiRoutes.contextSlot(context), token, {
+    method: 'DELETE',
+  });
 }
 
 export function listWhiteboardShareableUsers(
   token: string,
   q = '',
-  workspaceSlug?: string | null,
 ): Promise<ShareableUserItem[]> {
   return request<ShareableUserItem[]>(
     whiteboardApiRoutes.shareableUsers(q),
     token,
     {},
-    workspaceSlug,
   );
 }
 
 export function getWhiteboardSharing(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardSharingResponse> {
   return request<WhiteboardSharingResponse>(
     whiteboardApiRoutes.sharing(itemId),
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -436,7 +369,6 @@ export function upsertWhiteboardUserShare(
   itemId: string,
   userId: string,
   accessLevel: 'read' | 'edit',
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardSharingResponse> {
   return request<WhiteboardSharingResponse>(
     whiteboardApiRoutes.userShare(itemId, userId),
@@ -445,7 +377,6 @@ export function upsertWhiteboardUserShare(
       method: 'PUT',
       body: JSON.stringify({ access_level: accessLevel }),
     },
-    workspaceSlug,
   );
 }
 
@@ -453,13 +384,11 @@ export function deleteWhiteboardUserShare(
   token: string,
   itemId: string,
   userId: string,
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardSharingResponse> {
   return request<WhiteboardSharingResponse>(
     whiteboardApiRoutes.userShare(itemId, userId),
     token,
     { method: 'DELETE' },
-    workspaceSlug,
   );
 }
 
@@ -471,7 +400,6 @@ export function upsertWhiteboardLinkShare(
     active?: boolean;
     regenerate_token?: boolean;
   },
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardSharingResponse> {
   return request<WhiteboardSharingResponse>(
     whiteboardApiRoutes.linkShare(itemId),
@@ -480,20 +408,17 @@ export function upsertWhiteboardLinkShare(
       method: 'PUT',
       body: JSON.stringify(payload),
     },
-    workspaceSlug,
   );
 }
 
 export function deleteWhiteboardLinkShare(
   token: string,
   itemId: string,
-  workspaceSlug?: string | null,
 ): Promise<WhiteboardSharingResponse> {
   return request<WhiteboardSharingResponse>(
     whiteboardApiRoutes.linkShare(itemId),
     token,
     { method: 'DELETE' },
-    workspaceSlug,
   );
 }
 
@@ -505,4 +430,24 @@ export function resolveWhiteboardSharedLink(
     whiteboardApiRoutes.sharedLink(shareToken),
     token,
   );
+}
+
+export async function updateWhiteboardCompanySharing(
+  token: string,
+  itemId: string,
+  enabled: boolean,
+  acknowledged: boolean,
+): Promise<WhiteboardDetail> {
+  await request<void>(
+    `/api/v1/whiteboard/items/${itemId}/sharing/company`,
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        enabled,
+        company_admin_read_acknowledged: acknowledged,
+      }),
+    },
+  );
+  return getWhiteboard(token, itemId);
 }

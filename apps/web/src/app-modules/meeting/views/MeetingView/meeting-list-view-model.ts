@@ -1,9 +1,9 @@
+import { formatDateTime } from '@/src/platform/time/time-utils';
 import {
   parseServerDateTime,
   type MeetingListItem,
   type MeetingScope,
 } from '../../api/meeting-api';
-import { formatDateTime } from '@/src/platform/time/time-utils';
 
 export type MeetingTab = 'upcoming' | 'mine' | 'recordings';
 
@@ -150,13 +150,6 @@ export function resolveMeetingScope(tab: MeetingTab): MeetingScope {
   return MEETING_TABS.find((item) => item.id === tab)?.scope ?? 'upcoming';
 }
 
-export function getLegacyMeetingRedirectId(
-  searchParams: URLSearchParams,
-): string | null {
-  const id = searchParams.get('id')?.trim();
-  return id || null;
-}
-
 export function createMeetingTabSearchParams({
   searchParams,
   tab,
@@ -166,7 +159,6 @@ export function createMeetingTabSearchParams({
 }): URLSearchParams {
   const next = new URLSearchParams(searchParams);
   next.set('tab', tab);
-  next.delete('id');
   return next;
 }
 

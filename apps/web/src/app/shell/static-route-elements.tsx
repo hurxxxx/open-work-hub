@@ -1,10 +1,9 @@
-import { Route } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Route } from 'react-router-dom';
 
 import { pmsHelpGuideRegistration } from '@/src/app-modules/pms';
 
-import { AdminGate } from './gates';
 import {
   getDefaultAdminPath as getPlatformDefaultAdminPath,
   hasConfiguredAdminSectionAccess,
@@ -12,17 +11,18 @@ import {
   type DefaultAdminPathResolver,
 } from '@/src/platform/admin/admin-permissions';
 import { AccessDeniedView } from '@/src/platform/auth/settings-pages';
-import type { StaticRouteDefinition } from './navigation-types';
+import {
+  EMPTY_FEATURE_GUIDE_TOOL_IDS,
+  type FeatureGuideToolIds,
+} from './ai-feature-guides';
+import { AdminGate } from './gates';
 import {
   HelpAiGuidePage,
   HelpCenterPage,
   HelpPmsGuidePage,
 } from './HelpCenterPage';
+import type { StaticRouteDefinition } from './navigation-types';
 import { AdminLandingRedirect } from './redirects';
-import {
-  EMPTY_FEATURE_GUIDE_TOOL_IDS,
-  type FeatureGuideToolIds,
-} from './ai-feature-guides';
 
 export type ShellStaticRouteDefinition = Omit<
   StaticRouteDefinition,
@@ -37,43 +37,45 @@ export type ShellAdminSectionRouteDefinition = ShellStaticRouteDefinition & {
 
 export function resolveGlobalRouteGateAppId(route: {
   appId?: string;
-  bootstrapAppId?: string;
 }): string | undefined {
-  return route.bootstrapAppId ?? route.appId;
+  return route.appId;
 }
 
-export function isGlobalAppGateVisible(
+export function isGlobalAppGateEnabled(
   appId: string | undefined,
-  visibleAppIds: readonly string[],
+  enabledAppIds: readonly string[],
 ): boolean {
   return (
     !appId ||
     appId === 'home' ||
     appId === 'settings' ||
-    visibleAppIds.includes(appId)
+    enabledAppIds.includes(appId)
   );
 }
 
-export type GlobalRouteBootstrapState = {
-  bootstrapError: string | null;
-  bootstrapLoading: boolean;
-  visibleAppIds: readonly string[] | null;
-};
+export type GlobalAppGateState = 'allowed' | 'denied' | 'error' | 'loading';
 
-export function resolveGlobalRouteBootstrapState({
+export function resolveGlobalAppGateState({
   appId,
-  defaultState,
-  launcherGlobalAppIds,
-  launcherGlobalState,
+  bootstrapError,
+  bootstrapLoading,
+  enabledAppIds,
 }: {
   appId: string | undefined;
-  defaultState: GlobalRouteBootstrapState;
-  launcherGlobalAppIds: readonly string[];
-  launcherGlobalState: GlobalRouteBootstrapState;
-}): GlobalRouteBootstrapState {
-  return appId && launcherGlobalAppIds.includes(appId)
-    ? launcherGlobalState
-    : defaultState;
+  bootstrapError: string | null;
+  bootstrapLoading: boolean;
+  enabledAppIds: readonly string[] | null;
+}): GlobalAppGateState {
+  if (!appId || appId === 'home' || appId === 'settings') {
+    return 'allowed';
+  }
+  if (bootstrapError) {
+    return 'error';
+  }
+  if (bootstrapLoading || enabledAppIds === null) {
+    return 'loading';
+  }
+  return isGlobalAppGateEnabled(appId, enabledAppIds) ? 'allowed' : 'denied';
 }
 
 export function createDefaultHelpRoutes(
@@ -102,30 +104,33 @@ function GlobalAppGate({
   bootstrapError,
   bootstrapLoading,
   children,
-  visibleAppIds,
+  enabledAppIds,
 }: {
   appId: string | undefined;
   bootstrapError: string | null;
   bootstrapLoading: boolean;
   children: ReactNode;
-  visibleAppIds: readonly string[] | null;
+  enabledAppIds: readonly string[] | null;
 }) {
   const { t } = useTranslation('shell');
-  if (!appId || appId === 'home' || appId === 'settings') {
+  const state = resolveGlobalAppGateState({
+    appId,
+    bootstrapError,
+    bootstrapLoading,
+    enabledAppIds,
+  });
+  if (state === 'allowed') {
     return children;
   }
-  if (bootstrapLoading || visibleAppIds === null) {
+  if (state === 'error') {
+    return <AccessDeniedView description={bootstrapError ?? undefined} />;
+  }
+  if (state === 'loading') {
     return (
-      <div className="p-8 text-app-ink/55">{t('gates.workspaceLoading')}</div>
+      <div className="p-8 text-app-ink/55">{t('appBootstrap.loading')}</div>
     );
   }
-  if (bootstrapError) {
-    return <AccessDeniedView description={bootstrapError} />;
-  }
-  if (!isGlobalAppGateVisible(appId, visibleAppIds)) {
-    return <AccessDeniedView description={t('gates.appDisabled')} />;
-  }
-  return children;
+  return <AccessDeniedView description={t('gates.appDisabled')} />;
 }
 
 export function StaticRouteElements({
@@ -139,12 +144,7 @@ export function StaticRouteElements({
   getDefaultAdminPath = getPlatformDefaultAdminPath,
   hasAdminSectionAccess = hasConfiguredAdminSectionAccess,
   helpRoutes,
-  launcherGlobalAppIds = [],
-  launcherGlobalBootstrapError = null,
-  launcherGlobalBootstrapLoading = false,
-  launcherGlobalVisibleAppIds = null,
-  visibleAppIds,
-  workspaceSettingsRoute = null,
+  enabledAppIds,
 }: {
   adminLandingRoute?: ShellStaticRouteDefinition;
   adminRedirectRoutes?: readonly ShellStaticRouteDefinition[];
@@ -156,12 +156,7 @@ export function StaticRouteElements({
   getDefaultAdminPath?: DefaultAdminPathResolver;
   hasAdminSectionAccess?: AdminSectionAccessResolver;
   helpRoutes?: readonly ShellStaticRouteDefinition[];
-  launcherGlobalAppIds?: readonly string[];
-  launcherGlobalBootstrapError?: string | null;
-  launcherGlobalBootstrapLoading?: boolean;
-  launcherGlobalVisibleAppIds?: readonly string[] | null;
-  visibleAppIds: readonly string[] | null;
-  workspaceSettingsRoute?: ShellStaticRouteDefinition | null;
+  enabledAppIds: readonly string[] | null;
 }) {
   const resolvedHelpRoutes =
     helpRoutes ?? createDefaultHelpRoutes(featureGuideToolIds);
@@ -170,20 +165,6 @@ export function StaticRouteElements({
     <>
       {appGlobalRoutes.map((route) => {
         const appId = resolveGlobalRouteGateAppId(route);
-        const routeBootstrapState = resolveGlobalRouteBootstrapState({
-          appId,
-          defaultState: {
-            bootstrapError,
-            bootstrapLoading,
-            visibleAppIds,
-          },
-          launcherGlobalAppIds,
-          launcherGlobalState: {
-            bootstrapError: launcherGlobalBootstrapError,
-            bootstrapLoading: launcherGlobalBootstrapLoading,
-            visibleAppIds: launcherGlobalVisibleAppIds,
-          },
-        });
         return (
           <Route
             key={route.path}
@@ -191,9 +172,9 @@ export function StaticRouteElements({
             element={
               <GlobalAppGate
                 appId={appId}
-                bootstrapError={routeBootstrapState.bootstrapError}
-                bootstrapLoading={routeBootstrapState.bootstrapLoading}
-                visibleAppIds={routeBootstrapState.visibleAppIds}
+                bootstrapError={bootstrapError}
+                bootstrapLoading={bootstrapLoading}
+                enabledAppIds={enabledAppIds}
               >
                 {route.element}
               </GlobalAppGate>
@@ -201,12 +182,7 @@ export function StaticRouteElements({
           />
         );
       })}
-      {workspaceSettingsRoute ? (
-        <Route
-          path={workspaceSettingsRoute.path}
-          element={workspaceSettingsRoute.element}
-        />
-      ) : null}
+
       {resolvedHelpRoutes.map((route) => (
         <Route key={route.path} path={route.path} element={route.element} />
       ))}

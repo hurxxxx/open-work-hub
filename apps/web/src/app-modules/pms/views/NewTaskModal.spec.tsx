@@ -44,7 +44,7 @@ vi.mock('@/src/components/date/DateInput', () => ({
 vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({
     token: 'token-1',
-    user: { id: 'user-1', workspaces: [{ slug: 'workspace-1' }] },
+    user: { id: 'user-1' },
   }),
 }));
 
@@ -69,40 +69,32 @@ vi.mock('./TaskPickerModal', () => ({
 }));
 
 describe('NewTaskModal', () => {
-  it('shows workspace selection before the task list when options are provided', () => {
-    const onWorkspaceSlugChange = vi.fn();
+  it('selects an app-owned task list without an outer container selector', () => {
+    const onTaskListIdChange = vi.fn();
     render(
       <NewTaskModal
         isOpen
         onClose={vi.fn()}
-        onWorkspaceSlugChange={onWorkspaceSlugChange}
+        onTaskListIdChange={onTaskListIdChange}
         taskListId="list-alpha"
-        taskListOptions={[{ id: 'list-alpha', label: 'Alpha / Backlog' }]}
-        taskListStatuses={[]}
-        workspaceOptions={[
-          { label: 'Alpha', slug: 'alpha' },
-          { label: 'Beta', slug: 'beta' },
+        taskListOptions={[
+          { id: 'list-alpha', label: 'Alpha / Backlog' },
+          { id: 'list-beta', label: 'Beta / Backlog' },
         ]}
-        workspaceSlug="alpha"
+        taskListStatuses={[]}
       />,
     );
-
-    const workspaceSelect = screen.getByRole('combobox', {
-      name: 'common:labels.workspace',
-    });
-    const taskListSelect = screen.getByRole('combobox', {
-      name: 'pms.floating.taskList',
-    });
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'pms.floating.taskList' }),
+      { target: { value: 'list-beta' } },
+    );
+    expect(onTaskListIdChange).toHaveBeenCalledWith('list-beta');
     expect(
-      workspaceSelect.compareDocumentPosition(taskListSelect) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-
-    fireEvent.change(workspaceSelect, { target: { value: 'beta' } });
-    expect(onWorkspaceSlugChange).toHaveBeenCalledWith('beta');
+      screen.queryByRole('combobox', { name: 'common:labels.workspace' }),
+    ).toBeNull();
   });
 
-  it('keeps the workspace selector out of workspace-scoped PMS modals', () => {
+  it('keeps the deleted workspace selector out of PMS task modals', () => {
     render(
       <NewTaskModal
         isOpen

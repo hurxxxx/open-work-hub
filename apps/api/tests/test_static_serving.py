@@ -38,7 +38,7 @@ def test_static_serving_policy_can_exclude_static_assets_from_fallback() -> None
         not_found_fallback_excludes_file_paths=True,
     )
 
-    assert policy.fallback_path(404, "/w/hq/pms") == "index.html"
+    assert policy.fallback_path(404, "/apps/pms/lists") == "index.html"
     assert policy.fallback_path(404, "/assets/missing.js") is None
     assert policy.fallback_path(404, "/favicon.ico") is None
 
@@ -92,4 +92,4 @@ def test_normalize_static_request_path() -> None:
 def test_is_file_like_static_path() -> None:
     assert is_file_like_static_path("/assets/app.js") is True
     assert is_file_like_static_path("favicon.ico") is True
-    assert is_file_like_static_path("/w/hq/pms") is False
+    assert is_file_like_static_path("/apps/pms/lists") is False

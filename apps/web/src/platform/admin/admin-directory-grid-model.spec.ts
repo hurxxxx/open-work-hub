@@ -1,3 +1,4 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
@@ -5,14 +6,13 @@ import type { AuthUser } from '@/src/platform/auth/auth-api';
 import {
   buildPeopleDirectoryPagination,
   buildPeopleDirectoryUserRow,
-  buildUserWorkspaceChipModel,
   INITIAL_PEOPLE_DIRECTORY_GRID_STATE,
   peopleDirectoryGridReducer,
 } from './admin-directory-grid-model';
 import type { SubjectSelectionState } from './admin-shared-model';
 
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
-  return {
+  return createAuthUser({
     id: 'user-1',
     login_id: 'ada',
     email: 'ada@example.test',
@@ -24,37 +24,16 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     time_zone: 'Asia/Seoul',
     date_format: 'korean',
     system_roles: [],
-    workspaces: [],
-    workspace_roles: [],
+    group_ids: [],
+    managed_organization_unit_ids: [],
     must_change_password: false,
     last_login_at: null,
     created_at: undefined,
     ...overrides,
-  } as AuthUser;
+  });
 }
 
 describe('admin directory grid model', () => {
-  it('sorts workspace chips by role rank and locale name with hidden title', () => {
-    const model = buildUserWorkspaceChipModel(
-      [
-        { id: 'workspace-1', slug: 'delta', name: 'Delta', role: 'member' },
-        { id: 'workspace-2', slug: 'beta', name: 'Beta', role: 'admin' },
-        { id: 'workspace-3', slug: 'alpha', name: 'Alpha', role: 'member' },
-        { id: 'workspace-4', slug: 'gamma', name: 'Gamma', role: 'admin' },
-        { id: 'workspace-5', slug: 'epsilon', name: 'Epsilon', role: 'member' },
-      ],
-      'en-US',
-    );
-
-    expect(model.visible).toEqual([
-      { id: 'workspace-2', name: 'Beta', role: 'admin', elevated: true },
-      { id: 'workspace-4', name: 'Gamma', role: 'admin', elevated: true },
-      { id: 'workspace-3', name: 'Alpha', role: 'member', elevated: false },
-    ]);
-    expect(model.hiddenCount).toBe(2);
-    expect(model.hiddenTitle).toBe('Delta (member), Epsilon (member)');
-  });
-
   it('applies search, page, and load transitions', () => {
     const searched = peopleDirectoryGridReducer(
       INITIAL_PEOPLE_DIRECTORY_GRID_STATE,

@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react';
 import { Download, FileText, Loader2, MapPin, Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
 
-import { openDownloadUrl } from '@/src/platform/browser/browser-download';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { downloadAuthenticatedContent } from '@/src/platform/browser/browser-download';
 import { FilesApiError, getFileDownloadUrl } from '../api/files-api';
 
 interface FilesRagSource {
@@ -31,7 +30,7 @@ export function buildFilesRagSourcesPreview(content: string): string | null {
 export function FilesRagSourcesArtifact({ content }: { content: string }) {
   const { t } = useTranslation('apps');
   const { logout, token } = useAuth();
-  const { workspaceSlug } = useParams();
+
   const parsed = useMemo(() => parseFilesRagSources(content), [content]);
   const [busyFileId, setBusyFileId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,21 +40,14 @@ export function FilesRagSourcesArtifact({ content }: { content: string }) {
       setError(t('files.chat.sources.authMissing'));
       return;
     }
-    if (!workspaceSlug) {
-      setError(t('files.chat.sources.workspaceMissing'));
-      return;
-    }
+
     setBusyFileId(source.fileId);
     setError(null);
     try {
       // The endpoint issues a new signed URL only after rechecking the
       // caller's current Files ACL.
-      const response = await getFileDownloadUrl(
-        token,
-        workspaceSlug,
-        source.fileId,
-      );
-      openDownloadUrl(response.url);
+      const response = await getFileDownloadUrl(token, source.fileId);
+      await downloadAuthenticatedContent(token, response.url, source.filename);
     } catch (caughtError: unknown) {
       if (caughtError instanceof FilesApiError && caughtError.status === 401) {
         setError(t('files.chat.sources.sessionExpired'));

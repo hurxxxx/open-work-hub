@@ -36,6 +36,7 @@ from open_work_hub_api.domains.ai.runtime.routing_metadata import (
     runtime_done_meta_from_model_meta,
     runtime_model_meta_from_kwargs,
 )
+from open_work_hub_api.domains.ai.tool_call_event_projection import iter_tool_call_events
 from open_work_hub_api.domains.ai.tool_contracts import (
     AgentToolCallMessage,
     AgentToolResultMessage,
@@ -45,19 +46,17 @@ from open_work_hub_api.domains.ai.tool_contracts import (
     openai_tool_call_message,
     openai_tool_result_message,
 )
-from open_work_hub_api.domains.ai.tool_call_event_projection import iter_tool_call_events
 from open_work_hub_api.domains.ai.tool_runtime import execute_tool_call
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.conversations.models import Conversation
-
 
 AGENT_SYSTEM_PROMPT = (
     "너는 Open Work Hub의 범용 업무용 AI 어시스턴트다. "
     "사용자가 정체성을 물으면 반드시 '저는 Open Work Hub의 업무용 AI 어시스턴트입니다.'라고 소개한다. "
     "Qwen, Tongyi, OpenAI 같은 기반 모델명이나 개발사를 너의 정체성처럼 말하지 않는다. "
     "Open Work Hub 사내 업무를 한국어로 돕는다. "
-    "워크스페이스 사실은 추정하지 말고 가능하면 도구를 우선 사용한다. "
+    "회사와 앱의 업무 정보는 추정하지 말고 가능하면 도구를 우선 사용한다. "
     "도구 결과가 있으면 그 범위 안에서만 답하고, 부족하면 부족하다고 말한다. "
     "도구 오류가 나면 조용히 무시하지 말고 필요한 경우 다시 시도하거나 한계를 설명한다.\n\n"
     "생성, 수정, 삭제, 댓글, 상태 변경 같은 쓰기 요청은 반드시 해당 write tool 결과를 받은 뒤에만 완료 여부를 말한다. "
@@ -126,7 +125,6 @@ async def run_agent_turn_stream(
     context: LlmTaskContext,
     execution: ResolvedLlmExecution,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     messages: list[dict[str, Any]],
@@ -201,7 +199,6 @@ async def run_agent_turn_stream(
         context=context,
         execution=execution,
         db=db,
-        workspace=workspace,
         principal=principal,
         user=user,
         conversation=conversation,
@@ -228,7 +225,6 @@ async def resume_agent_run(
     *,
     context: LlmTaskContext,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     conversation: Conversation,
@@ -241,7 +237,6 @@ async def resume_agent_run(
 ) -> AsyncIterator[Any]:
     approval, snapshot = ai_approvals.get_resume_context(
         db,
-        workspace=workspace,
         user=user,
         conversation_id=conversation.id,
         approval_id=approval_id,
@@ -257,7 +252,6 @@ async def resume_agent_run(
         context=context,
         execution=execution,
         db=db,
-        workspace=workspace,
         principal=principal,
         user=user,
         conversation=conversation_messages,
@@ -289,7 +283,6 @@ async def _run_agent_loop_stream(
     context: LlmTaskContext,
     execution: ResolvedLlmExecution,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     conversation: list[dict[str, Any]],
@@ -332,7 +325,6 @@ async def _run_agent_loop_stream(
             )
             replay_execution = execute_tool_call(
                 db,
-                workspace=workspace,
                 principal=principal,
                 user=user,
                 tool_name=replay_approval.tool_name,
@@ -602,7 +594,6 @@ async def _run_agent_loop_stream(
 
                 tool_execution = execute_tool_call(
                     db,
-                    workspace=workspace,
                     principal=principal,
                     user=user,
                     tool_name=pending.name,
@@ -625,7 +616,6 @@ async def _run_agent_loop_stream(
                         ai_approvals.mark_snapshot_completed(db, current_snapshot)
                     snapshot = ai_approvals.persist_snapshot_on_halt(
                         db,
-                        workspace=workspace,
                         conversation=bound_conversation,
                         requested_by_user=user,
                         messages_json=_copy_messages(conversation),
@@ -635,7 +625,6 @@ async def _run_agent_loop_stream(
                     )
                     approval = ai_approvals.create_pending_approval(
                         db,
-                        workspace=workspace,
                         conversation=bound_conversation,
                         requested_by_user=user,
                         agent_run_id=snapshot.id,

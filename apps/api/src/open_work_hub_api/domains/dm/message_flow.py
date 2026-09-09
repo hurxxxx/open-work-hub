@@ -9,14 +9,14 @@ from sqlalchemy.orm import Session, selectinload
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.dm import conversation_lifecycle, participants as participant_rules
+from open_work_hub_api.domains.dm import conversation_lifecycle
+from open_work_hub_api.domains.dm import participants as participant_rules
 from open_work_hub_api.domains.dm.models import (
     DmConversation,
     DmConversationParticipant,
     DmMessage,
     DmMessageAttachment,
 )
-
 
 __all__ = ["DmMessageDraft", "compose_dm_message", "message_attachments_to_link"]
 

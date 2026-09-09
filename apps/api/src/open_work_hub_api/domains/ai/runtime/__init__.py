@@ -8,6 +8,7 @@ from open_work_hub_api.domains.ai.runtime.agent_definitions import (
     resolve_agent_definitions,
 )
 from open_work_hub_api.domains.ai.runtime.contracts import (
+    RUNTIME_PROFILE_VALUES,
     AgentInvocationContract,
     AgentInvocationSpec,
     AgentRunContract,
@@ -20,16 +21,6 @@ from open_work_hub_api.domains.ai.runtime.contracts import (
     GraphExecutionSchedule,
     GraphScheduleStep,
     QueryPlan,
-    RUNTIME_PROFILE_VALUES,
-)
-from open_work_hub_api.domains.ai.runtime.external_egress import (
-    ExternalCapability,
-    ExternalEgressDecision,
-    ExternalEgressReason,
-    ExternalProvider,
-    allowed_external_providers,
-    evaluate_external_egress,
-    normalize_external_provider,
 )
 from open_work_hub_api.domains.ai.runtime.external_adapters import (
     ExternalPlannerExecutionAdapter,
@@ -44,6 +35,15 @@ from open_work_hub_api.domains.ai.runtime.external_adapters import (
     select_external_search_execution_adapter,
     supported_external_planner_execution_adapters,
     supported_external_search_execution_adapters,
+)
+from open_work_hub_api.domains.ai.runtime.external_egress import (
+    ExternalCapability,
+    ExternalEgressDecision,
+    ExternalEgressReason,
+    ExternalProvider,
+    allowed_external_providers,
+    evaluate_external_egress,
+    normalize_external_provider,
 )
 from open_work_hub_api.domains.ai.runtime.external_planner import (
     EXTERNAL_PLANNER_ADAPTER_ID,
@@ -73,11 +73,14 @@ from open_work_hub_api.domains.ai.runtime.external_search import (
     summarize_external_search_execution,
     summarize_external_search_request,
 )
-from open_work_hub_api.domains.ai.runtime.graph_scheduler import (
-    GraphSchedulerError,
-    build_graph_execution_schedule,
-    summarize_graph_execution_schedule,
-    summarize_graph_schedule_failure,
+from open_work_hub_api.domains.ai.runtime.graph_evidence_packet import (
+    GRAPH_VERIFIER_AGENT_ID,
+    GRAPH_WRITER_AGENT_ID,
+    GraphVerifierFailurePolicy,
+    graph_verifier_failure_policy,
+    materialize_graph_evidence_packet,
+    render_evidence_packet,
+    summarize_graph_evidence_packet,
 )
 from open_work_hub_api.domains.ai.runtime.graph_execution_fallback_policy import (
     GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID,
@@ -88,25 +91,22 @@ from open_work_hub_api.domains.ai.runtime.graph_execution_fallback_policy import
 )
 from open_work_hub_api.domains.ai.runtime.graph_node_output import GraphNodeOutput
 from open_work_hub_api.domains.ai.runtime.graph_prompting import (
+    build_graph_execution_system_prompt,
     build_graph_node_messages,
     build_graph_node_system_prompt,
     build_graph_writer_system_prompt,
-    build_graph_execution_system_prompt,
 )
-from open_work_hub_api.domains.ai.runtime.graph_evidence_packet import (
-    GRAPH_VERIFIER_AGENT_ID,
-    GRAPH_WRITER_AGENT_ID,
-    GraphVerifierFailurePolicy,
-    graph_verifier_failure_policy,
-    materialize_graph_evidence_packet,
-    render_evidence_packet,
-    summarize_graph_evidence_packet,
+from open_work_hub_api.domains.ai.runtime.graph_scheduler import (
+    GraphSchedulerError,
+    build_graph_execution_schedule,
+    summarize_graph_execution_schedule,
+    summarize_graph_schedule_failure,
 )
 from open_work_hub_api.domains.ai.runtime.manager_candidate import (
     DETERMINISTIC_MANAGER_CANDIDATE_RUNTIME_PROFILES,
     build_deterministic_manager_candidate,
-    supports_deterministic_manager_candidate,
     summarize_execution_graph,
+    supports_deterministic_manager_candidate,
 )
 from open_work_hub_api.domains.ai.runtime.manager_validation import (
     EXECUTION_GRAPH_SCHEMA_NAME,
@@ -116,11 +116,6 @@ from open_work_hub_api.domains.ai.runtime.manager_validation import (
     build_execution_graph_response_schema,
     validate_manager_graph_candidate,
 )
-from open_work_hub_api.domains.ai.runtime.registry_validation import (
-    RuntimeRegistry,
-    RuntimeRegistryValidationError,
-    validate_execution_graph,
-)
 from open_work_hub_api.domains.ai.runtime.persistence import (
     append_graph_execution_trace_events,
     append_trace_event,
@@ -128,6 +123,11 @@ from open_work_hub_api.domains.ai.runtime.persistence import (
     persist_graph_schedule_invocation_skeletons,
     prepare_trace_payload,
     scrub_trace_payload,
+)
+from open_work_hub_api.domains.ai.runtime.registry_validation import (
+    RuntimeRegistry,
+    RuntimeRegistryValidationError,
+    validate_execution_graph,
 )
 from open_work_hub_api.domains.ai.runtime.retention import scrub_completed_runtime_records
 from open_work_hub_api.domains.ai.runtime.routing import (

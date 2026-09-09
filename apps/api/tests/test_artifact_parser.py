@@ -36,33 +36,31 @@ def test_registered_server_owned_artifact_types_cannot_be_emitted_by_model(
     artifact_type: str,
 ) -> None:
     events = iter_feed(
-        ArtifactStreamParser(
-            server_owned_artifact_types=frozenset({artifact_type})
-        ),
+        ArtifactStreamParser(server_owned_artifact_types=frozenset({artifact_type})),
         [
             "before",
             f'<artifact type="{artifact_type}" title="forged">fake</artifact>',
             "after",
-        ]
+        ],
     )
 
     assert events == [ParsedText("before"), ParsedText("after")]
 
 
 def test_unregistered_artifact_type_remains_extensible() -> None:
-    events = _collect(
-        ['<artifact type="scope-analysis" title="Owned elsewhere">body</artifact>']
-    )
+    events = _collect(['<artifact type="scope-analysis" title="Owned elsewhere">body</artifact>'])
 
     assert any(isinstance(event, ParsedArtifactStart) for event in events)
 
 
 def test_single_artifact_full_chunk() -> None:
-    events = _collect([
-        "Here is your doc: ",
-        '<artifact type="document" title="Email">body **here**</artifact>',
-        " thanks!",
-    ])
+    events = _collect(
+        [
+            "Here is your doc: ",
+            '<artifact type="document" title="Email">body **here**</artifact>',
+            " thanks!",
+        ]
+    )
 
     assert [type(e).__name__ for e in events] == [
         "ParsedText",
@@ -87,10 +85,12 @@ def test_single_artifact_full_chunk() -> None:
 
 
 def test_open_tag_split_across_chunks() -> None:
-    events = _collect([
-        "prefix <arti",
-        'fact type="document">body</artifact> suffix',
-    ])
+    events = _collect(
+        [
+            "prefix <arti",
+            'fact type="document">body</artifact> suffix',
+        ]
+    )
     kinds = [type(e).__name__ for e in events]
     assert kinds == [
         "ParsedText",
@@ -105,11 +105,13 @@ def test_open_tag_split_across_chunks() -> None:
 
 
 def test_close_tag_split_across_chunks() -> None:
-    events = _collect([
-        '<artifact type="document">part one',
-        " part two</arti",
-        "fact>after",
-    ])
+    events = _collect(
+        [
+            '<artifact type="document">part one',
+            " part two</arti",
+            "fact>after",
+        ]
+    )
     kinds = [type(e).__name__ for e in events]
     assert "ParsedArtifactStart" in kinds
     body_parts = [e.text for e in events if isinstance(e, ParsedArtifactBody)]
@@ -119,11 +121,13 @@ def test_close_tag_split_across_chunks() -> None:
 
 
 def test_angle_bracket_inside_body_is_preserved_as_text() -> None:
-    events = _collect([
-        '<artifact type="document">',
-        "see <br> and <span>x</span>",
-        "</artifact>",
-    ])
+    events = _collect(
+        [
+            '<artifact type="document">',
+            "see <br> and <span>x</span>",
+            "</artifact>",
+        ]
+    )
     body = "".join(e.text for e in events if isinstance(e, ParsedArtifactBody))
     assert body == "see <br> and <span>x</span>"
 
@@ -136,11 +140,13 @@ def test_non_artifact_tag_outside_is_plain_text() -> None:
 
 
 def test_multiple_artifacts_in_one_stream() -> None:
-    events = _collect([
-        '<artifact type="document" title="one">first</artifact>',
-        "between ",
-        '<artifact type="document" title="two">second</artifact>',
-    ])
+    events = _collect(
+        [
+            '<artifact type="document" title="one">first</artifact>',
+            "between ",
+            '<artifact type="document" title="two">second</artifact>',
+        ]
+    )
     starts = [e for e in events if isinstance(e, ParsedArtifactStart)]
     ends = [e for e in events if isinstance(e, ParsedArtifactEnd)]
     assert len(starts) == 2
@@ -183,9 +189,11 @@ def test_empty_body_artifact_still_emits_all_three_events() -> None:
 
 
 def test_attrs_with_spaces_and_mixed_order() -> None:
-    events = _collect([
-        '<artifact   title="A B"   type="document"  >x</artifact>',
-    ])
+    events = _collect(
+        [
+            '<artifact   title="A B"   type="document"  >x</artifact>',
+        ]
+    )
     start = next(e for e in events if isinstance(e, ParsedArtifactStart))
     assert start.attrs == {"title": "A B", "type": "document"}
 
@@ -226,9 +234,11 @@ def test_title_containing_gt_inside_quotes_is_preserved() -> None:
 
 
 def test_title_containing_escaped_double_quotes_is_preserved() -> None:
-    events = _collect([
-        '<artifact type="document" title="\\"Q2 보고서\\"">body</artifact>',
-    ])
+    events = _collect(
+        [
+            '<artifact type="document" title="\\"Q2 보고서\\"">body</artifact>',
+        ]
+    )
     start = next(e for e in events if isinstance(e, ParsedArtifactStart))
     assert start.attrs["title"] == '"Q2 보고서"'
     assert start.attrs["type"] == "document"
@@ -238,9 +248,11 @@ def test_title_containing_escaped_double_quotes_is_preserved() -> None:
 
 def test_close_tag_prefix_collision_stays_inside_body() -> None:
     # `</artifacts>` inside body must not be treated as a close tag.
-    events = _collect([
-        '<artifact type="document">see </artifacts> note</artifact>',
-    ])
+    events = _collect(
+        [
+            '<artifact type="document">see </artifacts> note</artifact>',
+        ]
+    )
     bodies = "".join(e.text for e in events if isinstance(e, ParsedArtifactBody))
     assert bodies == "see </artifacts> note"
     # The real close still fires once.
@@ -252,10 +264,11 @@ def test_parser_captures_language_attribute_verbatim() -> None:
     # ``type="code"`` artifacts carry a ``language`` hint the client uses
     # to pick a syntax highlighter. Attrs scanning must preserve it
     # alongside ``type`` and ``title`` without reordering or dropping.
-    events = _collect([
-        '<artifact type="code" language="python" title="Hello">'
-        'print("hi")</artifact>',
-    ])
+    events = _collect(
+        [
+            '<artifact type="code" language="python" title="Hello">print("hi")</artifact>',
+        ]
+    )
     start = next(e for e in events if isinstance(e, ParsedArtifactStart))
     assert start.attrs["type"] == "code"
     assert start.attrs["language"] == "python"
@@ -266,14 +279,14 @@ def test_bare_artifact_without_type_stays_plain_text() -> None:
     # The model may quote `<artifact>` literally in help text. Without a
     # `type=` attribute we don't treat it as a real open — the whole tag
     # stays as plain text so the explanation renders untouched.
-    events = _collect([
-        "Use <artifact> like this: <artifact>body</artifact> (example)",
-    ])
+    events = _collect(
+        [
+            "Use <artifact> like this: <artifact>body</artifact> (example)",
+        ]
+    )
     assert not any(isinstance(e, ParsedArtifactStart) for e in events)
     joined = "".join(e.text for e in events if isinstance(e, ParsedText))
-    assert joined == (
-        "Use <artifact> like this: <artifact>body</artifact> (example)"
-    )
+    assert joined == ("Use <artifact> like this: <artifact>body</artifact> (example)")
 
 
 def test_artifact_without_type_does_not_swallow_trailing_text_on_flush() -> None:
@@ -292,9 +305,11 @@ def test_artifact_without_type_does_not_swallow_trailing_text_on_flush() -> None
 def test_self_closing_artifact_emits_start_and_end_atomically() -> None:
     # XML-style `<artifact type="document"/>` must not enter INSIDE mode —
     # otherwise trailing prose ends up in a phantom body until flush.
-    events = _collect([
-        'prefix <artifact type="document" title="Empty"/> summary text',
-    ])
+    events = _collect(
+        [
+            'prefix <artifact type="document" title="Empty"/> summary text',
+        ]
+    )
     kinds = [type(e).__name__ for e in events]
     assert kinds == [
         "ParsedText",
@@ -326,15 +341,14 @@ def test_inline_backtick_wrapped_artifact_stays_plain_text() -> None:
     # When the model shows the markup inside inline code — e.g. explaining
     # the format — the whole `<artifact ...>` must flow through as plain
     # text even though it carries a valid `type=` attribute.
-    events = _collect([
-        'Use `<artifact type="document" title="Example">body</artifact>` for docs.',
-    ])
+    events = _collect(
+        [
+            'Use `<artifact type="document" title="Example">body</artifact>` for docs.',
+        ]
+    )
     assert not any(isinstance(e, ParsedArtifactStart) for e in events)
     joined = "".join(e.text for e in events if isinstance(e, ParsedText))
-    assert joined == (
-        'Use `<artifact type="document" title="Example">body</artifact>`'
-        " for docs."
-    )
+    assert joined == ('Use `<artifact type="document" title="Example">body</artifact>` for docs.')
 
 
 def test_closed_inline_code_span_before_artifact_still_activates() -> None:
@@ -342,9 +356,11 @@ def test_closed_inline_code_span_before_artifact_still_activates() -> None:
     # suppress this artifact because `spec` closes with a backtick
     # immediately before `<artifact`. The span is already closed, so
     # the tag is real content and must open the panel.
-    events = _collect([
-        '요약은 `spec`<artifact type="document" title="Draft">본문</artifact> 참고.',
-    ])
+    events = _collect(
+        [
+            '요약은 `spec`<artifact type="document" title="Draft">본문</artifact> 참고.',
+        ]
+    )
     starts = [e for e in events if isinstance(e, ParsedArtifactStart)]
     assert len(starts) == 1
     assert starts[0].attrs == {"type": "document", "title": "Draft"}
@@ -355,10 +371,7 @@ def test_closed_inline_code_span_before_artifact_still_activates() -> None:
 def test_newline_resets_inline_code_tracking() -> None:
     # Markdown inline code cannot cross paragraph breaks. An unmatched
     # backtick on one line must not leak into the next line's parsing.
-    stream = (
-        "stray backtick here: `\n"
-        '<artifact type="document" title="Doc">body</artifact> end'
-    )
+    stream = 'stray backtick here: `\n<artifact type="document" title="Doc">body</artifact> end'
     events = _collect([stream])
     starts = [e for e in events if isinstance(e, ParsedArtifactStart)]
     assert len(starts) == 1
@@ -371,27 +384,15 @@ def test_fenced_close_tag_inside_body_does_not_terminate_artifact() -> None:
     # fenced `</artifact>` example. The parser must not mistake that
     # literal example for the real close — otherwise the artifact gets
     # truncated and trailing text leaks back into the chat bubble.
-    body = (
-        "Usage example:\n"
-        "```\n"
-        "<artifact type=\"document\">sample</artifact>\n"
-        "```\n"
-        "End of doc."
-    )
-    stream = (
-        f'<artifact type="document" title="Guide">{body}</artifact> outro'
-    )
+    body = 'Usage example:\n```\n<artifact type="document">sample</artifact>\n```\nEnd of doc.'
+    stream = f'<artifact type="document" title="Guide">{body}</artifact> outro'
     events = _collect([stream])
     starts = [e for e in events if isinstance(e, ParsedArtifactStart)]
     ends = [e for e in events if isinstance(e, ParsedArtifactEnd)]
     assert len(starts) == 1 and len(ends) == 1
     bodies = "".join(e.text for e in events if isinstance(e, ParsedArtifactBody))
     assert bodies == body
-    trailing = [
-        e.text
-        for e in events
-        if isinstance(e, ParsedText) and e.text.strip()
-    ]
+    trailing = [e.text for e in events if isinstance(e, ParsedText) and e.text.strip()]
     assert trailing == [" outro"]
 
 
@@ -400,9 +401,7 @@ def test_inline_code_close_tag_inside_body_does_not_terminate() -> None:
     # — e.g. "see `</artifact>` for the terminator" — must not be
     # interpreted as a real close.
     body = "see `</artifact>` for the terminator, then continue reading"
-    stream = (
-        f'<artifact type="document" title="G">{body}</artifact> done'
-    )
+    stream = f'<artifact type="document" title="G">{body}</artifact> done'
     events = _collect([stream])
     starts = [e for e in events if isinstance(e, ParsedArtifactStart)]
     ends = [e for e in events if isinstance(e, ParsedArtifactEnd)]
@@ -412,14 +411,8 @@ def test_inline_code_close_tag_inside_body_does_not_terminate() -> None:
 
 
 def test_indented_close_tag_inside_body_does_not_terminate() -> None:
-    body = (
-        "예시:\n"
-        "    </artifact>\n"
-        "이 줄까지 본문에 남아야 한다."
-    )
-    stream = (
-        f'<artifact type="document" title="Guide">{body}</artifact> done'
-    )
+    body = "예시:\n    </artifact>\n이 줄까지 본문에 남아야 한다."
+    stream = f'<artifact type="document" title="Guide">{body}</artifact> done'
     events = _collect([stream])
     starts = [e for e in events if isinstance(e, ParsedArtifactStart)]
     ends = [e for e in events if isinstance(e, ParsedArtifactEnd)]
@@ -486,13 +479,9 @@ def test_html_document_fence_streams_artifact_before_closing_fence() -> None:
     starts = [e for e in first_events if isinstance(e, ParsedArtifactStart)]
     assert len(starts) == 1
     assert starts[0].attrs == {"type": "html", "title": "간단한 카드"}
-    first_body = "".join(
-        e.text for e in first_events if isinstance(e, ParsedArtifactBody)
-    )
+    first_body = "".join(e.text for e in first_events if isinstance(e, ParsedArtifactBody))
     assert first_body == (
-        "<!doctype html>\n"
-        '<html lang="ko">\n'
-        "<head><title>간단한 카드</title></head>\n"
+        '<!doctype html>\n<html lang="ko">\n<head><title>간단한 카드</title></head>\n'
     )
     assert not any(isinstance(e, ParsedArtifactEnd) for e in first_events)
 
@@ -536,15 +525,15 @@ def test_fence_split_across_chunks_still_suppresses() -> None:
     # The fence opener may straddle a chunk boundary. We must hold back
     # partial 1-2 backtick runs until the third arrives instead of
     # emitting them as text and then matching `<artifact` inside the body.
-    events = _collect([
-        "prose ``",
-        '`\n<artifact type="document">example</artifact>\n```\nend',
-    ])
+    events = _collect(
+        [
+            "prose ``",
+            '`\n<artifact type="document">example</artifact>\n```\nend',
+        ]
+    )
     assert not any(isinstance(e, ParsedArtifactStart) for e in events)
     joined = "".join(e.text for e in events if isinstance(e, ParsedText))
-    assert joined == (
-        'prose ```\n<artifact type="document">example</artifact>\n```\nend'
-    )
+    assert joined == ('prose ```\n<artifact type="document">example</artifact>\n```\nend')
 
 
 def test_fence_followed_by_real_artifact_still_parses() -> None:
@@ -580,7 +569,7 @@ def test_self_closing_artifact_does_not_leave_open_for_flush() -> None:
     "chunks",
     [
         ['<artifact type="document" title="T">hello</artifact>'],
-        ['<arti', 'fact type="document" title="T">hello</artifact>'],
+        ["<arti", 'fact type="document" title="T">hello</artifact>'],
         ['<artifact type="document" title="T">', "hello", "</artifact>"],
         ['<artifact type="document" title="T">hel', "lo</artifact>"],
     ],

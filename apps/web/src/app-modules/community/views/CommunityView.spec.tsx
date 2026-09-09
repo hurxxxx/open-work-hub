@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -19,6 +20,10 @@ import {
 } from '../api/community-api';
 import { CommunityView } from './CommunityView';
 
+const realtimeHandlers = vi.hoisted(
+  () => new Map<string, (event: unknown) => void>(),
+);
+
 vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({ token: 'token', user: null }),
 }));
@@ -28,6 +33,12 @@ vi.mock('@/src/platform/media/use-media-upload', () => ({
     resolveFileUrl: async (url: string) => url,
     uploadFile: async () => 'media:test',
   }),
+}));
+
+vi.mock('@/src/platform/realtime/realtime-provider', () => ({
+  useRealtimeEvent: (type: string, handler: (event: unknown) => void) => {
+    realtimeHandlers.set(type, handler);
+  },
 }));
 
 vi.mock('@/src/platform/community/CommunityMarkdownEditor', () => ({
@@ -69,6 +80,7 @@ vi.mock('../api/community-api', () => ({
 describe('CommunityView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    realtimeHandlers.clear();
     vi.mocked(listCommunityChannels).mockResolvedValue({
       channels: [
         {
@@ -125,11 +137,14 @@ describe('CommunityView', () => {
 
     render(
       <MemoryRouter
-        initialEntries={['/community/posts/post-1?channel=general']}
+        initialEntries={['/apps/community/posts/post-1?channel=general']}
       >
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -140,6 +155,143 @@ describe('CommunityView', () => {
     await waitFor(() => {
       expect(markCommunityPostRead).toHaveBeenCalledWith('token', 'post-1');
     });
+  });
+
+  it('refreshes an open post when its comment notification arrives', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={['/apps/community/posts/post-1?channel=general']}
+      >
+        <Routes>
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByRole('heading', { name: 'Post title' });
+    vi.mocked(getCommunityPost).mockResolvedValue({
+      authorName: 'Author',
+      body: 'Body',
+      canModify: true,
+      channelKey: 'general',
+      commentCount: 1,
+      comments: [
+        {
+          anonSeq: null,
+          authorName: 'Commenter',
+          body: 'New realtime comment',
+          canModify: false,
+          createdAt: '2026-06-29T00:01:00Z',
+          id: 'comment-1',
+          isAnonymous: false,
+          isDeleted: false,
+          parentCommentId: null,
+          updatedAt: '2026-06-29T00:01:00Z',
+        },
+      ],
+      createdAt: '2026-06-29T00:00:00Z',
+      id: 'post-1',
+      isAnonymous: false,
+      isMine: true,
+      isRead: true,
+      isSecret: false,
+      locked: false,
+      lockedReason: null,
+      title: 'Post title',
+      updatedAt: '2026-06-29T00:00:00Z',
+    });
+
+    await act(async () => {
+      realtimeHandlers.get('notification.created')?.({
+        type: 'notification.created',
+        data: {
+          notification: {
+            action_url: '/apps/community/posts/post-1',
+            body: 'A new comment was added.',
+            created_at: '2026-06-29T00:01:00Z',
+            id: 'notification-1',
+            is_read: false,
+            origin_app_id: 'community',
+            source_id: 'post-1',
+            source_type: 'community_post',
+            title: 'New comment',
+            type: 'community_comment',
+          },
+          unread_count: 1,
+        },
+      });
+    });
+
+    expect(await screen.findByText('New realtime comment')).toBeTruthy();
+    expect(getCommunityPost).toHaveBeenCalledTimes(2);
+  });
+
+  it('coalesces focus and visibility refreshes while a post refresh is in flight', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={['/apps/community/posts/post-1?channel=general']}
+      >
+        <Routes>
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('heading', { name: 'Post title' });
+    await waitFor(() => expect(getCommunityPost).toHaveBeenCalledTimes(1));
+    const initialDetail =
+      await vi.mocked(getCommunityPost).mock.results[0].value;
+
+    let resolveRefresh: (() => void) | undefined;
+    vi.mocked(getCommunityPost).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = () => resolve(initialDetail);
+        }),
+    );
+
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    expect(getCommunityPost).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolveRefresh?.();
+    });
+
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+
+    await waitFor(() => expect(getCommunityPost).toHaveBeenCalledTimes(3));
+  });
+
+  it('uses readable channel metadata contrast classes', async () => {
+    render(
+      <MemoryRouter initialEntries={['/apps/community?channel=general']}>
+        <Routes>
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect((await screen.findByText('General channel')).className).toContain(
+      'text-app-ink/70',
+    );
+    expect(screen.getByText('글 0개').className).toContain('text-app-ink/70');
   });
 
   it('does not mark a locked secret post as read', async () => {
@@ -164,11 +316,14 @@ describe('CommunityView', () => {
 
     render(
       <MemoryRouter
-        initialEntries={['/community/posts/post-locked?channel=general']}
+        initialEntries={['/apps/community/posts/post-locked?channel=general']}
       >
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -188,11 +343,14 @@ describe('CommunityView', () => {
 
     render(
       <MemoryRouter
-        initialEntries={['/community/posts/post-1?channel=general']}
+        initialEntries={['/apps/community/posts/post-1?channel=general']}
       >
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -252,11 +410,14 @@ describe('CommunityView', () => {
 
     render(
       <MemoryRouter
-        initialEntries={['/community/posts/post-1?channel=general']}
+        initialEntries={['/apps/community/posts/post-1?channel=general']}
       >
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -324,10 +485,13 @@ describe('CommunityView', () => {
     );
 
     render(
-      <MemoryRouter initialEntries={['/community?channel=general']}>
+      <MemoryRouter initialEntries={['/apps/community?channel=general']}>
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -429,10 +593,13 @@ describe('CommunityView', () => {
     });
 
     render(
-      <MemoryRouter initialEntries={['/community?channel=private']}>
+      <MemoryRouter initialEntries={['/apps/community?channel=private']}>
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -488,10 +655,13 @@ describe('CommunityView', () => {
     });
 
     render(
-      <MemoryRouter initialEntries={['/community?channel=private']}>
+      <MemoryRouter initialEntries={['/apps/community?channel=private']}>
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -538,10 +708,13 @@ describe('CommunityView', () => {
     });
 
     render(
-      <MemoryRouter initialEntries={['/community?channel=announcements']}>
+      <MemoryRouter initialEntries={['/apps/community?channel=announcements']}>
         <Routes>
-          <Route path="/community/posts/:postId" element={<CommunityView />} />
-          <Route path="/community" element={<CommunityView />} />
+          <Route
+            path="/apps/community/posts/:postId"
+            element={<CommunityView />}
+          />
+          <Route path="/apps/community" element={<CommunityView />} />
         </Routes>
       </MemoryRouter>,
     );

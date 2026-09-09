@@ -1,21 +1,20 @@
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import { useConfirm, type BlockContent } from '@open-work-hub/ui';
+import type { TFunction } from 'i18next';
 import {
   useCallback,
+  useEffect,
+  useRef,
   useState,
   type RefObject,
   type SetStateAction,
 } from 'react';
-import type { TFunction } from 'i18next';
-import type { BlockContent } from '@open-work-hub/ui';
 
 import {
   createNativeDoc,
   listDocPages,
   updateDocPage,
 } from '@/src/app-modules/docs/public-api';
-import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
 import {
   attachTaskDoc,
   detachTaskDoc,
@@ -26,8 +25,6 @@ import {
   getTaskDetailMutationErrorMessage,
   notifyTaskDetailUpdated,
 } from './task-detail-mutation';
-
-type WorkspaceUser = Parameters<typeof resolveDefaultWorkspaceAppPath>[0];
 
 export function resolveTaskDetailPromotedDocContent({
   descriptionBlocks,
@@ -43,23 +40,16 @@ export function resolveTaskDetailPromotedDocContent({
   );
 }
 
-export function resolveTaskDetailDocPath({
-  docId,
-  user,
-  workspaceSlug,
-}: {
-  docId: string;
-  user: WorkspaceUser;
-  workspaceSlug: string | null;
-}): string {
-  const suffix = `/${docId}`;
-  return workspaceSlug
-    ? buildWorkspaceAppPath(workspaceSlug, 'docs', suffix)
-    : resolveDefaultWorkspaceAppPath(user, 'docs', suffix);
+export function resolveTaskDetailDocPath({ docId }: { docId: string }): string {
+  return buildAppHref({
+    routeId: 'docs.document',
+    pathParams: { docId },
+  });
 }
 
 export function useTaskDetailLinkedDocs({
   canEdit,
+  canPublishDoc,
   descriptionBlocksRef,
   issue,
   onUpdate,
@@ -68,10 +58,9 @@ export function useTaskDetailLinkedDocs({
   spaceId,
   token,
   t,
-  user,
-  workspaceSlug,
 }: {
   canEdit: boolean;
+  canPublishDoc: boolean;
   descriptionBlocksRef: RefObject<BlockContent | null>;
   issue: Pick<PmsTask, 'description_blocks' | 'id' | 'title'>;
   onUpdate?: () => void | Promise<void>;
@@ -80,49 +69,75 @@ export function useTaskDetailLinkedDocs({
   spaceId: string | null;
   token: string | null;
   t: TFunction;
-  user: WorkspaceUser;
-  workspaceSlug: string | null;
 }) {
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [promotingDescription, setPromotingDescription] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
+  const publicationGeneration = useRef(0);
+  useEffect(() => {
+    setPromotingDescription(false);
+    setDocPickerOpen(false);
+    return () => {
+      publicationGeneration.current += 1;
+    };
+  }, [token, issue.id, spaceId, canEdit, canPublishDoc]);
 
   const buildDocPath = useCallback(
-    (docId: string) => resolveTaskDetailDocPath({ docId, user, workspaceSlug }),
-    [user, workspaceSlug],
+    (docId: string) => resolveTaskDetailDocPath({ docId }),
+    [],
   );
 
   const handlePromoteDescriptionToDoc = useCallback(async () => {
-    if (!token || !canEdit || promotingDescription) return;
+    if (
+      !token ||
+      !canEdit ||
+      (spaceId && !canPublishDoc) ||
+      promotingDescription
+    )
+      return;
+    const generation = publicationGeneration.current;
     setPromotingDescription(true);
     setSaveError(null);
 
     try {
+      const acknowledged = spaceId
+        ? await confirm({
+            title: t('shell:contentPublication.title'),
+            description: t('shell:contentPublication.confirm'),
+            confirmLabel: t('common:actions.confirm'),
+            cancelLabel: t('common:actions.cancel'),
+          })
+        : false;
+      if (
+        generation !== publicationGeneration.current ||
+        (spaceId && !acknowledged)
+      )
+        return;
       const contentBlocks = resolveTaskDetailPromotedDocContent({
         descriptionBlocks: descriptionBlocksRef.current,
         issueDescriptionBlocks: issue.description_blocks,
       });
-      const doc = await createNativeDoc(
-        token,
-        {
-          title: issue.title,
-          first_page_title: t('pms.taskDetail.promotedDocPageTitle'),
-          source_app: 'pms',
-          source_kind: 'task_description',
-          source_ref: issue.id,
-          doc_type: 'memo',
-          content_format: 'block',
-          primary_target: spaceId
-            ? {
-                app: 'pms',
-                type: 'space',
-                id: spaceId,
-              }
-            : null,
-        },
-        workspaceSlug,
-      );
+      const doc = await createNativeDoc(token, {
+        title: issue.title,
+        first_page_title: t('pms.taskDetail.promotedDocPageTitle'),
+        source_app: 'pms',
+        source_kind: 'task_description',
+        source_ref: issue.id,
+        doc_type: 'memo',
+        content_format: 'block',
+        primary_target: spaceId
+          ? {
+              app: 'pms',
+              type: 'space',
+              id: spaceId,
+              company_admin_read_acknowledged: acknowledged,
+            }
+          : null,
+      });
+      if (generation !== publicationGeneration.current) return;
 
-      const pages = await listDocPages(token, doc.id, null, workspaceSlug);
+      const pages = await listDocPages(token, doc.id, null);
+      if (generation !== publicationGeneration.current) return;
       const firstPage = pages.items[0];
       if (firstPage) {
         await updateDocPage(
@@ -133,19 +148,16 @@ export function useTaskDetailLinkedDocs({
             content_blocks: contentBlocks,
           },
           null,
-          workspaceSlug,
         );
       }
 
-      const response = await attachTaskDoc(
-        token,
-        issue.id,
-        doc.id,
-        workspaceSlug,
-      );
+      if (generation !== publicationGeneration.current) return;
+      const response = await attachTaskDoc(token, issue.id, doc.id);
+      if (generation !== publicationGeneration.current) return;
       setLinkedDocs(response.items);
       await notifyTaskDetailUpdated(onUpdate);
     } catch (error) {
+      if (generation !== publicationGeneration.current) return;
       setSaveError(
         getTaskDetailMutationErrorMessage(
           error,
@@ -153,10 +165,13 @@ export function useTaskDetailLinkedDocs({
         ),
       );
     } finally {
-      setPromotingDescription(false);
+      if (generation === publicationGeneration.current)
+        setPromotingDescription(false);
     }
   }, [
     canEdit,
+    canPublishDoc,
+    confirm,
     descriptionBlocksRef,
     issue.description_blocks,
     issue.id,
@@ -168,22 +183,19 @@ export function useTaskDetailLinkedDocs({
     spaceId,
     t,
     token,
-    workspaceSlug,
   ]);
 
   const handleLinkDoc = useCallback(
     async (docId: string) => {
       if (!token || !canEdit) return;
+      const generation = publicationGeneration.current;
       try {
-        const response = await attachTaskDoc(
-          token,
-          issue.id,
-          docId,
-          workspaceSlug,
-        );
+        const response = await attachTaskDoc(token, issue.id, docId);
+        if (generation !== publicationGeneration.current) return;
         setLinkedDocs(response.items);
         await notifyTaskDetailUpdated(onUpdate);
       } catch (error) {
+        if (generation !== publicationGeneration.current) return;
         const message = getTaskDetailMutationErrorMessage(
           error,
           t('pms.taskDetail.errors.linkDocFailed'),
@@ -192,31 +204,20 @@ export function useTaskDetailLinkedDocs({
         throw new Error(message);
       }
     },
-    [
-      canEdit,
-      issue.id,
-      onUpdate,
-      setLinkedDocs,
-      setSaveError,
-      t,
-      token,
-      workspaceSlug,
-    ],
+    [canEdit, issue.id, onUpdate, setLinkedDocs, setSaveError, t, token],
   );
 
   const handleUnlinkDoc = useCallback(
     async (docId: string) => {
       if (!token || !canEdit) return;
+      const generation = publicationGeneration.current;
       try {
-        const response = await detachTaskDoc(
-          token,
-          issue.id,
-          docId,
-          workspaceSlug,
-        );
+        const response = await detachTaskDoc(token, issue.id, docId);
+        if (generation !== publicationGeneration.current) return;
         setLinkedDocs(response.items);
         await notifyTaskDetailUpdated(onUpdate);
       } catch (error) {
+        if (generation !== publicationGeneration.current) return;
         setSaveError(
           getTaskDetailMutationErrorMessage(
             error,
@@ -225,19 +226,11 @@ export function useTaskDetailLinkedDocs({
         );
       }
     },
-    [
-      canEdit,
-      issue.id,
-      onUpdate,
-      setLinkedDocs,
-      setSaveError,
-      t,
-      token,
-      workspaceSlug,
-    ],
+    [canEdit, issue.id, onUpdate, setLinkedDocs, setSaveError, t, token],
   );
 
   return {
+    confirmDialog,
     buildDocPath,
     docPickerOpen,
     handleLinkDoc,

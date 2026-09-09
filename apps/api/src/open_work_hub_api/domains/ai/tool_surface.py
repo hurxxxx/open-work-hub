@@ -11,16 +11,14 @@ from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.registry import (
     AiCapabilityDescriptor,
     AiCapabilityRegistry,
-    build_workspace_context,
     get_ai_capability_registry,
-    resolve_workspace_entitlement_view,
+    resolve_app_entitlements,
 )
+from open_work_hub_api.domains.ai.tool_contracts import AgentToolSpec, agent_tool_names
 from open_work_hub_api.domains.ai.tool_surface_projection import (
     build_tool_manifest,
     build_tool_openapi_export,
 )
-from open_work_hub_api.domains.ai.tool_contracts import AgentToolSpec, agent_tool_names
-from open_work_hub_api.domains.auth.models import Workspace
 
 
 @dataclass(frozen=True)
@@ -39,11 +37,20 @@ class AgentToolSurface:
     has_approval_required_tools: bool
 
 
+def descriptor_owner_app_enabled(
+    descriptor: AiCapabilityDescriptor,
+    *,
+    enabled_app_ids: frozenset[str],
+) -> bool:
+    """Require the descriptor owner before domain-specific narrowing rules."""
+
+    return descriptor.owner_app_id in enabled_app_ids
+
+
 def resolve_filtered_capability_tools(
     db: Session,
     *,
     registry: AiCapabilityRegistry,
-    workspace: Workspace,
     principal: CallerPrincipal,
     app_id: str | None = None,
     app_ids: Iterable[str] | None = None,
@@ -53,28 +60,30 @@ def resolve_filtered_capability_tools(
     # ``app_id`` (single) and ``app_ids`` (multi-select) compose: when both are
     # given the descriptor must match the single id AND be part of the
     # multi-select set. The multi-select is user-driven scope narrowing; it can
-    # never expand the workspace entitlement and discoverability checks below.
-    scope_set: frozenset[str] | None = (
-        frozenset(app_ids) if app_ids is not None else None
-    )
-    workspace_context = build_workspace_context(workspace)
-    entitlements = resolve_workspace_entitlement_view(db, workspace=workspace)
+    # never expand the company app admission and discoverability checks below.
+    scope_set: frozenset[str] | None = frozenset(app_ids) if app_ids is not None else None
+    entitlements = resolve_app_entitlements(db, user_id=principal.user_id)
     filtered: list[FilteredCapabilityTool] = []
     for tool_name, descriptor in sorted(registry.descriptors.items()):
         if descriptor.kind != "tool":
             continue
         if app_id is not None and not descriptor_matches_app(descriptor, app_id=app_id):
             continue
-        if scope_set is not None and descriptor.workspace_app_id not in scope_set:
+        if scope_set is not None and descriptor.owner_app_id not in scope_set:
             continue
         if not include_approval_required and descriptor.approval_policy == "required":
+            continue
+        if not descriptor_owner_app_enabled(
+            descriptor,
+            enabled_app_ids=entitlements.enabled_app_ids,
+        ):
             continue
         predicate = registry.resolve_discoverability_predicate(
             descriptor.discoverability_predicate_id
         )
         if predicate is None:
             continue
-        if not predicate(principal, workspace_context, entitlements):
+        if not predicate(principal, entitlements):
             continue
         compiled = registry.get_compiled_schemas(tool_name)
         if compiled is None:
@@ -97,10 +106,10 @@ def resolve_filtered_capability_tools(
 
 
 def descriptor_matches_app(descriptor: AiCapabilityDescriptor, *, app_id: str) -> bool:
-    return descriptor.workspace_app_id == app_id
+    return descriptor.owner_app_id == app_id
 
 
-def workspace_app_id_for_tool(
+def owner_app_id_for_tool(
     tool_name: str,
     *,
     registry: AiCapabilityRegistry | None = None,
@@ -109,13 +118,12 @@ def workspace_app_id_for_tool(
     descriptor = resolved_registry.descriptors.get(tool_name)
     if descriptor is None:
         return None
-    return descriptor.workspace_app_id
+    return descriptor.owner_app_id
 
 
 def resolve_agent_tool_surface(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     messages: list[dict[str, Any]] | None = None,
     allowed_app_ids: list[str] | None = None,
@@ -125,8 +133,8 @@ def resolve_agent_tool_surface(
     resolved_registry = registry or get_ai_capability_registry()
     _ = messages
 
-    # ``allowed_app_ids`` is a user-driven scope narrowing knob. An empty list
-    # explicitly means text-only. ``None`` keeps the legacy all-entitled surface.
+    # ``allowed_app_ids`` is a user-driven owner-app scope. An empty list means
+    # text-only; ``None`` exposes every entitled and discoverable owner app.
     if allowed_app_ids is not None and not allowed_app_ids:
         return AgentToolSurface(
             tool_specs=[],
@@ -140,7 +148,6 @@ def resolve_agent_tool_surface(
     filtered_tools = resolve_filtered_capability_tools(
         db,
         registry=resolved_registry,
-        workspace=workspace,
         principal=principal,
         app_ids=scope_filter,
         include_meta=False,
@@ -207,5 +214,5 @@ __all__ = [
     "resolve_agent_tool_surface",
     "resolve_filtered_capability_tools",
     "tool_names_from_specs",
-    "workspace_app_id_for_tool",
+    "owner_app_id_for_tool",
 ]

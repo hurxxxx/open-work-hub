@@ -17,9 +17,7 @@ from open_work_hub_api.domains.ai.events import (
 
 
 _ADAPTER: TypeAdapter = TypeAdapter(AgentEventEnvelope)
-_SCHEMA_FIXTURE = (
-    Path(__file__).parent / "fixtures" / "envelope_schema.json"
-)
+_SCHEMA_FIXTURE = Path(__file__).parent / "fixtures" / "envelope_schema.json"
 
 
 def test_rejects_unknown_type() -> None:

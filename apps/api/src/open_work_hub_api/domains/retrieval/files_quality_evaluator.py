@@ -5,7 +5,7 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.rag.query_service import RagQueryService
 from open_work_hub_api.domains.rag.runtime import (
     build_partitioned_retrieval_candidate_query_service,
@@ -70,7 +70,7 @@ SessionFactory = Callable[[], Session]
 KeywordClientFactory = Callable[[object, str], KeywordSearchClient]
 RagQueryServiceFactory = Callable[[object, str], RagQueryService]
 RetrievalQuery = Callable[..., RetrievalQueryResponse]
-SourceAclPolicyFactory = Callable[[Session, Workspace, User], SourceAclPolicy]
+SourceAclPolicyFactory = Callable[[Session, User], SourceAclPolicy]
 
 
 def evaluate_files_partitioned_quality(
@@ -314,10 +314,9 @@ def _evaluate_strategy(
     for case in corpus.cases:
         try:
             with session_factory() as db:
-                workspace, user = _evaluation_context(db, case)
+                user = _evaluation_context(db, case)
                 response = retrieval_query(
                     db,
-                    workspace=workspace,
                     user=user,
                     request=_retrieval_request(case=case, strategy=strategy),
                     source="cli.files_partitioned_quality_evaluation",
@@ -341,14 +340,11 @@ def _evaluate_strategy(
 def _evaluation_context(
     db: Session,
     case: RetrievalQualityCorpusCase,
-) -> tuple[Workspace, User]:
-    workspace = db.get(Workspace, case.workspace_id)
+) -> User:
     user = db.get(User, case.user_id)
-    if workspace is None or not workspace.active:
-        raise FilesQualityEvaluationError("evaluation_context_unavailable")
     if user is None or user.status != "active" or user.login_blocked:
         raise FilesQualityEvaluationError("evaluation_context_unavailable")
-    return workspace, user
+    return user
 
 
 def _retrieval_request(

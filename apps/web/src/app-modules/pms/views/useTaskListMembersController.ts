@@ -29,7 +29,6 @@ type UseTaskListMembersControllerParams = {
   onMembersChanged?: (members: PmsSpaceMember[]) => void;
   teamId: string | null;
   token: string | null | undefined;
-  workspaceSlug?: string | null;
 };
 
 export function useTaskListMembersController({
@@ -40,7 +39,6 @@ export function useTaskListMembersController({
   onMembersChanged,
   teamId,
   token,
-  workspaceSlug,
 }: UseTaskListMembersControllerParams) {
   const [members, setMembers] = useState<PmsSpaceMember[]>([]);
   const [selectedUserId, setSelectedUserId] = useState(NO_MEMBER_SELECTION);
@@ -68,15 +66,10 @@ export function useTaskListMembersController({
     setAddingMember(true);
     onError(null);
     try {
-      const added = await addSpaceMember(
-        token,
-        teamId,
-        {
-          user_id: selectedUserId,
-          role: selectedRole,
-        },
-        workspaceSlug,
-      );
+      const added = await addSpaceMember(token, teamId, {
+        user_id: selectedUserId,
+        role: selectedRole,
+      });
       replaceMembers([...members, added]);
       setSelectedUserId(NO_MEMBER_SELECTION);
       setSelectedRole(DEFAULT_SPACE_MEMBER_ROLE);
@@ -98,7 +91,6 @@ export function useTaskListMembersController({
     selectedUserId,
     teamId,
     token,
-    workspaceSlug,
   ]);
 
   const handleRoleChange = useCallback(
@@ -111,7 +103,6 @@ export function useTaskListMembersController({
           teamId,
           userId,
           role,
-          workspaceSlug,
         );
         replaceMembers(
           members.map((member) =>
@@ -133,7 +124,6 @@ export function useTaskListMembersController({
       replaceMembers,
       teamId,
       token,
-      workspaceSlug,
     ],
   );
 
@@ -142,7 +132,7 @@ export function useTaskListMembersController({
       if (!token || !teamId) return;
       onError(null);
       try {
-        await removeSpaceMember(token, teamId, userId, workspaceSlug);
+        await removeSpaceMember(token, teamId, userId);
         replaceMembers(members.filter((member) => member.user_id !== userId));
       } catch (caughtError) {
         onError(
@@ -159,7 +149,6 @@ export function useTaskListMembersController({
       replaceMembers,
       teamId,
       token,
-      workspaceSlug,
     ],
   );
 

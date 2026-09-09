@@ -1,7 +1,11 @@
+import {
+  getAppRouteChrome,
+  getAppRoutePattern,
+} from '@open-work-hub/contracts/app-routes';
 import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const WebSearchView = lazy(() =>
   import('./views/WebSearchView').then((module) => ({
@@ -10,12 +14,11 @@ const WebSearchView = lazy(() =>
 );
 const webSearchElement = lazyRoute(createElement(WebSearchView));
 
-export const webSearchWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const webSearchAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'web-search',
-    chrome: 'fullSurface',
-    path: '/w/:workspaceSlug/web-search',
-    subSidebar: 'hidden',
+    chrome: getAppRouteChrome('web-search.root'),
+    path: getAppRoutePattern('web-search.root'),
     element: webSearchElement,
   },
 ];

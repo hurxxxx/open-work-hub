@@ -88,18 +88,16 @@ def test_apply_planner_event_update_rejects_partial_bounds() -> None:
     assert exc_info.value.detail.code == "planner.update_start_end_required"
 
 
-def test_planner_event_access_enforces_personal_user_principal() -> None:
+def test_planner_event_access_enforces_user_principal() -> None:
     with pytest.raises(HTTPException) as kind_error:
         require_planner_user_write_principal(
-            CallerPrincipal(kind="system", workspace_id="workspace-1", source="test"),
+            CallerPrincipal(kind="system", source="test"),
         )
     assert kind_error.value.detail.code == "planner.write_user_principal_required"
 
     with pytest.raises(HTTPException) as user_error:
         ensure_planner_principal_user(
-            principal=CallerPrincipal(
-                kind="user", workspace_id=None, user_id="user-2", source="test"
-            ),
+            principal=CallerPrincipal(kind="user", user_id="user-2", source="test"),
             user=SimpleNamespace(id="user-1"),
         )
     assert user_error.value.detail.code == "planner.principal_user_mismatch"

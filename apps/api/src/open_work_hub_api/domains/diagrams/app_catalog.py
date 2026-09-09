@@ -1,32 +1,25 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
-    WorkspaceNavRegistration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-DIAGRAMS_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="diagrams",
-    title="Diagrams",
-    route_base="/diagrams",
-    icon_key="workflow",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
+DIAGRAMS_APP = app_registration(
+    "diagrams",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="diagrams-all",
             title="All Diagrams",
             category="Library",
             icon_key="workflow",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="diagrams-mine",
             title="My Diagrams",
             category="Library",
             icon_key="user",
             path_suffix="?view=mine",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="diagrams-archived",
             title="Archived",
             category="Library",

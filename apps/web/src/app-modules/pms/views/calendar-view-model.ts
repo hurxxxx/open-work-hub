@@ -1,15 +1,12 @@
+import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
 import { parseDateOnlyParts } from '@/src/platform/time/time-utils';
-import type {
-  CalendarEvent,
-  CalendarWorkspaceRef,
-} from '@/src/platform/calendar/calendar-types';
 import type { PmsTask, PmsTaskListStatus } from '../api/pms-api';
 import {
   PMS_CALENDAR_FALLBACK_STATUS_COLOR,
   PMS_CALENDAR_STATUS_COLORS,
 } from './pms-color-palettes';
 
-type CalendarPmsTask = PmsTask & { workspace?: CalendarWorkspaceRef | null };
+type CalendarPmsTask = PmsTask;
 
 export function startOfCalendarMonth(value: Date): Date {
   return new Date(value.getFullYear(), value.getMonth(), 1);
@@ -60,7 +57,6 @@ function buildPmsCalendarEvent(
     sourceType: 'pms_due',
     sourceId: task.id,
     color: getCalendarTaskDisplayColor(task.status, taskListStatuses),
-    workspace: task.workspace ?? null,
     metadata: {
       taskListId: task.list_id,
       status: task.status,

@@ -4,7 +4,7 @@ import {
   addCancellingCoreBackgroundWorkKey,
   coreBackgroundWorkItemKey,
   buildCoreBackgroundWorkSessionSnapshot,
-  filterCoreBackgroundWorkSourcesForWorkspace,
+  filterCoreBackgroundWorkSourcesForApps,
   mergeCoreBackgroundWorkSourceListResults,
   removeCancellingCoreBackgroundWorkKey,
   resolveCoreBackgroundWorkCadence,
@@ -43,7 +43,7 @@ describe('core background work session', () => {
     });
   });
 
-  it('filters background sources by enabled workspace app and nav gates', () => {
+  it('filters background sources by enabled app and nav gates', () => {
     const unownedSource = {
       id: 'unowned-job',
       list: async () => [],
@@ -66,7 +66,7 @@ describe('core background work session', () => {
     ];
 
     expect(
-      filterCoreBackgroundWorkSourcesForWorkspace(sources, {
+      filterCoreBackgroundWorkSourcesForApps(sources, {
         enabledAppIds: ['research'],
         enabledNavItemIds: ['research-home'],
       }).map((source) => source.id),

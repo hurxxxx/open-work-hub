@@ -1,18 +1,18 @@
-import { useCallback } from 'react';
-import type * as React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { FileText, MoreHorizontal } from 'lucide-react';
+import type * as React from 'react';
+import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
-import { cn } from '@/src/lib/utils';
 import type { DocsHubItem } from '@/src/app-modules/docs/public-api';
+import { cn } from '@/src/lib/utils';
 import type { FlatDropZone } from '../api/pms-sidebar-reorder';
-import { getSpaceDocSpaceId } from './space-tree-model';
+import { buildPmsSpaceDocsToolPath } from '../views/pms-view-route';
 import { FolderContextMenu } from './FolderContextMenu';
 import { useSuppressClickAfterDrag } from './space-tree-drag';
-import { buildPmsSpaceDocsToolPath } from '../views/pms-view-route';
+import { getSpaceDocSpaceId } from './space-tree-model';
 
 export type SortableDocPermissions = {
   canDrag: boolean;
@@ -40,7 +40,7 @@ type SortableDocLinkProps = {
   doc: DocsHubItem;
   spaceId: string;
   activeNavItemId: string;
-  workspaceSlug: string | null;
+
   dropZone: FlatDropZone | null;
   menu: SortableDocMenuState;
   onDelete: () => void;
@@ -52,7 +52,6 @@ export function SortableDocLink({
   doc,
   spaceId,
   activeNavItemId,
-  workspaceSlug,
   dropZone,
   menu,
   onDelete,
@@ -84,11 +83,10 @@ export function SortableDocLink({
         buildPmsSpaceDocsToolPath({
           docId: doc.id,
           spaceId,
-          workspaceSlug,
         }),
       );
     },
-    [doc.id, navigate, spaceId, suppressClick, workspaceSlug],
+    [doc.id, navigate, spaceId, suppressClick],
   );
   return (
     <div

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WorkspaceNotification } from '@/src/platform/notifications/notifications-api';
+import type { NotificationItem } from '@/src/platform/notifications/notifications-api';
 import {
   INITIAL_NOTIFICATION_PANEL_STATE,
   countUnreadNotifications,
@@ -22,6 +22,7 @@ describe('notification panel model', () => {
       notifications: [{ id: 'n1' }],
     });
     expect(loading.loading).toBe(true);
+    expect(loading.notifications).toEqual([]);
     expect(signedOut).toEqual({ loading: false, notifications: [] });
   });
 
@@ -57,23 +58,23 @@ describe('notification panel model', () => {
     expect(
       resolveNotificationAction(
         notification('route', {
-          action_url: '/tool/reports?workspace=hq',
-          reference_id: 'issue-1',
+          action_url: '/apps/pms/assigned',
+          source_id: 'issue-1',
         }),
       ),
-    ).toEqual({ kind: 'route', to: '/tool/reports?workspace=hq' });
+    ).toEqual({ kind: 'route', to: '/apps/pms/assigned' });
     expect(
       resolveNotificationAction(
         notification('dm', {
           action_url: '/dm/conversations/conversation-1',
-          reference_id: 'issue-1',
+          source_id: 'issue-1',
         }),
       ),
     ).toEqual({ kind: 'dm', threadId: 'conversation-1' });
     expect(
       resolveNotificationAction(
-        notification('workspace-dm', {
-          action_url: '/w/hq/dm?thread=conversation-2',
+        notification('dm-query', {
+          action_url: '/dm?thread=conversation-2',
         }),
       ),
     ).toEqual({ kind: 'dm', threadId: 'conversation-2' });
@@ -81,7 +82,8 @@ describe('notification panel model', () => {
       resolveNotificationAction(
         notification('issue', {
           action_url: 'https://example.test/unsafe',
-          reference_id: 'issue-1',
+          source_id: 'issue-1',
+          source_type: 'pms_task',
         }),
       ),
     ).toEqual({ kind: 'issue', taskId: 'issue-1' });
@@ -89,7 +91,7 @@ describe('notification panel model', () => {
       resolveNotificationAction(
         notification('none', {
           action_url: 'https://example.test/unsafe',
-          reference_id: null,
+          source_id: null,
         }),
       ),
     ).toEqual({ kind: 'none' });
@@ -98,18 +100,19 @@ describe('notification panel model', () => {
 
 function notification(
   id: string,
-  overrides: Partial<WorkspaceNotification> = {},
-): WorkspaceNotification {
+  overrides: Partial<NotificationItem> = {},
+): NotificationItem {
   return {
     action_url: null,
     body: 'Body',
     created_at: '2026-05-20T00:00:00.000Z',
     id,
     is_read: false,
-    reference_id: null,
-    reference_type: null,
+    source_id: null,
+    source_type: 'system',
+    origin_app_id: 'shell',
     title: 'Title',
     type: 'issue_assigned',
     ...overrides,
-  } as WorkspaceNotification;
+  } as NotificationItem;
 }

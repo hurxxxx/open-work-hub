@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-import logging
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -17,16 +17,18 @@ from open_work_hub_worker.queue_contract import (
 )
 from open_work_hub_worker.runtime import (
     db_session as _db_session,
+)
+from open_work_hub_worker.runtime import (
     ensure_api_src_on_path as _ensure_api_src_on_path,
+)
+from open_work_hub_worker.runtime import (
     minio_client as _minio_client,
 )
 from open_work_hub_worker.settings import get_settings
 
-
 _ensure_api_src_on_path()
 
 from open_work_hub_api.domains.files.models import FileManagerStorageCleanupJob  # noqa: E402
-
 
 logger = logging.getLogger(__name__)
 

@@ -28,8 +28,7 @@ class VideoChatSession(Base):
             name="ck_video_chat_sessions_captions_status",
         ),
         Index(
-            "ix_video_chat_sessions_workspace_status_started",
-            "workspace_id",
+            "ix_video_chat_sessions_status_started",
             "status",
             "started_at",
         ),
@@ -37,9 +36,6 @@ class VideoChatSession(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"), index=True, nullable=False
-    )
     meeting_id: Mapped[str | None] = mapped_column(
         ForeignKey("meetings.id"), index=True, nullable=True
     )
@@ -66,8 +62,6 @@ class VideoChatSession(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False
     )
-
-    workspace = relationship("Workspace")
     meeting = relationship("Meeting")
     started_by = relationship("User")
     recording = relationship("Recording")

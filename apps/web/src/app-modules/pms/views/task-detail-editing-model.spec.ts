@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { createPmsTask, createPmsStatus } from '../../../../tests/fixtures/pms';
+import type { PmsTask } from '../api/pms-api';
+import { createInstance } from 'i18next';
+import { describe, expect, it } from 'vitest';
 
 import {
   applyTaskUserRoleState,
@@ -29,7 +32,9 @@ describe('task detail editing model', () => {
       assignee_name: 'New One',
       assignee_names: ['New One', 'New Two'],
     });
-    expect(restoreTaskUserRoleState(updatedTask, 'assignees', previousTask)).toMatchObject({
+    expect(
+      restoreTaskUserRoleState(updatedTask, 'assignees', previousTask),
+    ).toMatchObject({
       assignee_id: 'old-1',
       assignee_ids: ['old-1'],
       assignee_name: 'Old One',
@@ -54,7 +59,9 @@ describe('task detail editing model', () => {
       follower_ids: ['new-1'],
       follower_names: ['New One'],
     });
-    expect(restoreTaskUserRoleState(updatedTask, 'followers', previousTask)).toMatchObject({
+    expect(
+      restoreTaskUserRoleState(updatedTask, 'followers', previousTask),
+    ).toMatchObject({
       follower_ids: ['old-1'],
       follower_names: ['Old One'],
     });
@@ -65,24 +72,29 @@ describe('task detail editing model', () => {
     expect(toggleTaskUserRoleId(['a'], 'b')).toEqual(['a', 'b']);
   });
 
-  it('uses configured status labels before translated defaults', () => {
-    const t = vi.fn((key: string) => `translated:${key}`);
+  it('uses configured status labels before translated defaults', async () => {
+    const i18n = createInstance();
+    await i18n.init({
+      lng: 'en-US',
+      resources: {
+        'en-US': { translation: { 'pms.filter.status.todo': 'To do' } },
+      },
+    });
+    const t = i18n.getFixedT('en-US');
 
     expect(
       resolveTaskDetailStatusLabel(
         'review',
-        [{ id: 'status-1', name: 'Custom Review', slug: 'review', sort_order: 0 }],
+        [createPmsStatus({ name: 'Custom Review', slug: 'review' })],
         t,
       ),
     ).toBe('Custom Review');
-    expect(resolveTaskDetailStatusLabel('todo', undefined, t)).toBe(
-      'translated:pms.filter.status.todo',
-    );
+    expect(resolveTaskDetailStatusLabel('todo', undefined, t)).toBe('To do');
   });
 });
 
-function task(overrides = {}) {
-  return {
+function task(overrides: Partial<PmsTask> = {}): PmsTask {
+  return createPmsTask({
     id: 'task-1',
     title: 'Task',
     labels: [],
@@ -93,5 +105,5 @@ function task(overrides = {}) {
     follower_ids: [],
     follower_names: [],
     ...overrides,
-  };
+  });
 }

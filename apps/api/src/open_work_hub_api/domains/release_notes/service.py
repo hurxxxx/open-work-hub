@@ -6,13 +6,16 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.release_notes.models import ReleaseNote, ReleaseNoteRead, utcnow_naive
+from open_work_hub_api.domains.release_notes.models import (
+    ReleaseNote,
+    ReleaseNoteRead,
+    utcnow_naive,
+)
 from open_work_hub_api.domains.release_notes.schemas import (
     CurrentReleaseNoteResponse,
     ReleaseNoteOut,
     ReleaseNotesResponse,
 )
-
 
 PUBLISHED_STATUS = "published"
 DEFAULT_RELEASE_NOTES_LIMIT = 20

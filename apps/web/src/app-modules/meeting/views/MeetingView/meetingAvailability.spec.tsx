@@ -44,7 +44,6 @@ describe('useMeetingAvailabilityQuery', () => {
     const { rerender } = renderHook(
       ({ userIds, rangeStart, rangeEnd }) =>
         useMeetingAvailabilityQuery({
-          workspaceSlug: 'hq',
           userIds,
           rangeStart,
           rangeEnd,

@@ -1,3 +1,4 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
@@ -21,7 +22,7 @@ const formatter: AdminPeopleFormatter = {
 };
 
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
-  return {
+  return createAuthUser({
     id: 'user-1',
     login_id: 'ada',
     email: 'ada@example.test',
@@ -34,30 +35,23 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     time_zone: 'Asia/Seoul',
     date_format: 'korean',
     system_roles: [],
-    workspaces: [],
-    workspace_roles: [],
+    group_ids: [],
+    managed_organization_unit_ids: [],
     must_change_password: false,
     last_login_at: null,
     created_at: undefined,
     ...overrides,
-  } as AuthUser;
+  });
 }
 
 describe('admin people rows model', () => {
-  it('derives table rows with labels and workspace names', () => {
+  it('derives table rows with labels and effective group count', () => {
     const model = buildAdminPeopleRows({
       users: [
         user({
           display_name: 'Ada',
           system_roles: ['platform_admin'],
-          workspaces: [
-            {
-              id: 'workspace-1',
-              slug: 'hq',
-              name: 'HQ',
-              role: 'admin',
-            },
-          ],
+          group_ids: ['group-1'],
           last_login_at: '2026-05-29T00:00:00Z',
           created_at: '2026-01-01T00:00:00Z',
         }),
@@ -72,11 +66,10 @@ describe('admin people rows model', () => {
       name: 'Ada',
       loginId: 'ada',
       email: 'ada@example.test',
-      workspaceNames: 'HQ',
+      groupCount: '1',
       role: 'admin',
       roleLabel: 'Admin',
       statusLabel: 'status:active',
-      appsLabel: 'Admin',
       lastActiveLabel: '2026-05-29T00:00:00Z',
       createdLabel: '2026-01-01T00:00:00Z',
     });
@@ -141,14 +134,7 @@ describe('admin people rows model', () => {
             unit_type: 'department',
             active: true,
           },
-          workspaces: [
-            {
-              id: 'workspace-1',
-              slug: 'hq',
-              name: 'HQ',
-              role: 'member',
-            },
-          ],
+          group_ids: ['group-1'],
           created_at: '2026-01-01T00:00:00Z',
         }),
       ],
@@ -162,12 +148,11 @@ describe('admin people rows model', () => {
       'E-1001',
       'Researcher',
       'Research',
-      'HQ',
+      '1',
       'Member',
       'status:active',
       '-',
       '2026-01-01T00:00:00Z',
-      '-',
     ]);
     expect(
       encodeAdminPeopleCsv({
@@ -178,12 +163,11 @@ describe('admin people rows model', () => {
           'Employee code',
           'Job title',
           'Organization',
-          'Workspaces',
+          'Groups',
           'Role',
           'Status',
           'Last Active',
           'Created',
-          'Apps',
         ],
         rows,
       }),

@@ -364,7 +364,7 @@ def test_bento_model_normalizer_supplies_title_and_normalizes_percent_opacity() 
 def test_bento_create_update_archive_restore_and_delete(client: TestClient) -> None:
     session = dev_login(client, "delivery-hub-admin")
     headers = _auth_headers(session["token"])
-    base = "/api/v1/workspaces/delivery-hub/bento"
+    base = "/api/v1/bento"
 
     create_response = client.post(
         f"{base}/items",
@@ -403,11 +403,15 @@ def test_bento_create_update_archive_restore_and_delete(client: TestClient) -> N
     visibility_response = client.patch(
         f"{base}/items/{created['id']}",
         headers=headers,
-        json={"version": updated["version"], "visibility": "workspace"},
+        json={
+            "version": updated["version"],
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+        },
     )
     assert visibility_response.status_code == 200, visibility_response.text
     visible = visibility_response.json()
-    assert visible["visibility"] == "workspace"
+    assert visible["visibility"] == "company"
     assert visible["version"] == 3
 
     archive_response = client.delete(f"{base}/items/{created['id']}", headers=headers)
@@ -437,10 +441,11 @@ def test_bento_create_update_archive_restore_and_delete(client: TestClient) -> N
     assert client.get(f"{base}/items/{created['id']}", headers=headers).status_code == 404
 
 
-def test_bento_visibility_and_workspace_access(client: TestClient) -> None:
+def test_bento_private_ownership_company_read_only_and_app_revocation(client: TestClient) -> None:
+    administrator = dev_login(client)
     owner = dev_login(client, "delivery-hub-admin")
     member = dev_login(client, "delivery-hub-member")
-    base = "/api/v1/workspaces/delivery-hub/bento"
+    base = "/api/v1/bento"
 
     personal_response = client.post(
         f"{base}/items",
@@ -450,13 +455,17 @@ def test_bento_visibility_and_workspace_access(client: TestClient) -> None:
     assert personal_response.status_code == 201, personal_response.text
     personal = personal_response.json()
 
-    workspace_response = client.post(
+    company_response = client.post(
         f"{base}/items",
         headers=_auth_headers(owner["token"]),
-        json={"title": "Shared deck", "visibility": "workspace"},
+        json={
+            "title": "Shared deck",
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+        },
     )
-    assert workspace_response.status_code == 201, workspace_response.text
-    workspace_document = workspace_response.json()
+    assert company_response.status_code == 201, company_response.text
+    company_document = company_response.json()
 
     member_hub_response = client.get(
         f"{base}/hub",
@@ -464,7 +473,7 @@ def test_bento_visibility_and_workspace_access(client: TestClient) -> None:
     )
     assert member_hub_response.status_code == 200
     member_ids = [item["id"] for item in member_hub_response.json()["items"]]
-    assert workspace_document["id"] in member_ids
+    assert company_document["id"] in member_ids
     assert personal["id"] not in member_ids
 
     assert (
@@ -476,63 +485,79 @@ def test_bento_visibility_and_workspace_access(client: TestClient) -> None:
     )
 
     member_update = client.patch(
-        f"{base}/items/{workspace_document['id']}",
+        f"{base}/items/{company_document['id']}",
         headers=_auth_headers(member["token"]),
         json={
-            "version": workspace_document["version"],
+            "version": company_document["version"],
             "document_json": _document_json(title="Shared deck edited"),
         },
     )
-    assert member_update.status_code == 200, member_update.text
+    assert member_update.status_code == 403, member_update.text
 
     member_visibility = client.patch(
-        f"{base}/items/{workspace_document['id']}",
+        f"{base}/items/{company_document['id']}",
         headers=_auth_headers(member["token"]),
-        json={"version": member_update.json()["version"], "visibility": "personal"},
+        json={"version": company_document["version"], "visibility": "personal"},
     )
     assert member_visibility.status_code == 403
 
     member_owned_response = client.post(
         f"{base}/items",
         headers=_auth_headers(member["token"]),
-        json={"title": "Member deck", "visibility": "workspace"},
+        json={
+            "title": "Member deck",
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+        },
     )
     assert member_owned_response.status_code == 201, member_owned_response.text
     member_owned = member_owned_response.json()
 
     admin_visibility = client.patch(
         f"{base}/items/{member_owned['id']}",
-        headers=_auth_headers(owner["token"]),
+        headers=_auth_headers(administrator["token"]),
         json={"version": member_owned["version"], "visibility": "personal"},
     )
-    assert admin_visibility.status_code == 200, admin_visibility.text
-    assert admin_visibility.json()["visibility"] == "personal"
+    assert admin_visibility.status_code == 403, admin_visibility.text
+    admin_read = client.get(
+        f"{base}/items/{member_owned['id']}", headers=_auth_headers(administrator["token"])
+    )
+    assert admin_read.status_code == 200, admin_read.text
+    assert admin_read.json()["can_edit"] is False
+    assert admin_read.json()["can_manage"] is False
+    owner_revert = client.patch(
+        f"{base}/items/{member_owned['id']}",
+        headers=_auth_headers(member["token"]),
+        json={"version": member_owned["version"], "visibility": "personal"},
+    )
+    assert owner_revert.status_code == 409, owner_revert.text
+    assert owner_revert.json()["code"] == "content.company_ownership_irreversible"
+    private_member_deck = client.post(
+        f"{base}/items", headers=_auth_headers(member["token"]), json={"title": "Member private"}
+    )
+    assert private_member_deck.status_code == 201, private_member_deck.text
     assert (
         client.get(
-            f"{base}/items/{member_owned['id']}",
-            headers=_auth_headers(owner["token"]),
+            f"{base}/items/{private_member_deck.json()['id']}",
+            headers=_auth_headers(administrator["token"]),
         ).status_code
         == 404
     )
-    assert (
-        client.get(
-            f"{base}/items/{member_owned['id']}",
-            headers=_auth_headers(member["token"]),
-        ).status_code
-        == 200
+    disabled = client.put(
+        "/api/v1/admin/apps/bento/access-policy",
+        headers=_auth_headers(administrator["token"]),
+        json={"enabled": False, "audience": "all", "user_ids": [], "group_ids": []},
     )
-
-    no_membership = client.get(
-        "/api/v1/workspaces/general/bento/hub",
-        headers=_auth_headers(member["token"]),
-    )
-    assert no_membership.status_code == 403
+    assert disabled.status_code == 200, disabled.text
+    for actor in (administrator, owner, member):
+        denied = client.get(f"{base}/hub", headers=_auth_headers(actor["token"]))
+        assert denied.status_code == 403, denied.text
 
 
 def test_bento_rejects_invalid_document_payload(client: TestClient) -> None:
     session = dev_login(client, "delivery-hub-admin")
     response = client.post(
-        "/api/v1/workspaces/delivery-hub/bento/items",
+        "/api/v1/bento/items",
         headers=_auth_headers(session["token"]),
         json={"title": "Bad deck", "document_json": '{"format":"unknown"}'},
     )
@@ -540,7 +565,7 @@ def test_bento_rejects_invalid_document_payload(client: TestClient) -> None:
     assert response.json()["code"] == "bento.invalid_document"
 
     blank_title_response = client.post(
-        "/api/v1/workspaces/delivery-hub/bento/items",
+        "/api/v1/bento/items",
         headers=_auth_headers(session["token"]),
         json={"title": "   ", "document_json": _document_json(title="Imported")},
     )
@@ -585,13 +610,13 @@ def test_bento_ai_generation_uses_registered_local_workload_and_persists_documen
     monkeypatch.setattr(bento_generation, "execute_llm", fake_execute)
     session = dev_login(client, "delivery-hub-admin")
     response = client.post(
-        "/api/v1/workspaces/delivery-hub/bento/items/generate",
+        "/api/v1/bento/items/generate",
         headers=_auth_headers(session["token"]),
         json={
             "prompt": "신제품 출시 제안서를 작성해줘",
             "slide_count": 4,
             "language": "ko",
-            "visibility": "workspace",
+            "visibility": "personal",
         },
     )
 
@@ -599,17 +624,17 @@ def test_bento_ai_generation_uses_registered_local_workload_and_persists_documen
     job = _complete_bento_job(
         client,
         headers=_auth_headers(session["token"]),
-        base="/api/v1/workspaces/delivery-hub/bento",
+        base="/api/v1/bento",
         job_id=response.json()["id"],
     )
     assert job["status"] == "succeeded"
     created = client.get(
-        f"/api/v1/workspaces/delivery-hub/bento/items/{job['result_document_id']}",
+        f"/api/v1/bento/items/{job['result_document_id']}",
         headers=_auth_headers(session["token"]),
     ).json()
     document = json.loads(created["document_json"])
     assert created["title"] == "AI launch plan"
-    assert created["visibility"] == "workspace"
+    assert created["visibility"] == "personal"
     assert document["docId"] != "model-controlled-doc-id"
     assert len(document["slides"]) == 4
     title_elements = [slide["elements"][0] for slide in document["slides"]]
@@ -668,7 +693,7 @@ def test_bento_ai_generation_rejects_invalid_model_output_without_creating_docum
     monkeypatch.setattr(bento_generation, "execute_llm", fake_invalid_execute)
     session = dev_login(client, "delivery-hub-admin")
     headers = _auth_headers(session["token"])
-    base = "/api/v1/workspaces/delivery-hub/bento"
+    base = "/api/v1/bento"
     before = client.get(f"{base}/hub", headers=headers).json()["total"]
 
     response = client.post(
@@ -715,7 +740,7 @@ def test_bento_ai_generation_rejects_invalid_plan_before_rendering(
     monkeypatch.setattr(bento_generation, "execute_llm", fake_execute)
     session = dev_login(client, "delivery-hub-admin")
     response = client.post(
-        "/api/v1/workspaces/delivery-hub/bento/items/generate",
+        "/api/v1/bento/items/generate",
         headers=_auth_headers(session["token"]),
         json={"prompt": "invalid plan test", "slide_count": 3},
     )
@@ -724,7 +749,7 @@ def test_bento_ai_generation_rejects_invalid_plan_before_rendering(
     job = _complete_bento_job(
         client,
         headers=_auth_headers(session["token"]),
-        base="/api/v1/workspaces/delivery-hub/bento",
+        base="/api/v1/bento",
         job_id=response.json()["id"],
     )
     assert job["status"] == "failed"
@@ -766,7 +791,7 @@ def test_bento_ai_generation_repairs_invalid_model_output_once(
     monkeypatch.setattr(bento_generation, "execute_llm", fake_execute)
     session = dev_login(client, "delivery-hub-admin")
     response = client.post(
-        "/api/v1/workspaces/delivery-hub/bento/items/generate",
+        "/api/v1/bento/items/generate",
         headers=_auth_headers(session["token"]),
         json={"prompt": "repair this output", "slide_count": 3},
     )
@@ -775,11 +800,11 @@ def test_bento_ai_generation_repairs_invalid_model_output_once(
     job = _complete_bento_job(
         client,
         headers=_auth_headers(session["token"]),
-        base="/api/v1/workspaces/delivery-hub/bento",
+        base="/api/v1/bento",
         job_id=response.json()["id"],
     )
     created = client.get(
-        f"/api/v1/workspaces/delivery-hub/bento/items/{job['result_document_id']}",
+        f"/api/v1/bento/items/{job['result_document_id']}",
         headers=_auth_headers(session["token"]),
     ).json()
     assert created["title"] == "Repaired deck"
@@ -825,7 +850,7 @@ def test_bento_ai_edit_preserves_document_identity_and_server_owned_fields(
 
     session = dev_login(client, "delivery-hub-admin")
     headers = _auth_headers(session["token"])
-    base = "/api/v1/workspaces/delivery-hub/bento"
+    base = "/api/v1/bento"
     created_response = client.post(
         f"{base}/items",
         headers=headers,
@@ -854,9 +879,7 @@ def test_bento_ai_edit_preserves_document_identity_and_server_owned_fields(
         base=base,
         job_id=response.json()["id"],
     )
-    revised = client.get(
-        f"{base}/items/{job['result_document_id']}", headers=headers
-    ).json()
+    revised = client.get(f"{base}/items/{job['result_document_id']}", headers=headers).json()
     revised_document = json.loads(revised["document_json"])
     assert revised["id"] == created["id"]
     assert revised["version"] == created["version"] + 1
@@ -902,7 +925,7 @@ def test_bento_ai_edit_rejects_stale_version_before_model_call(
     monkeypatch.setattr(bento_generation, "execute_llm", fail_execute)
     session = dev_login(client, "delivery-hub-admin")
     headers = _auth_headers(session["token"])
-    base = "/api/v1/workspaces/delivery-hub/bento"
+    base = "/api/v1/bento"
     created = client.post(
         f"{base}/items",
         headers=headers,

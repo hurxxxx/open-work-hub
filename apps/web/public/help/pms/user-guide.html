@@ -367,6 +367,7 @@
           <a href="#settings">8. 설정과 권한</a>
           <a href="#personal">9. 개인 업무 화면</a>
           <a href="#checklist">10. 운영 체크리스트</a>
+          <a href="#english" lang="en">English guide</a>
         </nav>
       </aside>
 
@@ -385,7 +386,7 @@
           <div class="section-head">
             <h2>1. 접속과 빠른 시작</h2>
             <p>
-              운영 환경에서는 https://open-work-hub.example에 접속해 가입한 아이디와
+              현재 조직에서 안내한 Open Work Hub 주소에 접속해 가입한 아이디와
               비밀번호로 로그인합니다. 별도 PMS 전용 계정은 필요하지 않습니다.
             </p>
           </div>
@@ -402,30 +403,31 @@
 
             <figure class="card">
               <figcaption class="card-body">
-                <h3>워크스페이스 홈</h3>
+                <h3>앱 런처</h3>
                 <p>
-                  로그인 후 기본 워크스페이스 홈이 열립니다. 앱 바에서 PMS가 보이지
-                  않으면 더 보기 메뉴 또는 워크스페이스 앱 표시 설정을 확인합니다.
+                  로그인 후 회사 앱 런처가 열립니다. PMS가 활성화되어 있고 내 계정이
+                  앱 사용 대상에 포함된 경우 PMS를 열 수 있습니다. 관리자는 전체 직원
+                  또는 특정 사용자와 조직·수동 그룹을 앱 사용 대상으로 설정합니다.
                 </p>
               </figcaption>
             </figure>
 
             <figure class="card">
               <figcaption class="card-body">
-                <h3>워크스페이스 전환</h3>
+                <h3>PMS 스페이스 선택</h3>
                 <p>
-                  워크스페이스 전환 메뉴에서 작업 공간을 선택합니다. PMS 데이터는
-                  워크스페이스별로 분리되므로 화면이 비어 있으면 먼저 현재
-                  워크스페이스를 확인합니다.
+                  PMS를 열면 접근 가능한 첫 스페이스의 개요로 이동합니다.
+                  PMS 메뉴에서 다른 스페이스를 선택할 수 있습니다. 스페이스는 PMS 안의
+                  업무·권한 분리 단위이며 다른 앱의 이용 범위를 바꾸지 않습니다.
                 </p>
               </figcaption>
             </figure>
           </div>
 
           <ol class="step-list">
-            <li><b>1</b><span>https://open-work-hub.example에 접속해 아이디와 비밀번호로 로그인합니다.</span></li>
-            <li><b>2</b><span>업무를 관리할 워크스페이스로 전환합니다.</span></li>
-            <li><b>3</b><span>앱 바에서 PMS를 엽니다.</span></li>
+            <li><b>1</b><span>조직에서 안내한 Open Work Hub 주소에 접속해 아이디와 비밀번호로 로그인합니다.</span></li>
+            <li><b>2</b><span>앱 런처에서 PMS를 엽니다.</span></li>
+            <li><b>3</b><span>PMS 메뉴에서 접근 가능한 업무 스페이스를 고릅니다.</span></li>
             <li><b>4</b><span>스페이스를 선택하고 리스트 또는 Overview(개요) 화면으로 이동합니다.</span></li>
             <li><b>5</b><span>새 태스크를 만들거나 기존 태스크 상세를 열어 상태와 담당자를 관리합니다.</span></li>
           </ol>
@@ -435,7 +437,7 @@
           <div class="section-head">
             <h2>2. PMS 구조</h2>
             <p>
-              PMS는 워크스페이스 &gt; 스페이스 &gt; 폴더 &gt; 리스트 &gt; 태스크 순서로
+              PMS는 스페이스 &gt; 폴더 &gt; 리스트 &gt; 태스크 순서로
               구성됩니다. 폴더는 선택 항목이며, 실제 업무는 리스트 안의 태스크로
               관리합니다.
             </p>
@@ -444,7 +446,7 @@
           <div class="infographic" aria-label="PMS 업무 구조 인포그래픽">
             <svg viewBox="0 0 1180 430" role="img" aria-labelledby="flow-title flow-desc">
               <title id="flow-title">PMS 업무 구조</title>
-              <desc id="flow-desc">워크스페이스에서 스페이스, 리스트, 태스크, 연결 기능으로 이어지는 PMS 운영 흐름</desc>
+              <desc id="flow-desc">스페이스에서 선택적 폴더, 리스트, 태스크, 연결 기능으로 이어지는 PMS 운영 흐름</desc>
               <defs>
                 <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto">
                   <path d="M2,2 L10,6 L2,10 Z" fill="#2563eb" />
@@ -461,16 +463,16 @@
                 <rect x="60" y="145" width="190" height="120" rx="14" fill="#ffffff" stroke="#dbe3ee" />
                 <circle cx="92" cy="184" r="18" fill="#2563eb" />
                 <text x="86" y="191" fill="#fff" font-size="18" font-weight="800">1</text>
-                <text x="118" y="178" fill="#0f172a" font-size="20" font-weight="800">워크스페이스</text>
-                <text x="82" y="220" fill="#64748b" font-size="14">앱과 사용자를 묶는</text>
-                <text x="82" y="241" fill="#64748b" font-size="14">최상위 협업 공간</text>
+                <text x="118" y="178" fill="#0f172a" font-size="20" font-weight="800">스페이스</text>
+                <text x="82" y="220" fill="#64748b" font-size="14">PMS 업무와</text>
+                <text x="82" y="241" fill="#64748b" font-size="14">멤버·그룹 권한 관리</text>
 
                 <rect x="310" y="145" width="190" height="120" rx="14" fill="#ffffff" stroke="#dbe3ee" />
                 <circle cx="342" cy="184" r="18" fill="#0f766e" />
                 <text x="336" y="191" fill="#fff" font-size="18" font-weight="800">2</text>
-                <text x="368" y="178" fill="#0f172a" font-size="20" font-weight="800">스페이스</text>
-                <text x="332" y="220" fill="#64748b" font-size="14">팀, TF, 제품 단위</text>
-                <text x="332" y="241" fill="#64748b" font-size="14">멤버와 권한 관리</text>
+                <text x="368" y="178" fill="#0f172a" font-size="20" font-weight="800">폴더</text>
+                <text x="332" y="220" fill="#64748b" font-size="14">리스트·문서 분류</text>
+                <text x="332" y="241" fill="#64748b" font-size="14">필요할 때만 사용</text>
 
                 <rect x="560" y="145" width="190" height="120" rx="14" fill="#ffffff" stroke="#dbe3ee" />
                 <circle cx="592" cy="184" r="18" fill="#b45309" />
@@ -516,11 +518,6 @@
               </thead>
               <tbody>
                 <tr>
-                  <td>워크스페이스</td>
-                  <td>회사, 부서, TF처럼 앱과 멤버를 묶는 최상위 공간</td>
-                  <td>다른 조직 데이터가 보이지 않으면 워크스페이스 전환부터 확인합니다.</td>
-                </tr>
-                <tr>
                   <td>스페이스</td>
                   <td>팀 단위 업무 공간이며, 멤버, 리스트, Docs(문서), Whiteboard(화이트보드)를 함께 묶습니다.</td>
                   <td>권한 경계가 다르면 스페이스를 분리합니다.</td>
@@ -548,7 +545,7 @@
             <h3>PMS 시작 화면</h3>
             <p>
               PMS를 열면 접근 가능한 첫 번째 스페이스의 Overview(개요)로 이동합니다.
-              워크스페이스 전체 태스크를 한 번에 불러오지 않으며, 상단의 리스트, 보드,
+              상단의 리스트, 보드,
               캘린더, 간트, 테이블 탭에서 현재 스페이스의 활성 리스트를 함께 확인합니다.
               보관된 리스트는 스페이스 업무 화면에서 제외됩니다.
             </p>
@@ -559,8 +556,8 @@
           <div class="section-head">
             <h2>3. 스페이스 운영</h2>
             <p>
-              스페이스 Overview(개요)는 팀 업무의 대시보드입니다. 리스트, 문서,
-              화이트보드, 멤버를 한 화면에서 확인합니다.
+              스페이스 Overview(개요)는 팀 업무의 대시보드입니다. 최근 항목, 리스트,
+              문서, 폴더, 멤버를 한 화면에서 확인합니다.
             </p>
           </div>
 
@@ -579,7 +576,7 @@
               <figcaption class="card-body">
                 <h3>새 리스트 만들기</h3>
                 <p>
-                  리스트 이름은 General Workspace 주간 업무, 신규 기능 개발, 운영 요청처럼
+                  리스트 이름은 운영팀 주간 업무, 신규 기능 개발, 운영 요청처럼
                   업무 범위가 드러나게 입력합니다. 설명은 필요한 경우에만 작성합니다.
                 </p>
               </figcaption>
@@ -597,9 +594,10 @@
           </div>
 
           <div class="callout" style="margin-top: 18px">
-            스페이스 역할은 소유자, 관리자, 멤버, 뷰어로 나뉩니다. 멤버를 초대할
-            때는 기본적으로 멤버 권한으로 추가하고, 운영 책임자는 관리자 또는
-            소유자로 지정합니다.
+            스페이스 역할은 소유자, 관리자, 멤버, 뷰어로 나뉩니다. 소유자는 명시적으로
+            지정한 사용자이며 최소 한 명을 유지해야 합니다. 조직에서 파생된 그룹과
+            관리자가 만든 수동 그룹에는 뷰어·멤버·관리자 역할을 부여할 수 있습니다.
+            그룹 소속이나 부서장 지정만으로 소유자 권한이 생기지 않습니다.
           </div>
         </section>
 
@@ -815,8 +813,11 @@
           <div class="section-head">
             <h2>8. 설정과 권한</h2>
             <p>
-              리스트 설정에서는 멤버, 라벨, 워크플로를 관리합니다. 일부 설정은
-              관리자 이상의 권한이 있어야 변경할 수 있습니다.
+              앱 사용 권한과 스페이스 권한은 별도입니다. PMS를 사용할 수 있어도
+              모든 스페이스에 접근할 수 있는 것은 아닙니다. 사용자 직접 멤버십이나
+              현재 활성인 조직·수동 그룹을 통해 스페이스 역할을 부여합니다.
+              조직 배치나 부서장 지정만으로 PMS 역할이 생기지 않습니다. 플랫폼 관리자는
+              회사 업무를 읽을 수 있지만 변경하려면 해당 스페이스의 역할이 필요합니다.
             </p>
           </div>
 
@@ -867,7 +868,7 @@
               <figcaption class="card-body">
                 <h3>내게 배정됨</h3>
                 <p>
-                  현재 워크스페이스에서 나에게 담당자로 지정된 태스크를 모아 봅니다.
+                  내가 접근할 수 있는 PMS 스페이스에서 나에게 배정된 태스크를 모아 봅니다.
                   담당 업무의 상태와 마감일을 확인하고 우선순위를 정할 때 사용합니다.
                 </p>
               </figcaption>
@@ -925,6 +926,134 @@
           </div>
 
 
+        </section>
+
+        <section id="english" lang="en">
+          <div class="section-head">
+            <h2>English guide</h2>
+            <p>
+              This section summarizes the same core PMS flow for English-language users.
+              Product labels may follow the locale selected in Open Work Hub.
+            </p>
+          </div>
+
+          <div class="grid">
+            <article class="card">
+              <div class="card-body">
+                <h3>1. Open PMS and choose a space</h3>
+                <p>
+                  Sign in at the address provided by your organization and open PMS from the
+                  company app launcher. PMS must be enabled and your account must be admitted
+                  to the app. Administrators can admit all employees or selected users and
+                  organization or manual groups. PMS opens the first accessible space;
+                  use the PMS menu to switch spaces. A PMS space does not set access to other apps.
+                </p>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-body">
+                <h3>2. Understand the hierarchy</h3>
+                <p>
+                  Work is organized as space, optional folder, list, and task.
+                  Separate spaces when membership or permissions differ; use folders only
+                  for organization.
+                </p>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-body">
+                <h3>3. Operate a space</h3>
+                <p>
+                  A space Overview shows recent items, Team Docs, members, folders, and
+                  lists. Create lists and manage space members from this page. Keep at least
+                  one explicit user as owner. Groups may receive viewer, member, or admin
+                  roles; group membership never makes someone an owner.
+                </p>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-body">
+                <h3>4. Create and maintain tasks</h3>
+                <p>
+                  Give each task an actionable title, assignee, dates, priority, and clear
+                  completion criteria. Archive a finished list to make it read-only; restore
+                  it before editing. Permanent deletion is available only after archival.
+                </p>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-body">
+                <h3>5. Use task details</h3>
+                <p>
+                  Manage status, assignees, followers, dates, priority, milestones,
+                  recurrence, descriptions, checklists, subtasks, linked Docs, attachments,
+                  comments, and activity history from the task detail view.
+                </p>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-body">
+                <h3>6. Pick the right view</h3>
+                <p>
+                  Use List for daily execution, Board for status flow, Table for field
+                  comparison, Calendar for due dates, and Gantt for date ranges. These tabs
+                  show active lists in the current space.
+                </p>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-body">
+                <h3>7. Search, filter, and edit in bulk</h3>
+                <p>
+                  Search by title and combine status, assignee, and label filters. Select
+                  multiple tasks only when the same field change should apply to all of
+                  them, and confirm the selection before a destructive action.
+                </p>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-body">
+                <h3>8. Configure permissions and workflow</h3>
+                <p>
+                  App admission and space permissions are separate checks: being allowed to
+                  open PMS does not grant access to every space. Assign direct users or live
+                  organization and manual groups to space roles. Organization placement or a
+                  department-head title alone grants no PMS role. Company administrators may
+                  read company business content, but require a space role to change it. Keep
+                  shared statuses at space level and list-specific labels at list level.
+                </p>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-body">
+                <h3>9. Review personal work</h3>
+                <p>
+                  Assigned to me shows your assigned tasks across the PMS spaces you can access.
+                  Today and overdue highlights due and late work so you can set priorities
+                  at the start of the day.
+                </p>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-body">
+                <h3>10. Team operating checklist</h3>
+                <p>
+                  Agree on space boundaries, owners, list purpose, inherited statuses,
+                  labels, task naming, assignee and due-date expectations, and when long
+                  background material belongs in a linked Doc.
+                </p>
+              </div>
+            </article>
+          </div>
         </section>
       </main>
     </div>

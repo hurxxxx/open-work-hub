@@ -113,7 +113,6 @@ def test_prepare_web_search_execution_uses_external_registered_route(monkeypatch
     prepared = service.prepare_web_search_execution(
         question="등록 경로 검색",
         profile_id="general",
-        workspace_id="workspace-1",
         app_id="web-search",
         actor_user_id="user-1",
         db=object(),
@@ -133,7 +132,6 @@ def test_prepare_web_search_execution_rejects_local_route(monkeypatch) -> None:
     with pytest.raises(service.WebSearchConfigurationError, match="external LLM route"):
         service.prepare_web_search_execution(
             question="로컬 경로 거부",
-            workspace_id="workspace-1",
             app_id="web-search",
             actor_user_id="user-1",
             db=object(),
@@ -153,7 +151,6 @@ def test_prepare_web_search_execution_maps_database_route_error(monkeypatch) -> 
     with pytest.raises(service.WebSearchConfigurationError, match="not configured"):
         service.prepare_web_search_execution(
             question="DB 경로 오류",
-            workspace_id="workspace-1",
             app_id="web-search",
             actor_user_id="user-1",
             db=object(),
@@ -197,7 +194,6 @@ async def test_stream_web_search_answer_streams_text_and_final_citations(
     prepared = service.prepare_web_search_execution(
         question="최신 뉴스 알려줘",
         max_uses=3,
-        workspace_id="workspace-1",
         app_id="web-search",
         actor_user_id="user-1",
         db=None,
@@ -269,7 +265,6 @@ async def test_stream_web_search_answer_blocks_pii_before_client_factory(
     with pytest.raises(service.WebSearchPolicyError) as error:
         service.prepare_web_search_execution(
             question="owner@example.com 최신 소식 알려줘",
-            workspace_id="workspace-1",
             app_id="web-search",
             actor_user_id="user-1",
             db=None,
@@ -346,7 +341,6 @@ async def test_web_search_policy_denial_does_not_persist_sensitive_prompt(
             conversation_scope_ref="web_search",
             db=object(),
             current_user=SimpleNamespace(id="user-1"),
-            current_workspace=SimpleNamespace(id="workspace-1"),
         )
     ]
 
@@ -366,7 +360,6 @@ async def test_web_search_masked_prompt_persists_sanitized_text(
         decision = SimpleNamespace(mask_applied=True)
         request = AiExternalCapabilityRequest(
             source="api.general.web_search",
-            workspace_id="workspace-1",
             actor_user_id="user-1",
             principal_id="user-1",
             task_kind="web_search",
@@ -416,7 +409,6 @@ async def test_web_search_masked_prompt_persists_sanitized_text(
             conversation_scope_ref="web_search",
             db=object(),
             current_user=SimpleNamespace(id="user-1"),
-            current_workspace=SimpleNamespace(id="workspace-1"),
         )
     ]
 
@@ -439,7 +431,6 @@ async def test_prepare_web_search_execution_requires_database_route_credential(
     with pytest.raises(service.WebSearchConfigurationError, match="API key"):
         service.prepare_web_search_execution(
             question="검색",
-            workspace_id="workspace-1",
             app_id="web-search",
             actor_user_id="user-1",
             db=None,

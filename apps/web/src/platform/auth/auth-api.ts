@@ -1,8 +1,7 @@
 import { authRoutes } from '@open-work-hub/contracts/auth';
-import { hasCoreWorkspaceMembership } from '@open-work-hub/core-web/workspace-access';
 
+import type { ShellAppId } from '@/src/app/shell/navigation-types';
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
-import type { WorkspaceShellAppId } from '@/src/app/shell/navigation-types';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { i18n } from '@/src/platform/i18n';
 
@@ -14,25 +13,11 @@ export type DateFormatPreference =
   | 'us'
   | 'european'
   | 'locale';
-export type AppBarAppId = WorkspaceShellAppId;
+export type AppBarAppId = ShellAppId;
 
 export interface AppBarLayoutPreference {
   pinned_app_ids: AppBarAppId[];
 }
-
-export interface WorkspaceRole {
-  workspace_id: string;
-  key: string;
-  name: string;
-  role: string;
-}
-
-export type WorkspaceSummary = ApiSchema<'WorkspaceSummaryResponse'>;
-
-const WORKSPACE_ROLE_RANK: Record<string, number> = {
-  member: 20,
-  admin: 40,
-};
 
 const TEAM_ROLE_RANK: Record<string, number> = {
   viewer: 10,
@@ -44,52 +29,22 @@ const TEAM_ROLE_RANK: Record<string, number> = {
 export type AuthUser = Omit<
   ApiSchema<'AuthUserResponse'>,
   | 'created_at'
-  | 'default_workspace_id'
   | 'last_login_at'
   | 'login_blocked'
   | 'theme_preference'
   | 'locale'
   | 'time_zone'
   | 'date_format'
-  | 'workspaces'
 > & {
-  default_workspace_id?: string | null;
   app_bar_layout?: AppBarLayoutPreference | null;
   login_blocked?: boolean;
   theme_preference: ThemePreference;
   locale: LocalePreference;
   time_zone: string;
   date_format: DateFormatPreference;
-  workspaces: WorkspaceSummary[];
-  workspace_roles?: WorkspaceRole[];
   last_login_at?: string | null;
   created_at?: string;
 };
-
-export function getWorkspaceRoleByKey(
-  user: Pick<AuthUser, 'workspaces' | 'workspace_roles'> | null | undefined,
-  key: string,
-): WorkspaceRole | null {
-  const workspace = user?.workspaces.find((item) => item.slug === key);
-  if (workspace) {
-    return {
-      workspace_id: workspace.id,
-      key: workspace.slug,
-      name: workspace.name,
-      role: workspace.role,
-    };
-  }
-  return user?.workspace_roles?.find((role) => role.key === key) ?? null;
-}
-
-export function workspaceRoleAllows(
-  role: string | null | undefined,
-  minRole: keyof typeof WORKSPACE_ROLE_RANK,
-): boolean {
-  const normalizedRole =
-    role === 'owner' ? 'admin' : role === 'viewer' ? 'member' : role;
-  return roleRankAllows(WORKSPACE_ROLE_RANK, normalizedRole, minRole);
-}
 
 export function teamRoleAllows(
   role: string | null | undefined,
@@ -124,27 +79,6 @@ export function hasAnySystemRole(
   return roles.some((role) => hasSystemRole(user, role));
 }
 
-export function hasWorkspaceMembership(
-  user: Pick<AuthUser, 'workspaces'> | null | undefined,
-  workspaceSlug?: string | null,
-): boolean {
-  return hasCoreWorkspaceMembership(user, workspaceSlug);
-}
-
-export function hasWorkspaceAdminAccess(
-  user: Pick<AuthUser, 'workspaces' | 'system_roles'> | null | undefined,
-  workspaceSlug?: string | null,
-): boolean {
-  if (hasAnySystemRole(user, ['platform_admin'])) {
-    return true;
-  }
-  const role = workspaceSlug
-    ? user?.workspaces?.find((workspace) => workspace.slug === workspaceSlug)
-        ?.role
-    : null;
-  return workspaceRoleAllows(role, 'admin');
-}
-
 export function hasAdminConsoleAccess(
   user: Pick<AuthUser, 'system_roles'> | null | undefined,
 ): boolean {
@@ -173,7 +107,6 @@ export type UpdatePreferencesPayload = Omit<
   'theme_preference' | 'locale' | 'time_zone' | 'date_format'
 > & {
   app_bar_layout?: AppBarLayoutPreference | null;
-  default_workspace_id?: string | null;
   theme_preference?: ThemePreference;
   locale?: LocalePreference;
   time_zone?: string;

@@ -42,6 +42,19 @@ case "$COMMAND" in
     if [[ "$(printf '%s' "${OPEN_WORK_HUB_API_VIDEO_CHAT_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')" != "false" ]]; then
       services+=(livekit)
     fi
+    if [[ "$(dev_lower "${OPEN_WORK_HUB_HERMES_ENABLED:-false}")" == "true" ]]; then
+      if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+        echo "OPENROUTER_API_KEY is required when Hermes is enabled." >&2
+        exit 1
+      fi
+      services+=(
+        hermes-bootstrap
+        hermes-gateway
+        hermes-dashboard
+        hermes-terminal-egress
+        hermes-terminal-broker
+      )
+    fi
     compose up -d "${services[@]}"
     ;;
   down|stop)

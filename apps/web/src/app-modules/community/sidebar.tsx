@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
 import { Hash, Settings } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link, useLocation } from 'react-router-dom';
 
 import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
 import { cn } from '@/src/lib/utils';
@@ -12,8 +12,8 @@ import {
   listCommunityChannels,
   type CommunityChannel,
 } from './api/community-api';
-import { buildCommunityListUrl } from './community-url';
 import { DEFAULT_COMMUNITY_CHANNEL_KEY } from './community-constants';
+import { buildCommunityListUrl } from './community-url';
 
 function CommunitySidebarChannels({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation('apps');
@@ -64,12 +64,12 @@ function CommunitySidebarChannels({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <div className="space-y-5">
       <section className="space-y-1">
-        <div className="sidebar-section-label px-3 py-1 text-app-ink/45">
+        <div className="sidebar-section-label px-3 py-1 text-app-ink/60">
           {t('community.channelsLabel')}
         </div>
 
         {loading && channels.length === 0 ? (
-          <div className="sidebar-submenu-group text-app-ink/45">
+          <div className="sidebar-submenu-group text-app-ink/60">
             {t('community.loading')}
           </div>
         ) : null}
@@ -82,7 +82,7 @@ function CommunitySidebarChannels({ onNavigate }: { onNavigate?: () => void }) {
             )}
             key={channel.key}
             onClick={handleNavigate}
-            to={channelHrefByKey.get(channel.key) ?? '/community'}
+            to={channelHrefByKey.get(channel.key) ?? buildCommunityListUrl()}
           >
             <Hash size={16} className="text-app-ink/55 dark:text-app-ink/65" />
             <span className="sidebar-submenu-label">

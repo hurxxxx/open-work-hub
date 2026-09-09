@@ -1,15 +1,15 @@
-import { useCallback, useMemo, useState, type SetStateAction } from 'react';
 import type { TFunction } from 'i18next';
+import { useCallback, useMemo, useState, type SetStateAction } from 'react';
 
+import {
+  userOptionDisplayName,
+  userOptionMatchesQuery,
+} from '@/src/platform/users/user-option-picker-model';
 import {
   createTaskComment,
   type PmsComment,
   type PmsTaskListMember,
 } from '../api/pms-api';
-import {
-  userOptionMatchesQuery,
-  userOptionDisplayName,
-} from '@/src/platform/users/user-option-picker-model';
 import {
   getTaskDetailMutationErrorMessage,
   notifyTaskDetailUpdated,
@@ -36,10 +36,7 @@ export function getTaskDetailMentionCandidates<
   TMember extends Pick<PmsTaskListMember, 'email' | 'full_name'> & {
     user_id?: string;
   },
->(
-  members: TMember[],
-  mentionQuery: string,
-): TMember[] {
+>(members: TMember[], mentionQuery: string): TMember[] {
   if (!mentionQuery) return members;
   return members.filter((member) =>
     userOptionMatchesQuery(

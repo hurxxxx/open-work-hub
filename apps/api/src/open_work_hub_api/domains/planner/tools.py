@@ -13,7 +13,7 @@ from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.registry import AiCapabilityRegistry
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.planner import service as planner_service
 from open_work_hub_api.domains.planner.approval_preview import (
     build_create_event_preview,
@@ -89,12 +89,10 @@ def _parse_optional_range_arg(arguments: Mapping[str, Any], key: str):
 
 def _list_events(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    del workspace
     result = planner_service.list_events(
         db,
         principal=principal,
@@ -107,7 +105,6 @@ def _list_events(
 
 def _create_event(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -116,7 +113,6 @@ def _create_event(
 ) -> dict[str, Any]:
     return planner_service.create_event_for_ai(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         title=str(arguments["title"]),
@@ -131,7 +127,6 @@ def _create_event(
 
 def _update_event(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -140,7 +135,6 @@ def _update_event(
 ) -> dict[str, Any]:
     return planner_service.update_event_for_ai(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         event_id=str(arguments["event_id"]),
@@ -155,7 +149,6 @@ def _update_event(
 
 def _delete_event(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -164,7 +157,6 @@ def _delete_event(
 ) -> dict[str, Any]:
     return planner_service.delete_event_for_ai(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         event_id=str(arguments["event_id"]),

@@ -5,10 +5,12 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.dm import (
-    attachment_links,
-    participants as participant_rules,
+    attachment_policy,
     read_state,
     thread_projection,
+)
+from open_work_hub_api.domains.dm import (
+    participants as participant_rules,
 )
 from open_work_hub_api.domains.dm.models import (
     DmConversation,
@@ -17,9 +19,9 @@ from open_work_hub_api.domains.dm.models import (
     DmMessageAttachment,
 )
 from open_work_hub_api.domains.dm.schemas import (
-    DmMessageAttachmentItem,
     DmConversationItem,
     DmConversationParticipantItem,
+    DmMessageAttachmentItem,
     DmMessageItem,
     DmUserItem,
 )
@@ -121,9 +123,7 @@ def _visible_reply_to(
 
 
 def serialize_attachment(attachment: DmMessageAttachment) -> DmMessageAttachmentItem:
-    preview_url = attachment_links.build_dm_attachment_preview_url(attachment)
     return thread_projection.build_attachment_item(
         attachment,
-        download_url=attachment_links.build_dm_attachment_download_url(attachment),
-        preview_url=preview_url,
+        is_image=attachment_policy.is_previewable_image_content_type(attachment.content_type),
     )

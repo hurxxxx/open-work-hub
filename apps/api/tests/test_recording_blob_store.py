@@ -38,7 +38,9 @@ class _FakeMinioClient:
     def put_object(self, bucket: str, key: str, data, length: int, content_type: str) -> None:
         self.put_calls.append((bucket, key, data.read(), length, content_type))
 
-    def fput_object(self, bucket: str, key: str, path: str, content_type: str | None = None) -> None:
+    def fput_object(
+        self, bucket: str, key: str, path: str, content_type: str | None = None
+    ) -> None:
         self.fput_calls.append((bucket, key, path, content_type))
 
     def get_object(self, bucket: str, key: str) -> _FakeMinioObject:
@@ -48,17 +50,13 @@ class _FakeMinioClient:
 
 def test_build_recording_storage_key_preserves_current_layout() -> None:
     key = build_recording_storage_key(
-        workspace_id="workspace-1",
         user_id="user-1",
         recording_id="recording-1",
         started_at=datetime(2026, 5, 30, 9, 8, 7),
         file_extension=".webm",
     )
 
-    assert key == (
-        "recordings/workspace-1/user-1/2026/05/30/"
-        "20260530T090807Z-recording-1.webm"
-    )
+    assert key == ("recordings/user-1/2026/05/30/20260530T090807Z-recording-1.webm")
 
 
 def test_artifact_store_put_bytes_uses_configured_bucket_and_metadata() -> None:
@@ -66,13 +64,13 @@ def test_artifact_store_put_bytes_uses_configured_bucket_and_metadata() -> None:
     store = RecordingArtifactStore(bucket_name="recordings", client=client)
 
     store.put_bytes(
-        storage_key="recordings/workspace-1/file.webm",
+        storage_key="recordings/user-1/file.webm",
         data=b"audio",
         content_type="audio/webm",
     )
 
     assert client.put_calls == [
-        ("recordings", "recordings/workspace-1/file.webm", b"audio", 5, "audio/webm")
+        ("recordings", "recordings/user-1/file.webm", b"audio", 5, "audio/webm")
     ]
 
 
@@ -83,25 +81,25 @@ def test_artifact_store_put_file_uses_configured_bucket(tmp_path: Path) -> None:
     source.write_bytes(b"audio")
 
     store.put_file(
-        storage_key="recordings/workspace-1/file.webm",
+        storage_key="recordings/user-1/file.webm",
         path=source,
         content_type="audio/webm",
     )
 
     assert client.fput_calls == [
-        ("recordings", "recordings/workspace-1/file.webm", str(source), "audio/webm")
+        ("recordings", "recordings/user-1/file.webm", str(source), "audio/webm")
     ]
 
 
 def test_artifact_store_stream_closes_and_releases_response() -> None:
     client = _FakeMinioClient()
     obj = _FakeMinioObject(b"abcdef")
-    client.objects["recordings/workspace-1/file.webm"] = obj
+    client.objects["recordings/user-1/file.webm"] = obj
     store = RecordingArtifactStore(bucket_name="recordings", client=client)
 
     chunks = list(
         store.open_stream(
-            storage_key="recordings/workspace-1/file.webm",
+            storage_key="recordings/user-1/file.webm",
             chunk_size=2,
         )
     )

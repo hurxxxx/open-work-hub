@@ -1,26 +1,13 @@
 import { routePathMatchesPathname } from '@/src/app-shell-navigation-model';
-import type { AuthUser } from '@/src/platform/auth/auth-api';
 import {
-  getWorkspaceAppIdFromPath,
-  getWorkspaceSlugFromPath,
-  resolveBootstrapWorkspaceSlug,
-  resolveShellWorkspaceSlug,
-  type WorkspaceAppId,
-} from '@/src/platform/workspaces/workspace-utils';
+  getAppIdFromPath,
+  type ShellAppId,
+} from '@/src/platform/apps/app-links';
+import type { AuthUser } from '@/src/platform/auth/auth-api';
 import type {
   ShellRouteChrome,
   ShellRouteSubSidebar,
 } from './navigation-types';
-
-export type ShellWorkspaceSelectionState = {
-  key: string;
-  slug: string | null;
-};
-
-export interface ShellRouteStorageSelection {
-  appId: WorkspaceAppId;
-  workspaceSlug: string;
-}
 
 export type ShellActiveState = {
   activeAppId: string;
@@ -30,12 +17,11 @@ export type ShellActiveState = {
 export type ShellStateResolver = (
   path: string,
   user: AuthUser | null | undefined,
-  enabledWorkspaceAppIds?: readonly string[],
+  enabledShellAppIds?: readonly string[],
 ) => ShellActiveState;
 
 type ShellChromeRouteDefinition = {
   appId?: string;
-  bootstrapAppId?: string;
   chrome?: ShellRouteChrome;
   path: string;
   subSidebar?: ShellRouteSubSidebar;
@@ -44,24 +30,20 @@ type ShellChromeRouteDefinition = {
 export interface ShellChromeState {
   activeAppId: string;
   activeNavItemId: string;
-  bootstrapWorkspaceSlug: string | null;
   canOpenMobileAppMenu: boolean;
   mainClassName: string;
-  routeStorageSelection: ShellRouteStorageSelection | null;
-  routeWorkspaceAppId: WorkspaceAppId | null;
-  routeWorkspaceSlug: string | null;
+  routeShellAppId: ShellAppId | null;
   showSubSidebar: boolean;
 }
 
 export interface ResolveShellChromeStateInput {
   appGlobalRoutes?: readonly ShellChromeRouteDefinition[];
-  enabledWorkspaceAppIds?: readonly string[] | null;
+  enabledShellAppIds?: readonly string[] | null;
   pathname: string;
   resolveShellStateForPath?: ShellStateResolver;
   search: string;
-  shellWorkspaceSlug: string | null;
   user: AuthUser | null;
-  workspaceRoutes?: readonly ShellChromeRouteDefinition[];
+  appRoutes?: readonly ShellChromeRouteDefinition[];
 }
 
 const SHELL_MAIN_HIDDEN_CHROME_CLASS_NAME = 'flex-1 overflow-hidden relative';
@@ -75,7 +57,6 @@ const SHELL_OWNED_ROUTE_OPTIONS: Array<{
   { path: '/', subSidebar: 'hidden' },
   { path: '/help', subSidebar: 'hidden' },
   { path: '/help/pms', subSidebar: 'hidden' },
-  { path: '/tool/search', subSidebar: 'hidden' },
 ];
 
 const DEFAULT_SHELL_ACTIVE_STATE: ShellActiveState = {
@@ -86,43 +67,18 @@ const DEFAULT_SHELL_ACTIVE_STATE: ShellActiveState = {
 const resolveDefaultShellStateForPath: ShellStateResolver = () =>
   DEFAULT_SHELL_ACTIVE_STATE;
 
-export function buildShellWorkspaceSelectionKey(
-  user: AuthUser | null,
-  routeWorkspaceSlug: string | null,
-): string {
-  if (!user) {
-    return `anonymous:${routeWorkspaceSlug ?? ''}`;
-  }
-  return [
-    user.id,
-    user.default_workspace_id ?? '',
-    routeWorkspaceSlug ?? '',
-    ...user.workspaces.map((workspace) => `${workspace.id}:${workspace.slug}`),
-  ].join('\u0000');
-}
-
-export function resolveInitialShellWorkspaceSlug(
-  user: AuthUser | null,
-  routeWorkspaceSlug: string | null,
-): string | null {
-  if (!user || user.workspaces.length === 0) {
-    return null;
-  }
-  return resolveShellWorkspaceSlug(user, routeWorkspaceSlug);
-}
-
 function findShellRoute({
   appGlobalRoutes = [],
   pathname,
-  workspaceRoutes = [],
+  appRoutes = [],
 }: {
   appGlobalRoutes?: readonly ShellChromeRouteDefinition[];
   pathname: string;
-  workspaceRoutes?: readonly ShellChromeRouteDefinition[];
+  appRoutes?: readonly ShellChromeRouteDefinition[];
 }) {
   const matchedRoute = [
     ...SHELL_OWNED_ROUTE_OPTIONS,
-    ...workspaceRoutes,
+    ...appRoutes,
     ...appGlobalRoutes,
   ].find((route) => routePathMatchesPathname(route.path, pathname));
   return matchedRoute ?? null;
@@ -131,127 +87,80 @@ function findShellRoute({
 function routeOwnsShellMainScroll({
   appGlobalRoutes,
   pathname,
-  workspaceRoutes,
+  appRoutes,
 }: {
   appGlobalRoutes?: readonly ShellChromeRouteDefinition[];
   pathname: string;
-  workspaceRoutes?: readonly ShellChromeRouteDefinition[];
+  appRoutes?: readonly ShellChromeRouteDefinition[];
 }): boolean {
-  const chrome = findShellRoute({ appGlobalRoutes, pathname, workspaceRoutes })
-    ?.chrome;
-  return chrome === 'fullSurface' || chrome === 'containedSurface';
+  const chrome = findShellRoute({
+    appGlobalRoutes,
+    pathname,
+    appRoutes,
+  })?.chrome;
+  return (
+    chrome === 'fullSurface' ||
+    chrome === 'containedSurface' ||
+    chrome === 'shared'
+  );
 }
 
 function shouldShowSubSidebar({
   appGlobalRoutes,
   pathname,
-  workspaceRoutes,
+  appRoutes,
 }: {
   appGlobalRoutes?: readonly ShellChromeRouteDefinition[];
   pathname: string;
-  workspaceRoutes?: readonly ShellChromeRouteDefinition[];
+  appRoutes?: readonly ShellChromeRouteDefinition[];
 }): boolean {
   const matchedRoute = findShellRoute({
     appGlobalRoutes,
     pathname,
-    workspaceRoutes,
+    appRoutes,
   });
   return (
     matchedRoute?.chrome !== 'fullSurface' &&
+    matchedRoute?.chrome !== 'shared' &&
     matchedRoute?.subSidebar !== 'hidden'
   );
 }
 
-function resolveRouteStorageSelection({
-  enabledWorkspaceAppIds,
-  matchedWorkspaceRoute,
-  routeWorkspaceAppId,
-  routeWorkspaceSlug,
-  user,
-}: Pick<ShellChromeState, 'routeWorkspaceAppId' | 'routeWorkspaceSlug'> & {
-  enabledWorkspaceAppIds?: readonly string[] | null;
-  matchedWorkspaceRoute: ShellChromeRouteDefinition | null;
-  user: AuthUser | null;
-}): ShellRouteStorageSelection | null {
-  const storageAppId = matchedWorkspaceRoute?.bootstrapAppId ?? routeWorkspaceAppId;
-  if (!matchedWorkspaceRoute || !routeWorkspaceSlug || !storageAppId) {
-    return null;
-  }
-  if (
-    !user?.workspaces.some((workspace) => workspace.slug === routeWorkspaceSlug)
-  ) {
-    return null;
-  }
-  if (
-    enabledWorkspaceAppIds !== null &&
-    enabledWorkspaceAppIds !== undefined &&
-    !enabledWorkspaceAppIds.includes(storageAppId)
-  ) {
-    return null;
-  }
-  return {
-    appId: storageAppId,
-    workspaceSlug: routeWorkspaceSlug,
-  };
-}
-
 export function resolveShellChromeState({
   appGlobalRoutes,
-  enabledWorkspaceAppIds,
+  enabledShellAppIds,
   pathname,
   resolveShellStateForPath = resolveDefaultShellStateForPath,
   search,
-  shellWorkspaceSlug,
   user,
-  workspaceRoutes,
+  appRoutes,
 }: ResolveShellChromeStateInput): ShellChromeState {
-  const routeWorkspaceSlug = getWorkspaceSlugFromPath(pathname);
-  const routeWorkspaceAppId = getWorkspaceAppIdFromPath(pathname);
-  const bootstrapWorkspaceSlug = resolveBootstrapWorkspaceSlug(
-    user,
-    pathname,
-    search,
-    shellWorkspaceSlug,
-  );
+  const routeShellAppId = getAppIdFromPath(pathname);
   const shellState = resolveShellStateForPath(
     `${pathname}${search}`,
     user,
-    enabledWorkspaceAppIds ?? undefined,
+    enabledShellAppIds ?? undefined,
   );
-  const showSubSidebar = shouldShowSubSidebar({
-    appGlobalRoutes,
-    pathname,
-    workspaceRoutes,
-  });
+  const showSubSidebar =
+    shellState.activeAppId !== 'launcher' &&
+    shouldShowSubSidebar({
+      appGlobalRoutes,
+      pathname,
+      appRoutes,
+    });
   const ownsShellMainScroll = routeOwnsShellMainScroll({
     appGlobalRoutes,
     pathname,
-    workspaceRoutes,
+    appRoutes,
   });
-  const matchedWorkspaceRoute =
-    workspaceRoutes?.find((route) =>
-      routePathMatchesPathname(route.path, pathname),
-    ) ?? null;
-
   return {
     ...shellState,
-    bootstrapWorkspaceSlug,
     canOpenMobileAppMenu:
-      showSubSidebar &&
-      shellState.activeAppId !== 'home' &&
-      shellState.activeAppId !== 'profile',
+      showSubSidebar && shellState.activeAppId !== 'profile',
     mainClassName: ownsShellMainScroll
       ? SHELL_MAIN_HIDDEN_CHROME_CLASS_NAME
       : SHELL_MAIN_SCROLLING_CLASS_NAME,
-    routeStorageSelection: resolveRouteStorageSelection({
-      enabledWorkspaceAppIds,
-      matchedWorkspaceRoute,
-      routeWorkspaceAppId,
-      routeWorkspaceSlug,
-      user,
-    }),
-    routeWorkspaceAppId,
-    routeWorkspaceSlug,
+    routeShellAppId,
     showSubSidebar,
   };
 }

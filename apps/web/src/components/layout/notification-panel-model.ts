@@ -1,13 +1,13 @@
-import type { WorkspaceNotification } from '@/src/platform/notifications/notifications-api';
+import type { NotificationItem } from '@/src/platform/notifications/notifications-api';
 
 export type NotificationPanelState = {
   loading: boolean;
-  notifications: WorkspaceNotification[];
+  notifications: NotificationItem[];
 };
 
 export type NotificationPanelAction =
   | { type: 'loading' }
-  | { type: 'loaded'; notifications: WorkspaceNotification[] }
+  | { type: 'loaded'; notifications: NotificationItem[] }
   | { type: 'mark-read'; notificationId: string }
   | { type: 'mark-all-read' }
   | { type: 'signed-out' };
@@ -30,7 +30,7 @@ export function notificationPanelReducer(
   switch (action.type) {
     case 'loading':
       return {
-        ...state,
+        notifications: [],
         loading: true,
       };
     case 'loaded':
@@ -62,13 +62,13 @@ export function notificationPanelReducer(
 }
 
 export function countUnreadNotifications(
-  notifications: readonly WorkspaceNotification[],
+  notifications: readonly NotificationItem[],
 ): number {
   return notifications.filter((notification) => !notification.is_read).length;
 }
 
 export function resolveNotificationAction(
-  notification: WorkspaceNotification,
+  notification: NotificationItem,
 ): NotificationAction {
   const dmThreadId = resolveDmNotificationThreadId(notification.action_url);
   if (dmThreadId !== undefined) {
@@ -77,8 +77,8 @@ export function resolveNotificationAction(
   if (notification.action_url?.startsWith('/')) {
     return { kind: 'route', to: notification.action_url };
   }
-  if (notification.reference_id) {
-    return { kind: 'issue', taskId: notification.reference_id };
+  if (notification.source_type === 'pms_task' && notification.source_id) {
+    return { kind: 'issue', taskId: notification.source_id };
   }
   return { kind: 'none' };
 }
@@ -98,9 +98,6 @@ export function resolveDmNotificationThreadId(
   );
   if (globalMatch?.[1]) {
     return decodeURIComponent(globalMatch[1]);
-  }
-  if (/^\/w\/[^/]+\/dm\/?$/.test(parsed.pathname)) {
-    return parsed.searchParams.get('thread');
   }
   return undefined;
 }

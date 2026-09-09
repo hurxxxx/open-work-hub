@@ -1,10 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-
+import { APP_CONTRACTS } from '@open-work-hub/contracts/app-contracts';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import {
   FAKE_PLATFORM_ADMIN_USER,
   stubConversationsApi,
   stubShellBackend,
-  stubWorkspaceAppDataBackend,
+  stubAppDataBackend,
 } from './helpers';
 
 function collectBrowserErrors(page: Page) {
@@ -37,13 +38,50 @@ function collectBrowserErrors(page: Page) {
 }
 
 async function stubFullShell(page: Page) {
-  await stubWorkspaceAppDataBackend(page);
+  await stubAppDataBackend(page);
   await stubShellBackend(page);
   await stubConversationsApi(page);
 }
 
 test.describe('AI-friendly app boundary smoke', () => {
-  test('renders workspace apps and tool wrappers through the shell registry', async ({
+  test('opens admitted apps directly from the company launcher', async ({
+    page,
+  }) => {
+    await stubFullShell(page);
+    const errors = collectBrowserErrors(page);
+
+    await page.goto('/');
+    await expect(
+      page.getByRole('heading', { level: 1, name: /앱 런처|App launcher/ }),
+    ).toBeVisible();
+    await page.locator('a[href="/apps/docs"]').click();
+    await expect(page).toHaveURL(/\/apps\/docs$/);
+    await expect(page.getByText(/^(실행 범위|Execution scope)$/)).toHaveCount(
+      0,
+    );
+    await page.goto('/apps/planner');
+    await expect(page).toHaveURL(/\/apps\/planner$/);
+    await expect(
+      page.getByRole('heading', { level: 1, name: /Planner|플래너/ }),
+    ).toBeVisible();
+    errors.expectClean();
+  });
+
+  test('does not fetch app data when admission is denied', async ({ page }) => {
+    const deniedRequests: string[] = [];
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.startsWith('/api/v1/meeting/'))
+        deniedRequests.push(request.url());
+    });
+    await stubShellBackend(page, { enabledAppIds: ['home'] });
+    await page.goto('/apps/meeting');
+    await expect(
+      page.getByRole('heading', { name: /접근 권한 없음|No access/ }),
+    ).toBeVisible();
+    expect(deniedRequests).toEqual([]);
+  });
+
+  test('renders company apps and tool wrappers through the shell registry', async ({
     page,
   }) => {
     await stubFullShell(page);
@@ -54,13 +92,13 @@ test.describe('AI-friendly app boundary smoke', () => {
       assert: (page: Page) => Promise<void>;
     }> = [
       {
-        path: '/w/hq/home',
+        path: '/apps/home',
         assert: async (current) => {
           await expect(current.getByText(/Good/)).toBeVisible();
         },
       },
       {
-        path: '/w/hq/chatbot',
+        path: '/apps/chatbot',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', {
@@ -70,7 +108,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/w/hq/pms',
+        path: '/apps/pms',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { name: 'PMS', exact: true }).or(
@@ -92,7 +130,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/w/hq/docs',
+        path: '/apps/docs',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', {
@@ -106,7 +144,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/planner',
+        path: '/apps/planner',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { level: 1, name: /Planner|플래너/ }),
@@ -117,7 +155,7 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/w/hq/meeting',
+        path: '/apps/meeting',
         assert: async (current) => {
           await expect(
             current.getByRole('heading', { level: 1, name: /Meetings|회의/ }),
@@ -130,24 +168,13 @@ test.describe('AI-friendly app boundary smoke', () => {
         },
       },
       {
-        path: '/w/hq/settings',
+        path: '/apps/retrieval-search',
         assert: async (current) => {
-          await expect(
-            current.getByText(/Workspace Settings|워크스페이스 설정/),
-          ).toBeVisible();
           await expect(
             current.getByRole('heading', {
               level: 1,
-              name: 'Open Work Hub HQ',
+              name: /Retrieval 진단 검색|Retrieval diagnostics search/,
             }),
-          ).toBeVisible();
-        },
-      },
-      {
-        path: '/tool/search?workspace=hq',
-        assert: async (current) => {
-          await expect(
-            current.getByRole('heading', { name: 'Open Work Hub 통합검색' }),
           ).toBeVisible();
         },
       },
@@ -164,23 +191,116 @@ test.describe('AI-friendly app boundary smoke', () => {
     errors.expectClean();
   });
 
-  test('keeps disabled workspace apps blocked by WorkspaceGate', async ({
+  test('mounts every executable app entry without falling through to NotFoundView', async ({
+    context,
+  }) => {
+    test.setTimeout(120_000);
+    for (const app of APP_CONTRACTS) {
+      await test.step(app.app_id, async () => {
+        const appPage = await context.newPage();
+        try {
+          await stubAppDataBackend(appPage);
+          await stubShellBackend(appPage, {
+            enabledAppIds: APP_CONTRACTS.map((contract) => contract.app_id),
+          });
+          await stubConversationsApi(appPage);
+
+          const href = buildAppHref({
+            routeId: app.entry_route_id,
+          });
+          await appPage.goto(href, { waitUntil: 'domcontentloaded' });
+          await expect(appPage).toHaveURL(
+            new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
+          );
+          await expect(
+            appPage.getByRole('navigation', {
+              name: /주요 앱 탐색|Primary app navigation/,
+            }),
+          ).toBeVisible();
+          await expect(
+            appPage.getByRole('heading', {
+              name: /페이지를 찾을 수 없습니다|Page not found/,
+            }),
+            app.app_id,
+          ).toHaveCount(0);
+        } finally {
+          await appPage.close();
+        }
+      });
+    }
+  });
+
+  test('opens a newly created Bento presentation on its canonical detail route', async ({
     page,
   }) => {
-    await stubWorkspaceAppDataBackend(page);
+    await stubFullShell(page);
+    const document = {
+      id: 'presentation-1',
+      title: 'Untitled Presentation',
+      visibility: 'personal',
+      version: 1,
+      created_by_id: 'user-e2e',
+      created_by_name: 'E2E Tester',
+      created_at: '2026-08-31T00:00:00Z',
+      updated_at: '2026-08-31T00:00:00Z',
+      archived_at: null,
+      can_edit: true,
+      can_manage: true,
+      document_json: '{}',
+    };
+    await page.route('**/api/v1/bento/**', (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      if (pathname.endsWith('/bento/hub')) {
+        return route.fulfill({
+          json: { items: [], view: 'all', page: 1, page_size: 200, total: 0 },
+        });
+      }
+      if (pathname.endsWith('/bento/ai-jobs')) {
+        return route.fulfill({ json: [] });
+      }
+      if (pathname.endsWith('/bento/items') && request.method() === 'POST') {
+        return route.fulfill({ json: document });
+      }
+      if (pathname.endsWith('/bento/items/presentation-1')) {
+        return route.fulfill({ json: document });
+      }
+      return route.fulfill({ status: 404, json: { detail: 'not stubbed' } });
+    });
+
+    await page.goto('/apps/bento');
+    await page
+      .getByRole('button', { name: /새 프레젠테이션|New presentation/ })
+      .first()
+      .click();
+
+    await expect(page).toHaveURL(
+      /\/apps\/bento\/presentations\/presentation-1$/,
+    );
+    await expect(
+      page.getByRole('heading', {
+        name: /페이지를 찾을 수 없습니다|Page not found/,
+      }),
+    ).toHaveCount(0);
+  });
+
+  test('keeps denied apps blocked before their data loads', async ({
+    page,
+  }) => {
+    await stubAppDataBackend(page);
     await stubShellBackend(page, {
       enabledAppIds: ['home', 'chatbot', 'docs', 'planner', 'pms'],
     });
     await stubConversationsApi(page);
     const errors = collectBrowserErrors(page);
 
-    await page.goto('/w/hq/meeting');
+    await page.goto('/apps/meeting');
 
     await expect(
       page.getByRole('heading', { name: '접근 권한 없음' }),
     ).toBeVisible();
     await expect(
-      page.getByText('현재 workspace에서는 이 앱이 활성화되어 있지 않습니다.'),
+      page.getByText('현재 계정은 이 앱을 사용할 수 없습니다.'),
     ).toBeVisible();
     await expect(page.getByRole('link', { name: 'MEETING' })).toHaveCount(0);
     errors.expectClean();
@@ -204,7 +324,7 @@ test.describe('AI-friendly app boundary smoke', () => {
   test('renders admin sections for platform admin through settings boundaries', async ({
     page,
   }) => {
-    await stubWorkspaceAppDataBackend(page);
+    await stubAppDataBackend(page);
     await stubShellBackend(page, { user: FAKE_PLATFORM_ADMIN_USER });
     const errors = collectBrowserErrors(page);
 
@@ -213,12 +333,14 @@ test.describe('AI-friendly app boundary smoke', () => {
       page.locator('main').getByRole('heading', { level: 1 }),
     ).toBeVisible();
 
-    await page.goto('/admin/workspaces');
+    await page.goto('/admin/groups');
     await expect(
       page.locator('main').getByRole('heading', { level: 1 }),
     ).toBeVisible();
     await expect(
-      page.getByRole('button', { name: /Open Work Hub HQ/ }),
+      page.getByRole('button', {
+        name: /수동 그룹 생성|Create manual group/,
+      }),
     ).toBeVisible();
 
     errors.expectClean();

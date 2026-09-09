@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
 import { Users } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   UserOptionAvatar,

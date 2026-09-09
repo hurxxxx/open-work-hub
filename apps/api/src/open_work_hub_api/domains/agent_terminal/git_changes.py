@@ -23,7 +23,6 @@ from open_work_hub_api.domains.agent_terminal.schemas import (
     AgentTerminalGitSummaryResponse,
 )
 
-
 _GIT_TIMEOUT_SECONDS = 5
 _MAX_STATUS_BYTES = 1_000_000
 _MAX_CONTENT_BYTES = 1_000_000

@@ -1,38 +1,30 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
-    WorkspaceNavRegistration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-WHITEBOARD_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="whiteboard",
-    title="WHITEBOARD",
-    route_base="/whiteboard",
-    icon_key="pencil-ruler",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
-    launcher_pinned_by_default=True,
+WHITEBOARD_APP = app_registration(
+    "whiteboard",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="whiteboard-all",
             title="All Whiteboards",
             category="Library",
             icon_key="pencil-ruler",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="whiteboard-my",
             title="My Whiteboards",
             category="Library",
             icon_key="user",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="whiteboard-recent",
             title="Recent",
             category="Library",
             icon_key="history",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="whiteboard-archived",
             title="Archived",
             category="Library",

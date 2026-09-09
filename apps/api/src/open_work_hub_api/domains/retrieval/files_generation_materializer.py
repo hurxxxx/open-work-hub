@@ -41,7 +41,6 @@ from open_work_hub_api.domains.source_access.resource_types import (
     FILE_MANAGER_FILE_RESOURCE_TYPE,
 )
 
-
 KeywordClientFactory = Callable[[str], PartitionedKeywordGenerationClient]
 RagServiceFactory = Callable[[str], RagService]
 
@@ -206,7 +205,10 @@ class FilesCachedProjectionMaterializer:
             document = load_file_search_document(db, event.resource_id)
             if document is None:
                 raise RuntimeError("Cached Files keyword projection is unavailable")
-            projection = build_file_rag_projection(file=file, artifact=artifact).model_copy(
+            projection = build_file_rag_projection(
+                file=file,
+                artifact=artifact,
+            ).model_copy(
                 update={
                     "retrieval_partition_id": str(event.retrieval_partition_id),
                     "projection_version": int(event.projection_version),
@@ -269,11 +271,7 @@ class FilesCachedProjectionMaterializer:
         if partition is None or partition.source_namespace != "files":
             raise RuntimeError("Files materialization partition is unavailable")
         scope_kind = RagScopeKind(partition.candidate_scope_kind)
-        workspace_id = (
-            str(partition.candidate_workspace_id) if scope_kind is RagScopeKind.WORKSPACE else None
-        )
         rag_service.delete_projection(
-            workspace_id=workspace_id,
             scope_kind=scope_kind,
             resource_type=FILE_MANAGER_FILE_RESOURCE_TYPE,
             resource_id=event.resource_id,

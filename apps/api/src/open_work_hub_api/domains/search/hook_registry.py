@@ -4,9 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from open_work_hub_api.core.workspace_app_registry import WorkspaceAppRegistration
+from open_work_hub_api.core.app_registry import AppRegistration
 from open_work_hub_api.domains.search.entity_registry import normalize_search_entity_type
-
 
 SearchIndexHook = Callable[..., Any]
 SearchIndexOperation = Literal["create", "update", "delete"]
@@ -16,7 +15,7 @@ SEARCH_INDEX_OPERATIONS: frozenset[str] = frozenset({"create", "update", "delete
 @dataclass(frozen=True)
 class SearchIndexHookRegistration:
     name: str
-    owner_app: WorkspaceAppRegistration
+    owner_app: AppRegistration
     entity_type: str
     operations: frozenset[SearchIndexOperation]
     hook: SearchIndexHook
@@ -29,7 +28,7 @@ def register_search_index_hook(
     name: str,
     hook: SearchIndexHook,
     *,
-    owner_app: WorkspaceAppRegistration,
+    owner_app: AppRegistration,
     entity_type: str,
     operations: tuple[SearchIndexOperation, ...],
 ) -> None:
@@ -42,7 +41,7 @@ def register_search_index_hook(
         raise ValueError(f"Search index hook already registered: {normalized_name}")
     if not callable(hook):
         raise ValueError(f"Search index hook must be callable: {normalized_name}")
-    if not isinstance(owner_app, WorkspaceAppRegistration):
+    if not isinstance(owner_app, AppRegistration):
         raise ValueError(
             f"Search index hook must declare owner_app registration: {normalized_name}"
         )

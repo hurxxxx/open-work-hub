@@ -3,15 +3,13 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.pms.models import TaskUserAccess
 from open_work_hub_api.domains.pms.search_projection import (
     load_pms_task_search_document,
-    load_workspace_pms_task_search_documents,
+    load_pms_task_search_documents,
 )
 from open_work_hub_api.domains.rag.pms_projection import load_task_projection
 from test_pms_issues import (
@@ -21,12 +19,11 @@ from test_pms_issues import (
     _create_issue,
     _create_task_list,
     _create_user,
-    _grant_workspace_access,
     _login,
 )
 
 
-BASE_PATH = "/api/v1/workspaces/administrator/pms"
+BASE_PATH = "/api/v1/pms"
 
 
 def _update_list(
@@ -34,11 +31,9 @@ def _update_list(
     token: str,
     list_id: str,
     payload: dict[str, object],
-    *,
-    workspace_slug: str = "administrator",
 ):
     return client.patch(
-        f"/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}",
+        f"/api/v1/pms/lists/{list_id}",
         headers=_auth_headers(token),
         json=payload,
     )
@@ -75,7 +70,7 @@ def test_list_archive_restore_filters_preserve_state_and_gate_writes(
         due_date="2026-07-17",
     )
     linked_doc_response = client.post(
-        "/api/v1/workspaces/administrator/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(token),
         json={"title": "Preserved archived task doc"},
     )
@@ -156,23 +151,23 @@ def test_list_archive_restore_filters_preserve_state_and_gate_writes(
         assert response.json()["code"] == "pms.task_list_archived_read_only"
 
     new_doc_response = client.post(
-        "/api/v1/workspaces/administrator/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(token),
         json={"title": "Blocked archived task doc"},
     )
     assert new_doc_response.status_code == 201, new_doc_response.text
     docs_side_link_response = client.post(
-        f"/api/v1/workspaces/administrator/docs/items/{new_doc_response.json()['id']}/pms-tasks",
+        f"/api/v1/docs/items/{new_doc_response.json()['id']}/pms-tasks",
         headers=_auth_headers(token),
         json={"task_id": task["id"]},
     )
     docs_side_unlink_response = client.delete(
-        f"/api/v1/workspaces/administrator/docs/items/{linked_doc['id']}/pms-tasks/{task['id']}",
+        f"/api/v1/docs/items/{linked_doc['id']}/pms-tasks/{task['id']}",
         headers=_auth_headers(token),
     )
     for response in (docs_side_link_response, docs_side_unlink_response):
-        assert response.status_code == 409, response.text
-        assert response.json()["code"] == "pms.task_list_archived_read_only"
+        assert response.status_code == 403, response.text
+        assert response.json()["code"] == "pms.task_access_required"
 
     owner_write_responses = (
         _update_list(
@@ -252,7 +247,9 @@ def test_list_archive_restore_filters_preserve_state_and_gate_writes(
     assert archived_delete_response.status_code == 204, archived_delete_response.text
 
 
-def test_list_archive_permissions_and_workspace_isolation(client: TestClient) -> None:
+def test_list_archive_roles_and_direct_grants_are_scoped_to_each_resource(
+    client: TestClient,
+) -> None:
     owner = _bootstrap_admin_session(client)
     task_list = _create_task_list(client, owner["token"], key="AROLE", name="Archive roles")
     role_sessions: dict[str, str] = {}
@@ -301,38 +298,30 @@ def test_list_archive_permissions_and_workspace_isolation(client: TestClient) ->
         {"archived": False},
     )
     assert owner_restore_response.status_code == 200, owner_restore_response.text
-    same_workspace_task = _create_issue(
+    granted_task = _create_issue(
         client,
         owner["token"],
         task_list["id"],
-        title="Same-workspace grant link",
+        title="Explicit resource grant link",
     )
 
-    other_workspace_list = _create_task_list(
+    private_space_list = _create_task_list(
         client,
         owner["token"],
         key="ARISO",
-        name="Archive isolated workspace",
-        workspace_slug="general",
+        name="Archive private space",
     )
-    other_workspace_task = _create_issue(
+    private_space_task = _create_issue(
         client,
         owner["token"],
-        other_workspace_list["id"],
-        title="Cross-workspace link guard",
-        workspace_slug="general",
+        private_space_list["id"],
+        title="Ungrantable private task",
     )
     grant_reader = _create_user(
         client,
         owner["token"],
         email="archive-grant-reader@open-work-hub.local",
         full_name="Archive Grant Reader",
-    )
-    _grant_workspace_access(
-        client,
-        owner["token"],
-        grant_reader["user"]["id"],
-        "administrator",
     )
     grant_reader_token = _login(
         client,
@@ -344,14 +333,7 @@ def test_list_archive_permissions_and_workspace_isolation(client: TestClient) ->
             [
                 TaskUserAccess(
                     id=new_id(),
-                    task_id=same_workspace_task["id"],
-                    user_id=grant_reader["user"]["id"],
-                    granted_by_user_id=owner["user"]["id"],
-                    access_level="read",
-                ),
-                TaskUserAccess(
-                    id=new_id(),
-                    task_id=other_workspace_task["id"],
+                    task_id=granted_task["id"],
                     user_id=grant_reader["user"]["id"],
                     granted_by_user_id=owner["user"]["id"],
                     access_level="read",
@@ -360,31 +342,30 @@ def test_list_archive_permissions_and_workspace_isolation(client: TestClient) ->
         )
         db.commit()
     local_doc_response = client.post(
-        "/api/v1/workspaces/administrator/docs/items",
+        "/api/v1/docs/items",
         headers=_auth_headers(grant_reader_token),
-        json={"title": "Administrator workspace doc"},
+        json={"title": "Grant reader personal doc"},
     )
     assert local_doc_response.status_code == 201, local_doc_response.text
-    same_workspace_link_response = client.post(
-        f"/api/v1/workspaces/administrator/docs/items/{local_doc_response.json()['id']}/pms-tasks",
+    granted_link_response = client.post(
+        f"/api/v1/docs/items/{local_doc_response.json()['id']}/pms-tasks",
         headers=_auth_headers(grant_reader_token),
-        json={"task_id": same_workspace_task["id"]},
+        json={"task_id": granted_task["id"]},
     )
-    assert same_workspace_link_response.status_code == 201, same_workspace_link_response.text
-    cross_workspace_link_response = client.post(
-        f"/api/v1/workspaces/administrator/docs/items/{local_doc_response.json()['id']}/pms-tasks",
+    assert granted_link_response.status_code == 201, granted_link_response.text
+    ungranted_link_response = client.post(
+        f"/api/v1/docs/items/{local_doc_response.json()['id']}/pms-tasks",
         headers=_auth_headers(grant_reader_token),
-        json={"task_id": other_workspace_task["id"]},
+        json={"task_id": private_space_task["id"]},
     )
-    assert cross_workspace_link_response.status_code == 403
-    assert cross_workspace_link_response.json()["code"] == "pms.task_access_required"
+    assert ungranted_link_response.status_code == 403
+    assert ungranted_link_response.json()["code"] == "pms.task_access_required"
     assert (
         _update_list(
             client,
             owner["token"],
-            other_workspace_list["id"],
+            private_space_list["id"],
             {"archived": True},
-            workspace_slug="general",
         ).status_code
         == 200
     )
@@ -395,15 +376,15 @@ def test_list_archive_permissions_and_workspace_isolation(client: TestClient) ->
         params={"archived": "true", "page_size": 100},
     )
     assert administrator_archive_response.status_code == 200
-    assert other_workspace_list["id"] not in {
+    assert private_space_list["id"] in {
         item["id"] for item in administrator_archive_response.json()["items"]
     }
-    cross_workspace_detail_response = client.get(
-        f"{BASE_PATH}/lists/{other_workspace_list['id']}",
+    ungranted_detail_response = client.get(
+        f"{BASE_PATH}/lists/{private_space_list['id']}",
         headers=_auth_headers(owner["token"]),
     )
-    assert cross_workspace_detail_response.status_code == 404
-    assert cross_workspace_detail_response.json()["code"] == "pms.task_list_not_found"
+    assert ungranted_detail_response.status_code == 200
+    assert ungranted_detail_response.json()["archived"] is True
 
 
 def test_archived_list_tasks_leave_active_projections(client: TestClient) -> None:
@@ -422,7 +403,7 @@ def test_archived_list_tasks_leave_active_projections(client: TestClient) -> Non
     assigned_path = f"{BASE_PATH}/tasks/assigned"
     today_path = f"{BASE_PATH}/tasks/today-overdue"
     dashboard_path = f"{BASE_PATH}/dashboard/summary"
-    ai_search_path = "/api/v1/workspaces/administrator/chatbot/tools/pms.search_tasks/invoke"
+    ai_search_path = "/api/v1/chatbot/tools/pms.search_tasks/invoke"
 
     assert task["id"] in {
         item["id"]
@@ -485,7 +466,7 @@ def test_archived_list_tasks_leave_active_projections(client: TestClient) -> Non
         item["id"] for item in archived_ai_search_response.json()["result"]["items"]
     }
 
-    ai_list_path = "/api/v1/workspaces/administrator/chatbot/tools/pms.list_task_lists/invoke"
+    ai_list_path = "/api/v1/chatbot/tools/pms.list_task_lists/invoke"
     active_ai_lists_response = client.post(
         ai_list_path,
         headers=_auth_headers(token),
@@ -506,13 +487,13 @@ def test_archived_list_tasks_leave_active_projections(client: TestClient) -> Non
     }
 
     with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-        assert workspace is not None
         assert load_pms_task_search_document(db, task_id=task["id"]) is None
         assert load_task_projection(db, task_id=task["id"]) is None
         assert task["id"] not in {
             item["entity_id"]
-            for item in load_workspace_pms_task_search_documents(db, workspace=workspace)
+            for item in load_pms_task_search_documents(
+                db,
+            )
         }
 
     archived_detail_response = client.get(

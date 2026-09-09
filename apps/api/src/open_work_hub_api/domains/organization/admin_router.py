@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import NoReturn
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -12,6 +12,9 @@ from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.access import record_audit_log
 from open_work_hub_api.domains.auth.dependencies import AuthContext, require_permission
 from open_work_hub_api.domains.auth.security import new_id
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.auth.realtime import publish_principal_access_changed
+from open_work_hub_api.domains.groups.service import ensure_organization_group
 from open_work_hub_api.domains.organization.models import OrganizationUnit
 from open_work_hub_api.domains.organization.schemas import (
     OrganizationUnitCreateRequest,
@@ -21,12 +24,13 @@ from open_work_hub_api.domains.organization.schemas import (
 from open_work_hub_api.domains.organization.service import (
     OrganizationDirectoryError,
     ensure_unique_slug,
+    ensure_valid_head,
     ensure_valid_parent,
     load_organization_unit,
+    lock_organization_hierarchy,
     organization_slug,
     serialize_organization_unit,
 )
-
 
 router = APIRouter(prefix="/admin/organization-units", tags=["admin-organization"])
 
@@ -77,13 +81,16 @@ def list_organization_units(
 @router.post("", response_model=OrganizationUnitResponse, status_code=status.HTTP_201_CREATED)
 def create_organization_unit(
     payload: OrganizationUnitCreateRequest,
+    request: Request,
     context: AuthContext = Depends(require_permission("organization.write")),
     db: Session = Depends(get_db_session),
 ) -> OrganizationUnitResponse:
     slug = organization_slug(payload.slug or payload.name)
     try:
+        lock_organization_hierarchy(db)
         ensure_unique_slug(db, slug)
         ensure_valid_parent(db, organization_unit_id=None, parent_id=payload.parent_id)
+        ensure_valid_head(db, payload.head_user_id)
     except OrganizationDirectoryError as error:
         _raise_organization_error(db, error)
 
@@ -94,8 +101,10 @@ def create_organization_unit(
         unit_type=payload.unit_type,
         parent_id=payload.parent_id,
         active=payload.active,
+        head_user_id=payload.head_user_id,
     )
     db.add(item)
+    ensure_organization_group(db, item.id)
     record_audit_log(
         db,
         actor_user_id=context.user.id,
@@ -103,9 +112,11 @@ def create_organization_unit(
         entity_kind="organization_unit",
         entity_id=item.id,
         summary=f"Created organization unit {item.name}",
-        payload={"parent_id": item.parent_id, "unit_type": item.unit_type},
+        payload={"after": _access_snapshot(item)},
     )
+    affected = {item.head_user_id} if item.active and item.head_user_id else set()
     _commit_or_slug_conflict(db)
+    publish_principal_access_changed(getattr(request.app.state, "app_realtime", None), affected)
     db.refresh(item)
     return OrganizationUnitResponse.model_validate(serialize_organization_unit(item))
 
@@ -114,11 +125,17 @@ def create_organization_unit(
 def update_organization_unit(
     organization_unit_id: str,
     payload: OrganizationUnitUpdateRequest,
+    request: Request,
     context: AuthContext = Depends(require_permission("organization.write")),
     db: Session = Depends(get_db_session),
 ) -> OrganizationUnitResponse:
     try:
+        lock_organization_hierarchy(db)
         item = load_organization_unit(db, organization_unit_id, for_update=True)
+        before = _access_snapshot(item)
+        if "head_user_id" in payload.model_fields_set:
+            ensure_valid_head(db, payload.head_user_id)
+            item.head_user_id = payload.head_user_id
         next_parent_id = (
             payload.parent_id if "parent_id" in payload.model_fields_set else item.parent_id
         )
@@ -143,6 +160,7 @@ def update_organization_unit(
     if payload.active is not None:
         item.active = payload.active
     db.add(item)
+    after = _access_snapshot(item)
     record_audit_log(
         db,
         actor_user_id=context.user.id,
@@ -150,8 +168,28 @@ def update_organization_unit(
         entity_kind="organization_unit",
         entity_id=item.id,
         summary=f"Updated organization unit {item.name}",
-        payload={"changed_fields": sorted(payload.model_fields_set)},
+        payload={"before": before, "after": after},
     )
+    changed_fields = {field for field in before if before[field] != after[field]}
+    affected: set[str] = set()
+    if changed_fields.intersection({"name", "slug", "unit_type", "active"}):
+        affected.update(
+            db.scalars(select(User.id).where(User.primary_organization_unit_id == item.id))
+        )
+    if changed_fields.intersection({"head_user_id", "active"}):
+        affected.update(
+            snapshot["head_user_id"]
+            for snapshot in (before, after)
+            if snapshot["active"] and snapshot["head_user_id"]
+        )
     _commit_or_slug_conflict(db)
+    publish_principal_access_changed(getattr(request.app.state, "app_realtime", None), affected)
     db.refresh(item)
     return OrganizationUnitResponse.model_validate(serialize_organization_unit(item))
+
+
+def _access_snapshot(item: OrganizationUnit) -> dict:
+    return {
+        field: getattr(item, field)
+        for field in ("name", "slug", "unit_type", "parent_id", "head_user_id", "active")
+    }

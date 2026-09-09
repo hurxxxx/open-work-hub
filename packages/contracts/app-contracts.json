@@ -1,0 +1,473 @@
+{
+  "$schema": "./app-contracts.schema.json",
+  "apps": [
+    {
+      "app_id": "home",
+      "title": "Home",
+      "icon_key": "home",
+      "execution_context_kind": "personal",
+      "resource_scope": "personal",
+      "route_base": "/apps/home",
+      "entry_route_id": "home.root",
+      "launcher": {
+        "placement": "fixed",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "home.root",
+          "suffix": "",
+          "chrome": "containedSurface"
+        }
+      ]
+    },
+    {
+      "app_id": "agent-terminal",
+      "title": "Codex Terminal",
+      "icon_key": "square-terminal",
+      "execution_context_kind": "personal",
+      "resource_scope": "personal",
+      "route_base": "/apps/agent-terminal",
+      "entry_route_id": "agent-terminal.root",
+      "launcher": {
+        "placement": "personal_tools",
+        "pinned_by_default": false
+      },
+      "required_system_roles": ["platform_admin"],
+      "feature_flag": "agent_terminal_enabled",
+      "routes": [
+        {
+          "route_id": "agent-terminal.root",
+          "suffix": "",
+          "chrome": "fullSurface"
+        }
+      ]
+    },
+    {
+      "app_id": "hermes-terminal",
+      "title": "Hermes Terminal",
+      "icon_key": "square-terminal",
+      "execution_context_kind": "personal",
+      "resource_scope": "personal",
+      "route_base": "/apps/hermes-terminal",
+      "entry_route_id": "hermes-terminal.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": false
+      },
+      "feature_flag": "hermes_enabled",
+      "routes": [
+        {
+          "route_id": "hermes-terminal.root",
+          "suffix": "",
+          "chrome": "fullSurface"
+        }
+      ]
+    },
+    {
+      "app_id": "chatbot",
+      "title": "AI Assistant",
+      "icon_key": "message-square",
+      "execution_context_kind": "personal",
+      "resource_scope": "personal",
+      "route_base": "/apps/chatbot",
+      "entry_route_id": "chatbot.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "chatbot.root",
+          "suffix": "",
+          "chrome": "containedSurface"
+        }
+      ]
+    },
+    {
+      "app_id": "web-search",
+      "title": "Web Search",
+      "icon_key": "globe-2",
+      "execution_context_kind": "personal",
+      "resource_scope": "personal",
+      "route_base": "/apps/web-search",
+      "entry_route_id": "web-search.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "web-search.root",
+          "suffix": "",
+          "chrome": "containedSurface"
+        }
+      ]
+    },
+    {
+      "app_id": "pms",
+      "title": "PMS",
+      "icon_key": "folder-kanban",
+      "execution_context_kind": "company",
+      "resource_scope": "company",
+      "route_base": "/apps/pms",
+      "entry_route_id": "pms.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": true
+      },
+      "routes": [
+        {
+          "route_id": "pms.root",
+          "suffix": "",
+          "chrome": "containedSurface"
+        },
+        {
+          "route_id": "pms.assigned",
+          "suffix": "/assigned",
+          "chrome": "containedSurface"
+        },
+        {
+          "route_id": "pms.today",
+          "suffix": "/today",
+          "chrome": "containedSurface"
+        },
+        {
+          "route_id": "pms.list",
+          "suffix": "/lists/:taskListId",
+          "chrome": "containedSurface"
+        },
+        {
+          "route_id": "pms.space",
+          "suffix": "/spaces/:spaceId",
+          "chrome": "containedSurface"
+        },
+        {
+          "route_id": "pms.space-docs",
+          "suffix": "/spaces/:spaceId/docs",
+          "chrome": "containedSurface"
+        },
+        {
+          "route_id": "pms.space-doc",
+          "suffix": "/spaces/:spaceId/docs/:docId",
+          "chrome": "containedSurface"
+        },
+        {
+          "route_id": "pms.space-whiteboards",
+          "suffix": "/spaces/:spaceId/whiteboards",
+          "chrome": "containedSurface"
+        },
+        {
+          "route_id": "pms.space-whiteboard",
+          "suffix": "/spaces/:spaceId/whiteboards/:whiteboardId",
+          "chrome": "containedSurface"
+        }
+      ]
+    },
+    {
+      "app_id": "docs",
+      "title": "Docs",
+      "icon_key": "files",
+      "execution_context_kind": "personal",
+      "resource_scope": "hybrid",
+      "route_base": "/apps/docs",
+      "entry_route_id": "docs.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": true
+      },
+      "routes": [
+        {
+          "route_id": "docs.root",
+          "suffix": "",
+          "chrome": "standard"
+        },
+        {
+          "route_id": "docs.document",
+          "suffix": "/documents/:docId",
+          "chrome": "standard"
+        },
+        {
+          "route_id": "docs.document-html",
+          "suffix": "/documents/:docId/html/:pageId",
+          "chrome": "containedSurface"
+        },
+        {
+          "route_id": "docs.shared",
+          "suffix": "/shared/:shareToken",
+          "chrome": "shared"
+        },
+        {
+          "route_id": "docs.shared-html",
+          "suffix": "/shared/:shareToken/html/:pageId",
+          "chrome": "shared"
+        }
+      ]
+    },
+    {
+      "app_id": "files",
+      "title": "Files",
+      "icon_key": "folder",
+      "execution_context_kind": "personal",
+      "resource_scope": "hybrid",
+      "route_base": "/apps/files",
+      "entry_route_id": "files.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "files.root",
+          "suffix": "",
+          "chrome": "standard"
+        },
+        {
+          "route_id": "files.chat",
+          "suffix": "/chat",
+          "chrome": "standard"
+        }
+      ]
+    },
+    {
+      "app_id": "mail",
+      "title": "Mail",
+      "icon_key": "mail",
+      "execution_context_kind": "personal",
+      "resource_scope": "personal",
+      "route_base": "/apps/mail",
+      "entry_route_id": "mail.root",
+      "launcher": {
+        "placement": "personal_tools",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "mail.root",
+          "suffix": "",
+          "chrome": "standard"
+        }
+      ]
+    },
+    {
+      "app_id": "community",
+      "title": "Community",
+      "icon_key": "message-square",
+      "execution_context_kind": "company",
+      "resource_scope": "company",
+      "route_base": "/apps/community",
+      "entry_route_id": "community.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "community.root",
+          "suffix": "",
+          "chrome": "standard"
+        },
+        {
+          "route_id": "community.post",
+          "suffix": "/posts/:postId",
+          "chrome": "standard"
+        }
+      ]
+    },
+    {
+      "app_id": "whiteboard",
+      "title": "Whiteboard",
+      "icon_key": "pencil-ruler",
+      "execution_context_kind": "personal",
+      "resource_scope": "hybrid",
+      "route_base": "/apps/whiteboard",
+      "entry_route_id": "whiteboard.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": true
+      },
+      "routes": [
+        {
+          "route_id": "whiteboard.root",
+          "suffix": "",
+          "chrome": "standard"
+        },
+        {
+          "route_id": "whiteboard.board",
+          "suffix": "/boards/:whiteboardId",
+          "chrome": "containedSurface"
+        },
+        {
+          "route_id": "whiteboard.shared",
+          "suffix": "/shared/:shareToken",
+          "chrome": "shared"
+        }
+      ]
+    },
+    {
+      "app_id": "diagrams",
+      "title": "Diagrams",
+      "icon_key": "workflow",
+      "execution_context_kind": "personal",
+      "resource_scope": "hybrid",
+      "route_base": "/apps/diagrams",
+      "entry_route_id": "diagrams.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "diagrams.root",
+          "suffix": "",
+          "chrome": "standard"
+        },
+        {
+          "route_id": "diagrams.diagram",
+          "suffix": "/diagrams/:diagramId",
+          "chrome": "containedSurface"
+        }
+      ]
+    },
+    {
+      "app_id": "bento",
+      "title": "Bento",
+      "icon_key": "presentation",
+      "execution_context_kind": "personal",
+      "resource_scope": "hybrid",
+      "route_base": "/apps/bento",
+      "entry_route_id": "bento.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "bento.root",
+          "suffix": "",
+          "chrome": "standard"
+        },
+        {
+          "route_id": "bento.presentation",
+          "suffix": "/presentations/:documentId",
+          "chrome": "containedSurface"
+        }
+      ]
+    },
+    {
+      "app_id": "planner",
+      "title": "Planner",
+      "icon_key": "calendar",
+      "execution_context_kind": "personal",
+      "resource_scope": "personal",
+      "route_base": "/apps/planner",
+      "entry_route_id": "planner.root",
+      "launcher": {
+        "placement": "personal_tools",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "planner.root",
+          "suffix": "",
+          "chrome": "fullSurface"
+        }
+      ]
+    },
+    {
+      "app_id": "meeting",
+      "title": "Meeting",
+      "icon_key": "users",
+      "execution_context_kind": "company",
+      "resource_scope": "company",
+      "route_base": "/apps/meeting",
+      "entry_route_id": "meeting.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "meeting.root",
+          "suffix": "",
+          "chrome": "standard"
+        },
+        {
+          "route_id": "meeting.detail",
+          "suffix": "/meetings/:meetingId",
+          "chrome": "standard"
+        }
+      ]
+    },
+    {
+      "app_id": "video-chat",
+      "title": "Video Chat",
+      "icon_key": "video",
+      "execution_context_kind": "company",
+      "resource_scope": "company",
+      "route_base": "/apps/video-chat",
+      "entry_route_id": "video-chat.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "video-chat.root",
+          "suffix": "",
+          "chrome": "standard"
+        },
+        {
+          "route_id": "video-chat.session",
+          "suffix": "/sessions/:sessionId",
+          "chrome": "containedSurface"
+        }
+      ]
+    },
+    {
+      "app_id": "recording",
+      "title": "Recording",
+      "icon_key": "mic",
+      "execution_context_kind": "personal",
+      "resource_scope": "personal",
+      "route_base": "/apps/recording",
+      "entry_route_id": "recording.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "recording.root",
+          "suffix": "",
+          "chrome": "standard"
+        },
+        {
+          "route_id": "recording.detail",
+          "suffix": "/recordings/:recordingId",
+          "chrome": "standard"
+        }
+      ]
+    },
+    {
+      "app_id": "retrieval-search",
+      "title": "Retrieval Search",
+      "icon_key": "search",
+      "execution_context_kind": "personal",
+      "resource_scope": "hybrid",
+      "route_base": "/apps/retrieval-search",
+      "entry_route_id": "retrieval-search.root",
+      "launcher": {
+        "placement": "category",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "retrieval-search.root",
+          "suffix": "",
+          "chrome": "standard"
+        }
+      ]
+    }
+  ]
+}

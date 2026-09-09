@@ -1,12 +1,12 @@
-import type { AuthUser, ThemePreference } from '@/src/platform/auth/auth-api';
-import type { LauncherGlobalPaths } from './navigation-types';
+import type { ShellAppId } from '@/src/platform/apps/app-links';
+import type { ThemePreference } from '@/src/platform/auth/auth-api';
 import {
-  buildWorkspaceAppPath,
-  getPreferredWorkspace,
-  type WorkspaceAppId,
-} from '@/src/platform/workspaces/workspace-utils';
+  APP_CONTRACT_BY_ID,
+  type AppId,
+} from '@open-work-hub/contracts/app-contracts';
 
 export type ResolvedThemePreference = 'light' | 'dark';
+export type AppDisplayScope = 'company' | 'personal';
 
 export const DARK_MODE_QUERY = '(prefers-color-scheme: dark)';
 
@@ -54,26 +54,12 @@ export function getInitials(label: string, fallback: string): string {
   return initials || fallback;
 }
 
-export function resolveMobileAppLink(
-  appId: WorkspaceAppId,
-  currentUser: AuthUser,
-  shellWorkspaceSlug: string | null,
-  launcherGlobalPaths: LauncherGlobalPaths,
-): string {
-  const globalPath = launcherGlobalPaths.get(appId);
-  if (globalPath) {
-    return globalPath;
-  }
-
-  const workspaceForShellSlug = shellWorkspaceSlug
-    ? currentUser.workspaces.find(
-        (workspace) => workspace.slug === shellWorkspaceSlug,
-      )
-    : undefined;
-  const selectedWorkspace =
-    workspaceForShellSlug ?? getPreferredWorkspace(currentUser, appId);
-
-  return selectedWorkspace
-    ? buildWorkspaceAppPath(selectedWorkspace.slug, appId)
-    : '/';
+export function resolveAppDisplayScope(
+  appId: ShellAppId,
+): AppDisplayScope | null {
+  const contract = APP_CONTRACT_BY_ID.get(appId as AppId);
+  if (!contract) return null;
+  return contract.execution_context_kind === 'personal'
+    ? 'personal'
+    : 'company';
 }

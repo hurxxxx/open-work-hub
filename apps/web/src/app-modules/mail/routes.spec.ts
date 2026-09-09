@@ -5,10 +5,8 @@ import { mailGlobalRoutes } from './routes';
 
 describe('personal Mail routes', () => {
   it('declares only the canonical global route', () => {
-    expect(mailGlobalRoutes.map((route) => route.path)).toEqual(['/mail']);
-    expect(mailManifest.workspaceRoutePaths).toEqual([]);
-    expect(mailManifest.globalRoutePaths).toEqual(['/mail']);
-    expect(mailManifest.contract.resourceScope).toBe('personal');
-    expect(mailManifest.surfaces?.launcher?.globalPath).toBe('/mail');
+    expect(mailGlobalRoutes.map((route) => route.path)).toEqual(['/apps/mail']);
+    expect(mailManifest.appRoutePaths).toEqual([]);
+    expect(mailManifest.globalRoutePaths).toEqual(['/apps/mail']);
   });
 });

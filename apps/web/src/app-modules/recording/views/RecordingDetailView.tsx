@@ -1,25 +1,31 @@
-import { useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import { Button, useConfirm } from '@open-work-hub/ui';
 import {
   AlertCircle,
   ArrowLeft,
   CalendarDays,
   CheckSquare,
   Database,
+  FileText,
   Loader2,
   Play,
   RefreshCw,
+  Send,
 } from 'lucide-react';
-import { Button, useConfirm } from '@open-work-hub/ui';
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams } from 'react-router-dom';
 
-import { useAuth } from '@/src/platform/auth/auth-provider';
 import { DocsViewerModal } from '@/src/app-modules/docs/public-api';
+import {
+  isBootstrapAppEnabled,
+  useAppBootstrapContext,
+} from '@/src/platform/apps/app-bootstrap-context';
+import { buildAppPath } from '@/src/platform/apps/app-links';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   formatDateTime as formatZonedDateTime,
   normalizeTimeZone,
 } from '@/src/platform/time/time-utils';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import { MeetingPickerModal } from './MeetingPickerModal';
 import { DocLink, LinkedSubsection } from './RecordingDetailLinkedItems';
 import { RecordingStageRail } from './RecordingStageRail';
@@ -43,8 +49,10 @@ function formatDateTime(
 function useRecordingDetailElement() {
   const { t, i18n } = useTranslation(['apps', 'common']);
   const { token, user } = useAuth();
-  const { workspaceSlug, recordingId } = useParams();
+  const { recordingId } = useParams();
   const navigate = useNavigate();
+  const appBootstrap = useAppBootstrapContext();
+  const docsEnabled = isBootstrapAppEnabled(appBootstrap.data, 'docs');
   const timeZone = normalizeTimeZone(user?.time_zone);
   const { confirm, confirmDialog } = useConfirm();
 
@@ -54,6 +62,7 @@ function useRecordingDetailElement() {
       updateFailed: t('apps:recording.errors.updateFailed'),
       playbackFailed: t('apps:recording.errors.playbackFailed'),
       retryFailed: t('apps:recording.errors.retryFailed'),
+      publishFailed: t('apps:recording.errors.publishFailed'),
       detachFailed: t('apps:recording.errors.detachFailed'),
       detachConfirmTitle: t('apps:recording.detail.detachConfirmTitle'),
       detachConfirmDescription: t(
@@ -66,7 +75,6 @@ function useRecordingDetailElement() {
   );
   const controller = useRecordingDetailController({
     token,
-    workspaceSlug,
     recordingId,
     messages,
     confirm,
@@ -85,8 +93,11 @@ function useRecordingDetailElement() {
   } = controller.state;
   const { meetingTargets, taskTargets, otherTargets, retryable } =
     controller.derived;
-
-  if (!workspaceSlug) return null;
+  const emptyResultMessage = retryable
+    ? t('apps:recording.detail.resultFailed')
+    : recording?.summary_status === 'done'
+      ? t('apps:recording.detail.resultUnavailable')
+      : t('apps:recording.detail.resultPending');
 
   return (
     <div className="flex h-full flex-col bg-app-bg">
@@ -94,9 +105,7 @@ function useRecordingDetailElement() {
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
-            onClick={() =>
-              navigate(buildWorkspaceAppPath(workspaceSlug, 'recording'))
-            }
+            onClick={() => navigate(buildAppPath('recording'))}
             className="inline-flex size-8 items-center justify-center rounded border border-app-border bg-app-surface-raised text-app-ink hover:bg-app-surface-subtle"
             aria-label={t('apps:recording.detail.back')}
           >
@@ -235,26 +244,98 @@ function useRecordingDetailElement() {
               </section>
 
               <section className="rounded-md border border-app-border bg-app-surface p-4">
-                <h2 className="app-text-title-sm text-app-ink">
-                  {t('apps:recording.detail.generatedDocsTitle')}
-                </h2>
-                <div className="mt-3 grid gap-2">
-                  <DocLink
-                    docId={recording.raw_transcript_doc_id}
-                    label={t('apps:recording.detail.rawTranscriptDoc')}
-                    notReadyLabel={t('apps:recording.detail.notReady')}
-                    onOpen={(docId, label) => {
-                      controller.actions.setDocPreview({ docId, label });
-                    }}
-                  />
-                  <DocLink
-                    docId={recording.minutes_doc_id}
-                    label={t('apps:recording.detail.minutesDoc')}
-                    notReadyLabel={t('apps:recording.detail.notReady')}
-                    onOpen={(docId, label) => {
-                      controller.actions.setDocPreview({ docId, label });
-                    }}
-                  />
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="app-text-title-sm text-app-ink">
+                      {t('apps:recording.detail.resultsTitle')}
+                    </h2>
+                    <p className="app-text-caption mt-1 text-app-ink/55">
+                      {recording.result
+                        ? t('apps:recording.detail.resultVersion', {
+                            version: recording.result.version,
+                          })
+                        : emptyResultMessage}
+                    </p>
+                  </div>
+                  {docsEnabled ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void controller.actions.publish()}
+                      disabled={
+                        busy !== null ||
+                        recording.summary_status !== 'done' ||
+                        !recording.result?.summary_text
+                      }
+                    >
+                      {busy === 'publish' ? (
+                        <Loader2 size={14} className="mr-1 animate-spin" />
+                      ) : (
+                        <Send size={14} className="mr-1" />
+                      )}
+                      {busy === 'publish'
+                        ? t('apps:recording.detail.publishing')
+                        : t('apps:recording.detail.publishToDocs')}
+                    </Button>
+                  ) : null}
+                </div>
+
+                {recording.result ? (
+                  <div className="mt-4 space-y-4">
+                    <article>
+                      <h3 className="app-text-body font-semibold text-app-ink">
+                        {t('apps:recording.detail.transcriptTitle')}
+                      </h3>
+                      <div className="app-text-body mt-2 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-md border border-app-border bg-app-surface-raised p-3 text-app-ink/80">
+                        {recording.result.transcript_text}
+                      </div>
+                    </article>
+                    <article>
+                      <h3 className="app-text-body font-semibold text-app-ink">
+                        {t('apps:recording.detail.summaryTitle')}
+                      </h3>
+                      <div className="app-text-body mt-2 whitespace-pre-wrap rounded-md border border-app-border bg-app-surface-raised p-3 text-app-ink/80">
+                        {recording.result.summary_text ?? emptyResultMessage}
+                      </div>
+                    </article>
+                    {recording.result.verifier_note ? (
+                      <p className="app-text-caption text-app-ink/55">
+                        {t('apps:recording.detail.verifierNote', {
+                          note: recording.result.verifier_note,
+                        })}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="mt-5 border-t border-app-border pt-4">
+                  <h3 className="app-text-body inline-flex items-center gap-1.5 font-semibold text-app-ink">
+                    <FileText size={14} />
+                    {t('apps:recording.detail.publicationsTitle')}
+                  </h3>
+                  <div className="mt-2 grid gap-2">
+                    {(recording.publications ?? []).length > 0 ? (
+                      (recording.publications ?? []).map((publication) => (
+                        <DocLink
+                          key={publication.id}
+                          docId={publication.target_resource_id}
+                          label={
+                            publication.target_title ??
+                            t('apps:recording.detail.publishedDocument', {
+                              version: publication.result_version,
+                            })
+                          }
+                          notReadyLabel={t('apps:recording.detail.notReady')}
+                          onOpen={(docId, label) => {
+                            controller.actions.setDocPreview({ docId, label });
+                          }}
+                        />
+                      ))
+                    ) : (
+                      <p className="app-text-caption text-app-ink/45">
+                        {t('apps:recording.detail.noPublications')}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </section>
 
@@ -273,7 +354,6 @@ function useRecordingDetailElement() {
                     emptyLabel={t('apps:recording.detail.noLinkedMeetings')}
                     items={meetingTargets}
                     busyId={busy}
-                    workspaceSlug={workspaceSlug}
                     onDetach={controller.actions.detachTarget}
                     detachLabel={t('apps:recording.detail.detach')}
                   />
@@ -287,7 +367,6 @@ function useRecordingDetailElement() {
                     emptyLabel={t('apps:recording.detail.noLinkedTasks')}
                     items={taskTargets}
                     busyId={busy}
-                    workspaceSlug={workspaceSlug}
                     onDetach={controller.actions.detachTarget}
                     detachLabel={t('apps:recording.detail.detach')}
                   />
@@ -299,7 +378,6 @@ function useRecordingDetailElement() {
                     emptyLabel={t('apps:recording.detail.noOtherConnections')}
                     items={otherTargets}
                     busyId={busy}
-                    workspaceSlug={workspaceSlug}
                     onDetach={controller.actions.detachTarget}
                     detachLabel={t('apps:recording.detail.detach')}
                   />
@@ -315,7 +393,6 @@ function useRecordingDetailElement() {
           <MeetingPickerModal
             isOpen={meetingPickerOpen}
             onClose={() => controller.actions.setMeetingPickerOpen(false)}
-            workspaceSlug={workspaceSlug}
             excludeMeetingIds={meetingTargets.map((target) => target.target_id)}
             onPick={(meeting) =>
               void controller.actions.attachMeeting(meeting.id)
@@ -324,7 +401,6 @@ function useRecordingDetailElement() {
           <TaskPickerModal
             isOpen={taskPickerOpen}
             onClose={() => controller.actions.setTaskPickerOpen(false)}
-            workspaceSlug={workspaceSlug}
             excludeTaskIds={taskTargets.map((target) => target.target_id)}
             onPick={(task) => void controller.actions.attachTask(task.id)}
           />
@@ -332,7 +408,6 @@ function useRecordingDetailElement() {
             open={docPreview !== null}
             itemId={docPreview?.docId}
             fallbackTitle={docPreview?.label}
-            workspaceSlug={workspaceSlug}
             onOpenChange={(nextOpen) => {
               if (!nextOpen) controller.actions.setDocPreview(null);
             }}

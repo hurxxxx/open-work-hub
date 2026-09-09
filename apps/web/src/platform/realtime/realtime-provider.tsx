@@ -11,6 +11,7 @@ import {
 
 import {
   isDocsPagesRealtimeSubscriptionMessage,
+  isWhiteboardAccessRealtimeSubscriptionMessage,
   resolveRealtimeWebSocketUrl,
 } from '@open-work-hub/contracts/realtime';
 
@@ -188,19 +189,20 @@ export function useRealtimeSubscription(
   const shareToken = message?.share_token ?? null;
   const topic = message?.topic ?? null;
   const type = message?.type ?? null;
-  const workspaceSlug = message?.workspace_slug ?? null;
 
   useEffect(() => {
     const subscriptionMessage = {
       type,
       topic,
       key,
-      workspace_slug: workspaceSlug,
       share_token: shareToken,
     };
-    if (!isDocsPagesRealtimeSubscriptionMessage(subscriptionMessage)) {
+    if (
+      !isDocsPagesRealtimeSubscriptionMessage(subscriptionMessage) &&
+      !isWhiteboardAccessRealtimeSubscriptionMessage(subscriptionMessage)
+    ) {
       return undefined;
     }
     return subscribe(subscriptionMessage);
-  }, [key, shareToken, topic, type, workspaceSlug, subscribe]);
+  }, [key, shareToken, topic, type, subscribe]);
 }

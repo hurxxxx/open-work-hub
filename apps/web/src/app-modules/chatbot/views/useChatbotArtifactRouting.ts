@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import type { ArtifactBuffer } from '../api/agent-events';
+import type { ChatTurn } from './chat/MessageBubble';
 import {
   buildArtifactSearchParams,
   collectArtifacts,
@@ -9,7 +10,6 @@ import {
   resolveAutoOpenArtifactId,
   shouldClearMissingArtifactQuery,
 } from './chatbot-view-model';
-import type { ChatTurn } from './chat/MessageBubble';
 
 function createBrowserSearchParams(): URLSearchParams {
   return new URLSearchParams(

@@ -1,0 +1,29 @@
+# Narrow command guardrails. Complex shell syntax remains subject to the native sandbox.
+prefix_rule(
+    pattern = ["gh", "pr", ["create", "edit", "merge", "review", "comment", "close", "reopen"]],
+    decision = "forbidden",
+    justification = "Site changes belong to GitLab origin; use the authorized glab workflow.",
+    match = ["gh pr create", "gh pr merge 7"],
+    not_match = ["gh pr view 7", "gh pr diff 7"],
+)
+prefix_rule(
+    pattern = ["gh", "issue", ["create", "edit", "comment", "close", "reopen", "delete", "transfer", "pin", "unpin", "develop"]],
+    decision = "forbidden",
+    justification = "GitHub is source-only for this project; use GitLab for site issue changes.",
+    match = ["gh issue create"],
+    not_match = ["gh issue view 7"],
+)
+prefix_rule(
+    pattern = ["git", "push", "upstream"],
+    decision = "forbidden",
+    justification = "The upstream remote is source-only; publish authorized changes through origin.",
+    match = ["git push upstream dev"],
+    not_match = ["git fetch upstream", "git push origin dev"],
+)
+prefix_rule(
+    pattern = ["docker", "compose", "-f", ["ops/compose/open-work-hub-prod.app.yml", "./ops/compose/open-work-hub-prod.app.yml"], ["up", "down", "restart", "start", "stop", "kill", "run"]],
+    decision = "forbidden",
+    justification = "Production app mutations use scripts/prod-app.sh and its deployment gates.",
+    match = ["docker compose -f ops/compose/open-work-hub-prod.app.yml up -d"],
+    not_match = ["docker compose -f ops/compose/open-work-hub-prod.app.yml config", "docker compose -f ops/compose/open-work-hub-dev.infra.yml up -d"],
+)

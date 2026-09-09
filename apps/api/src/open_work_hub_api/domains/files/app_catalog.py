@@ -1,26 +1,19 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
-    WorkspaceNavRegistration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-FILES_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="files",
-    title="FILES",
-    route_base="/files",
-    icon_key="folder",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
+FILES_APP = app_registration(
+    "files",
     backend_domain="files",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="files-all",
             title="All Files",
             category="Drive",
             icon_key="folder-open",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="files-search",
             title="Search",
             category="Drive",

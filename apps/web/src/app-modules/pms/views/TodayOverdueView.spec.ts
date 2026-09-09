@@ -16,7 +16,7 @@ describe('loadTodayOverdueTasks', () => {
     vi.clearAllMocks();
   });
 
-  it('loads task lists and assigned due tasks in the requested workspace', async () => {
+  it('loads task lists and assigned due tasks across accessible PMS spaces', async () => {
     const firstTask = { id: 'task-1' };
     const secondTask = { id: 'task-2' };
     const firstList = { id: 'list-1' };
@@ -29,21 +29,16 @@ describe('loadTodayOverdueTasks', () => {
     } as never);
 
     await expect(
-      loadTodayOverdueTasks('token-1', '2026-07-09', 'delivery-hub'),
+      loadTodayOverdueTasks('token-1', '2026-07-09'),
     ).resolves.toEqual({
       taskLists: [firstList, secondList],
       tasks: [firstTask, secondTask],
     });
 
-    expect(listAllPmsTaskListsMock).toHaveBeenCalledWith(
-      'token-1',
-      undefined,
-      'delivery-hub',
-    );
+    expect(listAllPmsTaskListsMock).toHaveBeenCalledWith('token-1', undefined);
     expect(listAllTodayOverdueTasksMock).toHaveBeenCalledWith(
       'token-1',
       '2026-07-09',
-      'delivery-hub',
     );
   });
 });

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
 import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   listReleaseNotes,

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import re
-from ipaddress import ip_address
 from datetime import UTC, datetime, timedelta
+from ipaddress import ip_address
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import status
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.settings import Settings, get_settings
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.meeting.models import Meeting
 from open_work_hub_api.domains.meeting.permissions import ensure_meeting_participant, is_participant
@@ -100,13 +100,12 @@ def _livekit_url_for_browser(*, settings: Settings, request_host: str | None) ->
 def _safe_room_fragment(value: str) -> str:
     normalized = re.sub(r"[^A-Za-z0-9_-]+", "-", value.strip())
     normalized = re.sub(r"-{2,}", "-", normalized).strip("-_")
-    return normalized or "workspace"
+    return normalized or "room"
 
 
-def _room_name(*, settings: Settings, workspace: Workspace, session_id: str) -> str:
+def _room_name(*, settings: Settings, session_id: str) -> str:
     prefix = _safe_room_fragment(settings.video_chat_room_prefix)[:32]
-    workspace_part = _safe_room_fragment(workspace.key)[:40]
-    return f"{prefix}-{workspace_part}-{session_id}"
+    return f"{prefix}-{session_id}"
 
 
 def _display_name(user: User) -> str:
@@ -116,7 +115,6 @@ def _display_name(user: User) -> str:
 def _serialize(session: VideoChatSession) -> VideoChatSessionOut:
     return VideoChatSessionOut(
         id=session.id,
-        workspace_id=session.workspace_id,
         meeting_id=session.meeting_id,
         room_name=session.room_name,
         title=session.title,
@@ -137,13 +135,12 @@ def _serialize(session: VideoChatSession) -> VideoChatSessionOut:
     )
 
 
-def _load_session(db: Session, *, workspace: Workspace, session_id: str) -> VideoChatSession:
+def _load_session(db: Session, *, session_id: str) -> VideoChatSession:
     session = db.scalar(
         select(VideoChatSession)
         .options(selectinload(VideoChatSession.started_by))
         .where(
             VideoChatSession.id == session_id,
-            VideoChatSession.workspace_id == workspace.id,
         )
     )
     if session is None:
@@ -154,15 +151,12 @@ def _load_session(db: Session, *, workspace: Workspace, session_id: str) -> Vide
     return session
 
 
-def _ensure_session_access(
-    db: Session, *, workspace: Workspace, user: User, session: VideoChatSession
-) -> None:
+def _ensure_session_access(db: Session, *, user: User, session: VideoChatSession) -> None:
     if not session.meeting_id:
         return
     meeting = db.scalar(
         select(Meeting).where(
             Meeting.id == session.meeting_id,
-            Meeting.workspace_id == workspace.id,
         )
     )
     if meeting is None:
@@ -184,7 +178,6 @@ def _ensure_session_host(*, user: User, session: VideoChatSession) -> None:
 def _load_meeting_for_session(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     meeting_id: str | None,
 ) -> Meeting | None:
@@ -193,7 +186,6 @@ def _load_meeting_for_session(
     meeting = db.scalar(
         select(Meeting).where(
             Meeting.id == meeting_id,
-            Meeting.workspace_id == workspace.id,
         )
     )
     if meeting is None:
@@ -208,7 +200,6 @@ def _load_meeting_for_session(
 def list_sessions(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     status_filter: str | None = None,
 ) -> VideoChatSessionListResponse:
@@ -219,7 +210,7 @@ def list_sessions(
             selectinload(VideoChatSession.started_by),
             selectinload(VideoChatSession.meeting).selectinload(Meeting.attendees),
         )
-        .where(VideoChatSession.workspace_id == workspace.id)
+        .where()
         .order_by(VideoChatSession.started_at.desc())
     )
     if status_filter:
@@ -240,7 +231,6 @@ def list_sessions(
 def create_session(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     payload: VideoChatSessionCreateRequest,
 ) -> VideoChatSessionOut:
@@ -248,7 +238,6 @@ def create_session(
     _require_enabled(settings)
     _load_meeting_for_session(
         db,
-        workspace=workspace,
         user=user,
         meeting_id=payload.meeting_id,
     )
@@ -256,9 +245,8 @@ def create_session(
     title = (payload.title or "").strip() or "Video chat"
     session = VideoChatSession(
         id=session_id,
-        workspace_id=workspace.id,
         meeting_id=payload.meeting_id,
-        room_name=_room_name(settings=settings, workspace=workspace, session_id=session_id),
+        room_name=_room_name(settings=settings, session_id=session_id),
         title=title,
         started_by_id=user.id,
     )
@@ -272,20 +260,18 @@ def create_session(
 def get_session(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     session_id: str,
 ) -> VideoChatSessionOut:
     _require_enabled(_settings())
-    session = _load_session(db, workspace=workspace, session_id=session_id)
-    _ensure_session_access(db, workspace=workspace, user=user, session=session)
+    session = _load_session(db, session_id=session_id)
+    _ensure_session_access(db, user=user, session=session)
     return _serialize(session)
 
 
 def create_join_token(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     session_id: str,
     request_host: str | None = None,
@@ -293,15 +279,15 @@ def create_join_token(
     settings = _settings()
     _require_enabled(settings)
     _require_livekit_configured(settings)
-    session = _load_session(db, workspace=workspace, session_id=session_id)
+    session = _load_session(db, session_id=session_id)
     if session.status != "open":
         raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
             code="video_chat.session_closed",
         )
-    _ensure_session_access(db, workspace=workspace, user=user, session=session)
+    _ensure_session_access(db, user=user, session=session)
 
-    identity = f"{workspace.id}:{user.id}:{new_id()}"
+    identity = f"{user.id}:{new_id()}"
     display_name = _display_name(user)
     expires_at = _utcnow() + timedelta(seconds=settings.video_chat_token_ttl_seconds)
     token = create_livekit_join_token(
@@ -328,13 +314,12 @@ def create_join_token(
 def end_session(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     session_id: str,
 ) -> VideoChatSessionOut:
     _require_enabled(_settings())
-    session = _load_session(db, workspace=workspace, session_id=session_id)
-    _ensure_session_access(db, workspace=workspace, user=user, session=session)
+    session = _load_session(db, session_id=session_id)
+    _ensure_session_access(db, user=user, session=session)
     _ensure_session_host(user=user, session=session)
     if session.status != "ended":
         now = _utcnow()
@@ -350,7 +335,6 @@ def end_session(
 def start_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     session_id: str,
 ) -> VideoChatSessionOut:
@@ -366,21 +350,20 @@ def start_recording(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             code="video_chat.egress_not_configured",
         )
-    session = _load_session(db, workspace=workspace, session_id=session_id)
-    _ensure_session_access(db, workspace=workspace, user=user, session=session)
+    session = _load_session(db, session_id=session_id)
+    _ensure_session_access(db, user=user, session=session)
     return _serialize(session)
 
 
 def stop_recording(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     session_id: str,
 ) -> VideoChatSessionOut:
     _require_enabled(_settings())
-    session = _load_session(db, workspace=workspace, session_id=session_id)
-    _ensure_session_access(db, workspace=workspace, user=user, session=session)
+    session = _load_session(db, session_id=session_id)
+    _ensure_session_access(db, user=user, session=session)
     if session.recording_status not in {"recording", "starting"}:
         raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
@@ -392,7 +375,6 @@ def stop_recording(
 def start_captions(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     session_id: str,
 ) -> VideoChatSessionOut:
@@ -403,21 +385,20 @@ def start_captions(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             code="video_chat.captions_not_enabled",
         )
-    session = _load_session(db, workspace=workspace, session_id=session_id)
-    _ensure_session_access(db, workspace=workspace, user=user, session=session)
+    session = _load_session(db, session_id=session_id)
+    _ensure_session_access(db, user=user, session=session)
     return _serialize(session)
 
 
 def stop_captions(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     session_id: str,
 ) -> VideoChatSessionOut:
     _require_enabled(_settings())
-    session = _load_session(db, workspace=workspace, session_id=session_id)
-    _ensure_session_access(db, workspace=workspace, user=user, session=session)
+    session = _load_session(db, session_id=session_id)
+    _ensure_session_access(db, user=user, session=session)
     if session.captions_status not in {"on", "starting"}:
         raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,

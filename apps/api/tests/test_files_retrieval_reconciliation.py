@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, event, select, update
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import Base
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.files.rag_sync import (
     adopt_legacy_file_retrieval_heads,
     capture_file_retrieval_event_watermark,
@@ -50,7 +50,6 @@ def _session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
             OrganizationUnit.__table__,
             User.__table__,
             RetrievalPartition.__table__,
@@ -66,13 +65,6 @@ def _session() -> Session:
     session = Session(engine)
     session.add_all(
         [
-            Workspace(
-                id="workspace-1",
-                key="workspace-1",
-                name="Workspace 1",
-                description="",
-                active=True,
-            ),
             User(
                 id="user-1",
                 login_id="user-1",
@@ -83,9 +75,7 @@ def _session() -> Session:
             RetrievalPartition(
                 id=_PARTITION_ID,
                 source_namespace="files",
-                managed_workspace_id="workspace-1",
-                candidate_scope_kind="workspace",
-                candidate_workspace_id="workspace-1",
+                candidate_scope_kind="company",
                 is_default_ingest=False,
             ),
         ]
@@ -102,14 +92,13 @@ def _legacy_file(
 ) -> FileManagerFile:
     return FileManagerFile(
         id=file_id,
-        workspace_id="workspace-1",
         retrieval_partition_id=_PARTITION_ID,
         owner_id="user-1",
         filename=f"{file_id}.txt",
         content_type="text/plain",
         size_bytes=100,
-        storage_key=f"files/workspace-1/{file_id}.txt",
-        visibility="workspace",
+        storage_key=f"files/{file_id}/document.txt",
+        visibility="company",
         extraction_status="ready" if checksum is not None else "pending",
         extraction_content_checksum=checksum,
         extraction_text="cached extracted text" if checksum is not None else None,
@@ -253,7 +242,6 @@ def test_extraction_completion_refreshes_cached_row_and_advances_head(
             desired_state=first.desired_state,
             content_checksum=first.content_checksum,
             visibility_checksum=first.visibility_checksum,
-            diagnostic_workspace_id=first.diagnostic_workspace_id,
         )
         db.execute(
             update(FileManagerFile)
@@ -308,7 +296,6 @@ def test_reconciliation_stages_only_latest_file_head_through_captured_watermark(
             change_kind="content",
             desired_state="active",
             content_checksum="a" * 64,
-            diagnostic_workspace_id="workspace-1",
         )
         latest = record_projection_event(
             db,
@@ -317,7 +304,6 @@ def test_reconciliation_stages_only_latest_file_head_through_captured_watermark(
             retrieval_partition_id=_PARTITION_ID,
             change_kind="delete",
             desired_state="deleted",
-            diagnostic_workspace_id="workspace-1",
         )
         watermark = capture_file_retrieval_event_watermark(db)
 
@@ -346,13 +332,12 @@ def test_reconciliation_stages_only_latest_file_head_through_captured_watermark(
         db.close()
 
 
-def test_reconciliation_preserves_company_scope_with_workspace_diagnostic_identity() -> None:
+def test_reconciliation_preserves_company_scope_for_visibility_events() -> None:
     db = _session()
     try:
         partition = db.get(RetrievalPartition, _PARTITION_ID)
         assert partition is not None
         partition.candidate_scope_kind = "company"
-        partition.candidate_workspace_id = None
         db.flush()
         event_ref = record_projection_event(
             db,
@@ -362,7 +347,6 @@ def test_reconciliation_preserves_company_scope_with_workspace_diagnostic_identi
             change_kind="visibility",
             desired_state="active",
             content_checksum="d" * 64,
-            diagnostic_workspace_id="workspace-1",
         )
 
         stage_file_retrieval_reconciliation(
@@ -374,16 +358,16 @@ def test_reconciliation_preserves_company_scope_with_workspace_diagnostic_identi
         search_job = db.scalar(select(SearchIndexJob))
         rag_job = db.scalar(select(RagSyncJob))
         assert search_job is not None and rag_job is not None
-        assert search_job.workspace_id == "workspace-1"
+        assert not hasattr(search_job, "workspace_id")
         assert search_job.operation == "upsert"
         assert rag_job.scope_kind == "company"
-        assert rag_job.workspace_id is None
+        assert not hasattr(rag_job, "workspace_id")
         assert rag_job.operation == "visibility_update"
     finally:
         db.close()
 
 
-def test_reconciliation_uses_current_source_workspace_after_no_reindex_move() -> None:
+def test_reconciliation_preserves_current_source_partition_and_projection_version() -> None:
     db = _session()
     try:
         file = _legacy_file(file_id="file-moved", checksum="f" * 64)
@@ -397,23 +381,10 @@ def test_reconciliation_uses_current_source_workspace_after_no_reindex_move() ->
             change_kind="content",
             desired_state="active",
             content_checksum="f" * 64,
-            diagnostic_workspace_id="workspace-1",
-        )
-        db.add(
-            Workspace(
-                id="workspace-2",
-                key="workspace-2",
-                name="Workspace 2",
-                description="",
-                active=True,
-            )
         )
         db.flush()
         partition = db.get(RetrievalPartition, _PARTITION_ID)
         assert partition is not None
-        file.workspace_id = "workspace-2"
-        partition.managed_workspace_id = "workspace-2"
-        partition.candidate_workspace_id = "workspace-2"
         db.flush()
 
         stage_file_retrieval_reconciliation(
@@ -425,9 +396,9 @@ def test_reconciliation_uses_current_source_workspace_after_no_reindex_move() ->
         search_job = db.scalar(select(SearchIndexJob))
         rag_job = db.scalar(select(RagSyncJob))
         assert search_job is not None and rag_job is not None
-        assert search_job.workspace_id == "workspace-2"
-        assert rag_job.scope_kind == "workspace"
-        assert rag_job.workspace_id == "workspace-2"
+        assert not hasattr(search_job, "workspace_id")
+        assert rag_job.scope_kind == "company"
+        assert not hasattr(rag_job, "workspace_id")
         assert search_job.retrieval_partition_id == rag_job.retrieval_partition_id == _PARTITION_ID
         assert search_job.projection_version == rag_job.projection_version == 1
     finally:
@@ -444,7 +415,6 @@ def test_reactivation_watermark_requires_both_backends_and_no_newer_file_event()
             retrieval_partition_id=_PARTITION_ID,
             change_kind="delete",
             desired_state="deleted",
-            diagnostic_workspace_id="workspace-1",
         )
         watermark = capture_file_retrieval_event_watermark(db)
         stage_file_retrieval_reconciliation(
@@ -486,7 +456,6 @@ def test_reactivation_watermark_requires_both_backends_and_no_newer_file_event()
             change_kind="content",
             desired_state="active",
             content_checksum="b" * 64,
-            diagnostic_workspace_id="workspace-1",
         )
         assert newer.event_sequence > event_ref.event_sequence
         drifted = inspect_file_retrieval_reconciliation(

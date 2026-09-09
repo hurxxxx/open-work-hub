@@ -4,7 +4,7 @@ import {
   hasConfiguredAdminSectionAccess,
   type AdminSectionAccessResolver,
 } from '@/src/platform/admin/admin-permissions';
-import type { WorkspaceBootstrapNavItem } from '@/src/platform/workspaces/workspaces-api';
+import type { BootstrapNavItem } from '@/src/platform/apps/apps-api';
 
 import { buildSidebarCategories } from './sub-sidebar-categories';
 export {
@@ -26,19 +26,17 @@ export interface SubSidebarNavigationProjection {
 
 export interface BuildSubSidebarNavigationProjectionInput {
   activeAppId: string;
-  activeFeatureAppId?: string | null;
-  canReadWorkspace: boolean;
+  canReadApp: boolean;
   extendCategories?: AppSidebarConfig['extendCategories'];
   globalAppIds?: readonly string[];
   hasAdminSectionAccess?: AdminSectionAccessResolver;
   navItems: readonly NavItem[];
   systemRoles: readonly string[];
   translate: TranslateSidebarLabel;
-  workspaceNavItems: readonly WorkspaceBootstrapNavItem[];
+  appNavItems: readonly BootstrapNavItem[];
 }
 
 const ADMIN_SECTION_ALIASES: Record<string, string> = {
-  teams: 'workspaces',
   users: 'people',
 };
 
@@ -55,36 +53,25 @@ function translateNavItem(
   };
 }
 
-function buildWorkspaceNavItems({
+function buildAppNavItems({
   activeAppId,
-  activeFeatureAppId,
   navItems,
   translate,
-  workspaceNavItems,
+  appNavItems,
 }: Pick<
   BuildSubSidebarNavigationProjectionInput,
-  | 'activeAppId'
-  | 'activeFeatureAppId'
-  | 'navItems'
-  | 'translate'
-  | 'workspaceNavItems'
+  'activeAppId' | 'navItems' | 'translate' | 'appNavItems'
 >): NavItem[] {
   const navItemRegistry = new Map(navItems.map((item) => [item.id, item]));
   const items: NavItem[] = [];
-  for (const item of workspaceNavItems) {
-    if (
-      !isWorkspaceNavItemInActiveScope({
-        activeAppId,
-        activeFeatureAppId,
-        item,
-      })
-    ) {
+  for (const item of appNavItems) {
+    if (item.app_id !== activeAppId) {
       continue;
     }
     const localItem = navItemRegistry.get(item.id);
     if (!localItem) {
       throw new Error(
-        `Workspace nav item ${item.id} for ${item.app_id} is missing from the web app registry`,
+        `App nav item ${item.id} for ${item.app_id} is missing from the web app registry`,
       );
     }
     const nextItem: NavItem = {
@@ -109,22 +96,6 @@ function buildWorkspaceNavItems({
     items.push(nextItem);
   }
   return items;
-}
-
-function isWorkspaceNavItemInActiveScope({
-  activeAppId,
-  activeFeatureAppId,
-  item,
-}: {
-  activeAppId: string;
-  activeFeatureAppId?: string | null;
-  item: WorkspaceBootstrapNavItem;
-}): boolean {
-  if (activeFeatureAppId !== undefined && activeFeatureAppId !== null) {
-    return item.app_id === activeFeatureAppId;
-  }
-
-  return item.app_id === activeAppId;
 }
 
 function buildSettingsNavItems({
@@ -164,15 +135,14 @@ function resolveSettingsSectionId(item: NavItem): string | null {
 
 export function buildSubSidebarNavigationProjection({
   activeAppId,
-  activeFeatureAppId,
-  canReadWorkspace,
+  canReadApp,
   extendCategories,
   globalAppIds = [],
   hasAdminSectionAccess,
   navItems,
   systemRoles,
   translate,
-  workspaceNavItems,
+  appNavItems,
 }: BuildSubSidebarNavigationProjectionInput): SubSidebarNavigationProjection {
   const filteredItems =
     activeAppId === 'settings'
@@ -187,20 +157,18 @@ export function buildSubSidebarNavigationProjection({
         ? navItems
             .filter((item) => item.appId === activeAppId)
             .map((item) => translateNavItem(item, translate))
-        : buildWorkspaceNavItems({
+        : buildAppNavItems({
             activeAppId,
-            activeFeatureAppId,
             navItems,
             translate,
-            workspaceNavItems,
+            appNavItems,
           });
   const baseCategories = buildSidebarCategories(
     filteredItems.map((item) => item.category),
   );
   const categories =
     extendCategories?.(baseCategories, {
-      activeFeatureAppId,
-      canReadWorkspace,
+      canReadApp,
     }) ?? baseCategories;
   return { categories, filteredItems };
 }

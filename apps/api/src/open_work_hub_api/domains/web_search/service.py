@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import inspect
 import asyncio
+import inspect
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -9,24 +9,23 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import Settings, get_settings
-from open_work_hub_api.domains.ai.gateway import resolve_llm_workload_route
-from open_work_hub_api.domains.ai.model_settings_service import (
-    AiModelSettingsError,
-    ResolvedLlmWorkloadRoute,
-)
 from open_work_hub_api.domains.ai.external_gateway import (
     AiExternalCapabilityExecution,
     AiExternalCapabilityPolicyViolation,
     AiExternalCapabilityRequest,
     begin_external_capability,
 )
+from open_work_hub_api.domains.ai.gateway import resolve_llm_workload_route
+from open_work_hub_api.domains.ai.model_settings_service import (
+    AiModelSettingsError,
+    ResolvedLlmWorkloadRoute,
+)
+from open_work_hub_api.domains.web_search import WEB_SEARCH_WORKLOAD_IDS
 from open_work_hub_api.domains.web_search.schemas import (
     WebSearchAnswerResponse,
     WebSearchCitation,
     WebSearchUsage,
 )
-from open_work_hub_api.domains.web_search import WEB_SEARCH_WORKLOAD_IDS
-
 
 WEB_SEARCH_TOOL_TYPE = "web_search_20250305"
 
@@ -104,7 +103,6 @@ def prepare_web_search_execution(
     max_uses: int = 5,
     profile_id: str = "general",
     settings: Settings | None = None,
-    workspace_id: str,
     app_id: str,
     actor_user_id: str | None,
     principal_kind: str = "user",
@@ -124,7 +122,6 @@ def prepare_web_search_execution(
         external_execution = begin_external_capability(
             AiExternalCapabilityRequest(
                 source=source,
-                workspace_id=workspace_id,
                 actor_user_id=actor_user_id,
                 principal_kind=principal_kind,
                 principal_id=principal_id,

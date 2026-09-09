@@ -15,9 +15,8 @@ from open_work_hub_api.domains.ai.registry import (
     AiCapabilityRegistry,
     ApprovalPreview,
     PreviewField,
-    WorkspaceContext,
 )
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.planner.event_time import parse_iso_or_date
 
 
@@ -117,7 +116,6 @@ def _meeting_service():
 
 def _list_meetings(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -125,7 +123,6 @@ def _list_meetings(
     scope = str(arguments.get("scope", "mine"))
     result = _meeting_service().list_meetings(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         scope=scope,
@@ -150,24 +147,20 @@ def _list_meetings(
 
 def _get_meeting(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    result = _meeting_service().get_meeting(
+    return _meeting_service().get_meeting_for_ai(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         meeting_id=str(arguments["meeting_id"]),
     )
-    return result.model_dump(mode="json", by_alias=True)
 
 
 def _find_availability(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -187,7 +180,6 @@ def _find_availability(
         )
     result = _meeting_service().list_meeting_availability(
         db,
-        workspace=workspace,
         principal=principal,
         viewer=user,
         user_ids=list(arguments["user_ids"]),
@@ -199,14 +191,12 @@ def _find_availability(
 
 def _extract_actions(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
     return _insights_module().list_action_insights(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         meeting_id=str(arguments["meeting_id"]),
@@ -216,14 +206,12 @@ def _extract_actions(
 
 def _extract_decisions(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
     return _insights_module().list_decision_insights(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         meeting_id=str(arguments["meeting_id"]),
@@ -233,14 +221,12 @@ def _extract_decisions(
 
 def _draft_followup_schedule(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
     return _insights_module().draft_followup_schedule(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         meeting_id=str(arguments["meeting_id"]),
@@ -253,7 +239,6 @@ def _draft_followup_schedule(
 
 def _create_meeting(
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     arguments: Mapping[str, Any],
@@ -262,7 +247,6 @@ def _create_meeting(
 ) -> dict[str, Any]:
     return _meeting_service().create_meeting_for_ai(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         title=str(arguments["title"]),
@@ -277,7 +261,6 @@ def _create_meeting(
 
 def _build_create_meeting_preview(
     principal: CallerPrincipal,
-    workspace: WorkspaceContext,
     parsed_args: BaseModel | Mapping[str, Any],
 ) -> ApprovalPreview:
     values = (
@@ -287,7 +270,7 @@ def _build_create_meeting_preview(
     )
     attendee_count = len(values.get("attendee_user_ids") or [])
     return ApprovalPreview(
-        title=f"[{workspace.display_name}] Create meeting",
+        title="Create meeting",
         summary=str(values.get("description") or "Create a meeting from AI.").strip()
         or "Create a meeting from AI.",
         fields=(
@@ -331,7 +314,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     registry.register_tool(
         name="meeting.list_meetings",
         description=(
-            "List meetings in the current workspace. For questions about the latest, "
+            "List meetings in the current user. For questions about the latest, "
             "last, previous, or past meeting, call this with scope='all'. "
             "For future schedule questions, call this with scope='upcoming'."
         ),
@@ -341,14 +324,14 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     )
     registry.register_tool(
         name="meeting.get_meeting",
-        description="Load one meeting in the current workspace.",
+        description="Load one meeting in the current user.",
         owner_domain="meeting",
         handler=_get_meeting,
         args_model=GetMeetingArgs,
     )
     registry.register_tool(
         name="meeting.find_availability",
-        description="Find attendee availability in the current workspace.",
+        description="Find attendee availability in the current user.",
         owner_domain="meeting",
         handler=_find_availability,
         args_model=FindAvailabilityArgs,
@@ -378,7 +361,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         return
     registry.register_tool(
         name="meeting.create_meeting",
-        description="Create a meeting in the current workspace.",
+        description="Create a meeting in the current user.",
         owner_domain="meeting",
         handler=_create_meeting,
         args_model=CreateMeetingArgs,

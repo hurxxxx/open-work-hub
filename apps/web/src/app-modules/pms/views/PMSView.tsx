@@ -1,75 +1,69 @@
-import {
-  type ReactNode,
-  type SetStateAction,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-} from 'react';
-import {
-  useParams,
-  Link,
-  Navigate,
-  useSearchParams,
-  useNavigate,
-  useLocation,
-} from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { LazyMotion, domAnimation, m, AnimatePresence } from 'motion/react';
-import { useConfirm } from '@open-work-hub/ui/feedback/confirm-dialog';
-import { usePrompt } from '@open-work-hub/ui/feedback/prompt-dialog';
-import { useFeedback } from '@open-work-hub/ui';
-import {
-  Archive,
-  ArchiveRestore,
-  Layout,
-  Star,
-  Plus,
-  PencilRuler,
-  List as ListIcon,
-  Grid,
-  Calendar,
-  Activity,
-  Table,
-  Download,
-  MoreHorizontal,
-} from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import { useFeedback } from '@open-work-hub/ui';
+import { useConfirm } from '@open-work-hub/ui/feedback/confirm-dialog';
+import { usePrompt } from '@open-work-hub/ui/feedback/prompt-dialog';
 import {
-  buildWorkspaceAppPath,
-  getWorkspaceBySlug,
-  getCurrentOrLastWorkspaceSlug,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
+  Activity,
+  Archive,
+  ArchiveRestore,
+  Calendar,
+  Download,
+  Grid,
+  Layout,
+  List as ListIcon,
+  MoreHorizontal,
+  PencilRuler,
+  Plus,
+  Star,
+  Table,
+} from 'lucide-react';
+import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
 import {
-  getPmsTaskList,
-  listAllPmsTaskLists,
-  listSpaces,
-  listSpaceMembers,
-  listAllTaskListTasks,
-  listTaskListMilestones,
-  listTaskListLabels,
-  listTaskListStatuses,
-  getTaskDetail,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
+import {
+  DEFAULT_PMS_TASK_SORT,
   createTaskListTask,
   deletePmsTaskList,
   deleteTask,
-  reorderTaskListTasks,
-  updateTask,
-  updatePmsTaskList,
   exportTaskListCsv,
-  DEFAULT_PMS_TASK_SORT,
-  type TaskFilterParams,
-  type PmsTaskList,
-  type PmsTask,
-  type PmsTaskListMember,
-  type PmsSpace,
-  type PmsMilestone,
+  getPmsTaskList,
+  getTaskDetail,
+  listAllPmsTaskLists,
+  listAllTaskListTasks,
+  listSpaceMembers,
+  listSpaces,
+  listTaskListLabels,
+  listTaskListMilestones,
+  listTaskListStatuses,
+  reorderTaskListTasks,
+  updatePmsTaskList,
+  updateTask,
   type PmsLabel,
+  type PmsMilestone,
+  type PmsSpace,
+  type PmsTask,
+  type PmsTaskList,
+  type PmsTaskListMember,
   type PmsTaskListStatus,
   type PmsTaskSort,
+  type TaskFilterParams,
 } from '../api/pms-api';
 import {
   createDefaultTaskFilterParams,
@@ -80,29 +74,60 @@ import {
   withEffectiveTaskStatusFilter,
 } from '../api/pms-filters';
 
-import { SpaceTasksView } from './SpaceTasksView';
-import { ListView } from './ListView';
-import { BoardView } from './BoardView';
-import { CalendarView } from './CalendarView';
-import { GanttView } from './GanttView';
-import { TableView } from './TableView';
-import { TaskDetail } from './TaskDetail';
-import { TaskDetailModal } from './TaskDetailModal';
-import { NewTaskModal } from './NewTaskModal';
+import { WhiteboardContextSlotPanel } from '@/src/app-modules/whiteboard/public-api';
+import {
+  PERSONAL_TODO_PMS_TASK_CREATED_EVENT,
+  type PersonalTodoPmsTaskCreatedEventDetail,
+} from '@/src/platform/personal-widgets/floating-panel-events';
+import { taskListRoleAllows } from '../api/pms-permissions';
+import { ListContextMenu } from '../sidebar/ListContextMenu';
 import { AssignedToMeView } from './AssignedToMeView';
-import { TodayOverdueView } from './TodayOverdueView';
-import { TaskListSettingsPanel } from './TaskListSettingsPanel';
+import { BoardView } from './BoardView';
+import { BulkActionBar } from './BulkActionBar';
+import { CalendarView } from './CalendarView';
 import { CreateSpaceModal } from './CreateSpaceModal';
 import { FilterBar } from './FilterBar';
-import { BulkActionBar } from './BulkActionBar';
-import { SpaceDocsView } from './SpaceDocsView';
-import { SpaceWhiteboardsView } from './SpaceWhiteboardsView';
-import { SpaceOverviewView } from './SpaceOverviewView';
-import { ListContextMenu } from '../sidebar/ListContextMenu';
+import { GanttView } from './GanttView';
+import { ListView } from './ListView';
+import { NewTaskModal } from './NewTaskModal';
 import {
   PmsCenteredLoadingState,
   PmsCenteredStateBlock,
 } from './PmsCenteredStateBlock';
+import { SpaceDocsView } from './SpaceDocsView';
+import { SpaceOverviewView } from './SpaceOverviewView';
+import { SpaceTasksView } from './SpaceTasksView';
+import { SpaceWhiteboardsView } from './SpaceWhiteboardsView';
+import { TableView } from './TableView';
+import { TaskDetail } from './TaskDetail';
+import { TaskDetailModal } from './TaskDetailModal';
+import { TaskListSettingsPanel } from './TaskListSettingsPanel';
+import { TodayOverdueView } from './TodayOverdueView';
+import {
+  PMS_SPACE_MEMBERS_CHANGED_EVENT,
+  PMS_TASK_LIST_CHANGED_EVENT,
+  dispatchPmsTaskListChanged,
+  type PmsSpaceMembersChangedDetail,
+  type PmsTaskListChangedDetail,
+} from './pms-events';
+import type { TaskBoardPositionUpdate } from './pms-task-hierarchy';
+import { reconcilePmsTaskListCatalog } from './pms-task-list-catalog-model';
+import {
+  findPmsTaskById,
+  getRequestedPmsTaskId,
+  resolvePmsTaskClosedTransition,
+  resolvePmsTaskSelectedTransition,
+  resolveReloadedPmsTaskSelection,
+  resolveRequestedPmsTaskTransition,
+  resolveSingleListPmsTaskDetailTransition,
+  resolveSingleListPmsTaskSelection,
+} from './pms-task-selection-workflow';
+import {
+  buildPmsSpaceToolPath,
+  clearPmsCreateTaskSearchParams,
+  readPmsCreateTaskRequest,
+  resolvePmsViewRoute,
+} from './pms-view-route';
 import {
   EMPTY_SELECTED_TASK_IDS,
   buildInlineTaskCreatePayload,
@@ -114,38 +139,7 @@ import {
   type ScopedTaskFilterState,
   type ScopedTaskSelectionState,
 } from './pms-view-scoped-state-model';
-import {
-  buildPmsSpaceToolPath,
-  clearPmsCreateTaskSearchParams,
-  readPmsCreateTaskRequest,
-  resolvePmsViewRoute,
-} from './pms-view-route';
-import {
-  findPmsTaskById,
-  getRequestedPmsTaskId,
-  resolvePmsTaskClosedTransition,
-  resolvePmsTaskSelectedTransition,
-  resolveReloadedPmsTaskSelection,
-  resolveRequestedPmsTaskTransition,
-  resolveSingleListPmsTaskSelection,
-  resolveSingleListPmsTaskDetailTransition,
-} from './pms-task-selection-workflow';
-import type { TaskBoardPositionUpdate } from './pms-task-hierarchy';
-import { taskListRoleAllows } from '../api/pms-permissions';
-import { WhiteboardContextSlotPanel } from '@/src/app-modules/whiteboard/public-api';
-import {
-  PERSONAL_TODO_PMS_TASK_CREATED_EVENT,
-  type PersonalTodoPmsTaskCreatedEventDetail,
-} from '@/src/platform/personal-widgets/floating-panel-events';
-import {
-  PMS_SPACE_MEMBERS_CHANGED_EVENT,
-  PMS_TASK_LIST_CHANGED_EVENT,
-  dispatchPmsTaskListChanged,
-  type PmsSpaceMembersChangedDetail,
-  type PmsTaskListChangedDetail,
-} from './pms-events';
 import { usePmsTaskListGroupPreference } from './usePmsTaskListGroupPreference';
-import { reconcilePmsTaskListCatalog } from './pms-task-list-catalog-model';
 
 type PmsViewTab =
   | 'List'
@@ -230,7 +224,6 @@ export const PMSView = () => <>{usePMSViewElement()}</>;
 
 function usePMSViewElement(): ReactNode {
   const { t } = useTranslation('apps');
-  const { toolId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -238,13 +231,8 @@ function usePMSViewElement(): ReactNode {
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
   const toast = useFeedback();
-  const pmsRoot = resolveDefaultWorkspaceAppPath(user, 'pms');
-  const currentWorkspaceSlug =
-    getWorkspaceBySlug(user, searchParams.get('workspace'))?.slug ??
-    getCurrentOrLastWorkspaceSlug();
-  const pmsListRootPath = currentWorkspaceSlug
-    ? buildWorkspaceAppPath(currentWorkspaceSlug, 'pms')
-    : pmsRoot;
+
+  const pmsListRootPath = buildAppHref({ routeId: 'pms.root' });
   const [selectedIssueDraft, setSelectedIssueDraft] = useState<PmsTask | null>(
     null,
   );
@@ -311,7 +299,6 @@ function usePMSViewElement(): ReactNode {
     isNewTaskModalOpen,
     requestedTab: searchParams.get('tab'),
     routePathname: location.pathname,
-    toolId,
   });
   const isAssignedTasksView = pmsRoute.kind === 'assigned';
   const isTodayView = pmsRoute.kind === 'today';
@@ -355,7 +342,6 @@ function usePMSViewElement(): ReactNode {
   const { groupBy: taskListGroupBy, setGroupBy: setTaskListGroupBy } =
     usePmsTaskListGroupPreference({
       enabled: pmsRoute.kind === 'list' && activeTab === 'List',
-      workspaceSlug: currentWorkspaceSlug,
     });
   const defaultFilterParams = useMemo(
     () => createDefaultTaskFilterParamsForList(),
@@ -476,11 +462,7 @@ function usePMSViewElement(): ReactNode {
 
     const reloadSpaceMembers = async () => {
       try {
-        const response = await listSpaceMembers(
-          token,
-          selectedSpaceId,
-          currentWorkspaceSlug,
-        );
+        const response = await listSpaceMembers(token, selectedSpaceId);
         if (!cancelled) {
           setMembers(response.items);
         }
@@ -507,7 +489,7 @@ function usePMSViewElement(): ReactNode {
         handleSpaceMembersChanged,
       );
     };
-  }, [currentWorkspaceSlug, selectedTaskList?.team_id, token]);
+  }, [selectedTaskList?.team_id, token]);
 
   useEffect(() => {
     if (
@@ -677,9 +659,7 @@ function usePMSViewElement(): ReactNode {
       setSelectedTaskListId('');
       navigate(
         updated.team_id
-          ? buildPmsSpaceToolPath(updated.team_id, {
-              workspaceSlug: currentWorkspaceSlug,
-            })
+          ? buildPmsSpaceToolPath(updated.team_id, {})
           : pmsListRootPath,
       );
     } catch (caughtError) {
@@ -689,7 +669,6 @@ function usePMSViewElement(): ReactNode {
     canManageTaskList,
     clearSelectedIssue,
     confirm,
-    currentWorkspaceSlug,
     getErrorMessage,
     navigate,
     pmsListRootPath,
@@ -757,9 +736,7 @@ function usePMSViewElement(): ReactNode {
       setSelectedTaskListId('');
       navigate(
         selectedTaskList.team_id
-          ? buildPmsSpaceToolPath(selectedTaskList.team_id, {
-              workspaceSlug: currentWorkspaceSlug,
-            })
+          ? buildPmsSpaceToolPath(selectedTaskList.team_id, {})
           : pmsListRootPath,
       );
     } catch (error) {
@@ -769,7 +746,6 @@ function usePMSViewElement(): ReactNode {
     canManageTaskList,
     clearSelectedIssue,
     confirm,
-    currentWorkspaceSlug,
     getErrorMessage,
     navigate,
     pmsListRootPath,
@@ -790,8 +766,8 @@ function usePMSViewElement(): ReactNode {
 
       try {
         const [response, spaceItems] = await Promise.all([
-          listAllPmsTaskLists(activeToken, undefined, currentWorkspaceSlug),
-          listSpaces(activeToken, currentWorkspaceSlug),
+          listAllPmsTaskLists(activeToken, undefined),
+          listSpaces(activeToken),
         ]);
         if (cancelled) {
           return;
@@ -875,7 +851,6 @@ function usePMSViewElement(): ReactNode {
     };
   }, [
     createTaskRequested,
-    currentWorkspaceSlug,
     getErrorMessage,
     routeTaskListId,
     shouldLoadSingleTaskList,
@@ -893,7 +868,6 @@ function usePMSViewElement(): ReactNode {
           token,
           selectedTaskListId,
           withEffectiveTaskStatusFilter(filterParams, statuses),
-          undefined,
           { sort: taskSort },
         );
         applyIssueCollection(res.items);
@@ -967,12 +941,11 @@ function usePMSViewElement(): ReactNode {
           token,
           selectedTaskListId,
           withEffectiveTaskStatusFilter(filterParams, statusResponse.items),
-          undefined,
           { sort: taskSort },
         ),
       ),
       selectedSpaceId
-        ? listSpaceMembers(token, selectedSpaceId, currentWorkspaceSlug)
+        ? listSpaceMembers(token, selectedSpaceId)
         : Promise.resolve({ items: [], total: 0, page: 1, page_size: 20 }),
       listTaskListMilestones(token, selectedTaskListId),
       listTaskListLabels(token, selectedTaskListId),
@@ -1003,7 +976,6 @@ function usePMSViewElement(): ReactNode {
     };
   }, [
     applyTaskListDataLoad,
-    currentWorkspaceSlug,
     failTaskListDataLoad,
     taskLists,
     token,
@@ -1060,25 +1032,20 @@ function usePMSViewElement(): ReactNode {
       ) {
         return;
       }
-      const result = await reorderTaskListTasks(
-        token,
-        selectedTaskListId,
-        {
-          items: updates.map((update) => {
-            const item: {
-              board_position: number;
-              parent_id?: string | null;
-              task_id: string;
-            } = {
-              board_position: update.boardPosition,
-              task_id: update.taskId,
-            };
-            if (update.parentId !== undefined) item.parent_id = update.parentId;
-            return item;
-          }),
-        },
-        currentWorkspaceSlug,
-      );
+      const result = await reorderTaskListTasks(token, selectedTaskListId, {
+        items: updates.map((update) => {
+          const item: {
+            board_position: number;
+            parent_id?: string | null;
+            task_id: string;
+          } = {
+            board_position: update.boardPosition,
+            task_id: update.taskId,
+          };
+          if (update.parentId !== undefined) item.parent_id = update.parentId;
+          return item;
+        }),
+      });
       if (result.items.length === 0) return;
       const updatedById = new Map(
         result.items.map((item) => [item.id, item] as const),
@@ -1087,14 +1054,7 @@ function usePMSViewElement(): ReactNode {
         tasks.map((item) => updatedById.get(item.id) ?? item),
       );
     },
-    [
-      applyIssueCollection,
-      canEditTaskList,
-      currentWorkspaceSlug,
-      selectedTaskListId,
-      tasks,
-      token,
-    ],
+    [applyIssueCollection, canEditTaskList, selectedTaskListId, tasks, token],
   );
 
   const handleUpdateIssue = useCallback(
@@ -1179,7 +1139,7 @@ function usePMSViewElement(): ReactNode {
     let cancelled = false;
     prepareRequestedTaskLoad();
 
-    getTaskDetail(token, transition.detailRequest.taskId, currentWorkspaceSlug)
+    getTaskDetail(token, transition.detailRequest.taskId)
       .then((detail) => {
         if (cancelled) {
           return;
@@ -1202,7 +1162,6 @@ function usePMSViewElement(): ReactNode {
     };
   }, [
     applyRequestedTaskDetail,
-    currentWorkspaceSlug,
     getErrorMessage,
     prepareRequestedTaskLoad,
     requestedTaskId,
@@ -1278,10 +1237,10 @@ function usePMSViewElement(): ReactNode {
   );
 
   if (isAssignedTasksView) {
-    return <AssignedToMeView workspaceSlug={currentWorkspaceSlug} />;
+    return <AssignedToMeView />;
   }
   if (isTodayView) {
-    return <TodayOverdueView workspaceSlug={currentWorkspaceSlug} />;
+    return <TodayOverdueView />;
   }
   if (spaceDocsSpaceId) {
     const spaceName = resolveLoadedSpaceName(
@@ -1294,7 +1253,6 @@ function usePMSViewElement(): ReactNode {
         spaceId={spaceDocsSpaceId}
         spaceName={spaceName}
         docId={spaceDocsDocId}
-        workspaceSlug={currentWorkspaceSlug}
       />
     );
   }
@@ -1309,7 +1267,6 @@ function usePMSViewElement(): ReactNode {
         spaceId={spaceWhiteboardsSpaceId}
         spaceName={spaceName}
         whiteboardId={spaceWhiteboardsWhiteboardId}
-        workspaceSlug={currentWorkspaceSlug}
       />
     );
   }
@@ -1324,7 +1281,6 @@ function usePMSViewElement(): ReactNode {
         activeTab={spaceTasksTab}
         spaceId={spaceTasksSpaceId}
         spaceName={spaceName}
-        workspaceSlug={currentWorkspaceSlug}
       />
     );
   }
@@ -1335,11 +1291,7 @@ function usePMSViewElement(): ReactNode {
       spaceOverviewId,
     );
     return (
-      <SpaceOverviewView
-        spaceId={spaceOverviewId}
-        spaceName={spaceName}
-        workspaceSlug={currentWorkspaceSlug}
-      />
+      <SpaceOverviewView spaceId={spaceOverviewId} spaceName={spaceName} />
     );
   }
   if (isOverviewRoute) {
@@ -1354,14 +1306,7 @@ function usePMSViewElement(): ReactNode {
       );
     }
     if (spaces.length > 0) {
-      return (
-        <Navigate
-          replace
-          to={buildPmsSpaceToolPath(spaces[0].id, {
-            workspaceSlug: currentWorkspaceSlug,
-          })}
-        />
-      );
+      return <Navigate replace to={buildPmsSpaceToolPath(spaces[0].id, {})} />;
     }
     return (
       <>
@@ -1390,17 +1335,12 @@ function usePMSViewElement(): ReactNode {
         <CreateSpaceModal
           isOpen={createSpaceOpen}
           onClose={() => setCreateSpaceOpen(false)}
-          workspaceSlug={currentWorkspaceSlug}
           onCreated={(space) => {
             setSpaces((current) => [
               space,
               ...current.filter((item) => item.id !== space.id),
             ]);
-            navigate(
-              buildPmsSpaceToolPath(space.id, {
-                workspaceSlug: currentWorkspaceSlug,
-              }),
-            );
+            navigate(buildPmsSpaceToolPath(space.id, {}));
           }}
         />
       </>
@@ -1428,11 +1368,9 @@ function usePMSViewElement(): ReactNode {
           {/* Row 1: breadcrumb */}
           <nav className="app-text-caption mb-1.5 hidden min-w-0 items-center gap-1.5 text-app-ink/55 lg:flex">
             <Link
-              to={
-                currentWorkspaceSlug
-                  ? `/w/${encodeURIComponent(currentWorkspaceSlug)}/pms`
-                  : pmsRoot
-              }
+              to={buildAppHref({
+                routeId: 'pms.root',
+              })}
               className="hover:text-app-ink transition-colors shrink-0"
             >
               {t('pms.title')}
@@ -1831,7 +1769,6 @@ function usePMSViewElement(): ReactNode {
                   >
                     <WhiteboardContextSlotPanel
                       context={selectedTaskListWhiteboardContext}
-                      workspaceSlug={currentWorkspaceSlug}
                       defaultTitle={`${taskListName} Whiteboard`}
                       canEditContext={canEditTaskList}
                       className="min-h-[calc(100vh-220px)] w-full overflow-hidden"
@@ -1851,6 +1788,10 @@ function usePMSViewElement(): ReactNode {
               onClose={clearSelectedIssue}
             >
               <TaskDetail
+                canPublishDoc={taskListRoleAllows(
+                  selectedTaskList?.role,
+                  'admin',
+                )}
                 task={selectedIssue}
                 members={members}
                 milestones={milestones}
@@ -1858,7 +1799,6 @@ function usePMSViewElement(): ReactNode {
                 taskListStatuses={taskListStatuses}
                 spaceName={selectedTaskList?.team_name}
                 spaceId={selectedTaskList?.team_id ?? null}
-                workspaceSlug={currentWorkspaceSlug}
                 canEdit={canEditTaskList}
                 onClose={clearSelectedIssue}
                 onUpdate={reloadIssues}
@@ -1879,7 +1819,6 @@ function usePMSViewElement(): ReactNode {
               onCreated={handleNewTaskCreated}
               taskListStatuses={taskListStatuses}
               canCreate={canEditTaskList}
-              workspaceSlug={currentWorkspaceSlug}
             />
           )}
         </AnimatePresence>
@@ -1890,7 +1829,6 @@ function usePMSViewElement(): ReactNode {
               taskListId={selectedTaskListId}
               taskListName={selectedTaskList?.name ?? null}
               teamId={selectedTaskList?.team_id ?? null}
-              workspaceSlug={currentWorkspaceSlug}
               currentUserRole={selectedTaskList?.role ?? null}
               onClose={() => setSettingsOpen(false)}
               onLabelsChanged={handleLabelsChanged}
@@ -1919,17 +1857,12 @@ function usePMSViewElement(): ReactNode {
         <CreateSpaceModal
           isOpen={createSpaceOpen}
           onClose={() => setCreateSpaceOpen(false)}
-          workspaceSlug={currentWorkspaceSlug}
           onCreated={(space) => {
             setSpaces((current) => [
               space,
               ...current.filter((item) => item.id !== space.id),
             ]);
-            navigate(
-              buildPmsSpaceToolPath(space.id, {
-                workspaceSlug: currentWorkspaceSlug,
-              }),
-            );
+            navigate(buildPmsSpaceToolPath(space.id, {}));
           }}
         />
         {promptDialog}

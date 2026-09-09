@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  downloadAuthenticatedContent,
   downloadBlobAsFile,
   openBlobInNewTab,
   openDownloadUrl,
+  parseAuthenticatedContentUrl,
   type BrowserBlobOpenAdapter,
   type BrowserDownloadAdapter,
   type BrowserDownloadAnchor,
@@ -47,6 +49,54 @@ function createFakeAdapter() {
 }
 
 describe('browser download', () => {
+  it('keeps content capabilities in a fragment and sends them as a header', async () => {
+    const fake = createFakeAdapter();
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(new Blob(['hello']), {
+          headers: {
+            'content-disposition': 'attachment; filename="hello.txt"',
+          },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(
+      parseAuthenticatedContentUrl('/api/v1/content#grant=signed-token'),
+    ).toEqual({
+      grant: 'signed-token',
+      url: '/api/v1/content',
+    });
+    await downloadAuthenticatedContent(
+      'session-token',
+      '/api/v1/content#grant=signed-token',
+      'fallback.txt',
+      fake.adapter,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/content',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer session-token',
+          'X-Open-Work-Hub-Content-Grant': 'signed-token',
+        }),
+      }),
+    );
+    expect(fake.anchors[0]?.download).toBe('hello.txt');
+    vi.unstubAllGlobals();
+  });
+
+  it('rejects content capabilities in request queries', () => {
+    for (const invalidUrl of [
+      '/api/v1/content?grant=signed-token',
+      '/api/v1/content#grant=one&grant=two',
+      '/api/v1/content#grant=one#extra',
+    ]) {
+      expect(() => parseAuthenticatedContentUrl(invalidUrl)).toThrow();
+    }
+  });
+
   it('downloads a blob with a temporary object URL and filename', () => {
     const fake = createFakeAdapter();
 
@@ -106,7 +156,9 @@ describe('browser download', () => {
 
   it('opens a blob in a new tab and schedules object URL cleanup', () => {
     const calls: string[] = [];
-    let scheduledCallback: (() => void) | null = null;
+    let scheduledCallback: () => void = () => {
+      throw new Error('Expected scheduled object URL cleanup');
+    };
     const adapter: BrowserBlobOpenAdapter = {
       createObjectUrl: () => {
         calls.push('createObjectUrl');
@@ -132,7 +184,7 @@ describe('browser download', () => {
       'scheduleRevoke:30000',
     ]);
 
-    scheduledCallback?.();
+    scheduledCallback();
 
     expect(calls.at(-1)).toBe('revokeObjectUrl:blob:preview-url');
   });

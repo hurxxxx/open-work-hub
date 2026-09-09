@@ -1,6 +1,6 @@
 # Open Work Hub
 
-Modular ALM platform: workspaces, tasks, docs, meetings, files, search, and AI-assisted workflows.
+Company work platform: users and groups, app access policies, PMS spaces, docs, meetings, files, search, and AI-assisted workflows.
 
 ## Layout
 
@@ -13,22 +13,20 @@ Modular ALM platform: workspaces, tasks, docs, meetings, files, search, and AI-a
 ## Requirements
 
 - Node.js 22+
-- pnpm 10.33.0
+- pnpm version pinned by `packageManager` in [package.json](./package.json)
 - Python 3.12 + `uv`
 - Docker Compose
 
 ## Dev
 
-```bash
-cp .env.example .env
-pnpm install --frozen-lockfile
-pnpm dev:infra:up
-pnpm dev
-```
+Start with the [Linux development installation guide / 리눅스 개발 환경 설치 가이드](./INSTALL.md).
+It covers setup with Codex or Claude Code, prerequisites, existing env preservation,
+Docker infrastructure, source-based app execution, and verification.
 
 - Web default: `http://127.0.0.1:4200`
 - API default: `http://127.0.0.1:8001`
 - Runtime env prefix: `OPEN_WORK_HUB_*`
+- API hot reload watches `apps/api/src`; test and script edits do not restart active browser sessions.
 
 Minimal auth/UI stack:
 
@@ -38,6 +36,27 @@ pnpm dev:login-smoke
 pnpm e2e:install
 pnpm dev:login-browser-smoke
 ```
+
+Full-stack public-domain user acceptance uses the current development data and real dependencies.
+Keep the first command running, then execute the preflight in another terminal before opening
+isolated `agent-browser` sessions:
+
+```bash
+./dev.sh --with-worker --restart
+OPEN_WORK_HUB_UAT_BASE_URL=https://your-public-dev-domain.example pnpm dev:public-smoke
+OPEN_WORK_HUB_UAT_BASE_URL=https://your-public-dev-domain.example pnpm uat:preflight
+```
+
+`dev:public-smoke` is the focused recovery gate: it requires the local Web/API listeners and checks
+that the public root, login, health, readiness, and bootstrap surfaces resolve to the same development
+runtime. `uat:preflight` additionally requires the Worker and object storage.
+
+For a continuously available development domain, follow the
+[persistent development runtime contract](./docs/domains/release/README.md#persistent-development-runtime).
+The foreground `dev.sh` process stops its servers when its terminal session ends.
+
+The repeatable personas, state restoration rules, and expected evidence are owned by
+[Core Platform User Acceptance](./docs/product/core-platform-user-acceptance.md).
 
 Seed account: `administrator` / `open-work-hub-dev-only`. Dev/minimal settings are rejected by preview/prod.
 

@@ -16,6 +16,7 @@ export const resources = {
         refresh: '새로고침',
         reload: '다시 불러오기',
         rename: '이름 변경',
+        remove: '제거',
         reset: '초기화',
         retry: '다시 시도',
         save: '저장',
@@ -59,21 +60,117 @@ export const resources = {
         unknown: '알 수 없음',
       },
       labels: {
+        company: '회사',
         apps: '앱',
-        workspace: '워크스페이스',
-        workspaces: '워크스페이스',
       },
       accessNotice: {
-        blockedAction:
-          '{{workspace}} 접근 권한이 없어 {{action}}할 수 없습니다.',
+        blockedAction: '{{app}} 접근 권한이 없어 {{action}}할 수 없습니다.',
         requestHelp:
-          '관리자에게 {{workspace}} 권한을 요청하시거나, 권한이 있는 회의 주최자/참석자에게 요청해주세요.',
+          '관리자에게 {{app}} 권한을 요청하시거나, 권한이 있는 회의 주최자/참석자에게 요청해주세요.',
       },
     },
     shell: {
+      groupSharing: {
+        saved: '그룹 권한을 저장했습니다.',
+        title: '그룹 권한',
+        description:
+          '현재 그룹 구성원에게 적용됩니다. 그룹에서 제외되거나 앱 사용 권한이 회수되면 접근할 수 없습니다.',
+        empty: '배정된 그룹이 없습니다.',
+        failed: '그룹 권한을 저장하거나 불러오지 못했습니다.',
+        inactive: '비활성',
+        role: '그룹에 부여할 권한',
+        grant: '권한 배정',
+        roles: {
+          read: '읽기',
+          edit: '편집',
+          viewer: '보기',
+          member: '구성원',
+          admin: '스페이스 관리자',
+        },
+      },
+      contentPublication: {
+        title: '회사 콘텐츠로 전환',
+        confirm:
+          '회사 또는 프로젝트에 게시하면 회사 소유 콘텐츠가 되어 플랫폼 관리자가 읽을 수 있습니다. 게시 연결이나 전사 공개를 해제해도 개인 소유로 돌아가지 않습니다. 계속하시겠습니까?',
+        companyRead: '이 앱을 사용할 수 있는 전 직원에게 읽기 허용',
+        personal: '개인 소유 · 명시적으로 공유한 사용자와 그룹만 접근',
+        company: '회사 소유 · 플랫폼 관리자 읽기 가능',
+      },
+      appBootstrap: {
+        requestFailed: '앱 목록을 불러오지 못했습니다. ({{status}})',
+        loadFailed: '앱 목록을 불러오지 못했습니다.',
+        loading: '사용 가능한 앱을 확인하고 있습니다.',
+      },
+      directory: {
+        loadFailed: '디렉터리를 불러오지 못했습니다.',
+        unavailableSelection: '현재 비활성 또는 조회할 수 없는 선택 항목',
+        noResults: '검색 결과가 없습니다.',
+        remove: '{{name}} 선택 해제',
+        searchPeople: '사용자 이름 검색',
+        searchGroups: '그룹 이름 검색',
+        searchPrompt: '이름으로 검색해 주세요.',
+        loading: '불러오는 중…',
+        retry: '다시 시도',
+        loadMore: '더 불러오기',
+        previous: '이전',
+        next: '다음',
+        close: '닫기',
+      },
+      companyAccess: {
+        title: '앱 사용 권한',
+        app: '앱',
+        enabled: '회사에서 이 앱 사용',
+        audience: '사용 대상',
+        all: '전체 사용자',
+        selected: '선택한 사용자 또는 그룹',
+        users: '사용자',
+        groups: '그룹',
+        selectedRule:
+          '선택한 사용자 또는 그룹 구성원이 앱을 사용할 수 있습니다. 아무도 선택하지 않으면 일반 사용자는 접근할 수 없습니다. 활성 플랫폼 관리자는 선택 대상 제한을 받지 않습니다.',
+        resourceRule:
+          '앱 사용 권한은 개별 콘텐츠의 조회·수정 권한을 부여하지 않습니다. 회사에서 앱을 끄면 관리자도 사용할 수 없습니다.',
+        platformRule:
+          '플랫폼은 사용자·조직·그룹과 앱 사용 권한을 관리합니다. 프로젝트와 콘텐츠의 권한은 각 앱에서 관리하며, 개인 콘텐츠는 회사 관리자에게 자동으로 공개되지 않습니다.',
+        save: '권한 저장',
+        saved: '앱 사용 권한을 저장했습니다.',
+        saveFailed: '앱 사용 권한을 저장하지 못했습니다.',
+        loadFailed: '앱 사용 권한을 불러오지 못했습니다.',
+      },
+      companyGroups: {
+        title: '그룹',
+        policy:
+          '정규 조직 그룹은 현재 직접 소속된 사용자를 반영합니다. 수동 그룹은 인사 이동과 별개로 관리합니다. 두 종류의 그룹을 앱과 콘텐츠 권한에 함께 사용할 수 있습니다.',
+        create: '수동 그룹 생성',
+        created: '수동 그룹을 생성했습니다.',
+        saveFailed: '그룹을 저장하지 못했습니다.',
+        saved: '그룹 변경사항을 저장했습니다.',
+        loadFailed: '그룹을 불러오지 못했습니다.',
+        name: '그룹 이름',
+        kind: '종류',
+        status: '상태',
+        organization: '정규 조직',
+        manual: '수동 그룹',
+        active: '활성',
+        inactive: '비활성',
+        organizationRule:
+          '정규 조직 그룹의 이름과 구성원은 조직 및 사용자 소속에서 관리합니다. 하위 조직과 부서장은 자동으로 포함되지 않습니다.',
+        description: '설명',
+        saveDetails: '그룹 정보 저장',
+        members: '구성원',
+        saveMembers: '구성원 저장',
+        revokeTitle: '그룹 접근 권한 변경',
+        removeMembersNotice:
+          '{{count}}명의 사용자가 이 그룹을 통해 얻은 앱 및 콘텐츠 권한을 즉시 잃습니다. 계속하시겠습니까?',
+        deactivateNotice:
+          '이 그룹의 모든 구성원이 그룹을 통해 얻은 앱 및 콘텐츠 권한을 즉시 잃습니다. 콘텐츠와 다른 경로의 권한은 유지됩니다. 계속하시겠습니까?',
+        confirmRevocation: '접근 권한 변경',
+        head: '부서장',
+        headRule:
+          '조직마다 부서장 한 명을 지정할 수 있으며, 한 사람이 여러 조직을 담당할 수 있습니다. 이 지정만으로 그룹 가입이나 관리 권한이 부여되지는 않습니다.',
+      },
       mobileNavigation: {
         close: '앱 전환 닫기',
-        description: '앱과 워크스페이스를 전환합니다.',
+        description: '사용 가능한 앱을 전환합니다.',
         open: '앱 전환 열기',
         title: '앱 전환',
       },
@@ -81,12 +178,14 @@ export const resources = {
         close: '{{title}} 메뉴 닫기',
         description: '현재 앱 안에서 이동합니다.',
         title: '{{title}} 메뉴',
+        titleWithContext: '{{title}} 메뉴 — 현재 범위 {{context}}',
       },
       search: {
         open: '통합검색 열기',
         title: '통합검색',
       },
       notifications: {
+        closePanel: '알림 패널 닫기',
         empty: '알림이 없습니다.',
         markAllAsRead: '모두 읽음으로 표시',
         markAsRead: '읽음으로 표시',
@@ -163,7 +262,6 @@ export const resources = {
           summary: '개인용 단일 메모',
           title: '메모',
           unsaved: '저장 안 됨',
-          workspace: '워크스페이스',
         },
         dm: {
           open: 'DM 열기',
@@ -207,17 +305,7 @@ export const resources = {
       gates: {
         adminSectionDenied:
           '현재 계정에는 이 관리자 섹션을 볼 권한이 없습니다.',
-        appDisabled: '현재 workspace에서는 이 앱이 활성화되어 있지 않습니다.',
-        noAccessibleWorkspace:
-          '워크스페이스 초대를 기다리는 중입니다. 워크스페이스 관리자에게 초대를 요청해 주세요.',
-        toolWorkspaceDenied:
-          '현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다.',
-        workspaceAppDenied:
-          '현재 계정은 이 workspace에서 해당 앱을 사용할 수 없습니다.',
-        workspaceDenied: '현재 계정은 이 워크스페이스에 접근할 수 없습니다.',
-        workspaceLoading: '워크스페이스 구성을 불러오는 중입니다.',
-        workspaceSearchDisabled:
-          '현재 워크스페이스에서는 통합검색을 사용할 수 없습니다.',
+        appDisabled: '현재 계정은 이 앱을 사용할 수 없습니다.',
       },
       sidebar: {
         allSettings: '전체 설정',
@@ -238,6 +326,7 @@ export const resources = {
         favorites: '즐겨찾기 런처',
         launcher: '앱 런처',
         more: '더 보기',
+        primaryNavigation: '주요 앱 탐색',
         personalTools: '개인 도구',
         personalToolsScope: '내 개인 앱',
         searchApps: '앱 검색',
@@ -248,6 +337,35 @@ export const resources = {
         mode: '앱 영역',
         open: '열기',
         openApp: '{{title}} 열기',
+      },
+      launcher: {
+        appUnavailable: '이 앱을 사용할 수 없습니다.',
+
+        companyApp: '전사 앱',
+        companyScope: '전사 범위',
+
+        description:
+          '회사 앱과 개인 앱을 선택하세요. 앱 안의 프로젝트와 공유 권한은 각 앱에서 관리합니다.',
+        eyebrow: '업무 앱',
+
+        noAppsDescription:
+          '현재 계정에 노출하도록 설정된 전사 앱이나 개인 앱이 없습니다.',
+        noAppsTitle: '사용 가능한 앱이 없습니다',
+
+        openCompanyApp: '{{app}} — 전사 범위에서 열기',
+        openPersonalApp: '{{app}} — 개인 범위에서 열기',
+
+        personalApp: '개인 앱',
+        personalScope: '개인 범위',
+        title: '앱 런처',
+        unavailableAppLabel: '{{app}} — 사용할 수 없음',
+      },
+      accessRefresh: {
+        failedDescription:
+          '최신 접근 권한을 확인하지 못했습니다. 다시 시도해 주세요.',
+        failedTitle: '접근 권한을 새로 고치지 못했습니다',
+        loading: '최신 접근 권한을 확인하는 중입니다.',
+        retry: '다시 시도',
       },
       appBarEditor: {
         allApps: '전체 앱',
@@ -281,26 +399,13 @@ export const resources = {
         'diagrams-create': '다이어그램',
         'whiteboard-create': '화이트보드',
       },
-      workspaceSwitcher: {
-        create: '새 워크스페이스',
-        currentTitle: '{{name}} 워크스페이스',
-        defaultBadge: '시작',
-        defaultNone: '지정 안 함',
-        defaultSaveFailed: '시작 워크스페이스를 저장하지 못했습니다.',
-        defaultSelectLabel: '시작 워크스페이스',
-        manage: '워크스페이스 설정',
-        noResults: '검색 결과가 없습니다.',
-        noResultsHint: '이름 또는 slug 로 다시 검색하세요.',
-        searchPlaceholder: '워크스페이스 검색',
-        switch: '워크스페이스 전환',
-      },
       documentTitle: {
         app: '{{app}} | Open Work Hub',
         profile: '내 설정',
-        workspaceApp: '{{workspace}} · {{app}} | Open Work Hub',
       },
       apps: {
         'agent-terminal': 'Codex 터미널',
+        'hermes-terminal': 'Hermes 터미널',
         ai: 'AI',
         bento: 'bento/slides',
         business: '업무',
@@ -323,8 +428,10 @@ export const resources = {
         whiteboard: '화이트보드',
       },
       appDescriptions: {
-        bento: '프레젠테이션을 만들고 워크스페이스에 저장합니다.',
+        bento: '프레젠테이션을 만들고 저장하거나 회사에 공개합니다.',
         chatbot: '사내 데이터와 도구를 활용하는 대화형 어시스턴트',
+        'hermes-terminal':
+          '개인 격리 작업공간에서 Hermes 자율형 에이전트를 실행합니다.',
         pms: '스페이스, 리스트, 태스크를 관리합니다.',
         docs: '문서를 작성하고 공유합니다.',
         files: '업무 파일을 저장하고 공유합니다.',
@@ -339,6 +446,7 @@ export const resources = {
         'web-search': '최신 공개 웹 정보를 검색합니다.',
       },
       nav: {
+        'settings-apps-access': '앱 사용 정책',
         'bento-all': '전체 프레젠테이션',
         'bento-mine': '내 프레젠테이션',
         'bento-archived': '보관됨',
@@ -382,13 +490,13 @@ export const resources = {
         'settings-people': '사용자',
         'settings-organization': '조직 디렉터리',
         'settings-api-integrations': 'API 연계',
-        'settings-apps-platform': '전사 앱',
-        'settings-apps-workspace': '워크스페이스 앱',
+
         'settings-apps-app-bar': '앱바 구성',
-        'settings-workspaces': '워크스페이스',
+        'settings-groups': '그룹',
         'settings-community': '커뮤니티 채널',
         'settings-usage': '사용량 분석',
         'settings-llm': 'LLM 관리',
+        'settings-ai-tools': 'AI 도구 상태',
         'settings-model-monitoring': 'AI 모델 상태',
         'settings-document-processing': '문서 처리 현황',
         'settings-ai-security': 'AI 보안',
@@ -439,7 +547,7 @@ export const resources = {
         Messages: '메시지',
         Operations: '운영·모니터링',
         Organization: '사용자·조직',
-        Workspaces: '워크스페이스',
+
         '업무 앱': '업무 앱',
         '협업 앱': '협업 앱',
         Recordings: '녹음',
@@ -456,8 +564,7 @@ export const resources = {
     auth: {
       accessDenied: {
         description: '현재 계정에는 이 화면을 볼 권한이 없습니다.',
-        requestAccess:
-          '관리자에게 필요한 권한과 워크스페이스 바인딩을 요청하세요.',
+        requestAccess: '관리자에게 필요한 앱 사용 권한을 요청하세요.',
         title: '접근 권한 없음',
       },
       errors: {
@@ -518,10 +625,10 @@ export const resources = {
         showPasswordField: '{{field}} 보기',
         signIn: '로그인',
         signUp: '회원가입',
-        setupDescription: '첫 관리자 계정을 생성해 워크스페이스를 시작합니다.',
+        setupDescription: '첫 플랫폼 관리자 계정을 생성합니다.',
         setupTitle: '최초 관리자 설정',
         signupDescription:
-          '계정을 만든 뒤 워크스페이스 관리자의 초대를 받으면 앱을 사용할 수 있습니다.',
+          '회사 계정을 생성합니다. 사용할 앱은 관리자 정책에 따라 제공됩니다.',
       },
       notFound: {
         description: '요청한 주소는 존재하지 않거나 이동되었습니다.',
@@ -559,10 +666,6 @@ export const resources = {
         avatar: '아바타',
         currentPassword: '현재 비밀번호',
         customizeAppearance: '앱 표시 방식을 설정합니다.',
-        defaultWorkspace: '시작 워크스페이스',
-        defaultWorkspaceDescription:
-          '로그인 후 홈으로 들어갈 때 먼저 열 워크스페이스입니다.',
-        defaultWorkspaceNone: '지정 안 함',
         displayName: '표시 이름',
         emailAddress: '이메일 주소',
         emailChangeHint: '변경하려면 관리자에게 문의하세요.',
@@ -586,6 +689,7 @@ export const resources = {
         manageProfile: '개인 정보를 관리합니다.',
         mySettings: '내 설정',
         newPassword: '새 비밀번호',
+        newPasswordConfirm: '새 비밀번호 확인',
         notifications: '알림',
         notificationsChannelEmail: '이메일',
         notificationsChannelPush: '푸시',
@@ -594,11 +698,11 @@ export const resources = {
         notificationsSecurityDescription:
           '비밀번호 변경과 의심스러운 로그인 시도',
         notificationsSecurityTitle: '보안 이벤트',
-        notificationsWeeklyDescription: '접근 권한과 워크스페이스 요약',
+        notificationsWeeklyDescription: '접근 권한과 업무 활동 요약',
         notificationsWeeklyTitle: '주간 요약',
-        notificationsWorkspaceDescription:
-          '내가 속한 워크스페이스의 중요한 변경사항',
-        notificationsWorkspaceTitle: '워크스페이스 업데이트',
+        notificationsCompanyDescription:
+          '접근 가능한 회사 콘텐츠의 중요한 변경사항',
+        notificationsCompanyTitle: '회사 업데이트',
         organization: '조직',
         passwordChanged: '비밀번호를 변경했습니다.',
         passwordChangeFailed: '비밀번호를 변경하지 못했습니다.',
@@ -650,20 +754,6 @@ export const resources = {
       },
     },
     apps: {
-      workspace: {
-        bootstrapLoadFailed: '워크스페이스 bootstrap을 불러오지 못했습니다.',
-        bootstrapRequestFailed:
-          '워크스페이스 bootstrap 요청에 실패했습니다. ({{status}})',
-        contextUnavailable: '워크스페이스 컨텍스트를 사용할 수 없습니다.',
-        settingsAccessDenied:
-          '현재 계정은 이 workspace 설정에 접근할 수 없습니다.',
-        settingsAdminRequired:
-          '이 workspace 설정은 admin 이상만 접근할 수 있습니다.',
-        settingsDescription: '이 협업 공간의 프로필과 멤버십을 관리합니다.',
-        settingsLoadFailed: '워크스페이스 설정을 불러오지 못했습니다.',
-        settingsLoading: '워크스페이스 설정을 불러오는 중입니다.',
-        settingsTitle: '워크스페이스 설정',
-      },
       videoChat: {
         activeRooms: '열린 방',
         backToRooms: '방 목록',
@@ -978,7 +1068,6 @@ export const resources = {
             invalid: '문서 근거 정보를 읽지 못했습니다.',
             sessionExpired: '세션이 만료되었습니다. 다시 로그인해 주세요.',
             title: '문서 근거 ({{count}})',
-            workspaceMissing: '워크스페이스를 확인할 수 없습니다.',
           },
         },
         search: {
@@ -1025,7 +1114,6 @@ export const resources = {
             loadFailed: '검색 결과를 불러오지 못했습니다.',
             queryRequired: '검색어를 입력하세요.',
             sessionExpired: '세션이 만료되었습니다. 다시 로그인해 주세요.',
-            workspaceMissing: '워크스페이스를 확인할 수 없습니다.',
           },
         },
         selection: {
@@ -1058,7 +1146,7 @@ export const resources = {
         },
         visibility: {
           private: '개인용',
-          workspace: '워크스페이스 공유',
+          company: '회사 공유',
         },
       },
       agentTerminal: {
@@ -1265,6 +1353,124 @@ export const resources = {
         title: 'Codex 터미널',
         unavailableTitle: 'Codex 터미널을 사용할 수 없습니다.',
       },
+      hermesTerminal: {
+        actions: {
+          approveOnce: '이번 요청만 승인',
+          cancel: '취소',
+          deny: '거부',
+          download: '다운로드',
+          downloadFile: '{{name}} 다운로드',
+          newSession: '새 세션',
+          parentFolder: '상위 폴더',
+          reconnect: '다시 연결',
+          refresh: '새로고침',
+          refreshResults: '결과 새로고침',
+          retry: '다시 시도',
+          stop: '세션 종료',
+        },
+        activity: {
+          approvals: '승인',
+          files: '결과 파일',
+          label: 'Hermes 실행 결과 및 승인',
+          loadingApprovals: '승인 요청을 불러오는 중입니다.',
+          loadingFiles: '작업 파일을 불러오는 중입니다.',
+          noApprovalsDescription:
+            'Open Work Hub 쓰기 도구를 요청하면 여기에 표시됩니다.',
+          noApprovalsTitle: '승인 요청이 없습니다.',
+          noFilesDescription:
+            'Hermes가 /workspace에 생성한 파일이 여기에 표시됩니다.',
+          noFilesTitle: '생성된 결과 파일이 없습니다.',
+          oneTimeApproval: '도구와 인자가 일치하는 이번 호출에만 적용됩니다.',
+        },
+        approvalStatus: {
+          approved: '승인됨',
+          denied: '거부됨',
+          expired: '만료됨',
+          pending: '승인 대기',
+        },
+        archive: {
+          partial:
+            '보관 한도를 초과한 결과 파일 {{count}}개는 다운로드 목록에서 제외되었습니다.',
+          workspaceRetained:
+            '결과 보관을 완료하지 못해 원본 작업공간을 관리자 복구용으로 안전하게 보존했습니다.',
+        },
+        connection: {
+          connected: '연결됨',
+          connecting: '연결 중',
+          ended: '종료됨',
+          offline: '연결 끊김',
+        },
+        create: {
+          description:
+            '세션 모드는 매번 선택하며 YOLO는 기본값으로 저장되지 않습니다.',
+          standardDescription: 'Hermes의 위험 명령 승인 프롬프트를 유지합니다.',
+          standardTitle: '표준 모드',
+          start: 'Hermes 시작',
+          starting: '시작 중...',
+          title: '새 Hermes 터미널 세션',
+          yoloAcknowledgement:
+            'Hermes의 위험 명령 확인을 건너뛰는 위험을 이해합니다. Open Work Hub 쓰기 승인과 격리 정책은 계속 적용됩니다.',
+          yoloDescription:
+            '공식 --yolo 플래그로 Hermes 자체 위험 명령 확인만 건너뜁니다.',
+          yoloTitle: 'YOLO 모드',
+        },
+        disabledDescription:
+          '서버 환경 설정에서 Hermes 통합을 먼저 활성화해야 합니다.',
+        eyebrow: '개인 자율형 에이전트',
+        feedback: {
+          approvalFailed: '승인 요청을 처리하지 못했습니다.',
+          approvalsLoadFailed: '승인 요청을 불러오지 못했습니다.',
+          approved: '이번 도구 요청을 승인했습니다.',
+          connectionFailed: 'Hermes 터미널 연결을 유지하지 못했습니다.',
+          createFailed: 'Hermes 터미널 세션을 시작하지 못했습니다.',
+          created: 'Hermes 터미널 세션을 시작했습니다.',
+          denied: '도구 요청을 거부했습니다.',
+          downloadFailed: '결과 파일을 다운로드하지 못했습니다.',
+          downloaded: '결과 파일을 다운로드했습니다.',
+          filesLoadFailed: '결과 파일을 불러오지 못했습니다.',
+          loadFailed: 'Hermes 터미널 정보를 불러오지 못했습니다.',
+          stopFailed: 'Hermes 터미널 세션을 종료하지 못했습니다.',
+          stopped: 'Hermes 터미널 세션을 종료했습니다.',
+        },
+        failureDescription:
+          '세션이 안전하게 종료되었습니다. 장애 코드: {{code}}',
+        loadFailedDescription:
+          '앱 사용 권한과 Hermes 런타임 상태를 확인해 주세요.',
+        loadFailedTitle: 'Hermes 터미널을 불러오지 못했습니다.',
+        loading: 'Hermes 터미널을 불러오는 중입니다.',
+        mode: {
+          standard: '표준',
+          yolo: 'YOLO',
+        },
+        noSessionDescription:
+          '개인 격리 작업공간에서 Hermes TUI를 시작하고 성능을 확인하세요.',
+        noSessionTitle: 'Hermes 세션이 없습니다.',
+        preparingDescription:
+          '격리 컨테이너와 개인 Hermes 프로필을 준비하고 있습니다.',
+        preparingTitle: 'Hermes 세션을 준비 중입니다.',
+        privateWorkspace: '사용자 전용 작업공간',
+        securityNotice:
+          'OpenRouter 키는 격리 실행기에 전달되지 않습니다. YOLO에서도 Open Work Hub 쓰기 승인, 인증, 네트워크 격리는 유지됩니다.',
+        sessionCapacity: '실행 세션 {{active}}/{{limit}}',
+        sessionEndedDescription:
+          '보존 기간 동안 오른쪽 결과 파일을 내려받을 수 있습니다.',
+        sessionEndedTitle: '터미널 세션이 종료되었습니다.',
+        sessionLimitReached: '실행 중인 개인 세션을 먼저 종료하세요.',
+        sessionsLabel: 'Hermes 터미널 세션 선택',
+        status: {
+          archiving: '결과 보관 중',
+          awaiting_approval: '승인 대기',
+          exited: '완료',
+          failed: '실패',
+          running: '실행 중',
+          starting: '시작 중',
+          stopping: '종료 중',
+          terminated: '종료됨',
+        },
+        terminalLabel: 'Hermes TUI 터미널',
+        title: 'Hermes 터미널',
+        unavailableTitle: 'Hermes 터미널을 사용할 수 없습니다.',
+      },
       mail: {
         eyebrow: '로컬 AI 메일',
         title: '메일',
@@ -1468,7 +1674,8 @@ export const resources = {
             actionPlaceholder: '작업 코드',
             actions: {
               adminAiRuntimeRetentionScrub: 'AI 런타임 보존 정리',
-              adminAppVisibilityUpdate: '전사 앱 표시 변경',
+              adminCompanyAppControlsUpdate: '회사 앱 제어 변경',
+              adminHermesResearchSourceUpdate: 'Hermes 논문 소스 설정 변경',
               adminTeamCreate: '팀 생성',
               adminTeamDelete: '팀 삭제',
               adminTeamMembersReplace: '팀 멤버 교체',
@@ -1491,14 +1698,7 @@ export const resources = {
               adminUserDelete: '사용자 삭제',
               adminUserResetPassword: '비밀번호 초기화',
               adminUserUpdate: '사용자 수정',
-              adminWorkspaceAppVisibilityUpdate: '워크스페이스 앱 표시 변경',
-              adminWorkspaceBindingsReplace: '워크스페이스 연결 교체',
-              adminWorkspaceCreate: '워크스페이스 생성',
-              adminWorkspaceDelete: '워크스페이스 삭제',
-              adminWorkspaceMemberAdd: '워크스페이스 멤버 추가',
-              adminWorkspaceMemberRemove: '워크스페이스 멤버 제거',
-              adminWorkspaceMemberRoleUpdate: '워크스페이스 멤버 역할 변경',
-              adminWorkspaceUpdate: '워크스페이스 수정',
+
               aiMeetingInsightCreated: '회의 AI 인사이트 생성',
               authChangePassword: '비밀번호 변경',
               authDesktopSessionLinkCreate: '데스크톱 세션 연결 생성',
@@ -1576,7 +1776,6 @@ export const resources = {
               tokens: '토큰',
               tool: '도구',
               user: '사용자',
-              workspace: '워크스페이스',
             },
             payloadValues: {
               impersonation: '{{impersonator}} → {{impersonated}}',
@@ -1599,6 +1798,89 @@ export const resources = {
               models: '모델 카탈로그',
               providers: 'LLM Provider',
               routing: 'LLM 라우팅',
+            },
+          },
+          hermesTools: {
+            extensions: {
+              emptyDescription: '등록되거나 활성화된 항목이 없습니다.',
+              mcp: 'MCP 서버',
+              skills: '스킬',
+            },
+            inventoryLoadFailed:
+              '선택한 프로필의 도구 상태를 불러오지 못했습니다.',
+            loadFailed: 'Hermes 도구 설정을 불러오지 못했습니다.',
+            loading: 'Hermes 런타임 정보를 불러오는 중입니다.',
+            none: '없음',
+            profile: 'Hermes 프로필',
+            profilesEmptyDescription:
+              '사용자가 Hermes를 처음 실행하면 관리 프로필이 생성됩니다.',
+            profilesEmptyTitle: 'Hermes 프로필이 없습니다.',
+            refresh: '새로고침',
+            research: {
+              applicationNote:
+                '변경값은 다음 headless 프로필 조정과 새 터미널 세션부터 적용됩니다. 실행 중인 터미널은 변경하지 않습니다.',
+              columns: {
+                control: '사용',
+                domains: '차단 대상 도메인',
+                source: '논문 소스',
+                status: '현재 설정',
+              },
+              conflict:
+                '다른 관리자가 먼저 변경했습니다. 최신 설정을 다시 불러왔습니다.',
+              description:
+                '논문 조사에 사용할 외부 소스를 각각 켜거나 끕니다. 꺼진 소스는 새 터미널에서 네트워크 수준으로 차단됩니다.',
+              loadingDescription: '저장된 논문 소스 정책을 확인합니다.',
+              loadingTitle: '논문 소스 설정을 불러오는 중입니다.',
+              saveFailed: '논문 소스 설정을 변경하지 못했습니다.',
+              saved: '논문 소스 설정을 저장했습니다.',
+              title: '논문 검색 소스',
+              toggleLabel: '{{source}} 사용 여부',
+            },
+            runtimeSummary:
+              'Hermes {{release}} · 기본 {{model}} · fallback {{fallback}}',
+            runtime: {
+              description:
+                'headless 및 개인 터미널 실행 상태, 복구 대기열과 유지보수 heartbeat를 확인합니다.',
+              maintenance: '유지보수 heartbeat',
+              metrics: {
+                activeRuns: '실행 중 headless',
+                activeTerminals: '활성 터미널',
+                pendingApprovals: '대기 승인',
+                pendingDispatches: '배포 대기',
+                quarantined: '보존 격리 작업공간',
+              },
+              neverSucceeded: '성공 기록 없음',
+              services: {
+                headless: 'Hermes headless',
+                terminal_broker: 'Hermes 터미널 브로커',
+              },
+              status: {
+                checking: '확인 중',
+                disabled: '꺼짐',
+                not_configured: '프로필 없음',
+                offline: '오프라인',
+                online: '온라인',
+              },
+              title: 'Hermes 런타임 상태',
+            },
+            status: {
+              disabled: '꺼짐',
+              enabled: '켜짐',
+            },
+            toolsets: {
+              columns: {
+                configured: '구성됨',
+                enabled: '활성',
+                tools: '포함 도구',
+                toolset: '툴셋',
+              },
+              description:
+                '선택한 관리 프로필에서 Hermes 공식 toolsets API가 보고한 활성화·구성 상태입니다.',
+              emptyDescription: 'Hermes가 보고한 툴셋이 없습니다.',
+              emptyTitle: '툴셋 상태가 없습니다.',
+              loadingDescription: '선택한 프로필의 toolsets를 확인합니다.',
+              loadingTitle: '툴셋 상태를 불러오는 중입니다.',
+              title: 'Hermes 툴 상태',
             },
           },
           modelMonitoring: {
@@ -1702,9 +1984,9 @@ export const resources = {
               },
               internal_context: {
                 description:
-                  'RAG, 문서, 지식베이스, 워크스페이스 내부 자료처럼 출처가 내부로 표시된 컨텍스트입니다.',
+                  'RAG, 문서, 지식베이스 내부 자료처럼 출처가 내부로 표시된 컨텍스트입니다.',
                 examples:
-                  '예: internal_context, workspace, rag, docs, knowledge, unknown 출처',
+                  '예: internal_context, rag, docs, knowledge, unknown 출처',
                 patterns:
                   '콘텐츠 출처가 내부 또는 불명확하면 원문을 외부 LLM/API로 보내지 않습니다.',
               },
@@ -1843,7 +2125,7 @@ export const resources = {
               actionsTitle: '선택한 앱별 처리 방식',
               appPickerEmpty: '적용할 앱을 선택하지 않았습니다.',
               appPickerHelp:
-                '외부 API 호출이 기능상 필수인 앱을 선택합니다. 앱 목록은 현재 등록된 워크스페이스 앱 카탈로그에서 로드됩니다.',
+                '외부 API 호출이 기능상 필수인 앱을 선택합니다. 앱 목록은 등록된 앱 카탈로그에서 불러옵니다.',
               appPickerNoResults: '검색 결과가 없습니다.',
               appPickerPlaceholder: '앱 이름 또는 ID 검색',
               appPickerTitle: '외부 전용 앱 추가',
@@ -2078,7 +2360,7 @@ export const resources = {
               },
               howItWorks: '정책 적용 방식 보기',
               rulesDescription:
-                '사용자, 워크스페이스, 앱, 작업, 기능, 외부 제공자 조건으로 적용되는 규칙입니다.',
+                '사용자, 앱, 작업, 기능, 외부 제공자 조건으로 적용되는 규칙입니다.',
               title: '요약',
             },
             routingOverview: {
@@ -2302,26 +2584,25 @@ export const resources = {
                 taskKind: '작업 종류',
                 user: '사용자',
                 userId: '사용자 ID',
-                workspace: '워크스페이스',
               },
               allApps: '모든 앱',
               allTasks: '모든 작업',
-              allWorkspaces: '모든 워크스페이스',
+
               appSearchPlaceholder: '앱 이름 또는 앱 ID 검색',
               clearApp: '앱 선택 해제',
               clearTaskKind: '작업 종류 선택 해제',
-              clearWorkspace: '워크스페이스 선택 해제',
+
               formDescription:
-                '사용자, 워크스페이스, 앱, 작업, 기능, 외부 제공자 조건을 AND로 조합해 적용합니다. 비워 둔 조건은 전체로 해석됩니다.',
+                '사용자, 앱, 작업, 기능, 외부 제공자 조건을 AND로 조합해 적용합니다. 비워 둔 조건은 전체로 해석됩니다.',
               guidance: {
                 effectDescription:
                   '동일 우선순위에서는 외부 전송 차단, 마스킹 후 외부 전송, 감사만, 상속 순서로 더 보수적인 효과가 우선합니다.',
                 effectTitle: '효과 충돌 처리',
                 noTeamDescription:
-                  '현재 정책은 팀 기준을 사용하지 않습니다. 사용자, 워크스페이스, 앱 기준으로 관리하세요.',
+                  '현재 정책은 팀 기준을 사용하지 않습니다. 사용자, 앱 기준으로 관리하세요.',
                 noTeamTitle: '팀 기준 없음',
                 scopePriorityDescription:
-                  '사용자 조건이 가장 강하고 그 다음 워크스페이스, 앱, 작업, 기능, 외부 제공자 순서입니다.',
+                  '사용자 조건이 가장 강하고 그 다음 앱, 작업, 기능, 외부 제공자 순서입니다.',
                 scopePriorityTitle: '적용 우선순위',
               },
               guidanceTitle: '우선순위와 충돌 처리 보기',
@@ -2341,14 +2622,12 @@ export const resources = {
                   'openai, anthropic, gemini처럼 외부 제공자별로 제한할 때 입력합니다.',
                 taskKind:
                   'LLM 작업 종류입니다. 라우팅 탭의 작업 이름과 같은 값을 사용합니다.',
-                user: '특정 사용자에게만 적용할 때 검색해서 선택합니다. 사용자를 선택하고 워크스페이스를 비워두면 모든 워크스페이스에서 적용됩니다.',
-                workspace:
-                  '특정 워크스페이스에서 발생한 요청에만 적용합니다. 비워두면 모든 워크스페이스입니다.',
+                user: '특정 사용자에게만 적용할 때 선택합니다. 비워 두면 모든 사용자에게 적용됩니다.',
               },
               noAppResults: '앱 검색 결과가 없습니다.',
               noTaskResults: '작업 검색 결과가 없습니다.',
               noUserResults: '사용자 검색 결과가 없습니다.',
-              noWorkspaceResults: '워크스페이스 검색 결과가 없습니다.',
+
               taskSearchPlaceholder: '작업 이름 또는 설명 검색',
               placeholders: {
                 appId: '예: chatbot, web-search',
@@ -2378,22 +2657,20 @@ export const resources = {
                   '앱, 작업, 기능, 외부 제공자 조건입니다. 로드된 목록에서 선택하거나 직접 입력할 수 있고, 비워 둔 필드는 전체로 해석됩니다.',
                 subject: '적용 대상',
                 subjectDescription:
-                  '사용자와 워크스페이스 조건입니다. 조건은 함께 좁혀지며, 비워 둔 필드는 전체로 해석됩니다.',
+                  '사용자 조건으로 적용 대상을 정합니다. 비워 두면 모든 사용자에게 적용됩니다.',
                 termsDescription:
                   '이 규칙이 매칭될 때만 추가로 검사할 차단 단어입니다. Enter, 쉼표, 여러 줄 붙여넣기로 태그를 추가할 수 있습니다.',
               },
               scopeParts: {
                 allUsers: '모든 사용자',
-                allWorkspaces: '모든 워크스페이스',
+
                 user: '사용자: {{name}}',
-                workspace: '워크스페이스: {{name}}',
               },
               title: '정책 규칙',
               updated: '정책 규칙을 수정했습니다.',
               userSearchPlaceholder: '이름 또는 이메일로 사용자 검색',
               userSearchPrompt:
                 '검색어를 입력하거나 목록에서 사용자를 선택하세요.',
-              workspaceSearchPlaceholder: '워크스페이스 이름, key, 설명 검색',
             },
             exceptions: {
               columns: {
@@ -2462,7 +2739,7 @@ export const resources = {
                 requestDescription:
                   '앱, 작업, 기능, 외부 제공자 조건입니다. 로드된 목록에서 선택하거나 직접 입력할 수 있고, 비워 둔 필드는 전체로 해석됩니다.',
                 subjectDescription:
-                  '사용자와 워크스페이스 조건입니다. 조건은 함께 좁혀지며, 비워 둔 필드는 전체로 해석됩니다.',
+                  '사용자 조건으로 예외 적용 대상을 정합니다. 비워 두면 모든 사용자에게 적용됩니다.',
               },
               title: '외부 전송 예외',
               updated: '외부 전송 예외를 수정했습니다.',
@@ -2499,7 +2776,6 @@ export const resources = {
                 sensitivity_labels: '민감도 라벨',
                 source_kinds: '컨텍스트 출처',
                 task_kind: '작업 종류',
-                workspace_id: '워크스페이스',
               },
               guidance: {
                 noRawSaveDescription:
@@ -2516,7 +2792,7 @@ export const resources = {
                 capability:
                   '기능 조건이 있는 규칙을 시험합니다. 일반 LLM은 llm으로 둘 수 있습니다.',
                 content_origin:
-                  '내부 자료인지 사용자 입력인지 나타냅니다. 예: user_prompt, rag, docs, workspace',
+                  '내부 자료인지 사용자 입력인지 나타냅니다. 예: user_prompt, rag, docs',
                 provider:
                   '외부 제공자 조건을 시험합니다. 예: openai, anthropic, gemini',
                 sample:
@@ -2524,11 +2800,10 @@ export const resources = {
                 sensitivity_labels:
                   '문서나 컨텍스트에 붙은 민감도 라벨을 쉼표로 입력합니다.',
                 source_kinds:
-                  'RAG, 문서, 워크스페이스처럼 함께 전달되는 컨텍스트 출처를 쉼표로 입력합니다.',
+                  'RAG, 문서처럼 함께 전달되는 컨텍스트 출처를 쉼표로 입력합니다.',
                 task_kind:
                   '작업 종류 조건을 시험합니다. 라우팅 탭의 작업 이름과 같은 값을 사용합니다.',
                 user: '사용자 조건이 있는 규칙을 시험하려면 사용자를 검색해 선택합니다.',
-                workspace: '워크스페이스 조건이 있는 규칙을 시험합니다.',
               },
               noRule: '일치하는 규칙 없음',
               hardBlockers: '하드 차단',
@@ -2542,7 +2817,7 @@ export const resources = {
                 content_origin: '예: user_prompt, rag, docs',
                 provider: '예: openai',
                 sensitivity_labels: '예: confidential, internal',
-                source_kinds: '예: rag, docs, workspace',
+                source_kinds: '예: rag, docs',
                 task_kind: '예: mail_reply_draft',
               },
               piiHits: '개인정보 감지',
@@ -2564,10 +2839,9 @@ export const resources = {
                   '앱, 작업, 기능, 외부 제공자, 콘텐츠 출처를 로드된 목록에서 선택하거나 직접 입력해 조건 매칭을 확인합니다.',
                 subject: '적용 대상',
                 subjectDescription:
-                  '사용자와 워크스페이스 조건이 있는 규칙을 검증합니다.',
+                  '사용자 조건에 따른 규칙 적용 결과를 검증합니다.',
               },
               title: '시뮬레이터',
-              workspaceAny: '모든 워크스페이스',
             },
             tabs: {
               audit: '감사 로그',
@@ -2592,7 +2866,7 @@ export const resources = {
                 '회의록에서 후속 일정과 후속 조치를 추출합니다.',
               meeting_summary: '회의 음성/대화 기록을 요약합니다.',
               rag_grounded_answer:
-                '워크스페이스 RAG 검색 결과를 근거로 답변을 생성합니다.',
+                '접근 권한을 확인한 회사 RAG 검색 결과로 답변을 생성합니다.',
             },
           },
           usage: {
@@ -2968,17 +3242,6 @@ export const resources = {
             usersTitle: '사용자별 활용 현황',
           },
           apps: {
-            columns: {
-              app: '앱',
-              route: '기본 경로',
-              status: '상태',
-              visibility: '표시',
-              workspaces: '표시 워크스페이스',
-            },
-            description:
-              '전사 앱 표시 기본값을 관리합니다. 워크스페이스에 별도 앱 표시 설정이 있으면 해당 설정이 우선 적용됩니다.',
-            emptyDescription: '등록된 앱 카탈로그가 없습니다.',
-            emptyTitle: '표시할 앱이 없습니다.',
             appBarAddCategory: '카테고리 추가',
             appBarAddApp: '이 카테고리에 추가',
             appBarCategoryCreateFailed: '앱바 카테고리를 만들지 못했습니다.',
@@ -3042,64 +3305,8 @@ export const resources = {
             appBarTab: '앱바 구성',
             appBarTitle: '플랫폼 앱바 카테고리',
             appBarUnassignedApps: '미분류 앱',
-            groupCount: '{{count}}개 앱',
-            hidden: '숨김',
-            hideSaved: '{{app}} 앱을 숨김 처리했습니다.',
-            hideToggle: '숨김',
-            loadFailed: '앱 표시 설정을 불러오지 못했습니다.',
-            loadingDescription: '잠시만 기다려 주세요.',
-            loadingTitle: '앱 표시 설정을 불러오는 중입니다.',
-            platformTab: '전사 표시 기본값',
-            personalToolsDescription:
-              '모든 사용자의 고정 개인 도구 런처에 표시할 앱을 관리합니다. 숨긴 앱은 워크스페이스와 관계없이 개인 도구에서 사라집니다.',
-            personalToolsScope: '모든 사용자',
-            personalToolsScopeColumn: '적용 범위',
-            personalToolsTab: '개인 도구',
-            personalToolsTitle: '개인 도구 표시',
+
             refresh: '새로고침',
-            runtime: '런타임',
-            runtimeDisabled: '설정 꺼짐',
-            runtimeEnabled: '활성',
-            saveFailed: '앱 표시 설정을 저장하지 못했습니다.',
-            showSaved: '{{app}} 앱을 표시하도록 변경했습니다.',
-            showToggle: '표시',
-            title: '전사 앱 표시',
-            toggleLabel: '{{app}} 앱 표시 전환',
-            uncategorizedGroup: '앱바 미배치 앱',
-            personalToolsGroup: '개인 도구',
-            visible: '표시',
-            visibleWorkspaceCount: '{{count}}개',
-            visibleWorkspaceEmpty: '표시 중인 워크스페이스가 없습니다.',
-            visibleWorkspaceListLabel: '{{app}} 표시 워크스페이스 목록',
-            effective: '적용 결과',
-            platformDefault: '전사 기본값',
-            workspaceDescription:
-              '선택한 워크스페이스만 다른 앱 표시 정책을 적용합니다. 전사 기본값을 따르면 플랫폼 관리자의 설정이 적용됩니다.',
-            workspaceDefaultsDescription:
-              '모든 워크스페이스가 기본으로 상속할 앱 노출을 설정합니다. 워크스페이스별 설정이 있으면 해당 설정이 우선합니다.',
-            workspaceDefaultsTab: '앱 기본 설정',
-            workspaceDefaultsTitle: '워크스페이스 앱 기본 노출',
-            workspaceEmptyDescription:
-              '앱 표시를 설정할 워크스페이스가 없습니다.',
-            workspaceEmptyTitle: '워크스페이스가 없습니다.',
-            workspaceHide: '숨김',
-            workspaceInherit: '전사 기본값 따름',
-            workspaceListTitle: '워크스페이스',
-            workspaceLoadFailed:
-              '워크스페이스 앱 표시 설정을 불러오지 못했습니다.',
-            workspaceLoadingTitle:
-              '워크스페이스 앱 표시 설정을 불러오는 중입니다.',
-            workspaceNoResults: '검색 결과가 없습니다.',
-            workspaceOverride: '워크스페이스 설정',
-            workspaceOverridesTab: '워크스페이스 앱 설정',
-            workspaceSaveFailed:
-              '워크스페이스 앱 표시 설정을 저장하지 못했습니다.',
-            workspaceSaved:
-              '{{workspace}} 워크스페이스의 {{app}} 앱 표시 설정을 저장했습니다.',
-            workspaceSearchPlaceholder: '워크스페이스 검색',
-            workspaceShow: '표시',
-            workspaceTab: '워크스페이스 표시 예외',
-            workspaceTitle: '워크스페이스별 앱 표시',
           },
           badges: {
             adminOnly: '관리자 전용',
@@ -3153,7 +3360,7 @@ export const resources = {
             noteAudit:
               '관리자 이벤트와 인증 이벤트는 Audit 섹션에서 시간순으로 확인합니다.',
             noteNavigation:
-              '사용자, PMS 공간, 워크스페이스, 감사 로그는 좌측 서브사이드바를 기준으로 분리합니다.',
+              '사용자, 조직, 그룹, 앱 정책과 감사 로그를 좌측 메뉴에서 관리합니다.',
             noteProfile:
               '프로필 아바타는 개인 설정으로만 이동하고, 조직 운영 기능은 모두 Settings 앱 안에서 다룹니다.',
             notesDescription:
@@ -3167,7 +3374,6 @@ export const resources = {
             teamCount: 'PMS 공간 {{count}}{{suffix}}',
             userCount: '사용자 계정 {{count}}{{suffix}}',
             workModelTitle: '작업 모델',
-            workspaceCount: '워크스페이스 {{count}}{{suffix}}',
           },
           documentProcessing: {
             chunking: {
@@ -3260,20 +3466,20 @@ export const resources = {
               'Vision 문서 추출이 비활성화되어 있거나 Vision 지원 모델로 라우팅되지 않았습니다.',
           },
           people: {
-            accessSaveFailed: '워크스페이스 배정을 저장하지 못했습니다.',
             accountAccessSection: '계정 접근',
             adminPrivilegesSection: '관리 권한',
             allOrganizations: '모든 조직',
             allUsers: '전체 사용자 ({{count}})',
             blockLogin: '로그인 차단',
             blockLoginDescription:
-              '계정 정보는 보존하면서 새로운 로그인을 차단합니다.',
+              '계정 정보는 보존하면서 기존 세션을 종료하고 로그인을 차단합니다.',
             columns: {
               actions: '작업',
               created: '생성일',
               email: '이메일',
               employeeCode: '사번',
               enabledApps: '관리 앱',
+              groups: '그룹',
               jobTitle: '직책',
               lastActive: '최근 활동',
               loginId: '아이디',
@@ -3282,10 +3488,9 @@ export const resources = {
               role: '역할',
               status: '상태',
               user: '사용자',
-              workspaces: '워크스페이스',
             },
             createDescription:
-              '회사 계정을 만들고 관리자 권한과 소속 워크스페이스를 배정합니다.',
+              '회사 계정을 만들고 조직 정보와 관리자 권한을 설정합니다.',
             createUser: '사용자 생성',
             creating: '생성 중',
             deleteConfirm: '{{email}} 사용자를 삭제할까요?',
@@ -3318,8 +3523,7 @@ export const resources = {
             loadingDescription: '잠시만 기다려 주세요.',
             loadingTitle: '사용자 목록을 불러오는 중입니다.',
             more: '더보기',
-            noCreatableWorkspaces: '배정 가능한 워크스페이스가 없습니다.',
-            noWorkspaces: '생성된 워크스페이스가 없습니다.',
+
             organizationFilter: '조직',
             organizationListLoadFailed: '조직 디렉터리를 불러오지 못했습니다.',
             organizationMetadataHint:
@@ -3331,6 +3535,7 @@ export const resources = {
               '임시 비밀번호를 재발급했습니다. 새 비밀번호: {{password}}',
             passwordResetFailed: '비밀번호를 재발급하지 못했습니다.',
             platformAdmin: '플랫폼 관리자',
+            regularUser: '일반 사용자',
             platformAdminDescription:
               '전체 관리자 콘솔과 회사 전역 설정을 관리할 수 있습니다.',
             profileSection: '기본 정보',
@@ -3345,24 +3550,20 @@ export const resources = {
             unblockLogin: '로그인 차단 해제',
             userActions: '{{email}} 작업',
             userCreated: '사용자를 생성했습니다. 임시 비밀번호: {{password}}',
-            userCreatedAccessFailed:
-              '사용자는 생성됐지만 워크스페이스 배정을 완료하지 못했습니다. 임시 비밀번호: {{password}}',
+            userCreatedReloadFailed:
+              '사용자를 생성했지만 목록을 갱신하지 못했습니다. 임시 비밀번호: {{password}}',
             userCreateFailed: '사용자를 생성하지 못했습니다.',
             userDeleted: '{{email}} 사용자를 삭제했습니다.',
             userDeleteFailed: '사용자를 삭제하지 못했습니다.',
             userListLoadFailed: '사용자 목록을 불러오지 못했습니다.',
             userSaved: '사용자 정보를 저장했습니다.',
-            userSavedAccessFailed:
-              '계정 정보는 저장됐지만 워크스페이스 배정을 완료하지 못했습니다. 목록을 새로 불러왔습니다.',
+
             userSaveFailed: '사용자 정보를 저장하지 못했습니다.',
-            workspaceListLoadFailed:
-              '배정 가능한 워크스페이스를 불러오지 못했습니다.',
-            workspaceMemberships: '소속 워크스페이스',
           },
           organization: {
             boundaryTitle: '조직 정보의 범위',
             boundaryDescription:
-              '조직 단위와 사용자의 주 소속을 회사 공통 메타데이터로 관리합니다. 이 정보는 현재 접근 권한이나 워크스페이스 역할을 부여하지 않습니다.',
+              '정규 조직 그룹의 권한은 현재 주 소속에 따라 적용됩니다. 부서장 지정만으로 관리 권한이 생기지 않으며, 비정규 그룹은 별도로 관리합니다.',
             count: '조직 단위 {{count}}개',
             loadFailed: '조직 디렉터리를 불러오지 못했습니다.',
             loadingTitle: '조직 디렉터리를 불러오는 중입니다.',
@@ -3466,18 +3667,17 @@ export const resources = {
               title: '사용량 분석',
             },
             general: {
-              description:
-                '공통 사용자, 공간, 워크스페이스 운영 현황을 한곳에서 확인합니다.',
+              description: '회사 사용자, 조직, 그룹과 앱 정책을 관리합니다.',
               title: '플랫폼 개요',
             },
             people: {
               description:
-                '회사 사용자를 생성하고 계정 상태, 관리자 권한, 워크스페이스 배정을 관리합니다.',
+                '회사 계정 상태, 조직 정보와 관리자 권한을 관리합니다.',
               title: '사용자 관리',
             },
             organization: {
               description:
-                '회사 공통 조직 계층과 사용자 주 소속에 사용할 디렉터리 메타데이터를 관리합니다.',
+                '조직 계층과 사용자 주 소속을 관리합니다. 연결된 정규 그룹에는 현재 소속 사용자가 반영됩니다.',
               title: '조직 디렉터리',
             },
             apiIntegrations: {
@@ -3486,19 +3686,14 @@ export const resources = {
               title: 'API 키 및 외부 연계',
             },
             apps: {
-              description:
-                '전사 앱 표시 기본값, 워크스페이스별 앱 표시 정책, 앱바 카테고리를 관리합니다.',
+              access: {
+                title: '앱 사용 정책',
+                description:
+                  '앱별 사용 여부와 사용자·그룹 대상을 설정합니다. 콘텐츠 공유 권한은 각 앱에서 관리합니다.',
+              },
+              description: '앱 사용 대상과 앱바 카테고리를 관리합니다.',
               title: '앱 노출 및 구성',
-              platform: {
-                description:
-                  '회사 전체에서 제공하는 앱과 개인 도구의 기본 노출을 관리합니다.',
-                title: '전사 앱',
-              },
-              workspace: {
-                description:
-                  '워크스페이스 앱의 기본 노출과 워크스페이스별 예외를 관리합니다.',
-                title: '워크스페이스 앱',
-              },
+
               'app-bar': {
                 description:
                   '메인 앱바의 카테고리와 카테고리별 앱 구성을 관리합니다.',
@@ -3515,6 +3710,11 @@ export const resources = {
                 'Provider 연결과 승인 모델, 앱·기능별 실행 경로 및 출력 상한을 관리합니다.',
               title: 'LLM 관리',
             },
+            aiTools: {
+              description:
+                'Hermes 툴셋, MCP, 스킬 상태와 논문 검색 소스 정책을 확인하고 관리합니다.',
+              title: 'AI 도구 상태',
+            },
             modelMonitoring: {
               description:
                 '현재 서버와 DGX SPARK에서 사용 중인 모델의 온라인 상태를 확인합니다.',
@@ -3530,40 +3730,10 @@ export const resources = {
                 '전사 커뮤니티 채널을 추가하고 노출 상태를 관리합니다.',
               title: '커뮤니티 채널',
             },
-            workspaces: {
-              description:
-                '전체 워크스페이스를 확인하고 멤버, 앱 표시, 상태를 관리합니다.',
-              title: '워크스페이스',
-            },
           },
           units: {
             count: '개',
             people: '명',
-          },
-          workspaces: {
-            appToggleHint:
-              '앱 표시 여부는 생성 후 워크스페이스 상세의 Apps 탭에서 관리할 수 있습니다.',
-            createAction: '워크스페이스 만들기',
-            createDescription:
-              '협업 공간을 생성합니다. 생성 직후 본인이 자동으로 admin 으로 등록되고 기본 Team Space 가 함께 만들어집니다.',
-            created: '워크스페이스 "{{name}}" 를 만들었습니다.',
-            createFailed: '워크스페이스를 만들지 못했습니다.',
-            createTitle: '새 워크스페이스 만들기',
-            creating: '만드는 중...',
-            descriptionOptional: '설명 (선택)',
-            descriptionPlaceholder: '이 워크스페이스에서 어떤 일을 하나요?',
-            empty: '표시할 워크스페이스가 없습니다.',
-            filterActive: '활성',
-            filterAll: '전체',
-            filterArchived: '보관',
-            infoLoadFailed: '워크스페이스 정보를 불러오지 못했습니다.',
-            itemMeta: '{{key}} · {{count}}명',
-            listLoadFailed: '워크스페이스 목록을 불러오지 못했습니다.',
-            memberCount: '{{count}}명',
-            namePlaceholder: '예: Delivery Hub',
-            searchPlaceholder: '이름, key 검색',
-            statusActive: '활성',
-            statusArchived: '보관',
           },
         },
         shared: {
@@ -3586,22 +3756,13 @@ export const resources = {
             status: '상태',
             total: '총 {{total}}명',
             user: '사용자',
-            workspace: '워크스페이스',
+            groups: '그룹',
           },
           pagination: {
             next: '다음',
             previous: '이전',
           },
-          roles: {
-            admin: {
-              description: '멤버와 설정 관리',
-              label: '관리자',
-            },
-            member: {
-              description: '워크스페이스 앱 사용',
-              label: '멤버',
-            },
-          },
+
           status: {
             active: '활성',
             activeShort: '활성',
@@ -3610,108 +3771,6 @@ export const resources = {
             suspended: '정지됨',
             suspendedShort: '정지',
           },
-        },
-        workspace: {
-          actions: '워크스페이스 작업',
-          addDescription: '+ 설명 추가',
-          addMembers: {
-            addCount: '{{count}}명 추가',
-            adding: '추가 중...',
-            description: '사용자를 검색해 여러 명을 한 번에 추가합니다.',
-            noSelection: '선택한 사용자가 없습니다.',
-            openDirectory: '임직원 디렉터리 열기',
-            removeSelection: '{{label}} 선택 해제',
-            selectedCount: '선택 {{count}}명',
-            title: '새 멤버 추가',
-            userSearchPlaceholder: '이름 또는 이메일',
-          },
-          archiveAction: '보관함으로 옮기기',
-          archived: '워크스페이스를 보관함으로 옮겼습니다.',
-          archivedStatus: '보관됨',
-          archiveConfirm: '보관하기',
-          archiveConfirmDescription:
-            '"{{name}}" 을 보관함으로 옮기면 사용자가 더 이상 접근하지 못합니다. 멤버와 데이터는 보존되며 언제든 다시 활성화할 수 있습니다.',
-          archiveConfirmTitle: '워크스페이스 보관',
-          blockerDocs: '{{count}}개 문서',
-          blockerMeetings: '{{count}}개 회의',
-          blockerSpaces: '{{count}}개 space',
-          copyKey: '키 복사',
-          deleteActionWithReason: '영구 삭제 ({{reason}})',
-          deleteBlockActive:
-            '워크스페이스를 먼저 보관함으로 옮겨야 영구 삭제할 수 있습니다.',
-          deleteBlockRemaining: '{{items}} 가 남아있습니다. 먼저 비워주세요.',
-          deleteConfirmDescription:
-            '"{{name}}" 을 완전히 삭제하면 되돌릴 수 없습니다. 모든 멤버십과 연관 데이터가 함께 제거됩니다.',
-          deleteConfirmTitle: '워크스페이스 영구 삭제',
-          deleted: '워크스페이스 "{{name}}" 를 영구 삭제했습니다.',
-          deleteFailed: '워크스페이스를 삭제하지 못했습니다.',
-          descriptionLabel: '설명',
-          detailLoadFailed: '워크스페이스 상세를 불러오지 못했습니다.',
-          directory: {
-            currentSelection: '현재 선택: {{count}}명',
-            description:
-              '검색과 필터로 사용자를 찾아 다중 선택합니다. 여기서 선택한 항목은 추가 모달의 선택 목록에 누적됩니다.',
-            done: '완료',
-            title: '임직원 디렉터리',
-          },
-          editDescription:
-            '이름과 설명을 수정합니다. 키는 고정 식별자라 변경할 수 없습니다.',
-          editTitle: '워크스페이스 편집',
-          groupBindingMeta: '{{count}}개 · 사용자에게 권한 상속',
-          heroMeta: '· 멤버 {{count}} · 만든 날짜 {{date}}',
-          keyCopied: '키를 복사했습니다.',
-          keyCopyFailed: '키를 복사하지 못했습니다.',
-          keyLabel: '키',
-          members: {
-            add: '멤버 추가',
-            addFailed: '멤버를 추가하지 못했습니다.',
-            actions: '멤버 작업',
-            bulkAdded: '{{count}}명을 추가했습니다.',
-            bulkAddPartial: '{{succeeded}}명 추가됨, {{failed}}명 실패',
-            bulkRemoveFailed: '일괄 제거에 실패했습니다.',
-            bulkRemovePartial: '{{succeeded}}명 제거됨, {{failed}}명 실패',
-            bulkRemoved: '{{count}}명을 제거했습니다.',
-            bulkRoleChanged: '{{count}}명의 역할을 변경했습니다.',
-            bulkRoleFailed: '일괄 역할 변경에 실패했습니다.',
-            bulkRolePartial: '{{succeeded}}명 변경됨, {{failed}}명 실패',
-            changeRole: '역할 변경',
-            clearSelection: '해제',
-            currentUser: '(본인)',
-            empty: '표시할 멤버가 없습니다.',
-            emptyHint: '[멤버 추가] 를 눌러 팀원을 등록하세요.',
-            emptyYet: '아직 멤버가 없습니다.',
-            filterAll: '전체 {{count}}',
-            filterPending: '초대 대기 {{count}}',
-            filterRole: '{{role}} {{count}}',
-            loadFailed: '멤버를 불러오지 못했습니다.',
-            manage: '멤버 관리',
-            manageDescription:
-              '검색, 필터, 일괄 작업으로 워크스페이스 멤버를 관리합니다.',
-            manageTitle: '{{name}} 멤버 관리',
-            name: '이름',
-            previewMeta: '{{count}}명 · 관리자 미리보기',
-            removeFailed: '멤버를 제거하지 못했습니다.',
-            removed: '멤버를 제거했습니다.',
-            removeFromWorkspace: '워크스페이스에서 제거',
-            role: '역할',
-            roleChanged: '역할을 변경했습니다.',
-            roleChangeFailed: '역할을 변경하지 못했습니다.',
-            searchPlaceholder: '이름, 이메일, 그룹 이름',
-            selectAll: '멤버 전체 선택',
-            selectMember: '{{name}} 선택',
-            selectedCount: '{{count}}명 선택됨',
-            title: '멤버',
-            viewAll: '전체 {{count}}명 보기 →',
-          },
-          nameLabel: '이름',
-          noSelectionDescription:
-            '왼쪽 목록에서 워크스페이스를 선택하면 상세 정보를 볼 수 있습니다.',
-          noSelectionTitle: '워크스페이스를 선택하세요',
-          profileSaved: '워크스페이스 정보를 저장했습니다.',
-          profileSaveFailed: '워크스페이스를 저장하지 못했습니다.',
-          reactivateAction: '다시 활성화',
-          reactivated: '워크스페이스를 다시 활성화했습니다.',
-          statusChangeFailed: '워크스페이스 상태를 변경하지 못했습니다.',
         },
       },
       toolView: {
@@ -3817,6 +3876,21 @@ export const resources = {
           stage: '{{stage}}',
           title: '답변 작성 중',
         },
+        agentControl: {
+          title: 'Hermes 에이전트 제어',
+          runtime: 'Hermes · OpenRouter · Qwen 3.8 Flash',
+          refresh: '에이전트 상태 새로고침',
+          recentRuns: '최근 실행',
+          scheduledJobs: '예약 작업',
+          noRuns: '아직 실행 기록이 없습니다.',
+          noJobs: '등록된 예약 작업이 없습니다.',
+          stopRun: '실행 중단',
+          runNow: '지금 실행',
+          pauseJob: '예약 작업 일시정지',
+          resumeJob: '예약 작업 재개',
+          loadFailed: '에이전트 제어 상태를 불러오지 못했습니다.',
+          actionFailed: '에이전트 제어 요청을 처리하지 못했습니다.',
+        },
         errors: {
           connect:
             'AI 서버에 연결하지 못했습니다. API 서버가 실행 중인지 확인해 주세요.',
@@ -3884,7 +3958,7 @@ export const resources = {
           showJson: 'JSON 보기',
           title: '작업 승인 필요',
           description:
-            '이 변경은 실제 워크스페이스 데이터를 수정합니다. 내용을 확인한 뒤 승인하거나 취소하세요.',
+            '이 변경은 실제 업무 데이터를 수정합니다. 내용을 확인한 뒤 승인하거나 취소하세요.',
           toolDefault: '승인 필요 작업',
           toolDocs: '문서 변경',
           toolMeeting: '회의 변경',
@@ -4031,14 +4105,14 @@ export const resources = {
           sourcesLoadFailed: '검색 source 목록을 불러오지 못했습니다.',
           sortLatest: '최신순',
           sortRelevance: '관련도',
-          subtitle: '{{workspace}}의 문서, 회의, PMS, 일정을 검색합니다.',
+          subtitle: '{{app}}의 문서, 회의, PMS, 일정을 검색합니다.',
           subtitleFallback: '업무 데이터를 검색합니다.',
           title: 'Open Work Hub 통합검색',
           updated: '{{date}} 업데이트',
           visibilityPrivate: '비공개',
           visibilityPublic: '공개',
           visibilityShared: '공유됨',
-          workspaceMissing: '검색할 workspace를 찾을 수 없습니다.',
+
           yes: '예',
           no: '아니오',
           more: '더 보기',
@@ -4069,7 +4143,7 @@ export const resources = {
           search: '검색',
           sessionExpired: '세션이 만료되었습니다. 다시 로그인해주세요.',
           sourceLabels: {
-            generic_rag: 'Workspace RAG',
+            generic_rag: 'Company RAG',
             keyword: 'Keyword',
           },
           sources: 'Sources',
@@ -4081,14 +4155,13 @@ export const resources = {
             keyword: 'Keyword',
             semantic: 'Semantic',
           },
-          subtitle: '{{workspace}}의 retrieval service layer를 검색합니다.',
+          subtitle: '{{company}} 콘텐츠를 현재 접근 권한에 따라 검색합니다.',
           subtitleFallback: 'Retrieval service layer를 검색합니다.',
           title: 'Retrieval 진단 검색',
           topK: 'Top K',
           topKValue: 'Top {{count}}',
           traceId: 'trace {{traceId}}',
           untitled: '제목 없음',
-          workspaceMissing: '검색할 workspace를 찾을 수 없습니다.',
         },
         thinking: {
           cancelled: '생각 완료',
@@ -4195,11 +4268,10 @@ export const resources = {
           loadFailed: '문서를 불러오지 못했습니다.',
         },
         location: {
-          privateDesc: '나만 볼 수 있어요',
-          spaceDesc: '팀스페이스 멤버만 볼 수 있어요',
-          workspace: '워크스페이스',
-          workspaceDesc: '워크스페이스 전체 멤버가 볼 수 있어요',
-          workspaceNamed: '워크스페이스 · {{name}}',
+          privateDesc: '전사 공개나 프로젝트 연결 없이 개인 문서로 시작합니다.',
+          spaceDesc: '이 스페이스의 권한에 따라 접근하는 회사 문서로 만듭니다.',
+          company: '회사 공개',
+          companyDesc: '이 앱을 사용할 수 있는 전 직원에게 공개합니다.',
         },
         moreActions: '더 많은 작업',
         newDoc: '새 문서',
@@ -4303,18 +4375,29 @@ export const resources = {
           enableLink: '링크 활성화',
           internalLink: '내부 공유 링크',
           internalLinkDescription:
-            '로그인한 모든 내부 사용자가 이 링크로 문서에 접근할 수 있어요.',
+            'Docs 앱 사용 권한이 있는 로그인 사용자가 활성 링크의 읽기·편집 권한으로 접근합니다.',
           invitePlaceholder: '이름 또는 이메일로 초대...',
           linkAccess: '링크 ({{access}})',
-          manageOnlyNotice:
-            '공개 범위는 문서 소유자나 관리자만 변경할 수 있어요.',
+          manageOnlyNotice: '문서 공유 관리 권한이 있어야 변경할 수 있습니다.',
           peopleWithAccess: '접근 권한이 있는 사람',
           regenerate: '재생성',
           sharing: '공유',
           title: '문서 공유',
           userCount: '{{count}}명',
-          visibilityDescription: '이 문서를 기본으로 볼 수 있는 범위예요.',
+          visibilityDescription:
+            '전사 공개와 대표 프로젝트 연결은 별도 설정입니다. 사용자·그룹·링크 및 다른 프로젝트 연결 권한은 유지됩니다. 회사 소유 문서는 플랫폼 관리자가 계속 읽을 수 있습니다.',
           whoCanAccess: '접근 가능 범위',
+          companyAudience: '전사 공개',
+          primaryTarget: '대표 프로젝트 연결',
+          currentPrimaryTarget:
+            '현재 대표 연결입니다. 다른 공유 권한도 유지됩니다.',
+          targetAccessDescription:
+            '대표 연결로 지정합니다. 기존 공유와 다른 프로젝트 연결 권한도 유지됩니다.',
+          noPrimaryTarget: '대표 연결 없음',
+          noPrimaryTargetDescription:
+            '대표 연결만 해제합니다. 전사 공개와 다른 공유 권한은 유지됩니다.',
+          publicationSaved: '문서 공개 및 연결 설정을 저장했습니다.',
+          publicationFailed: '문서 공개 및 연결 설정을 저장하지 못했습니다.',
         },
         uploadTooLarge: '2MB 이하의 파일을 선택하세요.',
         startWriting: '작성을 시작하세요...',
@@ -4380,8 +4463,6 @@ export const resources = {
         mail: '받은 메일',
         mailComingSoon: '메일 연동 준비 중입니다.',
         meetingsEmptyCta: '회의 잡기',
-        notifications: '알림',
-        notificationsEmpty: '새 알림이 없습니다.',
         scheduleEmpty: '예정된 일정이 없습니다.',
         scheduleEmptyCta: '일정 추가',
         tasksEmptyCta: '태스크 추가',
@@ -4400,11 +4481,11 @@ export const resources = {
         tasksEmpty: '할당된 작업이 없습니다.',
         todayMeetings: '오늘의 회의',
         myTasks: '내 태스크',
-        startWorkspaceBadge: '시작',
+        startBadge: '시작',
         untitled: '제목 없음',
         userFallback: '사용자',
-        workspaceFallback: '워크스페이스',
-        workspaceLabel: '워크스페이스',
+
+        appLabel: '업무 홈',
       },
       recording: {
         actions: {
@@ -4433,6 +4514,7 @@ export const resources = {
           noLocalRecordingToRecover: '복구할 로컬 녹음이 없습니다.',
           originalUploadFailed: '원본 파일 업로드에 실패했습니다.',
           playbackFailed: '녹음 재생 링크를 가져올 수 없습니다.',
+          publishFailed: '녹음 결과를 문서로 게시할 수 없습니다.',
           persistCheckFailed:
             '브라우저 저장공간 보호 상태를 확인하지 못했습니다.',
           persistMayExpire:
@@ -4456,7 +4538,6 @@ export const resources = {
           detachConfirmDescription: '이 항목과의 연결을 해제하시겠습니까?',
           detachConfirmTitle: '연결 해제',
           detachItemLabel: '{{item}} 연결 해제',
-          generatedDocsTitle: '자동 생성된 문서',
           linkedItems: '관련 항목',
           linkedMeetings: '연결된 회의',
           linkedTasks: '연결된 태스크',
@@ -4479,12 +4560,25 @@ export const resources = {
             title: '회의 추가',
           },
           minutesDoc: '요약 문서',
+          noPublications: '아직 게시된 문서가 없습니다.',
           noLinkedMeetings: '연결된 회의가 없습니다.',
           noLinkedTasks: '연결된 태스크가 없습니다.',
           noOtherConnections: '기타 연결이 없습니다.',
           notReady: '준비 중',
           otherConnections: '기타 연결',
+          publicationsTitle: '게시된 문서',
+          publishedDocument: '녹음 결과 문서 v{{version}}',
+          publishing: '게시 중',
+          publishToDocs: '문서로 게시',
           rawTranscriptDoc: '원문 스크립트',
+          resultsTitle: '녹음 결과',
+          resultPending: '결과를 생성하고 있습니다.',
+          resultFailed:
+            '결과 생성에 실패했습니다. 실패 원인을 확인한 뒤 다시 시도하세요.',
+          resultUnavailable: '사용 가능한 결과가 없습니다.',
+          resultVersion: '결과 버전 {{version}}',
+          summaryTitle: '요약',
+          transcriptTitle: '스크립트',
           taskPicker: {
             description: '이 녹음을 연결할 태스크를 선택하세요.',
             noTaskLists: '태스크 목록이 없습니다.',
@@ -4494,6 +4588,7 @@ export const resources = {
           },
           titleLabel: '제목',
           titleSaved: '제목이 저장되었습니다.',
+          verifierNote: '검증 메모: {{note}}',
         },
         filters: {
           categories: {
@@ -4574,8 +4669,7 @@ export const resources = {
           progressLabel: '{{stage}} 진행 중',
           stages: {
             audio: '음성 저장',
-            minutesDoc: '요약 문서',
-            rawDoc: '원문 문서',
+            summary: '요약 생성',
             transcript: '스크립트 추출',
           },
           state: {
@@ -4598,6 +4692,10 @@ export const resources = {
         },
       },
       meeting: {
+        companyContentNotice:
+          '회의와 회의 노트·회의록·첨부 녹음은 회사 업무 콘텐츠이며 플랫폼 관리자가 읽을 수 있습니다.',
+        notesUnavailable:
+          '현재 볼 수 있는 회의 노트가 없습니다. 회의 상세 정보는 아래에서 확인할 수 있습니다.',
         addAttendees: {
           addCount: '{{count}}명 추가',
           adding: '추가 중...',
@@ -4847,7 +4945,7 @@ export const resources = {
           attachAction: '문서를 첨부',
           attachFailed: '문서를 첨부할 수 없습니다.',
           description: '회의에 연결할 NativeDoc 문서를 선택합니다.',
-          docsWorkspace: 'Docs 워크스페이스',
+          docsApp: 'Docs 앱',
           empty:
             '표시할 문서가 없습니다. PR1 은 NativeDoc 만 첨부할 수 있습니다.',
           loadFailed: '문서를 불러올 수 없습니다.',
@@ -4865,7 +4963,7 @@ export const resources = {
         recordingsDescription:
           '회의를 열면 notes editor 오른쪽 rail에서 녹음 시작과 음성 파일 업로드를 사용할 수 있습니다.',
         recordingsPlaceholder:
-          '회의 녹음은 각 회의 workspace에서 사용할 수 있습니다.',
+          '각 회의의 상세 화면에서 녹음을 사용할 수 있습니다.',
         schedule: '일정',
         scheduled: '예정',
         scheduleView: '스케줄 보기',
@@ -4878,18 +4976,18 @@ export const resources = {
           list: '리스트',
           listLoadFailed: '리스트 목록을 불러올 수 없습니다.',
           noLists: '리스트 없음',
-          pmsWorkspace: 'PMS 워크스페이스',
+          pmsApp: 'PMS 앱',
           searchPlaceholder: '태스크 제목으로 검색',
           title: '태스크 첨부',
         },
-        workspace: {
+        detailView: {
           backToMeetings: '회의 목록으로 돌아가기',
           detail: '상세',
           detailDrawerDescription:
             '회의 상태, 참석자, 연결된 문서와 녹음을 확인합니다.',
           detailDrawerTitle: '회의 상세',
           editorPlaceholder: '회의 메모를 작성하세요...',
-          loadFailed: '회의 workspace를 불러올 수 없습니다.',
+          loadFailed: '회의 상세 정보를 불러올 수 없습니다.',
           notesPageFailed: '회의 메모 페이지를 불러올 수 없습니다.',
           notesPlaceholder: '회의 메모',
           notesPrepareFailed: '회의 메모를 준비할 수 없습니다.',
@@ -4904,6 +5002,7 @@ export const resources = {
         allDay: '종일 일정',
         create: '생성',
         createEventOrMeeting: '이벤트 또는 회의 생성',
+        chooseMeetingDetail: '회의 선택',
         datePicker: {
           chooseDate: '날짜 선택',
           nextMonth: '다음 달',
@@ -5065,14 +5164,14 @@ export const resources = {
           title: 'All Tasks',
         },
         assignedToMe: '내게 배정됨',
-        assignedToMeDescription: '이 워크스페이스에서 내게 배정된 작업',
+        assignedToMeDescription: '접근 가능한 스페이스에서 내게 배정된 작업',
         create: '생성',
         createSpace: '스페이스 만들기',
         createSpaceDescription:
           '스페이스는 팀 단위의 작업 공간입니다. 리스트와 멤버를 묶어 관리할 수 있습니다.',
         createSpaceFailed: '스페이스 생성에 실패했습니다.',
         createSpaceNoAccess:
-          '워크스페이스 접근 권한이 없어 스페이스를 생성할 수 없습니다.',
+          'PMS 앱 사용 권한이 없어 스페이스를 생성할 수 없습니다.',
         createSpacePartialFailure:
           '스페이스는 만들어졌지만 일부 멤버 초대에 실패했습니다: {{failures}}',
         createFolder: '폴더 생성',
@@ -5096,7 +5195,7 @@ export const resources = {
         listNamePlaceholder: '예: Sprint Backlog, Design Ops, Q2 Campaign',
         name: '이름',
         noSpacesDescription:
-          '워크스페이스에는 접근할 수 있지만 아직 속한 스페이스가 없습니다. 새 스페이스를 만들고 바로 리스트와 문서를 운영할 수 있습니다.',
+          '아직 속한 스페이스가 없습니다. 새 스페이스를 만들거나 기존 스페이스에 참여하세요.',
         noSpacesTitle: '아직 스페이스가 없습니다',
         optional: '선택',
         removeMember: '{{name}} 제외',
@@ -5300,7 +5399,7 @@ export const resources = {
           removeFromSpace: '스페이스에서 내보내기',
           roleDescription: {
             admin: '멤버 관리 및 설정 변경 가능',
-            member: '리스트, 폴더, 문서 생성 및 편집',
+            member: '리스트와 폴더 생성 및 작업 생성·편집 가능',
             owner: '관리자 지정과 소유권 변경 가능',
             viewer: '읽기 전용',
           },
@@ -5485,7 +5584,7 @@ export const resources = {
             loadTasksFailed: '태스크를 불러오지 못했습니다.',
           },
           noTaskLists: '리스트가 없습니다.',
-          pmsWorkspace: 'PMS 워크스페이스',
+          pmsApp: 'PMS 앱',
           searchPlaceholder: '태스크 검색...',
           taskListLabel: '리스트',
           title: 'PMS 태스크 선택',
@@ -5638,10 +5737,12 @@ export const resources = {
         },
       },
       whiteboard: {
+        visibilityScopeNotice:
+          '회사 공개를 해제해도 사용자·그룹·연결된 업무의 권한과 회사 관리자 읽기 권한은 유지됩니다.',
         actionsMenu: '화이트보드 설정',
         cardView: '카드 보기',
-        changeToPersonal: '비공개로 변경',
-        changeToWorkspace: '워크스페이스 공개로 변경',
+        changeToPersonal: '회사 공개 해제',
+        changeToCompany: '회사 공개로 변경',
         chooseExisting: '기존에서 선택',
         close: '닫기',
         archiveFailed: '화이트보드를 휴지통으로 이동할 수 없습니다.',
@@ -5659,8 +5760,8 @@ export const resources = {
         connectFailed: '화이트보드를 연결할 수 없습니다.',
         createFailed: '화이트보드를 만들 수 없습니다.',
         create: '생성',
-        createPersonal: '비공개로 만들기',
-        createWorkspace: '워크스페이스 공개 만들기',
+        createPersonal: '제한 공개로 만들기',
+        createCompany: '회사 공개 만들기',
         deleteFailed: '화이트보드를 삭제할 수 없습니다.',
         deletePermanentConfirm: '"{{title}}" 화이트보드를 영구 삭제할까요?',
         deleteSelectedElements: '선택한 요소 {{count}}개 삭제',
@@ -5674,7 +5775,7 @@ export const resources = {
         edited: '{{date}} 수정',
         emptyBoard: '빈 화이트보드',
         enableReadLink: '읽기 링크 활성화',
-        fallbackWorkspace: '워크스페이스',
+        fallbackCompany: '회사',
         favoriteFailed: '즐겨찾기를 변경할 수 없습니다.',
         hideGrid: '그리드 숨기기',
         linkShare: '링크 공유',
@@ -5686,8 +5787,8 @@ export const resources = {
         noShareableUsers: '표시할 사용자가 없습니다.',
         noWhiteboards: '화이트보드가 없습니다',
         openSharedFailed: 'Shared whiteboard를 열 수 없습니다.',
-        personalSectionEmpty: '비공개 화이트보드가 없습니다',
-        personalSectionTitle: '비공개 화이트보드',
+        personalSectionEmpty: '제한 공개 화이트보드가 없습니다',
+        personalSectionTitle: '제한 공개 화이트보드',
         pickerDescription: '이미 저장된 Whiteboard를 연결합니다.',
         pickerEmpty: '연결할 Whiteboard가 없습니다.',
         pickerTitle: 'Whiteboard 선택',
@@ -5726,14 +5827,16 @@ export const resources = {
         count_plural: '{{count}} whiteboards',
         visibilityCurrent: '현재: {{visibility}}',
         visibilityManageRequired: '소유자 또는 관리자만 변경할 수 있습니다.',
-        visibilityPersonal: '비공개',
+        visibilityPersonal: '제한 공개',
         visibilityUpdateFailed: '공개 범위를 변경할 수 없습니다.',
-        visibilityWorkspace: '워크스페이스 공개',
-        workspaceMissing: '워크스페이스를 확인할 수 없습니다.',
-        workspaceSectionEmpty: '워크스페이스 공개 화이트보드가 없습니다',
-        workspaceSectionTitle: '워크스페이스 공개 화이트보드',
+        visibilityCompany: '회사 공개',
+
+        companySectionEmpty: '회사 공개 화이트보드가 없습니다',
+        companySectionTitle: '회사 공개 화이트보드',
       },
       diagrams: {
+        companyOwnershipNotice:
+          '회사 소유로 전환한 콘텐츠는 개인 소유로 되돌릴 수 없습니다.',
         actionsMenu: '다이어그램 설정',
         archive: '보관',
         archiveEmpty: '보관된 다이어그램이 없습니다',
@@ -5742,9 +5845,8 @@ export const resources = {
         create: '생성',
         createFailed: '다이어그램을 만들 수 없습니다.',
         createPersonal: '비공개로 만들기',
-        createWorkspace: '워크스페이스 공개 만들기',
-        changeToPersonal: '비공개로 변경',
-        changeToWorkspace: '워크스페이스 공개로 변경',
+        createCompany: '회사 공개 만들기',
+        changeToCompany: '회사 공개로 변경',
         editorTitle: '다이어그램 편집기',
         empty: '다이어그램이 없습니다',
         error: '오류',
@@ -5777,11 +5879,13 @@ export const resources = {
         visibilityManageRequired: '소유자 또는 관리자만 변경할 수 있습니다.',
         visibilityPersonal: '비공개',
         visibilityUpdateFailed: '공개 범위를 변경할 수 없습니다.',
-        visibilityWorkspace: '워크스페이스 공개',
-        workspaceSectionEmpty: '워크스페이스 공개 다이어그램이 없습니다',
-        workspaceSectionTitle: '워크스페이스 공개 다이어그램',
+        visibilityCompany: '회사 공개',
+        companySectionEmpty: '회사 공개 다이어그램이 없습니다',
+        companySectionTitle: '회사 공개 다이어그램',
       },
       bento: {
+        companyOwnershipNotice:
+          '회사 소유로 전환한 콘텐츠는 개인 소유로 되돌릴 수 없습니다.',
         actionsMenu: '프레젠테이션 설정',
         aiCancel: '취소',
         aiBackgroundCreate: 'Bento AI 프레젠테이션 생성',
@@ -5826,8 +5930,7 @@ export const resources = {
         archiveFailed: '프레젠테이션을 보관할 수 없습니다.',
         back: '프레젠테이션 목록으로 돌아가기',
         bridgeFailed: 'Bento 편집기와 통신할 수 없습니다.',
-        changeToPersonal: '비공개로 변경',
-        changeToWorkspace: '워크스페이스 공개로 변경',
+        changeToCompany: '회사 공개로 변경',
         count: '{{count}}개 프레젠테이션',
         create: '생성',
         createFailed: '프레젠테이션을 만들 수 없습니다.',
@@ -5863,9 +5966,9 @@ export const resources = {
         updated: '{{date}} 수정',
         visibilityPersonal: '비공개',
         visibilityUpdateFailed: '공개 범위를 변경할 수 없습니다.',
-        visibilityWorkspace: '워크스페이스 공개',
-        workspaceSectionEmpty: '워크스페이스 공개 프레젠테이션이 없습니다',
-        workspaceSectionTitle: '워크스페이스 공개 프레젠테이션',
+        visibilityCompany: '회사 공개',
+        companySectionEmpty: '회사 공개 프레젠테이션이 없습니다',
+        companySectionTitle: '회사 공개 프레젠테이션',
       },
     },
   },
@@ -5886,6 +5989,7 @@ export const resources = {
         refresh: 'Refresh',
         reload: 'Reload',
         rename: 'Rename',
+        remove: 'Remove',
         reset: 'Reset',
         retry: 'Retry',
         save: 'Save',
@@ -5928,21 +6032,121 @@ export const resources = {
         unknown: 'Unknown',
       },
       labels: {
+        company: 'Company',
         apps: 'Apps',
-        workspace: 'Workspace',
-        workspaces: 'Workspaces',
+
+        groups: 'Groups',
       },
       accessNotice: {
         blockedAction:
-          'You cannot {{action}} because you do not have access to {{workspace}}.',
+          'You cannot {{action}} because you do not have access to {{app}}.',
         requestHelp:
-          'Ask an admin for {{workspace}} access, or ask a meeting organizer or attendee with access.',
+          'Ask an admin for {{app}} access, or ask a meeting organizer or attendee with access.',
       },
     },
     shell: {
+      groupSharing: {
+        saved: 'Group access saved.',
+        title: 'Group permissions',
+        description:
+          'Applies to current group members. Group removal or revoked app admission removes access.',
+        empty: 'No groups assigned.',
+        failed: 'Could not load or save group permissions.',
+        inactive: 'Inactive',
+        role: 'Permission granted to the group',
+        grant: 'Assign permission',
+        roles: {
+          read: 'Read',
+          edit: 'Edit',
+          viewer: 'Viewer',
+          member: 'Member',
+          admin: 'Space administrator',
+        },
+      },
+      contentPublication: {
+        title: 'Publish as company content',
+        confirm:
+          'Publishing to the company or a project transfers ownership to the company and allows platform administrators to read it. Removing links or company-wide sharing does not restore personal ownership. Continue?',
+        companyRead: 'Allow everyone admitted to this app to read',
+        personal:
+          'Personal ownership · access limited to explicit users and groups',
+        company: 'Company ownership · platform administrators may read',
+      },
+      appBootstrap: {
+        requestFailed: 'Could not load apps. ({{status}})',
+        loadFailed: 'Could not load apps.',
+        loading: 'Checking available apps…',
+      },
+      directory: {
+        loadFailed: 'Could not load the directory.',
+        unavailableSelection: 'Inactive or unavailable selection',
+        noResults: 'No results.',
+        remove: 'Remove {{name}}',
+        searchPeople: 'Search people by name',
+        searchGroups: 'Search groups by name',
+        searchPrompt: 'Search by name.',
+        loading: 'Loading…',
+        retry: 'Retry',
+        loadMore: 'Load more',
+        previous: 'Previous',
+        next: 'Next',
+        close: 'Close',
+      },
+      companyAccess: {
+        title: 'App access',
+        app: 'App',
+        enabled: 'Enable this app for the company',
+        audience: 'Audience',
+        all: 'All users',
+        selected: 'Selected users or groups',
+        users: 'Users',
+        groups: 'Groups',
+        selectedRule:
+          'Selected users and members of selected groups can use the app. An empty selection denies regular users. Active platform administrators bypass audience selection.',
+        resourceRule:
+          'App access does not grant permission to read or edit individual content. Company disablement also blocks administrators.',
+        platformRule:
+          'The platform manages people, organizations, groups and app admission. Each app manages its projects and content permissions. Personal content is not automatically visible to company administrators.',
+        save: 'Save access policy',
+        saved: 'App access policy saved.',
+        saveFailed: 'Could not save app access.',
+        loadFailed: 'Could not load app access.',
+      },
+      companyGroups: {
+        title: 'Groups',
+        policy:
+          'Organization groups reflect current direct employment assignments. Manual groups are managed independently of organization transfers. Both group types can grant app and content access.',
+        create: 'Create manual group',
+        created: 'Manual group created.',
+        saveFailed: 'Could not save the group.',
+        saved: 'Group changes saved.',
+        loadFailed: 'Could not load groups.',
+        name: 'Group name',
+        kind: 'Type',
+        status: 'Status',
+        organization: 'Organization',
+        manual: 'Manual group',
+        active: 'Active',
+        inactive: 'Inactive',
+        organizationRule:
+          'Organization group names and members are managed through organizations and employee assignments. Child organizations and department heads are not automatically included.',
+        description: 'Description',
+        saveDetails: 'Save group details',
+        members: 'Members',
+        saveMembers: 'Save members',
+        revokeTitle: 'Change group access',
+        removeMembersNotice:
+          '{{count}} users will immediately lose app and content access granted by this group. Continue?',
+        deactivateNotice:
+          'All members will immediately lose access granted by this group. Content and access from other grants remain. Continue?',
+        confirmRevocation: 'Change access',
+        head: 'Department head',
+        headRule:
+          'Each organization has at most one head; one person may head several organizations. This designation does not grant group membership or administration rights.',
+      },
       mobileNavigation: {
         close: 'Close app switcher',
-        description: 'Switch apps and workspaces.',
+        description: 'Switch between available apps.',
         open: 'Open app switcher',
         title: 'App switcher',
       },
@@ -5950,12 +6154,14 @@ export const resources = {
         close: 'Close {{title}} menu',
         description: 'Navigate within the current app.',
         title: '{{title}} menu',
+        titleWithContext: '{{title}} menu — current scope: {{context}}',
       },
       search: {
         open: 'Open global search',
         title: 'Global search',
       },
       notifications: {
+        closePanel: 'Close notifications panel',
         empty: 'No notifications',
         markAllAsRead: 'Mark all as read',
         markAsRead: 'Mark as read',
@@ -5969,7 +6175,7 @@ export const resources = {
         eyebrow: 'Help',
         open: 'Help',
         pmsGuideDescription:
-          'Use screenshots and explanations to review PMS sign-in, workspace switching, and task management workflows.',
+          'Use screenshots and explanations to review PMS sign-in, app navigation, and task management workflows.',
         pmsGuideTitle: 'PMS user guide',
         sectionLabel: 'Help items',
         title: 'Help center',
@@ -6032,7 +6238,6 @@ export const resources = {
           summary: 'Single personal memo',
           title: 'Memo',
           unsaved: 'Unsaved',
-          workspace: 'Workspace',
         },
         dm: {
           open: 'Open DM',
@@ -6079,17 +6284,7 @@ export const resources = {
       },
       gates: {
         adminSectionDenied: 'Your account cannot view this admin section.',
-        appDisabled: 'This app is not enabled in the current workspace.',
-        noAccessibleWorkspace:
-          'Waiting for a workspace invitation. Ask a workspace admin to invite you.',
-        toolWorkspaceDenied:
-          'Your account cannot access the workspace for this tool.',
-        workspaceAppDenied:
-          'Your account cannot use this app in this workspace.',
-        workspaceDenied: 'Your account cannot access this workspace.',
-        workspaceLoading: 'Loading workspace configuration.',
-        workspaceSearchDisabled:
-          'Global search is not available in this workspace.',
+        appDisabled: 'This app is not available to your account.',
       },
       sidebar: {
         allSettings: 'All settings',
@@ -6110,6 +6305,7 @@ export const resources = {
         favorites: 'Favorites launcher',
         launcher: 'App launcher',
         more: 'Available',
+        primaryNavigation: 'Primary app navigation',
         personalTools: 'Personal tools',
         personalToolsScope: 'My personal apps',
         searchApps: 'Search apps',
@@ -6120,6 +6316,34 @@ export const resources = {
         mode: 'App area',
         open: 'Open',
         openApp: 'Open {{title}}',
+      },
+      launcher: {
+        appUnavailable: 'This app is unavailable.',
+
+        companyApp: 'Company app',
+        companyScope: 'Company scope',
+
+        description:
+          'Choose a company or personal app. Each app manages its projects and sharing permissions.',
+        eyebrow: 'Company apps',
+
+        noAppsDescription:
+          'No company or personal apps are configured for this account.',
+        noAppsTitle: 'No apps are available',
+
+        openCompanyApp: 'Open {{app}} in company scope',
+        openPersonalApp: 'Open {{app}} in personal scope',
+
+        personalApp: 'Personal app',
+        personalScope: 'Personal scope',
+        title: 'App launcher',
+        unavailableAppLabel: '{{app}} — unavailable',
+      },
+      accessRefresh: {
+        failedDescription: 'Could not verify your latest access. Try again.',
+        failedTitle: 'Could not refresh access',
+        loading: 'Checking your latest access.',
+        retry: 'Retry',
       },
       appBarEditor: {
         allApps: 'All apps',
@@ -6153,26 +6377,13 @@ export const resources = {
         'diagrams-create': 'Diagram',
         'whiteboard-create': 'Whiteboard',
       },
-      workspaceSwitcher: {
-        create: 'New workspace',
-        currentTitle: '{{name}} workspace',
-        defaultBadge: 'Start',
-        defaultNone: 'No preference',
-        defaultSaveFailed: 'Could not save the start workspace.',
-        defaultSelectLabel: 'Start workspace',
-        manage: 'Workspace settings',
-        noResults: 'No results found.',
-        noResultsHint: 'Search again by name or slug.',
-        searchPlaceholder: 'Search workspaces',
-        switch: 'Switch workspace',
-      },
       documentTitle: {
         app: '{{app}} | Open Work Hub',
         profile: 'My Settings',
-        workspaceApp: '{{workspace}} · {{app}} | Open Work Hub',
       },
       apps: {
         'agent-terminal': 'Codex Terminal',
+        'hermes-terminal': 'Hermes Terminal',
         ai: 'AI',
         bento: 'bento/slides',
         business: 'Business',
@@ -6195,8 +6406,10 @@ export const resources = {
         whiteboard: 'Whiteboard',
       },
       appDescriptions: {
-        bento: 'Create presentations and store them in the workspace.',
+        bento: 'Create and save presentations or publish them to the company.',
         chatbot: 'Conversational assistant using internal data and tools.',
+        'hermes-terminal':
+          'Run the Hermes autonomous agent in a private isolated workspace.',
         pms: 'Manage spaces, lists, and tasks.',
         docs: 'Create and share documents.',
         files: 'Store and share work files.',
@@ -6211,6 +6424,7 @@ export const resources = {
         'web-search': 'Search current public web information.',
       },
       nav: {
+        'settings-apps-access': 'App access',
         'bento-all': 'All Presentations',
         'bento-mine': 'My Presentations',
         'bento-archived': 'Archived',
@@ -6254,13 +6468,13 @@ export const resources = {
         'settings-people': 'People',
         'settings-organization': 'Organization directory',
         'settings-api-integrations': 'API integrations',
-        'settings-apps-platform': 'Platform Apps',
-        'settings-apps-workspace': 'Workspace Apps',
+
         'settings-apps-app-bar': 'App Bar',
-        'settings-workspaces': 'Workspaces',
+        'settings-groups': 'Groups',
         'settings-community': 'Community Channels',
         'settings-usage': 'Usage Analytics',
         'settings-llm': 'LLM Management',
+        'settings-ai-tools': 'AI Tool Status',
         'settings-model-monitoring': 'AI Model Status',
         'settings-document-processing': 'Document Processing',
         'settings-ai-security': 'AI Security',
@@ -6313,7 +6527,7 @@ export const resources = {
         Messages: 'Messages',
         Operations: 'Operations & Monitoring',
         Organization: 'People & Organization',
-        Workspaces: 'Workspaces',
+
         '업무 앱': 'Business Apps',
         '협업 앱': 'Collaboration Apps',
         Recordings: 'Recordings',
@@ -6330,8 +6544,7 @@ export const resources = {
     auth: {
       accessDenied: {
         description: 'Your account cannot view this screen.',
-        requestAccess:
-          'Ask an admin for the required permission and workspace binding.',
+        requestAccess: 'Ask an administrator for the required app access.',
         title: 'Access denied',
       },
       errors: {
@@ -6391,11 +6604,10 @@ export const resources = {
         showPasswordField: 'Show {{field}}',
         signIn: 'Sign in',
         signUp: 'Sign up',
-        setupDescription:
-          'Create the first admin account and start the workspace.',
+        setupDescription: 'Create the first platform administrator account.',
         setupTitle: 'Initial admin setup',
         signupDescription:
-          'Create an account now. Apps appear after a workspace admin invites you.',
+          'Create a company account. Available apps follow administrator policy.',
       },
       notFound: {
         description: 'The requested address does not exist or has moved.',
@@ -6433,10 +6645,6 @@ export const resources = {
         avatar: 'Avatar',
         currentPassword: 'Current Password',
         customizeAppearance: 'Customize how the app looks.',
-        defaultWorkspace: 'Start Workspace',
-        defaultWorkspaceDescription:
-          'The workspace that opens first when you enter home after login.',
-        defaultWorkspaceNone: 'No preference',
         displayName: 'Display Name',
         emailAddress: 'Email Address',
         emailChangeHint: 'Contact your admin to change.',
@@ -6460,6 +6668,7 @@ export const resources = {
         manageProfile: 'Manage your personal information.',
         mySettings: 'My Settings',
         newPassword: 'New Password',
+        newPasswordConfirm: 'Confirm New Password',
         notifications: 'Notifications',
         notificationsChannelEmail: 'Email',
         notificationsChannelPush: 'Push',
@@ -6469,11 +6678,11 @@ export const resources = {
         notificationsSecurityDescription:
           'Password changes and suspicious login attempts',
         notificationsSecurityTitle: 'Security Events',
-        notificationsWeeklyDescription: 'Summary of your access and workspaces',
+        notificationsWeeklyDescription: 'Summary of access and work activity',
         notificationsWeeklyTitle: 'Weekly Digest',
-        notificationsWorkspaceDescription:
-          'Important changes in your assigned workspaces',
-        notificationsWorkspaceTitle: 'Workspace Updates',
+        notificationsCompanyDescription:
+          'Important changes to company content you can access',
+        notificationsCompanyTitle: 'Company updates',
         organization: 'Organization',
         passwordChanged: 'Password changed.',
         passwordChangeFailed: 'Could not change the password.',
@@ -6527,21 +6736,6 @@ export const resources = {
       },
     },
     apps: {
-      workspace: {
-        bootstrapLoadFailed: 'Could not load workspace bootstrap.',
-        bootstrapRequestFailed:
-          'Workspace bootstrap request failed. ({{status}})',
-        contextUnavailable: 'Workspace context is not available.',
-        settingsAccessDenied:
-          'This account cannot access these workspace settings.',
-        settingsAdminRequired:
-          'Workspace settings require admin access or higher.',
-        settingsDescription:
-          'Manage this collaboration space profile and memberships.',
-        settingsLoadFailed: 'Could not load workspace settings.',
-        settingsLoading: 'Loading workspace settings.',
-        settingsTitle: 'Workspace Settings',
-      },
       videoChat: {
         activeRooms: 'Open rooms',
         backToRooms: 'Room list',
@@ -6858,7 +7052,6 @@ export const resources = {
             invalid: 'Could not read the document source details.',
             sessionExpired: 'Your session expired. Sign in again.',
             title: 'Document sources ({{count}})',
-            workspaceMissing: 'The workspace could not be resolved.',
           },
         },
         search: {
@@ -6905,7 +7098,6 @@ export const resources = {
             loadFailed: 'Could not load search results.',
             queryRequired: 'Enter a search query.',
             sessionExpired: 'Your session expired. Sign in again.',
-            workspaceMissing: 'The workspace could not be resolved.',
           },
         },
         selection: {
@@ -6937,7 +7129,7 @@ export const resources = {
         },
         visibility: {
           private: 'Private',
-          workspace: 'Workspace shared',
+          company: 'Company shared',
         },
       },
       agentTerminal: {
@@ -7147,6 +7339,126 @@ export const resources = {
         title: 'Codex Terminal',
         unavailableTitle: 'The Codex terminal is unavailable.',
       },
+      hermesTerminal: {
+        actions: {
+          approveOnce: 'Approve this request',
+          cancel: 'Cancel',
+          deny: 'Deny',
+          download: 'Download',
+          downloadFile: 'Download {{name}}',
+          newSession: 'New session',
+          parentFolder: 'Parent folder',
+          reconnect: 'Reconnect',
+          refresh: 'Refresh',
+          refreshResults: 'Refresh results',
+          retry: 'Try again',
+          stop: 'Stop session',
+        },
+        activity: {
+          approvals: 'Approvals',
+          files: 'Result files',
+          label: 'Hermes results and approvals',
+          loadingApprovals: 'Loading approval requests.',
+          loadingFiles: 'Loading workspace files.',
+          noApprovalsDescription:
+            'Open Work Hub write-tool requests will appear here.',
+          noApprovalsTitle: 'No approval requests.',
+          noFilesDescription:
+            'Files Hermes creates under /workspace will appear here.',
+          noFilesTitle: 'No result files yet.',
+          oneTimeApproval:
+            'Applies once to this exact tool and argument payload.',
+        },
+        approvalStatus: {
+          approved: 'Approved',
+          denied: 'Denied',
+          expired: 'Expired',
+          pending: 'Pending',
+        },
+        archive: {
+          partial:
+            '{{count}} result files exceeded the archive limit and are not available in the download list.',
+          workspaceRetained:
+            'The original workspace was retained safely for administrator recovery because archiving could not finish.',
+        },
+        connection: {
+          connected: 'Connected',
+          connecting: 'Connecting',
+          ended: 'Ended',
+          offline: 'Offline',
+        },
+        create: {
+          description:
+            'Choose a mode for this session. YOLO is never saved as the default.',
+          standardDescription:
+            'Keep Hermes dangerous-command approval prompts enabled.',
+          standardTitle: 'Standard mode',
+          start: 'Start Hermes',
+          starting: 'Starting...',
+          title: 'New Hermes terminal session',
+          yoloAcknowledgement:
+            'I understand the risk of skipping Hermes dangerous-command prompts. Open Work Hub write approvals and isolation still apply.',
+          yoloDescription:
+            'Use the official --yolo flag to skip only Hermes native dangerous-command prompts.',
+          yoloTitle: 'YOLO mode',
+        },
+        disabledDescription:
+          'Enable the Hermes integration in the server environment first.',
+        eyebrow: 'Private autonomous agent',
+        feedback: {
+          approvalFailed: 'Could not resolve the approval request.',
+          approvalsLoadFailed: 'Could not load approval requests.',
+          approved: 'Approved this tool request once.',
+          connectionFailed:
+            'The Hermes terminal connection could not be maintained.',
+          createFailed: 'Could not start a Hermes terminal session.',
+          created: 'Hermes terminal session started.',
+          denied: 'Denied the tool request.',
+          downloadFailed: 'Could not download the result file.',
+          downloaded: 'Result file downloaded.',
+          filesLoadFailed: 'Could not load result files.',
+          loadFailed: 'Could not load Hermes terminal information.',
+          stopFailed: 'Could not stop the Hermes terminal session.',
+          stopped: 'Hermes terminal session stopped.',
+        },
+        failureDescription: 'The session ended safely. Failure code: {{code}}',
+        loadFailedDescription: 'Check app admission and Hermes runtime status.',
+        loadFailedTitle: 'Could not load the Hermes terminal.',
+        loading: 'Loading the Hermes terminal.',
+        mode: {
+          standard: 'Standard',
+          yolo: 'YOLO',
+        },
+        noSessionDescription:
+          'Start the Hermes TUI in your private isolated workspace to evaluate it.',
+        noSessionTitle: 'No Hermes session exists.',
+        preparingDescription:
+          'Preparing the isolated container and your private Hermes profile.',
+        preparingTitle: 'Preparing the Hermes session.',
+        privateWorkspace: 'User-private workspace',
+        securityNotice:
+          'The OpenRouter key never enters the isolated runner. Open Work Hub write approvals, authentication, and network isolation remain active in YOLO mode.',
+        sessionCapacity: 'Running sessions {{active}}/{{limit}}',
+        sessionEndedDescription:
+          'You can download result files on the right during the retention period.',
+        sessionEndedTitle: 'The terminal session has ended.',
+        sessionLimitReached:
+          'Stop your active private session before starting another.',
+        sessionsLabel: 'Select a Hermes terminal session',
+        status: {
+          archiving: 'Archiving results',
+          awaiting_approval: 'Awaiting approval',
+          exited: 'Completed',
+          failed: 'Failed',
+          running: 'Running',
+          starting: 'Starting',
+          stopping: 'Stopping',
+          terminated: 'Stopped',
+        },
+        terminalLabel: 'Hermes TUI terminal',
+        title: 'Hermes Terminal',
+        unavailableTitle: 'The Hermes terminal is unavailable.',
+      },
       mail: {
         eyebrow: 'AI Mail',
         title: 'Mail',
@@ -7355,7 +7667,9 @@ export const resources = {
             actionPlaceholder: 'Action code',
             actions: {
               adminAiRuntimeRetentionScrub: 'AI runtime retention scrub',
-              adminAppVisibilityUpdate: 'Platform app visibility changed',
+              adminCompanyAppControlsUpdate: 'Company app controls changed',
+              adminHermesResearchSourceUpdate:
+                'Hermes research source setting changed',
               adminTeamCreate: 'Team created',
               adminTeamDelete: 'Team deleted',
               adminTeamMembersReplace: 'Team members replaced',
@@ -7380,15 +7694,7 @@ export const resources = {
               adminUserDelete: 'User deleted',
               adminUserResetPassword: 'Password reset',
               adminUserUpdate: 'User updated',
-              adminWorkspaceAppVisibilityUpdate:
-                'Workspace app visibility changed',
-              adminWorkspaceBindingsReplace: 'Workspace bindings replaced',
-              adminWorkspaceCreate: 'Workspace created',
-              adminWorkspaceDelete: 'Workspace deleted',
-              adminWorkspaceMemberAdd: 'Workspace member added',
-              adminWorkspaceMemberRemove: 'Workspace member removed',
-              adminWorkspaceMemberRoleUpdate: 'Workspace member role changed',
-              adminWorkspaceUpdate: 'Workspace updated',
+
               aiMeetingInsightCreated: 'Meeting AI insight created',
               authChangePassword: 'Password changed',
               authDesktopSessionLinkCreate: 'Desktop session link created',
@@ -7467,7 +7773,6 @@ export const resources = {
               tokens: 'Tokens',
               tool: 'Tool',
               user: 'User',
-              workspace: 'Workspace',
             },
             payloadValues: {
               impersonation: '{{impersonator}} → {{impersonated}}',
@@ -7491,6 +7796,89 @@ export const resources = {
               models: 'Model catalog',
               providers: 'LLM Providers',
               routing: 'LLM Routing',
+            },
+          },
+          hermesTools: {
+            extensions: {
+              emptyDescription: 'No registered or active items are available.',
+              mcp: 'MCP servers',
+              skills: 'Skills',
+            },
+            inventoryLoadFailed:
+              'Failed to load tool status for the selected profile.',
+            loadFailed: 'Failed to load Hermes tool settings.',
+            loading: 'Loading Hermes runtime information.',
+            none: 'None',
+            profile: 'Hermes profile',
+            profilesEmptyDescription:
+              'A managed profile is created when a user first runs Hermes.',
+            profilesEmptyTitle: 'No Hermes profiles',
+            refresh: 'Refresh',
+            research: {
+              applicationNote:
+                'Changes apply on the next headless profile reconciliation and to new terminal sessions. Running terminals are not changed.',
+              columns: {
+                control: 'Use',
+                domains: 'Blocked domains',
+                source: 'Research source',
+                status: 'Current setting',
+              },
+              conflict:
+                'Another administrator changed the setting first. The latest settings were reloaded.',
+              description:
+                'Enable or disable each external paper-research source. Disabled sources are blocked at the network layer in new terminals.',
+              loadingDescription: 'Checking the saved research source policy.',
+              loadingTitle: 'Loading research source settings',
+              saveFailed: 'Failed to change the research source setting.',
+              saved: 'Research source setting saved.',
+              title: 'Paper research sources',
+              toggleLabel: 'Use {{source}}',
+            },
+            runtimeSummary:
+              'Hermes {{release}} · primary {{model}} · fallback {{fallback}}',
+            runtime: {
+              description:
+                'Review headless and private-terminal availability, recovery queues, and maintenance heartbeats.',
+              maintenance: 'Maintenance heartbeat',
+              metrics: {
+                activeRuns: 'Active headless runs',
+                activeTerminals: 'Active terminals',
+                pendingApprovals: 'Pending approvals',
+                pendingDispatches: 'Pending dispatches',
+                quarantined: 'Retained quarantines',
+              },
+              neverSucceeded: 'No successful run recorded',
+              services: {
+                headless: 'Hermes headless',
+                terminal_broker: 'Hermes terminal broker',
+              },
+              status: {
+                checking: 'Checking',
+                disabled: 'Disabled',
+                not_configured: 'No profile',
+                offline: 'Offline',
+                online: 'Online',
+              },
+              title: 'Hermes runtime status',
+            },
+            status: {
+              disabled: 'Off',
+              enabled: 'On',
+            },
+            toolsets: {
+              columns: {
+                configured: 'Configured',
+                enabled: 'Enabled',
+                tools: 'Included tools',
+                toolset: 'Toolset',
+              },
+              description:
+                'Enablement and configuration status reported by the official Hermes toolsets API for the selected managed profile.',
+              emptyDescription: 'Hermes did not report any toolsets.',
+              emptyTitle: 'No toolset status',
+              loadingDescription: 'Checking toolsets for the selected profile.',
+              loadingTitle: 'Loading toolset status',
+              title: 'Hermes tool status',
             },
           },
           modelMonitoring: {
@@ -7600,9 +7988,9 @@ export const resources = {
               },
               internal_context: {
                 description:
-                  'Internal-origin context such as RAG, docs, knowledge base, or workspace content.',
+                  'Internal-origin context such as RAG, docs, knowledge base, or company content.',
                 examples:
-                  'Examples: internal_context, workspace, rag, docs, knowledge, unknown origins',
+                  'Examples: internal_context, rag, docs, knowledge, unknown origins',
                 patterns:
                   'Raw text is not sent to an external LLM/API when the content origin is internal or unclear.',
               },
@@ -7740,7 +8128,7 @@ export const resources = {
               actionsTitle: 'Handling by selected app',
               appPickerEmpty: 'No app selected.',
               appPickerHelp:
-                'Select apps whose external API call is required for the feature. The list is loaded from the registered workspace app catalog.',
+                'Select apps that require external API calls. Options come from the registered app catalog.',
               appPickerNoResults: 'No results.',
               appPickerPlaceholder: 'Search app name or ID',
               appPickerTitle: 'Add external-only app',
@@ -7981,7 +8369,7 @@ export const resources = {
               },
               howItWorks: 'How policy resolution works',
               rulesDescription:
-                'Rules applied by user, org, workspace, app, task, capability, and provider conditions.',
+                'Rules applied by user, org, app, task, capability, and provider conditions.',
               title: 'Overview',
             },
             routingOverview: {
@@ -8210,26 +8598,25 @@ export const resources = {
                 taskKind: 'Task kind',
                 user: 'User',
                 userId: 'User ID',
-                workspace: 'Workspace',
               },
               allApps: 'All apps',
               allTasks: 'All tasks',
-              allWorkspaces: 'All workspaces',
+
               appSearchPlaceholder: 'Search app name or app ID',
               clearApp: 'Clear app selection',
               clearTaskKind: 'Remove task kind',
-              clearWorkspace: 'Clear workspace selection',
+
               formDescription:
-                'Combine user, workspace, app, task, capability, and provider conditions with AND matching. Empty conditions mean all values.',
+                'Combine user, app, task, capability, and provider conditions with AND matching. Empty conditions mean all values.',
               guidance: {
                 effectDescription:
                   'For equal specificity, the more conservative effect wins: block external transfer, mask and send, audit only, then inherit.',
                 effectTitle: 'Effect conflict handling',
                 noTeamDescription:
-                  'Team scope is not used. Manage policies by user, workspace, and app.',
+                  'Team scope is not used. Manage policies by user, and app.',
                 noTeamTitle: 'No team scope',
                 scopePriorityDescription:
-                  'User scope is strongest, followed by workspace, app, task, capability, and provider.',
+                  'User scope is strongest, followed by app, task, capability, and provider.',
                 scopePriorityTitle: 'Scope priority',
               },
               guidanceTitle: 'Priority and conflict handling',
@@ -8249,14 +8636,12 @@ export const resources = {
                   'Enter a provider such as openai, anthropic, or gemini to scope by provider.',
                 taskKind:
                   'LLM task kind. Use the same value shown in the routing tab.',
-                user: 'Search and select a user to apply the rule only to that user. If workspace is blank, it applies in every workspace.',
-                workspace:
-                  'Applies only to requests from the selected workspace. Leave blank for every workspace.',
+                user: 'Select a user to limit the rule to that user. Leave blank to apply it to all users.',
               },
               noAppResults: 'No app results.',
               noTaskResults: 'No task results.',
               noUserResults: 'No user results.',
-              noWorkspaceResults: 'No workspace results.',
+
               taskSearchPlaceholder: 'Search task name or description',
               placeholders: {
                 appId: 'e.g. chatbot, web-search',
@@ -8286,22 +8671,19 @@ export const resources = {
                   'App, task, capability, and provider conditions. Select from the loaded list or type a value directly. Empty fields mean all values.',
                 subject: 'Subject',
                 subjectDescription:
-                  'User and workspace conditions. Conditions narrow together, and blank fields mean all values.',
+                  'Choose the user condition. A blank selection applies to all users.',
                 termsDescription:
                   'Additional block terms checked only when this rule matches. Add tags with Enter, comma, or multi-line paste.',
               },
               scopeParts: {
                 allUsers: 'All users',
-                allWorkspaces: 'All workspaces',
+
                 user: 'User: {{name}}',
-                workspace: 'Workspace: {{name}}',
               },
               title: 'Policy rules',
               updated: 'Updated policy rule.',
               userSearchPlaceholder: 'Search users by name or email',
               userSearchPrompt: 'Type a search term or choose a user.',
-              workspaceSearchPlaceholder:
-                'Search workspace name, key, or description',
             },
             exceptions: {
               columns: {
@@ -8370,7 +8752,7 @@ export const resources = {
                 requestDescription:
                   'App, task, capability, and provider conditions. Select from the loaded list or type a value directly. Empty fields mean all values.',
                 subjectDescription:
-                  'User and workspace conditions. Conditions narrow together, and blank fields mean all values.',
+                  'Choose the user condition for the exception. A blank selection applies to all users.',
               },
               title: 'External transfer exceptions',
               updated: 'Updated external transfer exception.',
@@ -8408,7 +8790,6 @@ export const resources = {
                 sensitivity_labels: 'Sensitivity labels',
                 source_kinds: 'Context sources',
                 task_kind: 'Task kind',
-                workspace_id: 'Workspace',
               },
               guidance: {
                 noRawSaveDescription:
@@ -8425,7 +8806,7 @@ export const resources = {
                 capability:
                   'Tests capability-scoped rules. General LLM calls can stay as llm.',
                 content_origin:
-                  'Identifies whether content is user input or internal material. Examples: user_prompt, rag, docs, workspace.',
+                  'Identifies whether content is user input or internal material. Examples: user_prompt, rag, docs.',
                 provider:
                   'Tests provider-scoped rules. Examples: openai, anthropic, gemini.',
                 sample:
@@ -8433,11 +8814,10 @@ export const resources = {
                 sensitivity_labels:
                   'Enter sensitivity labels attached to the document or context, separated by commas.',
                 source_kinds:
-                  'Enter context sources such as RAG, docs, or workspace, separated by commas.',
+                  'Enter context sources such as RAG, docs, or separated by commas.',
                 task_kind:
                   'Tests task-scoped rules. Use a value from the routing tab.',
                 user: 'Search and select a user to test user-scoped rules.',
-                workspace: 'Tests workspace-scoped rules.',
               },
               noRule: 'No matching rule',
               hardBlockers: 'Hard blockers',
@@ -8451,7 +8831,7 @@ export const resources = {
                 content_origin: 'e.g. user_prompt, rag, docs',
                 provider: 'e.g. openai',
                 sensitivity_labels: 'e.g. confidential, internal',
-                source_kinds: 'e.g. rag, docs, workspace',
+                source_kinds: 'e.g. rag, docs',
                 task_kind: 'e.g. mail_reply_draft',
               },
               piiHits: 'PII hits',
@@ -8474,10 +8854,9 @@ export const resources = {
                   'Select from the loaded list or type app, task, capability, provider, and content origin values to test matching.',
                 subject: 'Subject',
                 subjectDescription:
-                  'Validate rules with user, org, and workspace conditions.',
+                  'Validate rule outcomes for the selected user.',
               },
               title: 'Simulator',
-              workspaceAny: 'Any workspace',
             },
             tabs: {
               audit: 'Audit logs',
@@ -8504,7 +8883,7 @@ export const resources = {
                 'Extracts follow-up schedules and tasks from meeting transcripts.',
               meeting_summary: 'Summarizes meeting transcripts.',
               rag_grounded_answer:
-                'Synthesizes answers grounded in workspace RAG results.',
+                'Generate answers from authorized company RAG search results.',
             },
           },
           usage: {
@@ -8885,17 +9264,6 @@ export const resources = {
             usersTitle: 'Usage by user',
           },
           apps: {
-            columns: {
-              app: 'App',
-              route: 'Base route',
-              status: 'Status',
-              visibility: 'Visibility',
-              workspaces: 'Visible workspaces',
-            },
-            description:
-              'Manage the company-wide default app visibility. Workspace-specific app visibility settings take precedence when configured.',
-            emptyDescription: 'No app catalog entries are registered.',
-            emptyTitle: 'No apps to show.',
             appBarAddCategory: 'Add category',
             appBarAddApp: 'Add to this category',
             appBarCategoryCreateFailed:
@@ -8962,62 +9330,8 @@ export const resources = {
             appBarTab: 'App bar layout',
             appBarTitle: 'Platform app bar categories',
             appBarUnassignedApps: 'Unassigned apps',
-            groupCount: '{{count}} apps',
-            hidden: 'Hidden',
-            hideSaved: 'Hid the {{app}} app.',
-            hideToggle: 'Hidden',
-            loadFailed: 'Could not load app visibility settings.',
-            loadingDescription: 'Please wait.',
-            loadingTitle: 'Loading app visibility settings.',
-            platformTab: 'Company visibility defaults',
-            personalToolsDescription:
-              "Manage the apps shown in every user's fixed personal-tools launcher. Hidden apps disappear from personal tools across all workspaces.",
-            personalToolsScope: 'All users',
-            personalToolsScopeColumn: 'Scope',
-            personalToolsTab: 'Personal tools',
-            personalToolsTitle: 'Personal tool visibility',
+
             refresh: 'Refresh',
-            runtime: 'Runtime',
-            runtimeDisabled: 'Config off',
-            runtimeEnabled: 'Active',
-            saveFailed: 'Could not save app visibility settings.',
-            showSaved: 'Made the {{app}} app visible.',
-            showToggle: 'Visible',
-            title: 'Company-wide app visibility',
-            toggleLabel: 'Toggle {{app}} app visibility',
-            uncategorizedGroup: 'Apps not placed in the app bar',
-            personalToolsGroup: 'Personal tools',
-            visible: 'Visible',
-            visibleWorkspaceCount: '{{count}}',
-            visibleWorkspaceEmpty: 'No workspaces currently show this app.',
-            visibleWorkspaceListLabel: 'Visible workspaces for {{app}}',
-            effective: 'Effective',
-            platformDefault: 'Company default',
-            workspaceDescription:
-              'Apply a different app visibility policy only to the selected workspace. Inheriting the company default uses the platform admin setting.',
-            workspaceDefaultsDescription:
-              'Set the app visibility inherited by every workspace by default. Workspace-specific settings take precedence when configured.',
-            workspaceDefaultsTab: 'App defaults',
-            workspaceDefaultsTitle: 'Workspace app default visibility',
-            workspaceEmptyDescription: 'There are no workspaces to configure.',
-            workspaceEmptyTitle: 'No workspaces',
-            workspaceHide: 'Hidden',
-            workspaceInherit: 'Inherit company default',
-            workspaceListTitle: 'Workspaces',
-            workspaceLoadFailed:
-              'Could not load workspace app visibility settings.',
-            workspaceLoadingTitle: 'Loading workspace app visibility settings.',
-            workspaceNoResults: 'No matching workspaces.',
-            workspaceOverride: 'Workspace setting',
-            workspaceOverridesTab: 'Workspace app settings',
-            workspaceSaveFailed:
-              'Could not save workspace app visibility settings.',
-            workspaceSaved:
-              'Saved the {{app}} app visibility setting for {{workspace}}.',
-            workspaceSearchPlaceholder: 'Search workspaces',
-            workspaceShow: 'Visible',
-            workspaceTab: 'Workspace visibility overrides',
-            workspaceTitle: 'Workspace-specific app visibility',
           },
           badges: {
             adminOnly: 'Admin only',
@@ -9071,21 +9385,20 @@ export const resources = {
             noteAudit:
               'Admin and authentication events are reviewed chronologically in Audit.',
             noteNavigation:
-              'Users, PMS spaces, workspaces, and audit logs are separated in the left subsidebar.',
+              'Manage users, organizations, groups, app policies and audit logs from the left menu.',
             noteProfile:
               'Profile avatars stay in personal settings, while account operations stay inside Settings.',
             notesDescription:
               'Current UX principles that separate Settings app responsibilities from My Page.',
             notesTitle: 'Admin notes',
             operatingModelDescription:
-              'A summary of the current shared account model and workspace operations.',
+              'A summary of company accounts and access policy.',
             operatingModelTitle: 'Current operating model',
             restricted: 'Restricted',
             summaryLoadFailed: 'Could not load the admin summary.',
             teamCount: 'PMS spaces {{count}}{{suffix}}',
             userCount: 'User accounts {{count}}{{suffix}}',
             workModelTitle: 'Work model',
-            workspaceCount: 'Workspaces {{count}}{{suffix}}',
           },
           documentProcessing: {
             chunking: {
@@ -9180,14 +9493,13 @@ export const resources = {
               'Vision document extraction is disabled or is not routed to a Vision-capable model.',
           },
           people: {
-            accessSaveFailed: 'Could not save workspace assignments.',
             accountAccessSection: 'Account access',
             adminPrivilegesSection: 'Admin privileges',
             allOrganizations: 'All organizations',
             allUsers: 'All users ({{count}})',
             blockLogin: 'Block login',
             blockLoginDescription:
-              'Keep the account information while blocking new sign-ins.',
+              'Keep account information, end existing sessions, and block sign-in.',
             columns: {
               actions: 'Actions',
               created: 'Created',
@@ -9202,10 +9514,10 @@ export const resources = {
               role: 'Role',
               status: 'Status',
               user: 'User',
-              workspaces: 'Workspaces',
+              groups: 'Groups',
             },
             createDescription:
-              'Create a company account and assign admin privileges and workspace memberships.',
+              'Create a company account and configure organization details and administrator privileges.',
             createUser: 'Create user',
             creating: 'Creating',
             deleteConfirm: 'Delete user {{email}}?',
@@ -9237,8 +9549,7 @@ export const resources = {
             loadingDescription: 'Please wait.',
             loadingTitle: 'Loading users.',
             more: 'More',
-            noCreatableWorkspaces: 'No workspace can be assigned.',
-            noWorkspaces: 'No workspaces have been created.',
+
             organizationFilter: 'Organization',
             organizationListLoadFailed:
               'Could not load the organization directory.',
@@ -9251,6 +9562,7 @@ export const resources = {
               'Temporary password reset. New password: {{password}}',
             passwordResetFailed: 'Could not reset the password.',
             platformAdmin: 'Platform admin',
+            regularUser: 'Regular user',
             platformAdminDescription:
               'Can manage the full admin console and company-wide settings.',
             profileSection: 'Profile',
@@ -9265,23 +9577,20 @@ export const resources = {
             unblockLogin: 'Unblock login',
             userActions: '{{email}} actions',
             userCreated: 'User created. Temporary password: {{password}}',
-            userCreatedAccessFailed:
-              'The user was created, but workspace assignments were incomplete. Temporary password: {{password}}',
+            userCreatedReloadFailed:
+              'The user was created, but the list could not refresh. Temporary password: {{password}}',
             userCreateFailed: 'Could not create the user.',
             userDeleted: 'Deleted user {{email}}.',
             userDeleteFailed: 'Could not delete the user.',
             userListLoadFailed: 'Could not load users.',
             userSaved: 'User information saved.',
-            userSavedAccessFailed:
-              'The account was saved, but workspace assignments were incomplete. The list was reloaded.',
+
             userSaveFailed: 'Could not save user information.',
-            workspaceListLoadFailed: 'Could not load assignable workspaces.',
-            workspaceMemberships: 'Workspace memberships',
           },
           organization: {
             boundaryTitle: 'Organization information boundary',
             boundaryDescription:
-              'Organization units and each user’s primary unit are company-wide directory metadata. They do not grant access or workspace roles.',
+              'Organization group access follows current primary assignments. Department head designation grants no administrative privileges; manual groups are managed separately.',
             count: '{{count}} organization units',
             loadFailed: 'Could not load the organization directory.',
             loadingTitle: 'Loading the organization directory.',
@@ -9386,17 +9695,17 @@ export const resources = {
             },
             general: {
               description:
-                'Review shared users, spaces, and workspace operations in one place.',
+                'Manage company users, organizations, groups and app policy.',
               title: 'Platform overview',
             },
             people: {
               description:
-                'Create company users and manage account status, admin privileges, and workspace assignments.',
+                'Manage company account status, organization details and administrator privileges.',
               title: 'People management',
             },
             organization: {
               description:
-                'Manage company-wide organization hierarchy metadata used for each user’s primary unit.',
+                'Manage the organization hierarchy and primary assignments. Linked organization groups reflect current assignments.',
               title: 'Organization directory',
             },
             apiIntegrations: {
@@ -9405,19 +9714,14 @@ export const resources = {
               title: 'API keys and integrations',
             },
             apps: {
-              description:
-                'Manage company-wide app visibility defaults, workspace-specific app visibility policy, and app bar categories.',
+              access: {
+                title: 'App access',
+                description:
+                  'Set availability and user or group audiences for each app. Resource sharing remains within each app.',
+              },
+              description: 'Manage app audiences and app bar categories.',
               title: 'App visibility and configuration',
-              platform: {
-                description:
-                  'Manage default visibility for company-wide apps and personal tools.',
-                title: 'Platform apps',
-              },
-              workspace: {
-                description:
-                  'Manage workspace app defaults and workspace-specific visibility exceptions.',
-                title: 'Workspace apps',
-              },
+
               'app-bar': {
                 description:
                   'Manage the main app bar categories and the apps assigned to them.',
@@ -9434,6 +9738,11 @@ export const resources = {
                 'Manage provider connections, approved models, and per-app and per-feature routes and output limits.',
               title: 'LLM management',
             },
+            aiTools: {
+              description:
+                'Review and manage Hermes toolsets, MCP and skill status, and paper-research source policy.',
+              title: 'AI tool status',
+            },
             modelMonitoring: {
               description:
                 'Check the online status of models in use on the current server and DGX SPARK.',
@@ -9449,41 +9758,10 @@ export const resources = {
                 'Add company-wide community channels and manage their visibility.',
               title: 'Community channels',
             },
-            workspaces: {
-              description:
-                'Review all workspaces and manage members, app visibility, and status.',
-              title: 'Workspaces',
-            },
           },
           units: {
             count: '',
             people: '',
-          },
-          workspaces: {
-            appToggleHint:
-              'App visibility can be managed from the Apps tab in workspace details after creation.',
-            createAction: 'Create workspace',
-            createDescription:
-              'Create a collaboration space. You are automatically added as admin and a default Team Space is created.',
-            created: 'Created workspace "{{name}}".',
-            createFailed: 'Could not create the workspace.',
-            createTitle: 'Create new workspace',
-            creating: 'Creating...',
-            descriptionOptional: 'Description (optional)',
-            descriptionPlaceholder: 'What work happens in this workspace?',
-            empty: 'No workspaces to show.',
-            filterActive: 'Active',
-            filterAll: 'All',
-            filterArchived: 'Archived',
-            infoLoadFailed: 'Could not load workspace information.',
-            itemMeta: '{{key}} · {{count}} members',
-            listLoadFailed: 'Could not load workspaces.',
-            memberCount_one: '{{count}} member',
-            memberCount_other: '{{count}} members',
-            namePlaceholder: 'Example: Delivery Hub',
-            searchPlaceholder: 'Search by name or key',
-            statusActive: 'Active',
-            statusArchived: 'Archived',
           },
         },
         shared: {
@@ -9506,22 +9784,13 @@ export const resources = {
             status: 'Status',
             total: '{{total}} total',
             user: 'User',
-            workspace: 'Workspace',
+            groups: 'Groups',
           },
           pagination: {
             next: 'Next',
             previous: 'Previous',
           },
-          roles: {
-            admin: {
-              description: 'Can manage members and settings',
-              label: 'Admin',
-            },
-            member: {
-              description: 'Can use workspace apps',
-              label: 'Member',
-            },
-          },
+
           status: {
             active: 'Active',
             activeShort: 'Active',
@@ -9530,108 +9799,6 @@ export const resources = {
             suspended: 'Suspended',
             suspendedShort: 'Suspended',
           },
-        },
-        workspace: {
-          actions: 'Workspace actions',
-          addDescription: '+ Add description',
-          addMembers: {
-            addCount: 'Add {{count}}',
-            adding: 'Adding...',
-            description: 'Search users and add multiple members at once.',
-            noSelection: 'No users selected.',
-            openDirectory: 'Open people directory',
-            removeSelection: 'Remove {{label}} from selection',
-            selectedCount: '{{count}} selected',
-            title: 'Add new members',
-            userSearchPlaceholder: 'Name or email',
-          },
-          archiveAction: 'Archive',
-          archived: 'Workspace archived.',
-          archivedStatus: 'Archived',
-          archiveConfirm: 'Archive',
-          archiveConfirmDescription:
-            'Archiving "{{name}}" prevents users from accessing it. Members and data are preserved and can be reactivated anytime.',
-          archiveConfirmTitle: 'Archive workspace',
-          blockerDocs: '{{count}} docs',
-          blockerMeetings: '{{count}} meetings',
-          blockerSpaces: '{{count}} spaces',
-          copyKey: 'Copy key',
-          deleteActionWithReason: 'Delete permanently ({{reason}})',
-          deleteBlockActive:
-            'Archive the workspace before deleting it permanently.',
-          deleteBlockRemaining: '{{items}} remain. Clear them first.',
-          deleteConfirmDescription:
-            'Deleting "{{name}}" is permanent. All memberships and related data will be removed.',
-          deleteConfirmTitle: 'Delete workspace permanently',
-          deleted: 'Deleted workspace "{{name}}" permanently.',
-          deleteFailed: 'Could not delete the workspace.',
-          descriptionLabel: 'Description',
-          detailLoadFailed: 'Could not load workspace details.',
-          directory: {
-            currentSelection: '{{count}} selected',
-            description:
-              'Find users with search and filters, then select multiple users. Selections are accumulated in the add-member modal.',
-            done: 'Done',
-            title: 'People directory',
-          },
-          editDescription:
-            'Edit the name and description. The key is a fixed identifier and cannot be changed.',
-          editTitle: 'Edit workspace',
-          groupBindingMeta: '{{count}} · inherited by users',
-          heroMeta: '· Members {{count}} · Created {{date}}',
-          keyCopied: 'Key copied.',
-          keyCopyFailed: 'Could not copy the key.',
-          keyLabel: 'Key',
-          members: {
-            add: 'Add members',
-            addFailed: 'Could not add members.',
-            actions: 'Member actions',
-            bulkAdded: 'Added {{count}}.',
-            bulkAddPartial: '{{succeeded}} added, {{failed}} failed',
-            bulkRemoveFailed: 'Bulk remove failed.',
-            bulkRemovePartial: '{{succeeded}} removed, {{failed}} failed',
-            bulkRemoved: 'Removed {{count}}.',
-            bulkRoleChanged: 'Changed roles for {{count}}.',
-            bulkRoleFailed: 'Bulk role change failed.',
-            bulkRolePartial: '{{succeeded}} changed, {{failed}} failed',
-            changeRole: 'Change role',
-            clearSelection: 'Clear',
-            currentUser: '(You)',
-            empty: 'No members to show.',
-            emptyHint: 'Use Add members to register teammates.',
-            emptyYet: 'No members yet.',
-            filterAll: 'All {{count}}',
-            filterPending: 'Pending invitations {{count}}',
-            filterRole: '{{role}} {{count}}',
-            loadFailed: 'Could not load members.',
-            manage: 'Manage members',
-            manageDescription:
-              'Manage workspace members with search, filters, and bulk actions.',
-            manageTitle: '{{name}} members',
-            name: 'Name',
-            previewMeta: '{{count}} · admin preview',
-            removeFailed: 'Could not remove the member.',
-            removed: 'Member removed.',
-            removeFromWorkspace: 'Remove from workspace',
-            role: 'Role',
-            roleChanged: 'Role changed.',
-            roleChangeFailed: 'Could not change the role.',
-            searchPlaceholder: 'Name, email, group name',
-            selectAll: 'Select all members',
-            selectMember: 'Select {{name}}',
-            selectedCount: '{{count}} selected',
-            title: 'Members',
-            viewAll: 'View all {{count}} →',
-          },
-          nameLabel: 'Name',
-          noSelectionDescription:
-            'Select a workspace from the list on the left to view details.',
-          noSelectionTitle: 'Select a workspace',
-          profileSaved: 'Workspace profile saved.',
-          profileSaveFailed: 'Could not save the workspace.',
-          reactivateAction: 'Reactivate',
-          reactivated: 'Workspace reactivated.',
-          statusChangeFailed: 'Could not change workspace status.',
         },
       },
       toolView: {
@@ -9738,6 +9905,21 @@ export const resources = {
           stage: '{{stage}}',
           title: 'Writing the response',
         },
+        agentControl: {
+          title: 'Hermes agent controls',
+          runtime: 'Hermes · OpenRouter · Qwen 3.8 Flash',
+          refresh: 'Refresh agent status',
+          recentRuns: 'Recent runs',
+          scheduledJobs: 'Scheduled jobs',
+          noRuns: 'No agent runs yet.',
+          noJobs: 'No scheduled jobs.',
+          stopRun: 'Stop run',
+          runNow: 'Run now',
+          pauseJob: 'Pause scheduled job',
+          resumeJob: 'Resume scheduled job',
+          loadFailed: 'Could not load agent control status.',
+          actionFailed: 'Could not complete the agent control request.',
+        },
         errors: {
           connect:
             'Could not connect to the AI server. Check that the API server is running.',
@@ -9809,7 +9991,7 @@ export const resources = {
           showJson: 'View JSON',
           title: 'Approval required',
           description:
-            'This change modifies real workspace data. Review the details, then approve or cancel.',
+            'This change modifies real work data. Review the details, then approve or cancel.',
           toolDefault: 'Approval required',
           toolDocs: 'Document change',
           toolMeeting: 'Meeting change',
@@ -9956,15 +10138,14 @@ export const resources = {
           sourcesLoadFailed: 'Could not load search sources.',
           sortLatest: 'Latest',
           sortRelevance: 'Relevance',
-          subtitle:
-            'Search docs, meetings, PMS, and schedules in {{workspace}}.',
+          subtitle: 'Search docs, meetings, PMS, and schedules in {{app}}.',
           subtitleFallback: 'Search work data.',
           title: 'Open Work Hub Search',
           updated: 'Updated {{date}}',
           visibilityPrivate: 'Private',
           visibilityPublic: 'Public',
           visibilityShared: 'Shared',
-          workspaceMissing: 'Could not find a workspace to search.',
+
           yes: 'Yes',
           no: 'No',
           more: 'Show more',
@@ -9995,7 +10176,7 @@ export const resources = {
           search: 'Search',
           sessionExpired: 'Your session expired. Sign in again.',
           sourceLabels: {
-            generic_rag: 'Workspace RAG',
+            generic_rag: 'Company RAG',
             keyword: 'Keyword',
           },
           sources: 'Sources',
@@ -10007,14 +10188,14 @@ export const resources = {
             keyword: 'Keyword',
             semantic: 'Semantic',
           },
-          subtitle: 'Search the retrieval service layer in {{workspace}}.',
+          subtitle:
+            'Search {{company}} content allowed by your current access.',
           subtitleFallback: 'Search the retrieval service layer.',
           title: 'Retrieval Diagnostics',
           topK: 'Top K',
           topKValue: 'Top {{count}}',
           traceId: 'trace {{traceId}}',
           untitled: 'Untitled',
-          workspaceMissing: 'Could not find a workspace to search.',
         },
         thinking: {
           cancelled: 'Thinking complete',
@@ -10122,11 +10303,12 @@ export const resources = {
           loadFailed: 'Could not load the document.',
         },
         location: {
-          privateDesc: 'Only you can see it',
-          spaceDesc: 'Only teamspace members can see it',
-          workspace: 'Workspace',
-          workspaceDesc: 'All workspace members can see it',
-          workspaceNamed: 'Workspace · {{name}}',
+          privateDesc:
+            'Start a personal document without company visibility or a project connection.',
+          spaceDesc:
+            'Create company content accessible through this space’s permissions.',
+          company: 'Company visible',
+          companyDesc: 'Make visible to every employee admitted to this app.',
         },
         moreActions: 'More actions',
         newDoc: 'New Document',
@@ -10234,11 +10416,11 @@ export const resources = {
           enableLink: 'Enable link',
           internalLink: 'Internal share link',
           internalLinkDescription:
-            'All signed-in internal users can access this document with the link.',
+            'Signed-in users admitted to Docs can use an active link at its read or edit level.',
           invitePlaceholder: 'Invite by name or email...',
           linkAccess: 'Link ({{access}})',
           manageOnlyNotice:
-            'Only document owners or admins can change visibility.',
+            'Document sharing management permission is required to make changes.',
           peopleWithAccess: 'People with access',
           regenerate: 'Regenerate',
           sharing: 'Sharing',
@@ -10246,8 +10428,21 @@ export const resources = {
           userCount_one: '{{count}} user',
           userCount_other: '{{count}} users',
           visibilityDescription:
-            'This is the default audience for this document.',
+            'Company visibility and the primary project connection are separate settings. User, group, link and other project grants remain. Platform administrators can still read company-owned documents.',
           whoCanAccess: 'Who can access',
+          companyAudience: 'Company-wide visibility',
+          primaryTarget: 'Primary project connection',
+          currentPrimaryTarget:
+            'This is the current primary connection. Other sharing grants remain.',
+          targetAccessDescription:
+            'Set as the primary connection. Existing shares and other project grants remain.',
+          noPrimaryTarget: 'No primary connection',
+          noPrimaryTargetDescription:
+            'Remove only the primary connection. Company visibility and other sharing grants remain.',
+          publicationSaved:
+            'Document visibility and connection settings saved.',
+          publicationFailed:
+            'Could not save document visibility and connection settings.',
         },
         uploadTooLarge: 'Choose a file up to 2 MB.',
         startWriting: 'Start writing...',
@@ -10313,8 +10508,6 @@ export const resources = {
         mail: 'Inbox',
         mailComingSoon: 'Mail integration is coming soon.',
         meetingsEmptyCta: 'Schedule a meeting',
-        notifications: 'Notifications',
-        notificationsEmpty: 'No new notifications.',
         scheduleEmpty: 'No upcoming events.',
         scheduleEmptyCta: 'Add an event',
         tasksEmptyCta: 'Add a task',
@@ -10335,11 +10528,11 @@ export const resources = {
         tasksEmpty: 'No assigned tasks.',
         todayMeetings: "Today's Meetings",
         myTasks: 'My Tasks',
-        startWorkspaceBadge: 'Start',
+        startBadge: 'Start',
         untitled: 'Untitled',
         userFallback: 'User',
-        workspaceFallback: 'Workspace',
-        workspaceLabel: 'Workspace',
+
+        appLabel: 'Work home',
       },
       recording: {
         actions: {
@@ -10369,6 +10562,7 @@ export const resources = {
           noLocalRecordingToRecover: 'There is no local recording to recover.',
           originalUploadFailed: 'Could not upload the original file.',
           playbackFailed: 'Could not get the recording playback link.',
+          publishFailed: 'Could not publish the recording result to Docs.',
           persistCheckFailed: 'Could not check browser storage protection.',
           persistMayExpire:
             'The recoverable period may be shorter because of browser storage policy.',
@@ -10391,7 +10585,6 @@ export const resources = {
           detachConfirmDescription: 'Unlink this item from the recording?',
           detachConfirmTitle: 'Unlink item',
           detachItemLabel: 'Unlink {{item}}',
-          generatedDocsTitle: 'Auto-generated documents',
           linkedItems: 'Related items',
           linkedMeetings: 'Linked meetings',
           linkedTasks: 'Linked tasks',
@@ -10414,12 +10607,25 @@ export const resources = {
             title: 'Add meeting',
           },
           minutesDoc: 'Summary',
+          noPublications: 'No documents have been published yet.',
           noLinkedMeetings: 'No linked meetings yet.',
           noLinkedTasks: 'No linked tasks yet.',
           noOtherConnections: 'No other connections yet.',
           notReady: 'Preparing',
           otherConnections: 'Other connections',
+          publicationsTitle: 'Published documents',
+          publishedDocument: 'Recording result document v{{version}}',
+          publishing: 'Publishing',
+          publishToDocs: 'Publish to Docs',
           rawTranscriptDoc: 'Raw transcript',
+          resultsTitle: 'Recording result',
+          resultPending: 'The result is being generated.',
+          resultFailed:
+            'Result generation failed. Review the failure and try again.',
+          resultUnavailable: 'No result is available.',
+          resultVersion: 'Result version {{version}}',
+          summaryTitle: 'Summary',
+          transcriptTitle: 'Transcript',
           taskPicker: {
             description: 'Select a task to link to this recording.',
             noTaskLists: 'No task lists available.',
@@ -10429,6 +10635,7 @@ export const resources = {
           },
           titleLabel: 'Title',
           titleSaved: 'Title saved.',
+          verifierNote: 'Verification note: {{note}}',
         },
         filters: {
           categories: {
@@ -10513,8 +10720,7 @@ export const resources = {
           progressLabel: '{{stage}} in progress',
           stages: {
             audio: 'Audio',
-            minutesDoc: 'Summary',
-            rawDoc: 'Transcript doc',
+            summary: 'Summary',
             transcript: 'Transcription',
           },
           state: {
@@ -10537,6 +10743,10 @@ export const resources = {
         },
       },
       meeting: {
+        companyContentNotice:
+          'Meetings, notes, minutes and attached recordings are company business content readable by platform administrators.',
+        notesUnavailable:
+          'No meeting notes are currently available to you. Meeting details are shown below.',
         addAttendees: {
           addCount_one: 'Add {{count}} person',
           addCount_other: 'Add {{count}} people',
@@ -10795,7 +11005,7 @@ export const resources = {
           attachAction: 'attach documents',
           attachFailed: 'Could not attach the document.',
           description: 'Choose a NativeDoc document to link to this meeting.',
-          docsWorkspace: 'Docs workspace',
+          docsApp: 'Docs app',
           empty:
             'There are no documents to show. PR1 can attach only NativeDoc documents.',
           loadFailed: 'Could not load documents.',
@@ -10813,7 +11023,7 @@ export const resources = {
         recordingsDescription:
           'Open a meeting to use recording start and audio upload from the right rail of the notes editor.',
         recordingsPlaceholder:
-          'Meeting recordings are available in each meeting workspace.',
+          'Recordings are available in each meeting detail view.',
         schedule: 'Schedule',
         scheduled: 'Scheduled',
         scheduleView: 'View schedule',
@@ -10826,18 +11036,18 @@ export const resources = {
           list: 'List',
           listLoadFailed: 'Could not load lists.',
           noLists: 'No lists',
-          pmsWorkspace: 'PMS workspace',
+          pmsApp: 'PMS app',
           searchPlaceholder: 'Search by task title',
           title: 'Attach task',
         },
-        workspace: {
+        detailView: {
           backToMeetings: 'Back to meetings',
           detail: 'Details',
           detailDrawerDescription:
             'Review meeting status, attendees, linked documents, and recordings.',
           detailDrawerTitle: 'Meeting details',
           editorPlaceholder: 'Write meeting notes...',
-          loadFailed: 'Could not load the meeting workspace.',
+          loadFailed: 'Could not load meeting details.',
           notesPageFailed: 'Could not load the meeting notes page.',
           notesPlaceholder: 'Meeting notes',
           notesPrepareFailed: 'Could not prepare meeting notes.',
@@ -10852,6 +11062,7 @@ export const resources = {
         allDay: 'All-day event',
         create: 'Create',
         createEventOrMeeting: 'Create event or meeting',
+        chooseMeetingDetail: 'Choose a meeting',
         datePicker: {
           chooseDate: 'Choose a date',
           nextMonth: 'Next month',
@@ -11018,14 +11229,15 @@ export const resources = {
           title: 'All Tasks',
         },
         assignedToMe: 'Assigned to me',
-        assignedToMeDescription: 'Tasks assigned to you inside this workspace',
+        assignedToMeDescription:
+          'Tasks assigned to you in spaces you can access',
         create: 'Create',
         createSpace: 'Create Space',
         createSpaceDescription:
           'A space is a team work area for managing lists and members together.',
         createSpaceFailed: 'Could not create the space.',
         createSpaceNoAccess:
-          'You cannot create a space without workspace access.',
+          'You cannot create a space without PMS app access.',
         createSpacePartialFailure:
           'The space was created, but some member invites failed: {{failures}}',
         createFolder: 'Create Folder',
@@ -11048,7 +11260,7 @@ export const resources = {
         listNamePlaceholder: 'e.g. Sprint Backlog, Design Ops, Q2 Campaign',
         name: 'Name',
         noSpacesDescription:
-          'You can access the workspace, but you do not belong to any space yet. Create a space to start operating lists and documents.',
+          'You do not belong to a space yet. Create one or join an existing space.',
         noSpacesTitle: 'No Spaces Yet',
         optional: 'optional',
         removeMember: 'Remove {{name}}',
@@ -11255,7 +11467,7 @@ export const resources = {
           removeFromSpace: 'Remove from space',
           roleDescription: {
             admin: 'Can manage members and change settings',
-            member: 'Can create and edit lists, folders, and documents',
+            member: 'Can create lists and folders, and create and edit tasks',
             owner: 'Can assign admins and transfer ownership',
             viewer: 'Read only',
           },
@@ -11446,7 +11658,7 @@ export const resources = {
             loadTasksFailed: 'Could not load tasks.',
           },
           noTaskLists: 'No lists',
-          pmsWorkspace: 'PMS workspace',
+          pmsApp: 'PMS app',
           searchPlaceholder: 'Search tasks...',
           taskListLabel: 'List',
           title: 'Select PMS task',
@@ -11604,10 +11816,12 @@ export const resources = {
         },
       },
       whiteboard: {
+        visibilityScopeNotice:
+          'Turning off company-wide access preserves user, group and linked work permissions, as well as company administrator read access.',
         actionsMenu: 'Whiteboard settings',
         cardView: 'Card view',
-        changeToPersonal: 'Change to private',
-        changeToWorkspace: 'Change to workspace visible',
+        changeToPersonal: 'Turn off company-wide access',
+        changeToCompany: 'Change to company visible',
         chooseExisting: 'Choose existing',
         close: 'Close',
         archiveFailed: 'Could not move the whiteboard to trash.',
@@ -11626,8 +11840,8 @@ export const resources = {
         connectFailed: 'Could not connect the whiteboard.',
         createFailed: 'Could not create a whiteboard.',
         create: 'Create',
-        createPersonal: 'Create private',
-        createWorkspace: 'Create workspace visible',
+        createPersonal: 'Create with restricted access',
+        createCompany: 'Create company visible',
         deleteFailed: 'Could not delete the whiteboard.',
         deletePermanentConfirm: 'Delete "{{title}}" permanently?',
         deleteSelectedElements_one: 'Delete {{count}} selected element',
@@ -11642,7 +11856,7 @@ export const resources = {
         edited: 'Edited {{date}}',
         emptyBoard: 'Empty whiteboard',
         enableReadLink: 'Enable read link',
-        fallbackWorkspace: 'Workspace',
+        fallbackCompany: 'Company',
         favoriteFailed: 'Could not update favorite.',
         hideGrid: 'Hide grid',
         linkShare: 'Link share',
@@ -11654,8 +11868,8 @@ export const resources = {
         noShareableUsers: 'No users to show.',
         noWhiteboards: 'No whiteboards',
         openSharedFailed: 'Could not open the shared whiteboard.',
-        personalSectionEmpty: 'No private whiteboards',
-        personalSectionTitle: 'Private whiteboards',
+        personalSectionEmpty: 'No whiteboards with restricted access',
+        personalSectionTitle: 'Whiteboards with restricted access',
         pickerDescription: 'Connect an existing saved Whiteboard.',
         pickerEmpty: 'No Whiteboard is available to connect.',
         pickerTitle: 'Select Whiteboard',
@@ -11694,14 +11908,16 @@ export const resources = {
         count_other: '{{count}} whiteboards',
         visibilityCurrent: 'Current: {{visibility}}',
         visibilityManageRequired: 'Only owners or admins can change this.',
-        visibilityPersonal: 'Private',
+        visibilityPersonal: 'Restricted access',
         visibilityUpdateFailed: 'Could not change visibility.',
-        visibilityWorkspace: 'Workspace visible',
-        workspaceMissing: 'Could not determine the workspace.',
-        workspaceSectionEmpty: 'No workspace visible whiteboards',
-        workspaceSectionTitle: 'Workspace visible whiteboards',
+        visibilityCompany: 'Company visible',
+
+        companySectionEmpty: 'No company visible whiteboards',
+        companySectionTitle: 'Company visible whiteboards',
       },
       diagrams: {
+        companyOwnershipNotice:
+          'Company-owned content cannot be returned to personal ownership.',
         actionsMenu: 'Diagram settings',
         archive: 'Archive',
         archiveEmpty: 'No archived diagrams',
@@ -11711,9 +11927,8 @@ export const resources = {
         create: 'Create',
         createFailed: 'Could not create a diagram.',
         createPersonal: 'Create private',
-        createWorkspace: 'Create workspace visible',
-        changeToPersonal: 'Change to private',
-        changeToWorkspace: 'Change to workspace visible',
+        createCompany: 'Create company visible',
+        changeToCompany: 'Change to company visible',
         editorTitle: 'Diagram editor',
         empty: 'No diagrams',
         error: 'Error',
@@ -11746,11 +11961,13 @@ export const resources = {
         visibilityManageRequired: 'Only owners or admins can change this.',
         visibilityPersonal: 'Private',
         visibilityUpdateFailed: 'Could not change visibility.',
-        visibilityWorkspace: 'Workspace visible',
-        workspaceSectionEmpty: 'No workspace visible diagrams',
-        workspaceSectionTitle: 'Workspace visible diagrams',
+        visibilityCompany: 'Company visible',
+        companySectionEmpty: 'No company visible diagrams',
+        companySectionTitle: 'Company visible diagrams',
       },
       bento: {
+        companyOwnershipNotice:
+          'Company-owned content cannot be returned to personal ownership.',
         actionsMenu: 'Presentation settings',
         aiCancel: 'Cancel',
         aiBackgroundCreate: 'Bento AI presentation',
@@ -11795,8 +12012,7 @@ export const resources = {
         archiveFailed: 'Could not archive the presentation.',
         back: 'Back to presentations',
         bridgeFailed: 'Could not communicate with the Bento editor.',
-        changeToPersonal: 'Change to private',
-        changeToWorkspace: 'Change to workspace visible',
+        changeToCompany: 'Change to company visible',
         count_one: '{{count}} presentation',
         count_other: '{{count}} presentations',
         create: 'Create',
@@ -11833,9 +12049,9 @@ export const resources = {
         updated: 'Edited {{date}}',
         visibilityPersonal: 'Private',
         visibilityUpdateFailed: 'Could not change visibility.',
-        visibilityWorkspace: 'Workspace visible',
-        workspaceSectionEmpty: 'No workspace visible presentations',
-        workspaceSectionTitle: 'Workspace visible presentations',
+        visibilityCompany: 'Company visible',
+        companySectionEmpty: 'No company visible presentations',
+        companySectionTitle: 'Company visible presentations',
       },
     },
   },

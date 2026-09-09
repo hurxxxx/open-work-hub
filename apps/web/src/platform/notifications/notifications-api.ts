@@ -1,24 +1,15 @@
 import { apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 
-export type WorkspaceNotification = ApiSchema<'NotificationItem'>;
-export type WorkspaceNotificationsResponse = {
-  items: WorkspaceNotification[];
-  total: number;
-  page: number;
-  page_size: number;
-};
-export type WorkspaceUnreadCountResponse = {
-  count: number;
-};
+export type NotificationItem = ApiSchema<'GlobalNotificationItem'>;
+export type NotificationsResponse = ApiSchema<'GlobalNotificationListResponse'>;
+export type UnreadCountResponse = ApiSchema<'GlobalUnreadCountResponse'>;
 
 export function listNotifications(
   token: string,
   page = 1,
-  workspaceSlug?: string | null,
-): Promise<WorkspaceNotificationsResponse> {
-  void workspaceSlug;
-  return apiFetchJson<WorkspaceNotificationsResponse>(
+): Promise<NotificationsResponse> {
+  return apiFetchJson<NotificationsResponse>(
     `/api/v1/notifications?page=${page}&page_size=20`,
     token,
   );
@@ -26,10 +17,8 @@ export function listNotifications(
 
 export function getUnreadNotificationCount(
   token: string,
-  workspaceSlug?: string | null,
-): Promise<WorkspaceUnreadCountResponse> {
-  void workspaceSlug;
-  return apiFetchJson<WorkspaceUnreadCountResponse>(
+): Promise<UnreadCountResponse> {
+  return apiFetchJson<UnreadCountResponse>(
     '/api/v1/notifications/unread-count',
     token,
   );
@@ -38,24 +27,16 @@ export function getUnreadNotificationCount(
 export function markNotificationRead(
   token: string,
   notificationId: string,
-  workspaceSlug?: string | null,
-): Promise<WorkspaceNotification> {
-  void workspaceSlug;
-  return apiFetchJson<WorkspaceNotification>(
+): Promise<NotificationItem> {
+  return apiFetchJson<NotificationItem>(
     `/api/v1/notifications/${notificationId}/read`,
     token,
     { method: 'PATCH' },
   );
 }
 
-export function markAllNotificationsRead(
-  token: string,
-  workspaceSlug?: string | null,
-): Promise<void> {
-  void workspaceSlug;
-  return apiFetchJson<void>(
-    '/api/v1/notifications/read-all',
-    token,
-    { method: 'PATCH' },
-  );
+export function markAllNotificationsRead(token: string): Promise<void> {
+  return apiFetchJson<void>('/api/v1/notifications/read-all', token, {
+    method: 'PATCH',
+  });
 }

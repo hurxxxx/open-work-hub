@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -8,19 +9,23 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.retrieval.models import RetrievalProjectionHead
-from open_work_hub_api.domains.search.backend_contracts import KeywordSearchClient
-from open_work_hub_api.domains.search.backend_contracts import KeywordSearchBackendError
+from open_work_hub_api.domains.search.backend_contracts import (
+    KeywordSearchBackendError,
+    KeywordSearchClient,
+)
 from open_work_hub_api.domains.search.backend_factory import build_keyword_search_client
-from open_work_hub_api.domains.search.models import SearchIndexJob
-from open_work_hub_api.domains.search.outbox import enqueue_search_index_job
 from open_work_hub_api.domains.search.default_projection_adapters import (
     ensure_search_projection_adapters_registered,
 )
-from open_work_hub_api.domains.search.projection_registry import get_search_projection_adapter
+from open_work_hub_api.domains.search.models import SearchIndexJob
+from open_work_hub_api.domains.search.outbox import enqueue_search_index_job
 from open_work_hub_api.domains.search.projection_identity import (
     SearchProjectionIdentityError as SearchProjectionIdentityError,
+)
+from open_work_hub_api.domains.search.projection_identity import (
     ensure_search_document_identity,
 )
+from open_work_hub_api.domains.search.projection_registry import get_search_projection_adapter
 from open_work_hub_api.domains.search.projections import load_search_document
 from open_work_hub_api.domains.search.schemas import SearchEntityType
 from open_work_hub_api.domains.source_access.resource_types import (
@@ -40,12 +45,29 @@ def process_search_index_job(
     job_id: str,
     *,
     client: KeywordSearchClient | None = None,
+    client_factory: Callable[[Session, SearchIndexJob], KeywordSearchClient] | None = None,
+    execution_allowed: Callable[[Session, SearchIndexJob], bool] | None = None,
 ) -> str:
     job, claim_outcome = _claim_search_index_job(db, job_id)
     if claim_outcome == "missing":
         return "missing"
     if claim_outcome != "claimed" or job is None:
         return "ignored"
+
+    def pause_if_disabled() -> bool:
+        if execution_allowed is None or execution_allowed(db, job):
+            return False
+        job.status = "pending"
+        job.attempts = max(job.attempts - 1, 0)
+        job.last_error = "app_disabled"
+        job.next_retry_at = None
+        job.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        db.add(job)
+        db.commit()
+        return True
+
+    if pause_if_disabled():
+        return "app-disabled"
 
     versioned = _job_has_projection_fence(job)
     if not versioned:
@@ -59,11 +81,15 @@ def process_search_index_job(
             )
             return "superseded"
 
-    search_client = client or _search_client()
+    search_client = client or (
+        client_factory(db, job) if client_factory is not None else _search_client()
+    )
     if job.operation == "delete":
         if versioned and not _lock_matching_projection_head(db, job):
             _cancel_projection_fenced_search_index_job(db, job)
             return "superseded"
+        if pause_if_disabled():
+            return "app-disabled"
         mutation_result = _delete_search_document(
             search_client,
             job=job,
@@ -80,6 +106,8 @@ def process_search_index_job(
             if versioned and not _lock_matching_projection_head(db, job):
                 _cancel_projection_fenced_search_index_job(db, job)
                 return "superseded"
+            if pause_if_disabled():
+                return "app-disabled"
             mutation_result = _delete_search_document(
                 search_client,
                 job=job,
@@ -94,6 +122,8 @@ def process_search_index_job(
             if versioned and not _lock_matching_projection_head(db, job):
                 _cancel_projection_fenced_search_index_job(db, job)
                 return "superseded"
+            if pause_if_disabled():
+                return "app-disabled"
             mutation_result = _upsert_search_document(
                 search_client,
                 document=document,
@@ -111,7 +141,6 @@ def process_search_index_job(
             if superseding.status == "succeeded" and not _job_has_projection_fence(superseding):
                 enqueue_search_index_job(
                     db,
-                    workspace_id=superseding.workspace_id,
                     entity_type=superseding.entity_type,
                     entity_id=superseding.entity_id,
                     operation=superseding.operation,
@@ -172,7 +201,6 @@ def _latest_superseding_search_index_job(
         select(SearchIndexJob)
         .where(
             SearchIndexJob.id != job.id,
-            SearchIndexJob.workspace_id == job.workspace_id,
             SearchIndexJob.entity_type == job.entity_type,
             SearchIndexJob.entity_id == job.entity_id,
             SearchIndexJob.created_at > job.created_at,
@@ -279,7 +307,6 @@ def _delete_search_document(
 ) -> str:
     if not versioned or not _uses_partitioned_keyword_generation(job):
         client.delete_document(
-            workspace_id=job.workspace_id,
             entity_type=job.entity_type,
             entity_id=job.entity_id,
         )
@@ -362,7 +389,6 @@ def _ensure_search_document_matches_job(
 ) -> None:
     ensure_search_document_identity(
         document,
-        workspace_id=job.workspace_id,
         allowed_entity_types=(job.entity_type,),
         expected_entity_id=job.entity_id,
         context=f"job {job.id}",

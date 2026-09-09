@@ -60,7 +60,11 @@ export function resolveDmConversationCreateCommand(input: {
   groupTitle: string;
   selectedUsers: readonly IdentifiedDmUser[];
 }): DmConversationCreateCommand | null {
-  if (!input.authenticated || input.creating || input.selectedUsers.length === 0) {
+  if (
+    !input.authenticated ||
+    input.creating ||
+    input.selectedUsers.length === 0
+  ) {
     return null;
   }
   if (input.selectedUsers.length === 1) {

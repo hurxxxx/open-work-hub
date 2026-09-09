@@ -1,4 +1,6 @@
-from open_work_hub_api.open_work_hub_desktop_update_serving_policy import open_work_hub_desktop_update_serving_policy
+from open_work_hub_api.open_work_hub_desktop_update_serving_policy import (
+    open_work_hub_desktop_update_serving_policy,
+)
 
 
 def test_open_work_hub_desktop_update_serving_policy_uses_manifest_contract() -> None:

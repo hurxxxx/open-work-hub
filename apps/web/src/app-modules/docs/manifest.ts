@@ -1,3 +1,4 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import { Files, History, Lock, Mic, Share2, User } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
@@ -8,14 +9,6 @@ export const docsManifest: AppModuleManifest = {
     owner: 'docs-platform',
     permissions: [],
     apiDomain: 'docs',
-    workspaceApiPrefixes: ['/api/v1/docs'],
-    workspaceApiPublicPrefixes: ['/api/v1/docs/shared-links/'],
-    workspaceApiPublicQueryBypasses: [
-      {
-        pathPrefixes: ['/api/v1/docs/items/', '/api/v1/docs/pages/'],
-        queryParam: 'share_token',
-      },
-    ],
     aiCapabilities: [
       'docs.list_hub',
       'docs.get_item',
@@ -29,7 +22,6 @@ export const docsManifest: AppModuleManifest = {
     ],
   },
   defaultActiveNavItemId: 'docs-all',
-  surfaces: { launcher: { defaultPinOrder: 1 } },
   navItems: [
     {
       id: 'docs-all',
@@ -87,13 +79,13 @@ export const docsManifest: AppModuleManifest = {
       pathSuffix: '?view=archived',
     },
   ],
-  workspaceRoutePaths: [
-    '/w/:workspaceSlug/docs',
-    '/w/:workspaceSlug/docs/:docId',
-    '/w/:workspaceSlug/docs/:docId/html/:pageId',
+  appRoutePaths: [
+    getAppRoutePattern('docs.root'),
+    getAppRoutePattern('docs.document'),
+    getAppRoutePattern('docs.document-html'),
   ],
   globalRoutePaths: [
-    '/docs/shared/:shareToken',
-    '/docs/shared/:shareToken/html/:pageId',
+    getAppRoutePattern('docs.shared'),
+    getAppRoutePattern('docs.shared-html'),
   ],
 };

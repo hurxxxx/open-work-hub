@@ -1,8 +1,12 @@
+import {
+  getAppRouteChrome,
+  getAppRoutePattern,
+} from '@open-work-hub/contracts/app-routes';
 import { createElement, lazy } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const FileManagerView = lazy(() =>
   import('./views/FileManagerView').then((module) => ({
@@ -22,7 +26,7 @@ const FilesChatView = lazy(() =>
   })),
 );
 
-function FilesWorkspaceView() {
+function FilesAppView() {
   const [searchParams] = useSearchParams();
   const searchSelected = searchParams.get('view') === 'search';
   return lazyRoute(
@@ -32,15 +36,17 @@ function FilesWorkspaceView() {
   );
 }
 
-export const filesWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const filesAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'files',
-    path: '/w/:workspaceSlug/files/chat',
+    chrome: getAppRouteChrome('files.chat'),
+    path: getAppRoutePattern('files.chat'),
     element: lazyRoute(createElement(FilesChatView)),
   },
   {
     appId: 'files',
-    path: '/w/:workspaceSlug/files',
-    element: createElement(FilesWorkspaceView),
+    chrome: getAppRouteChrome('files.root'),
+    path: getAppRoutePattern('files.root'),
+    element: createElement(FilesAppView),
   },
 ];

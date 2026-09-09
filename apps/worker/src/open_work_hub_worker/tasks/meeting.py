@@ -7,20 +7,25 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from celery.exceptions import Ignore
-from sqlalchemy import select
+from fastapi import HTTPException
+from sqlalchemy import exists, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_worker.celery_app import celery_app
 from open_work_hub_worker.runtime import (
     db_session as _db_session,
+)
+from open_work_hub_worker.runtime import (
     ensure_api_src_on_path as _ensure_api_src_on_path,
+)
+from open_work_hub_worker.runtime import (
     minio_client as _minio_client,
 )
 from open_work_hub_worker.settings import get_settings
 
-
 _ensure_api_src_on_path()
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href  # noqa: E402
 from open_work_hub_api.core.asr import (  # noqa: E402
     PermanentError,
     TransientError,
@@ -35,15 +40,18 @@ from open_work_hub_api.domains.ai.gateway import (  # noqa: E402
     LlmWorkloadContext,
     execute_llm,
 )
-from open_work_hub_api.domains.auth.models import Workspace  # noqa: E402
+from open_work_hub_api.domains.auth.app_gate import (  # noqa: E402
+    can_use_app,
+)
 from open_work_hub_api.domains.auth.security import new_id  # noqa: E402
+from open_work_hub_api.domains.auth.models import User  # noqa: E402
+from open_work_hub_api.domains.pms.access import _ensure_task_writable  # noqa: E402
 from open_work_hub_api.domains.meeting.models import (  # noqa: E402
     Meeting,
     MeetingAttendee,
     MeetingRecording,
 )
 from open_work_hub_api.domains.pms.models import TaskComment  # noqa: E402
-
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +104,65 @@ def _mark_failed(session: Session, recording_id: str, reason: str) -> None:
     recording.failure_reason = reason[:5000]
     session.add(recording)
     session.commit()
+
+
+def _meeting_requester_is_participant(session: Session, recording: MeetingRecording) -> bool:
+    meeting_id = _recording_meeting_id(recording)
+    if meeting_id is None:
+        return False
+    return (
+        session.scalar(
+            select(Meeting.id)
+            .where(
+                Meeting.id == meeting_id,
+                or_(
+                    Meeting.organizer_id == recording.uploaded_by_id,
+                    exists().where(
+                        MeetingAttendee.meeting_id == Meeting.id,
+                        MeetingAttendee.user_id == recording.uploaded_by_id,
+                    ),
+                ),
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _ensure_meeting_execution_allowed(
+    session: Session,
+    recording: MeetingRecording,
+) -> None:
+    meeting = recording.meeting
+    if (
+        meeting is not None
+        and can_use_app(session, app_id="meeting", user_id=recording.uploaded_by_id)
+        and _meeting_requester_is_participant(session, recording)
+    ):
+        return
+    _mark_failed(
+        session,
+        recording.id,
+        "Meeting app execution disabled or requester membership revoked.",
+    )
+    raise Ignore()
+
+
+def _ensure_meeting_publication_allowed(session: Session, recording: MeetingRecording) -> None:
+    actor_id = recording.uploaded_by_id
+    if not can_use_app(session, app_id="docs", user_id=actor_id):
+        raise PermanentError("Docs app admission revoked before meeting publication.")
+    if not recording.linked_task_id:
+        return
+    if not can_use_app(session, app_id="pms", user_id=actor_id):
+        raise PermanentError("PMS app admission revoked before meeting publication.")
+    actor = session.get(User, actor_id)
+    if actor is None:
+        raise PermanentError("Meeting publication requester no longer exists.")
+    try:
+        _ensure_task_writable(session, actor, recording.linked_task_id)
+    except HTTPException as error:
+        raise PermanentError("PMS task write access revoked before meeting publication.") from error
 
 
 def _download_recording_to_tmp(recording: MeetingRecording) -> str:
@@ -159,9 +226,12 @@ def transcribe_recording(self, recording_id: str) -> str:
         recording = _load_active_recording(session, recording_id)
         if recording is None:
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
         if recording.transcript_text:
             _heartbeat(session, recording, 60, "summarizing")
             return recording.id
+
+        _ensure_meeting_execution_allowed(session, recording)
 
         if recording.transcribe_started_at is None:
             recording.transcribe_started_at = _utcnow()
@@ -182,12 +252,15 @@ def transcribe_recording(self, recording_id: str) -> str:
             rec = session.get(MeetingRecording, recording_id)
             if rec is None or rec.transcription_status == "cancelled":
                 raise Ignore()
+            _ensure_meeting_execution_allowed(session, rec)
             _heartbeat(session, rec, pct, "transcribing")
 
+        _ensure_meeting_execution_allowed(session, recording)
         result = get_asr_backend().transcribe(Path(tmp_path), on_progress=on_progress)
         recording = session.get(MeetingRecording, recording_id)
         if recording is None or recording.transcription_status == "cancelled":
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
         recording.transcript_text = result.text.strip()
         if recording.duration_sec is None and result.duration_sec:
             recording.duration_sec = int(result.duration_sec)
@@ -234,25 +307,20 @@ def summarize_recording(self, recording_id: str) -> str:
         recording = _load_active_recording(session, recording_id)
         if recording is None:
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
         if recording.summary_text:
             _heartbeat(session, recording, 90, "extracting_insights")
             return recording.id
         if not recording.transcript_text:
             raise PermanentError("Transcript is missing.")
 
-        _heartbeat(session, recording, max(recording.progress_pct, 60), "summarizing")
+        _ensure_meeting_execution_allowed(session, recording)
 
-        # Build the LlmTaskContext for this system job. Routing is delegated to
-        # the AI Gateway so policy changes take effect without touching the
-        # worker implementation.
-        workspace_id = recording.meeting.workspace_id if recording.meeting else None
-        if not workspace_id:
-            raise PermanentError("Recording is not linked to a workspace.")
+        _heartbeat(session, recording, max(recording.progress_pct, 60), "summarizing")
 
         context = LlmTaskContext(
             source="worker.meeting.summarize",
-            actor_user_id=None,
-            workspace_id=workspace_id,
+            actor_user_id=recording.uploaded_by_id,
             task_kind="meeting_summary",
             app_id="meeting",
         )
@@ -273,6 +341,7 @@ def summarize_recording(self, recording_id: str) -> str:
         recording = session.get(MeetingRecording, recording_id)
         if recording is None or recording.transcription_status == "cancelled":
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
         recording.summary_text = summary
         meeting_id = _recording_meeting_id(recording)
         if meeting_id is not None:
@@ -312,9 +381,12 @@ def extract_meeting_insights(self, recording_id: str) -> str:
         recording = _load_active_recording(session, recording_id)
         if recording is None:
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
         if not recording.summary_text or not recording.transcript_text:
             _heartbeat(session, recording, max(recording.progress_pct, 90), "generating_doc")
             return recording.id
+
+        _ensure_meeting_execution_allowed(session, recording)
 
         _heartbeat(session, recording, max(recording.progress_pct, 90), "extracting_insights")
         try:
@@ -322,9 +394,12 @@ def extract_meeting_insights(self, recording_id: str) -> str:
                 session,
                 recording_id=recording.id,
                 source="worker.meeting.extract_insights",
-                actor_user_id=None,
+                actor_user_id=recording.uploaded_by_id,
             )
+            _ensure_meeting_execution_allowed(session, recording)
             session.commit()
+        except Ignore:
+            raise
         except Exception:  # noqa: BLE001
             session.rollback()
             logger.warning(
@@ -336,6 +411,7 @@ def extract_meeting_insights(self, recording_id: str) -> str:
         recording = session.get(MeetingRecording, recording_id)
         if recording is None or recording.transcription_status == "cancelled":
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
         _heartbeat(session, recording, max(recording.progress_pct, 92), "generating_doc")
         return recording.id
     finally:
@@ -351,8 +427,8 @@ def extract_meeting_insights(self, recording_id: str) -> str:
 )
 def generate_meeting_doc(self, recording_id: str) -> str:
     from open_work_hub_api.domains.docs.minutes import create_meeting_minutes_doc
-    from open_work_hub_api.domains.meeting.rag_sync import enqueue_meeting_rag_sync_by_id
     from open_work_hub_api.domains.meeting import service as meeting_service
+    from open_work_hub_api.domains.meeting.rag_sync import enqueue_meeting_rag_sync_by_id
     from open_work_hub_api.domains.rag.contracts import RagSyncOperation
 
     session = _db_session()
@@ -360,6 +436,7 @@ def generate_meeting_doc(self, recording_id: str) -> str:
         recording = _load_active_recording(session, recording_id)
         if recording is None:
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
         if recording.linked_doc_id:
             _heartbeat(session, recording, 100, "done")
             return recording.id
@@ -368,9 +445,12 @@ def generate_meeting_doc(self, recording_id: str) -> str:
         if not recording.transcript_text:
             raise PermanentError("Transcript is missing.")
 
+        _ensure_meeting_execution_allowed(session, recording)
+
         meeting = recording.meeting
         if meeting is None:
             raise PermanentError("Meeting is missing.")
+        _ensure_meeting_publication_allowed(session, recording)
         doc = create_meeting_minutes_doc(
             session,
             meeting=meeting,
@@ -382,23 +462,31 @@ def generate_meeting_doc(self, recording_id: str) -> str:
             session,
             meeting=meeting,
             doc=doc,
-            added_by_id=meeting.organizer_id,
+            added_by_id=recording.uploaded_by_id,
         )
         if recording.linked_task_id:
-            workspace = session.get(Workspace, meeting.workspace_id)
-            slug = workspace.key if workspace is not None else ""
             session.add(
                 TaskComment(
                     id=new_id(),
                     task_id=recording.linked_task_id,
-                    author_id=meeting.organizer_id,
-                    body=f"📄 회의록: /w/{slug}/docs/{doc.id}" if slug else f"📄 회의록: {doc.id}",
+                    author_id=recording.uploaded_by_id,
+                    body=(
+                        "📄 회의록: "
+                        + build_app_href(
+                            InternalAppLocation(
+                                route_id="docs.document",
+                                path_params={"docId": doc.id},
+                            )
+                        )
+                    ),
                     body_blocks=None,
                 )
             )
         recording = session.get(MeetingRecording, recording_id)
         if recording is None or recording.transcription_status == "cancelled":
             raise Ignore()
+        _ensure_meeting_execution_allowed(session, recording)
+        _ensure_meeting_publication_allowed(session, recording)
         recording.linked_doc_id = doc.id
         recording.transcription_status = "done"
         recording.progress_pct = 100

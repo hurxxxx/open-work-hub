@@ -28,7 +28,6 @@ export interface PlannerCalendarScheduleAdapters {
   ): Promise<unknown>;
   updateMeeting(
     token: string,
-    workspaceSlug: string,
     meetingId: string,
     payload: MeetingScheduleCommand['payload'],
   ): Promise<unknown>;
@@ -36,7 +35,6 @@ export interface PlannerCalendarScheduleAdapters {
     token: string,
     taskId: string,
     payload: TaskScheduleCommand['payload'],
-    workspaceSlug?: string | null,
   ): Promise<unknown>;
 }
 
@@ -113,27 +111,11 @@ async function runScheduleCommand(
   }
 
   if (command.type === 'updateMeeting') {
-    if (!command.workspaceSlug) {
-      return;
-    }
-    await adapters.updateMeeting(
-      authToken,
-      command.workspaceSlug,
-      command.sourceId,
-      command.payload,
-    );
+    await adapters.updateMeeting(authToken, command.sourceId, command.payload);
     return;
   }
 
-  if (!command.workspaceSlug) {
-    return;
-  }
-  await adapters.updateTask(
-    authToken,
-    command.sourceId,
-    command.payload,
-    command.workspaceSlug,
-  );
+  await adapters.updateTask(authToken, command.sourceId, command.payload);
 }
 
 async function commitScheduleCommand(
@@ -143,13 +125,6 @@ async function commitScheduleCommand(
 ): Promise<void> {
   if (!options.token) {
     revert();
-    return;
-  }
-  if (command.type !== 'updatePlannerEvent' && !command.workspaceSlug) {
-    revert();
-    options.setActionError(
-      getScheduleCommandErrorMessage(command, null, options.messages),
-    );
     return;
   }
 

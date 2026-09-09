@@ -5,8 +5,8 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
-    Column,
     CheckConstraint,
+    Column,
     DateTime,
     ForeignKey,
     Index,
@@ -23,10 +23,15 @@ from sqlalchemy.orm import Mapped, mapped_column
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
 
-
 GRAPH_RUN_STATUSES = ("pending", "running", "completed", "failed", "cancelled")
-GRAPH_RUN_VISIBILITIES = ("private", "workspace")
-GRAPH_DISPATCH_STATUSES = ("pending", "claimed", "dispatched", "dead_letter")
+GRAPH_RUN_VISIBILITIES = ("private", "company")
+GRAPH_DISPATCH_STATUSES = (
+    "pending",
+    "claimed",
+    "dispatched",
+    "dead_letter",
+    "cancelled",
+)
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 
 
@@ -107,14 +112,12 @@ class AiGraphRun(Base):
             name="ck_ai_graph_runs_execution_attempts",
         ),
         Index(
-            "ix_ai_graph_runs_workspace_user_created",
-            "workspace_id",
+            "ix_ai_graph_runs_user_created",
             "requested_by_user_id",
             "created_at",
         ),
         Index(
-            "ix_ai_graph_runs_workspace_status_created",
-            "workspace_id",
+            "ix_ai_graph_runs_status_created",
             "status",
             "created_at",
         ),
@@ -131,11 +134,6 @@ class AiGraphRun(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
-        nullable=False,
-        index=True,
-    )
     requested_by_user_id: Mapped[str] = mapped_column(
         ForeignKey("users.id"),
         nullable=False,

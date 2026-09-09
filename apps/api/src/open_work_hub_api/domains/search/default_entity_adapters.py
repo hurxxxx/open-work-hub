@@ -8,23 +8,23 @@ from open_work_hub_api.domains.search.entity_adapter_registry import (
 
 def ensure_search_entity_adapters_registered() -> None:
     from open_work_hub_api.domains.docs.search_projection import (
-        DOCS_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
+        DOCS_KEYWORD_SEARCH_ADAPTER,
     )
     from open_work_hub_api.domains.files.search_projection import (
-        FILES_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
+        FILES_KEYWORD_SEARCH_ADAPTER,
     )
     from open_work_hub_api.domains.meeting.search_projection import (
-        MEETING_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
+        MEETING_KEYWORD_SEARCH_ADAPTER,
     )
     from open_work_hub_api.domains.pms.search_projection import (
-        PMS_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
+        PMS_KEYWORD_SEARCH_ADAPTER,
     )
 
     for adapter in (
-        DOCS_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
-        FILES_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
-        MEETING_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
-        PMS_WORKSPACE_KEYWORD_SEARCH_ADAPTER,
+        DOCS_KEYWORD_SEARCH_ADAPTER,
+        FILES_KEYWORD_SEARCH_ADAPTER,
+        MEETING_KEYWORD_SEARCH_ADAPTER,
+        PMS_KEYWORD_SEARCH_ADAPTER,
     ):
         _register_default_search_entity_adapter(adapter)
 

@@ -5,7 +5,6 @@ import {
   defineFeatureModule,
   defineFeatureModuleRegistration,
 } from './feature-module-registry';
-import { Sparkles } from 'lucide-react';
 
 function manifest(moduleId: string) {
   return defineFeatureModule({
@@ -46,51 +45,19 @@ describe('feature module registry', () => {
           ],
         }),
       ],
-      shell: {
-        navItem: {
-          id: 'custom-tool-action',
-          title: 'Custom tool',
-          icon: Sparkles,
-          category: 'Custom',
-        },
-        tool: { element: null, featureGuide: true },
-        workspaceRoutes: [
-          {
-            element: null,
-            pathSuffix: '/history',
-            subSidebar: 'auto',
-          },
-        ],
-      },
     });
 
     const registry = compileFeatureModuleRegistry([registered]);
 
     expect(registry.aiToolAppIds).toEqual(['custom-tool']);
-    expect(registry.featureGuideToolIds).toEqual(['custom-tool-action']);
+    expect(registry.featureGuideToolIds).toEqual([]);
     expect(registry.backgroundWorkSources[0]).toMatchObject({
       appId: 'custom-tool',
       id: 'custom-jobs',
     });
-    expect(registry.shellRegistrations[0]).toMatchObject({
-      appId: 'custom-tool',
-      navItem: { id: 'custom-tool-action' },
-      toolRoute: {
-        id: 'custom-tool.main',
-        path: '/w/:workspaceSlug/custom-tool',
-        toolIds: ['custom-tool-action'],
-      },
-      workspaceRoutes: [
-        {
-          path: '/w/:workspaceSlug/custom-tool/history',
-          subSidebar: 'auto',
-        },
-      ],
-    });
     await expect(
       registry.backgroundWorkSources[0].list({
         token: 'token',
-        workspaceSlug: 'hq',
         t: (key) => key,
       }),
     ).resolves.toMatchObject([{ href: '/jobs/custom-tool' }]);
@@ -158,54 +125,5 @@ describe('feature module registry', () => {
         }),
       ]),
     ).toThrow('must not declare appId');
-  });
-
-  it('rejects shell nav ownership and duplicate injected shell ids', () => {
-    expect(() =>
-      compileFeatureModuleRegistry([
-        defineFeatureModuleRegistration({
-          manifest: manifest('owner'),
-          shell: {
-            navItem: {
-              appId: 'other',
-              category: 'Custom',
-              icon: Sparkles,
-              id: 'owner',
-              title: 'Owner',
-            } as never,
-            tool: { element: null },
-          },
-        }),
-      ]),
-    ).toThrow('must not declare appId or linkAppId');
-
-    expect(() =>
-      compileFeatureModuleRegistry([
-        defineFeatureModuleRegistration({
-          manifest: manifest('first'),
-          shell: {
-            navItem: {
-              category: 'Custom',
-              icon: Sparkles,
-              id: 'same-action',
-              title: 'First',
-            },
-            tool: { element: null },
-          },
-        }),
-        defineFeatureModuleRegistration({
-          manifest: manifest('second'),
-          shell: {
-            navItem: {
-              category: 'Custom',
-              icon: Sparkles,
-              id: 'same-action',
-              title: 'Second',
-            },
-            tool: { element: null },
-          },
-        }),
-      ]),
-    ).toThrow('Duplicate feature shell nav item id: same-action');
   });
 });

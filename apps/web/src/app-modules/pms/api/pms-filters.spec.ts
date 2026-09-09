@@ -287,9 +287,14 @@ describe('listTaskListTasks', () => {
         ),
       );
 
-    await listAllTaskListTasks('token', 'task-list-1', {}, undefined, {
-      sort: { direction: 'desc', field: 'completed_date' },
-    });
+    await listAllTaskListTasks(
+      'token',
+      'task-list-1',
+      {},
+      {
+        sort: { direction: 'desc', field: 'completed_date' },
+      },
+    );
 
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     for (const [request] of fetchSpy.mock.calls) {
@@ -345,7 +350,7 @@ describe('listTaskListTasks', () => {
         ),
       );
 
-    const response = await listAllAssignedTasks('token', 'delivery-hub');
+    const response = await listAllAssignedTasks('token');
 
     expect(response.items.map((item) => item.id)).toEqual([
       'assigned-1',
@@ -370,7 +375,6 @@ describe('listTaskListTasks', () => {
     await listTodayOverdueTasks('token', '2026-07-09', {
       page: 2,
       pageSize: 50,
-      workspaceSlug: 'delivery-hub',
     });
 
     const url = String(fetchSpy.mock.calls[0][0]);

@@ -1,25 +1,11 @@
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Callable, Sequence
-import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from open_work_hub_api.domains.pms.links import normalize_pms_deep_link
-from open_work_hub_api.domains.search.schemas import (
-    TargetFacet,
-    EntityTypeFacet,
-    KeywordSearchRequest,
-    KeywordSearchResponse,
-    SearchTargetRef,
-    SearchFacets,
-    SearchHighlight,
-    SearchHit,
-    SearchPerson,
-    SearchSnippet,
-    StatusFacet,
-)
 from open_work_hub_api.domains.search.default_entity_adapters import (
     ensure_search_entity_descriptors_registered,
 )
@@ -27,7 +13,20 @@ from open_work_hub_api.domains.search.entity_registry import (
     label_for_search_entity,
     search_entity_descriptors,
 )
-from open_work_hub_api.domains.search.schemas import SearchEntityType
+from open_work_hub_api.domains.search.schemas import (
+    EntityTypeFacet,
+    KeywordSearchRequest,
+    KeywordSearchResponse,
+    SearchEntityType,
+    SearchFacets,
+    SearchHighlight,
+    SearchHit,
+    SearchPerson,
+    SearchSnippet,
+    SearchTargetRef,
+    StatusFacet,
+    TargetFacet,
+)
 
 DocPageLookup = Callable[[str], list[dict[str, Any]]]
 _SNIPPET_MAX_CHARS = 420
@@ -120,7 +119,6 @@ def build_search_hit(
     return SearchHit(
         entity_type=str(row["entity_type"]),
         entity_id=str(row["entity_id"]),
-        workspace_id=str(row["workspace_id"]),
         title=str(row.get("title") or "Untitled"),
         summary=str(row.get("summary") or ""),
         snippet=_build_snippet(row, query=query),
@@ -132,9 +130,7 @@ def build_search_hit(
         created_at=row["created_at"],
         date_markers=dict(row.get("date_markers") or {}),
         people=[SearchPerson.model_validate(item) for item in row.get("people") or []],
-        targets=[
-            SearchTargetRef.model_validate(item) for item in row.get("targets") or []
-        ],
+        targets=[SearchTargetRef.model_validate(item) for item in row.get("targets") or []],
         deep_link=_deep_link_for_row(row, query=query, doc_page_lookup=doc_page_lookup),
         preview_url=row.get("preview_url"),
         metadata=metadata,
@@ -147,7 +143,7 @@ def _deep_link_for_row(
     query: str,
     doc_page_lookup: DocPageLookup,
 ) -> str:
-    deep_link = normalize_pms_deep_link(str(row["deep_link"])) or str(row["deep_link"])
+    deep_link = str(row["deep_link"])
     if str(row.get("entity_type")) != SearchEntityType.DOC.value:
         return deep_link
     doc_pages = row.get("doc_pages")

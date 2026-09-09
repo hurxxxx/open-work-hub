@@ -1,3 +1,4 @@
+import { createPmsTask } from '../../../../tests/fixtures/pms';
 import { describe, expect, it } from 'vitest';
 
 import type { PmsTask } from '../api/pms-api';
@@ -12,18 +13,17 @@ import {
 function task(
   id: string,
   title: string,
-  taskNumber: number,
+  boardPosition: number,
   parentId: string | null = null,
   status = 'todo',
 ): PmsTask {
-  return {
+  return createPmsTask({
     id,
     title,
-    task_number: taskNumber,
-    board_position: taskNumber,
+    board_position: boardPosition,
     parent_id: parentId,
     status,
-  } as PmsTask;
+  });
 }
 
 describe('pms task hierarchy', () => {

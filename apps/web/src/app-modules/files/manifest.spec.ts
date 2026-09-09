@@ -20,9 +20,7 @@ describe('Files manifest', () => {
         }),
       ]),
     );
-    expect(filesManifest.workspaceRoutePaths).toContain(
-      '/w/:workspaceSlug/files/chat',
-    );
+    expect(filesManifest.appRoutePaths).toContain('/apps/files/chat');
     expect(filesManifest.contract.aiCapabilities).toEqual([
       'files.grounded_chat',
       'files.rag_query_rewrite',

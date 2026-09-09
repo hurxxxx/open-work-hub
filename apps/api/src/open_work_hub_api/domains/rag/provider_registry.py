@@ -6,7 +6,6 @@ from typing import Generic, TypeVar
 
 from open_work_hub_api.domains.rag.providers.base import RagProviderConfigurationError
 
-
 SettingsT = TypeVar("SettingsT")
 ProviderT = TypeVar("ProviderT")
 
@@ -38,9 +37,7 @@ class RagProviderRegistry(Generic[SettingsT]):
             return
         for raw_name in descriptor.names:
             name = _normalize_provider_name(raw_name)
-            self._embedding_collection_model_resolvers[
-                name
-            ] = descriptor.collection_model_resolver
+            self._embedding_collection_model_resolvers[name] = descriptor.collection_model_resolver
 
     def register_rerank(self, descriptor: RagProviderDescriptor[SettingsT, object | None]) -> None:
         self._register(self._rerank_builders, "rerank", descriptor)
@@ -111,7 +108,9 @@ class RagProviderRegistry(Generic[SettingsT]):
         provider_name = _normalize_provider_name(provider_name)
         builder = builders.get(provider_name)
         if builder is None:
-            raise RagProviderConfigurationError(f"Unsupported RAG {provider_kind} provider: {provider_name}")
+            raise RagProviderConfigurationError(
+                f"Unsupported RAG {provider_kind} provider: {provider_name}"
+            )
         return builder(settings)
 
 

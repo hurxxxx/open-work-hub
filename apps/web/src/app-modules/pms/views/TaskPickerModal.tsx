@@ -1,9 +1,9 @@
+import { useAppAdmission } from '@/src/platform/apps/app-bootstrap-context';
 import { useEffect, useMemo, useReducer } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { NoAccessNotice } from '@/src/components/common/NoAccessNotice';
 import { ResourcePickerDialog } from '@/src/components/picker/ResourcePickerDialog';
-import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   listPmsTaskLists,
@@ -21,7 +21,7 @@ import {
 export interface TaskPickerModalCopy {
   titleKey: string;
   descriptionKey: string;
-  workspaceLabelKey: string;
+  appLabelKey: string;
   noAccessActionKey: string;
   loadListsErrorKey: string;
   loadTasksErrorKey: string;
@@ -37,7 +37,7 @@ export interface TaskPickerModalProps {
   onClose: () => void;
   onPick: (task: PmsTask) => Promise<void> | void;
   excludeTaskIds?: string[];
-  workspaceSlug?: string | null;
+
   copy?: TaskPickerModalCopy;
   contentClassName?: string;
   fixedTaskListId?: string | null;
@@ -48,7 +48,7 @@ export interface TaskPickerModalProps {
 const DEFAULT_TASK_PICKER_MODAL_COPY: TaskPickerModalCopy = {
   titleKey: 'pms.taskPicker.title',
   descriptionKey: 'pms.taskPicker.description',
-  workspaceLabelKey: 'pms.taskPicker.pmsWorkspace',
+  appLabelKey: 'pms.taskPicker.pmsApp',
   noAccessActionKey: 'pms.taskPicker.attachAction',
   loadListsErrorKey: 'pms.taskPicker.errors.loadListsFailed',
   loadTasksErrorKey: 'pms.taskPicker.errors.loadTasksFailed',
@@ -64,7 +64,6 @@ export function TaskPickerModal({
   onClose,
   onPick,
   excludeTaskIds = EMPTY_EXCLUDED_TASK_IDS,
-  workspaceSlug,
   copy = DEFAULT_TASK_PICKER_MODAL_COPY,
   contentClassName,
   fixedTaskListId = null,
@@ -72,8 +71,8 @@ export function TaskPickerModal({
   overlayClassName,
 }: TaskPickerModalProps) {
   const { t } = useTranslation('apps');
-  const { token, user } = useAuth();
-  const canAccess = hasWorkspaceMembership(user, workspaceSlug);
+  const { token } = useAuth();
+  const canAccess = useAppAdmission('pms');
   const {
     attachErrorKey,
     descriptionKey,
@@ -85,20 +84,20 @@ export function TaskPickerModal({
     searchPlaceholderKey,
     taskListLabelKey,
     titleKey,
-    workspaceLabelKey,
+    appLabelKey,
   } = copy;
-  const [{
-    taskLists,
-    selectedTaskListId,
-    tasks,
-    query,
-    loading,
-    submittingId,
-    error,
-  }, dispatch] = useReducer(
-    taskPickerModalReducer,
-    INITIAL_TASK_PICKER_MODAL_STATE,
-  );
+  const [
+    {
+      taskLists,
+      selectedTaskListId,
+      tasks,
+      query,
+      loading,
+      submittingId,
+      error,
+    },
+    dispatch,
+  ] = useReducer(taskPickerModalReducer, INITIAL_TASK_PICKER_MODAL_STATE);
 
   useEffect(() => {
     if (!isOpen || !token || !canAccess) return;
@@ -109,7 +108,7 @@ export function TaskPickerModal({
         cancelled = true;
       };
     }
-    listPmsTaskLists(token, undefined, workspaceSlug)
+    listPmsTaskLists(token, undefined)
       .then((response) => {
         if (cancelled) return;
         dispatch({ type: 'taskListsLoaded', taskLists: response.items });
@@ -124,15 +123,7 @@ export function TaskPickerModal({
     return () => {
       cancelled = true;
     };
-  }, [
-    canAccess,
-    fixedTaskListId,
-    isOpen,
-    loadListsErrorKey,
-    t,
-    token,
-    workspaceSlug,
-  ]);
+  }, [canAccess, fixedTaskListId, isOpen, loadListsErrorKey, t, token]);
 
   useEffect(() => {
     if (!isOpen || !token || !canAccess || !selectedTaskListId) {
@@ -145,7 +136,6 @@ export function TaskPickerModal({
       token,
       selectedTaskListId,
       buildTaskPickerTaskParams(query),
-      workspaceSlug,
     )
       .then((response) => {
         if (cancelled) return;
@@ -169,7 +159,6 @@ export function TaskPickerModal({
     selectedTaskListId,
     t,
     token,
-    workspaceSlug,
   ]);
 
   const filteredTasks = useMemo(
@@ -196,7 +185,7 @@ export function TaskPickerModal({
     <ResourcePickerDialog
       accessNotice={
         <NoAccessNotice
-          workspaceLabel={t(workspaceLabelKey)}
+          appLabel={t(appLabelKey)}
           action={t(noAccessActionKey)}
         />
       }
@@ -244,7 +233,9 @@ export function TaskPickerModal({
       onPick={(task) => void handlePick(task)}
       renderItem={(task) => (
         <div className="min-w-0">
-          <p className="app-text-body line-clamp-1 text-app-ink">{task.title}</p>
+          <p className="app-text-body line-clamp-1 text-app-ink">
+            {task.title}
+          </p>
           <p className="app-text-caption text-app-ink/40">
             {task.reference} · {task.status_label}
           </p>

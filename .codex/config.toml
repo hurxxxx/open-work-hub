@@ -1,0 +1,4 @@
+# Project hooks require native /hooks review and exact-definition trust.
+# Do not set model/provider, credentials, approval bypasses, or user preferences here.
+[features]
+hooks = true

@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
-import { Link } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import {
   AudioWaveform,
   FileText,
@@ -15,17 +8,15 @@ import {
   ScrollText,
   Trash2,
 } from 'lucide-react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 
 import { DocsViewerModal } from '@/src/app-modules/docs/public-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import { RecordingStageRail } from './RecordingStageRail';
 import { useRecordingCollectionWorkflow } from './recording-collection-workflow';
-import {
-  formatBytes,
-  hasFailedStage,
-  titleFor,
-} from './recording-view-model';
+import { formatBytes, hasFailedStage, titleFor } from './recording-view-model';
 
 export interface LinkedRecordingListItem {
   id: string;
@@ -43,7 +34,7 @@ export interface LinkedRecordingListItem {
 
 export interface LinkedRecordingListProps {
   items: LinkedRecordingListItem[];
-  workspaceSlug: string;
+
   emptyText: string;
   loading?: boolean;
   errorText?: string | null;
@@ -54,7 +45,6 @@ export interface LinkedRecordingListProps {
 }
 
 export interface LinkedRecordingsForTargetProps {
-  workspaceSlug: string | null | undefined;
   targetApp: string;
   targetType: string;
   targetId: string;
@@ -79,7 +69,6 @@ function iconButtonClass(tone: 'default' | 'danger' = 'default'): string {
 
 export function LinkedRecordingList({
   items,
-  workspaceSlug,
   emptyText,
   loading = false,
   errorText = null,
@@ -154,7 +143,12 @@ export function LinkedRecordingList({
         {items.map((item) => {
           const actionBusy = actionBusyId === item.id;
           const isBusy = disabled || actionBusy;
-          const detailHref = item.detailHref ?? buildWorkspaceAppPath(workspaceSlug, 'recording', item.id);
+          const detailHref =
+            item.detailHref ??
+            buildAppHref({
+              routeId: 'recording.detail',
+              pathParams: { recordingId: item.id },
+            });
           return (
             <li
               key={item.id}
@@ -279,7 +273,6 @@ export function LinkedRecordingList({
         open={docViewer !== null}
         itemId={docViewer?.docId}
         fallbackTitle={docViewer?.title}
-        workspaceSlug={workspaceSlug}
         onOpenChange={(open) => {
           if (!open) setDocViewer(null);
         }}
@@ -289,7 +282,6 @@ export function LinkedRecordingList({
 }
 
 export function LinkedRecordingsForTarget({
-  workspaceSlug,
   targetApp,
   targetType,
   targetId,
@@ -310,7 +302,6 @@ export function LinkedRecordingsForTarget({
   );
   const recordingCollection = useRecordingCollectionWorkflow({
     token,
-    workspaceSlug,
     scope: recordingScope,
     messages: {
       loadFailed: t('recording.errors.loadFailed'),
@@ -335,21 +326,16 @@ export function LinkedRecordingsForTarget({
           id: recording.id,
           title: titleFor(recording, t('recording.untitled')),
           subtitle: `${formatBytes(recording.file_size)} · ${recording.mime_type}`,
-          detailHref: workspaceSlug
-            ? buildWorkspaceAppPath(workspaceSlug, 'recording', recording.id)
-            : null,
-          rawTranscriptDocId: recording.raw_transcript_doc_id,
-          minutesDocId: recording.minutes_doc_id,
+          detailHref: buildAppHref({
+            routeId: 'recording.detail',
+            pathParams: { recordingId: recording.id },
+          }),
           canRetry: isOwner && hasFailedStage(recording),
           progress: <RecordingStageRail recording={recording} compact />,
         };
       }),
-    [recordings, t, user?.id, workspaceSlug],
+    [recordings, t, user?.id],
   );
-
-  if (!workspaceSlug) {
-    return null;
-  }
 
   return (
     <div className="space-y-2">
@@ -366,7 +352,6 @@ export function LinkedRecordingsForTarget({
       ) : null}
       <LinkedRecordingList
         items={linkedItems}
-        workspaceSlug={workspaceSlug}
         emptyText={emptyText ?? t('recording.linked.empty')}
         loading={loading}
         errorText={errorText}

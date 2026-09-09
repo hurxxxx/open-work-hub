@@ -47,7 +47,7 @@ export function HtmlArtifact({ content, title }: HtmlArtifactProps) {
             // `allow-same-origin` — without it the iframe runs in a
             // unique null origin with no access to parent cookies /
             // localStorage / DOM, so even a hostile `<script>` inside
-            // the artifact can't escalate to the workspace session.
+            // the artifact can't escalate to the authenticated session.
             sandbox="allow-scripts"
             className="h-full w-full rounded-md border border-app-border bg-white"
           />

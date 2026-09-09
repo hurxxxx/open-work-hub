@@ -103,7 +103,9 @@ export function TaskAssigneeStack({
         {visible.map((assignee, index) => (
           <UserOptionAvatar
             key={assignee.id}
-            className={index > 0 ? '-ml-1.5 ring-2 ring-app-bg' : 'ring-2 ring-app-bg'}
+            className={
+              index > 0 ? '-ml-1.5 ring-2 ring-app-bg' : 'ring-2 ring-app-bg'
+            }
             sizeClassName={sizeClassName}
             user={assignee}
           />

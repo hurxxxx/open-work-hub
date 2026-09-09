@@ -1,26 +1,34 @@
+import {
+  getAppRouteChrome,
+  getAppRoutePattern,
+} from '@open-work-hub/contracts/app-routes';
 import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const MeetingView = lazy(() =>
-  import('./views/MeetingView/MeetingView').then((module) => ({ default: module.MeetingView })),
+  import('./views/MeetingView/MeetingView').then((module) => ({
+    default: module.MeetingView,
+  })),
 );
-const MeetingWorkspaceView = lazy(() =>
-  import('./views/MeetingView/MeetingWorkspaceView').then((module) => ({
-    default: module.MeetingWorkspaceView,
+const MeetingDetailView = lazy(() =>
+  import('./views/MeetingView/MeetingDetailView').then((module) => ({
+    default: module.MeetingDetailView,
   })),
 );
 
-export const meetingWorkspaceRoutes: WorkspaceRouteDefinition[] = [
+export const meetingAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'meeting',
-    path: '/w/:workspaceSlug/meeting',
+    chrome: getAppRouteChrome('meeting.root'),
+    path: getAppRoutePattern('meeting.root'),
     element: lazyRoute(createElement(MeetingView)),
   },
   {
     appId: 'meeting',
-    path: '/w/:workspaceSlug/meeting/:meetingId',
-    element: lazyRoute(createElement(MeetingWorkspaceView)),
+    chrome: getAppRouteChrome('meeting.detail'),
+    path: getAppRoutePattern('meeting.detail'),
+    element: lazyRoute(createElement(MeetingDetailView)),
   },
 ];

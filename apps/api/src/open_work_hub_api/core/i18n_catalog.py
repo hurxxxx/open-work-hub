@@ -56,6 +56,38 @@ MESSAGE_PARAM_VALUE_TRANSLATIONS: dict[tuple[str, str], str] = {
 
 
 MESSAGES: dict[str, dict[str, str]] = {
+    "admin.last_active_admin_required": {
+        "ko-KR": "활성 플랫폼 관리자가 최소 한 명 필요합니다.",
+        "en-US": "At least one active platform administrator is required.",
+    },
+    "organization.head_inactive": {
+        "ko-KR": "부서장은 활성 사용자 중에서 지정해야 합니다.",
+        "en-US": "The department head must be an active user.",
+    },
+    "content.company_publication_required": {
+        "ko-KR": "회사 콘텐츠로 게시하면 플랫폼 관리자가 열람할 수 있습니다. 확인 후 게시해 주세요.",
+        "en-US": "Company publication allows platform administrators to read this content. Confirm before publishing.",
+    },
+    "content.company_ownership_irreversible": {
+        "ko-KR": "회사에 게시한 콘텐츠는 연결을 해제해도 개인 소유로 변경할 수 없습니다.",
+        "en-US": "Published company content cannot be converted back to personal ownership by unlinking it.",
+    },
+    "group.not_found": {
+        "ko-KR": "그룹을 찾을 수 없습니다.",
+        "en-US": "Group not found.",
+    },
+    "group.organization_managed": {
+        "ko-KR": "정규 조직 그룹은 조직과 임직원 소속에서 관리합니다.",
+        "en-US": "Organization groups are managed through the organization and employee directory.",
+    },
+    "group.invalid_members": {
+        "ko-KR": "그룹 구성원은 활성 사용자 중에서 지정해야 합니다.",
+        "en-US": "Group members must be active users.",
+    },
+    "app.invalid_audience": {
+        "ko-KR": "사용 허용 대상에 유효하지 않은 사용자나 그룹이 있습니다.",
+        "en-US": "The app audience contains an invalid user or group.",
+    },
     "organization.unit_not_found": {
         "ko-KR": "조직 단위를 찾을 수 없습니다.",
         "en-US": "Organization unit not found.",
@@ -131,6 +163,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     "platform.app_disabled": {
         "ko-KR": "관리자에 의해 비활성화된 앱입니다.",
         "en-US": "This app has been disabled by an administrator.",
+    },
+    "app.not_found": {
+        "ko-KR": "앱을 찾을 수 없습니다.",
+        "en-US": "App not found.",
     },
     "agent_terminal.disabled": {
         "ko-KR": "Codex 터미널이 서버에서 활성화되지 않았습니다.",
@@ -504,37 +540,17 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "external LLM pool이 비활성화되어 있습니다.",
         "en-US": "External LLM pool is disabled.",
     },
+    "auth.password_change_required": {
+        "ko-KR": "임시 비밀번호를 변경한 후 서비스를 이용할 수 있습니다.",
+        "en-US": "Change your temporary password before using the service.",
+    },
     "auth.system_role_required": {
         "ko-KR": "시스템 역할이 필요합니다: {roles}",
         "en-US": "System role required: {roles}",
     },
-    "workspace.access_required": {
-        "ko-KR": "워크스페이스 접근 권한이 필요합니다.",
-        "en-US": "Workspace access required.",
-    },
-    "workspace.access_required_named": {
-        "ko-KR": "워크스페이스 접근 권한이 필요합니다: {workspace}",
-        "en-US": "Workspace access required: {workspace}",
-    },
-    "workspace.context_unavailable": {
-        "ko-KR": "워크스페이스 컨텍스트를 사용할 수 없습니다.",
-        "en-US": "Workspace context is not available.",
-    },
-    "workspace.slug_missing": {
-        "ko-KR": "워크스페이스 slug가 누락되었습니다.",
-        "en-US": "Missing workspace slug.",
-    },
-    "workspace.not_found": {
-        "ko-KR": "워크스페이스를 찾을 수 없습니다.",
-        "en-US": "Workspace not found.",
-    },
-    "workspace.membership_required": {
-        "ko-KR": "워크스페이스 멤버십이 필요합니다: {workspace}",
-        "en-US": "Workspace membership required: {workspace}",
-    },
-    "workspace.app_disabled": {
-        "ko-KR": "이 워크스페이스에서 해당 앱이 비활성화되어 있습니다.",
-        "en-US": "This app is disabled for the workspace.",
+    "app.access_required": {
+        "ko-KR": "현재 해당 앱을 사용할 권한이 없습니다.",
+        "en-US": "You cannot currently use this app.",
     },
     "team.path_parameter_missing": {
         "ko-KR": "팀 path parameter가 누락되었습니다: {team_param}",
@@ -548,9 +564,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "팀 접근 권한이 필요합니다.",
         "en-US": "Team access required.",
     },
-    "admin.invalid_workspace_role": {
-        "ko-KR": "워크스페이스 역할이 올바르지 않습니다.",
-        "en-US": "Invalid workspace role.",
+    "admin.invalid_system_role": {
+        "ko-KR": "회사 역할이 올바르지 않습니다.",
+        "en-US": "Invalid system role.",
     },
     "admin.user_already_exists": {
         "ko-KR": "사용자가 이미 존재합니다.",
@@ -579,26 +595,6 @@ MESSAGES: dict[str, dict[str, str]] = {
     "admin.user_linked_records_delete_denied": {
         "ko-KR": "사용자에 연결된 레코드가 있어 삭제할 수 없습니다.",
         "en-US": "User has linked records and cannot be deleted.",
-    },
-    "admin.workspace_key_exists": {
-        "ko-KR": "워크스페이스 key가 이미 존재합니다.",
-        "en-US": "Workspace key already exists.",
-    },
-    "admin.workspace_archive_before_delete": {
-        "ko-KR": "영구 삭제 전에 워크스페이스를 먼저 보관 처리해야 합니다.",
-        "en-US": "Workspace must be archived before it can be permanently deleted.",
-    },
-    "admin.workspace_contains_content": {
-        "ko-KR": "워크스페이스에 콘텐츠가 남아 있습니다. 스페이스 {space_count}개, 회의 {meeting_count}개, 문서 {doc_count}개를 먼저 비워 주세요.",
-        "en-US": "Workspace still contains content: {space_count} space(s), {meeting_count} meeting(s), {doc_count} document(s). Empty its content first.",
-    },
-    "admin.user_already_workspace_member": {
-        "ko-KR": "사용자가 이미 이 워크스페이스의 멤버입니다.",
-        "en-US": "User is already a member of this workspace.",
-    },
-    "admin.workspace_member_not_found": {
-        "ko-KR": "워크스페이스 멤버를 찾을 수 없습니다.",
-        "en-US": "Workspace member not found.",
     },
     "admin.ai_security_rule_not_found": {
         "ko-KR": "AI 보안 정책 룰을 찾을 수 없습니다.",
@@ -636,14 +632,6 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "자기 자신의 역할은 직접 변경할 수 없습니다. 다른 관리자에게 요청해 주세요.",
         "en-US": "You cannot change your own role. Ask another admin to do it.",
     },
-    "admin.self_workspace_remove_denied": {
-        "ko-KR": "자기 자신은 워크스페이스에서 제거할 수 없습니다.",
-        "en-US": "You cannot remove yourself from the workspace.",
-    },
-    "admin.invalid_workspace_role_filter": {
-        "ko-KR": "워크스페이스 역할 필터가 올바르지 않습니다.",
-        "en-US": "Invalid workspace role filter.",
-    },
     "admin.role_required_for_add": {
         "ko-KR": "추가 작업에는 role이 필요합니다.",
         "en-US": "role is required for add.",
@@ -657,8 +645,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en-US": "Already a member.",
     },
     "admin.team_key_exists": {
-        "ko-KR": "팀 key가 워크스페이스에 이미 존재합니다.",
-        "en-US": "Team key already exists in workspace.",
+        "ko-KR": "팀 key가 회사에 이미 존재합니다.",
+        "en-US": "Team key already exists in company.",
     },
     "admin.platform_admin_required": {
         "ko-KR": "플랫폼 관리자 권한이 필요합니다.",
@@ -768,9 +756,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "모델 {model_id}은(는) 워크로드 {workload_id}에 필요한 기능을 지원하지 않습니다.",
         "en-US": "Model {model_id} lacks capabilities required by workload {workload_id}.",
     },
-    "admin.unknown_workspace_app": {
-        "ko-KR": "알 수 없는 워크스페이스 앱입니다: {app_id}",
-        "en-US": "Unknown workspace app: {app_id}",
+    "admin.unknown_app": {
+        "ko-KR": "알 수 없는 회사 앱입니다: {app_id}",
+        "en-US": "Unknown company app: {app_id}",
     },
     "docs.doc_not_found": {
         "ko-KR": "문서를 찾을 수 없습니다.",
@@ -780,21 +768,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "페이지를 찾을 수 없습니다.",
         "en-US": "Page not found.",
     },
-    "docs.workspace_slug_required": {
-        "ko-KR": "워크스페이스 범위 협업 경로에는 워크스페이스 slug가 필요합니다.",
-        "en-US": "Workspace-scoped collaboration routes require a workspace slug.",
-    },
     "docs.invalid_yjs_state": {
         "ko-KR": "yjs_state payload가 올바르지 않습니다.",
         "en-US": "Invalid yjs_state payload.",
-    },
-    "docs.requests_workspace_context_required": {
-        "ko-KR": "문서 요청에는 워크스페이스 컨텍스트가 필요합니다.",
-        "en-US": "Docs requests require a workspace context.",
-    },
-    "docs.principal_workspace_mismatch": {
-        "ko-KR": "문서 principal의 워크스페이스가 일치하지 않습니다.",
-        "en-US": "Docs principal workspace mismatch.",
     },
     "docs.principal_user_mismatch": {
         "ko-KR": "문서 principal의 사용자가 일치하지 않습니다.",
@@ -868,10 +844,6 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "소유자는 이미 전체 권한을 가지고 있습니다.",
         "en-US": "Owner already has full access.",
     },
-    "docs.shared_users_workspace_required": {
-        "ko-KR": "공유 대상 사용자는 같은 워크스페이스의 멤버여야 합니다.",
-        "en-US": "Shared users must be members of the same workspace.",
-    },
     "docs.shared_link_not_found": {
         "ko-KR": "공유 링크를 찾을 수 없습니다.",
         "en-US": "Shared link not found.",
@@ -929,8 +901,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en-US": "Task list space access required.",
     },
     "files.app_disabled": {
-        "ko-KR": "이 워크스페이스에서는 파일 앱이 비활성화되어 있습니다.",
-        "en-US": "The files app is disabled for this workspace.",
+        "ko-KR": "이 회사에서는 파일 앱이 비활성화되어 있습니다.",
+        "en-US": "The files app is disabled for this company.",
     },
     "files.invalid_visibility": {
         "ko-KR": "지원하지 않는 파일 공개 범위입니다.",
@@ -1004,6 +976,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "파일 링크가 올바르지 않습니다.",
         "en-US": "File link is invalid.",
     },
+    "content.grant_invalid": {
+        "ko-KR": "콘텐츠 링크가 만료되었거나 현재 접근 권한이 없습니다.",
+        "en-US": "The content link expired or you no longer have access.",
+    },
     "files.preview_unsupported_type": {
         "ko-KR": "이 파일 형식은 바로보기를 지원하지 않습니다.",
         "en-US": "This file type cannot be previewed.",
@@ -1032,17 +1008,17 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "키워드 검색을 사용할 수 없습니다: {reason}",
         "en-US": "Keyword search is unavailable: {reason}",
     },
-    "search.workspace_keyword_search_disabled": {
-        "ko-KR": "이 워크스페이스에서 키워드 검색을 사용할 수 없습니다.",
-        "en-US": "Keyword search is not available in this workspace.",
+    "search.keyword_search_disabled": {
+        "ko-KR": "이 회사에서 키워드 검색을 사용할 수 없습니다.",
+        "en-US": "Keyword search is not available in this company.",
     },
     "retrieval.invalid_source": {
         "ko-KR": "지원하지 않는 검색 소스입니다: {source}",
         "en-US": "Unsupported retrieval source: {source}",
     },
     "retrieval.source_unavailable": {
-        "ko-KR": "이 워크스페이스에서 검색 소스를 사용할 수 없습니다: {source}",
-        "en-US": "Retrieval source is unavailable in this workspace: {source}",
+        "ko-KR": "이 회사에서 검색 소스를 사용할 수 없습니다: {source}",
+        "en-US": "Retrieval source is unavailable in this company: {source}",
     },
     "retrieval.source_failed": {
         "ko-KR": "요청한 검색 소스가 일시적으로 응답하지 않습니다: {source}",
@@ -1249,8 +1225,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en-US": "Personal todo not found.",
     },
     "rag.access_denied": {
-        "ko-KR": "워크스페이스 RAG 접근이 거부되었습니다: {reason}",
-        "en-US": "Workspace RAG access denied: {reason}",
+        "ko-KR": "회사 RAG 접근이 거부되었습니다: {reason}",
+        "en-US": "Company RAG access denied: {reason}",
     },
     "rag.unavailable": {
         "ko-KR": "RAG를 사용할 수 없습니다: {reason}",
@@ -1269,8 +1245,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en-US": "RAG query is unavailable: {reason}",
     },
     "rag.access_denied_not_enabled": {
-        "ko-KR": "이 워크스페이스에서 RAG가 활성화되어 있지 않습니다.",
-        "en-US": "Workspace RAG is not enabled for this workspace.",
+        "ko-KR": "이 회사에서 RAG가 활성화되어 있지 않습니다.",
+        "en-US": "Company RAG is not enabled for this company.",
     },
     "rag.reindex_cooldown": {
         "ko-KR": "RAG 재색인을 지금 다시 실행할 수 없습니다: {reason}",
@@ -1278,7 +1254,7 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     "rag.reindex_cooldown_recent": {
         "ko-KR": "RAG 재색인이 최근에 실행되었습니다. 몇 분 후 다시 시도하세요.",
-        "en-US": "Workspace RAG reindex was triggered recently. Wait a few minutes before retrying.",
+        "en-US": "Company RAG reindex was triggered recently. Wait a few minutes before retrying.",
     },
     "rag.metadata_filter_key_length": {
         "ko-KR": "메타데이터 필터 key는 1~64자여야 합니다.",
@@ -1304,17 +1280,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "메타데이터 필터 값은 문자열, 정수, boolean 또는 해당 값의 list여야 합니다.",
         "en-US": "Metadata filter values must be string/int/bool or a list of those values.",
     },
-    "whiteboard.workspace_slug_required": {
-        "ko-KR": "워크스페이스 범위 화이트보드 협업 경로에는 워크스페이스 slug가 필요합니다.",
-        "en-US": "Workspace-scoped whiteboard collaboration routes require a workspace slug.",
-    },
     "whiteboard.invalid_yjs_state": {
         "ko-KR": "yjs_state payload가 올바르지 않습니다.",
         "en-US": "Invalid yjs_state payload.",
-    },
-    "whiteboard.workspace_context_required": {
-        "ko-KR": "화이트보드 요청에는 워크스페이스 컨텍스트가 필요합니다.",
-        "en-US": "Whiteboard requests require a workspace context.",
     },
     "whiteboard.not_found": {
         "ko-KR": "화이트보드를 찾을 수 없습니다.",
@@ -1351,10 +1319,6 @@ MESSAGES: dict[str, dict[str, str]] = {
     "whiteboard.owner_already_has_full_access": {
         "ko-KR": "소유자는 이미 전체 권한을 가지고 있습니다.",
         "en-US": "Owner already has full access.",
-    },
-    "whiteboard.shared_users_workspace_required": {
-        "ko-KR": "공유 대상 사용자는 같은 워크스페이스의 멤버여야 합니다.",
-        "en-US": "Shared users must be members of the same workspace.",
     },
     "whiteboard.room_not_found": {
         "ko-KR": "방을 찾을 수 없습니다.",
@@ -1464,9 +1428,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "AI 도구 discoverability predicate가 등록되어 있지 않습니다: {tool_name}",
         "en-US": "AI tool discoverability predicate is not registered: {tool_name}",
     },
-    "ai.tool_unavailable_in_workspace": {
-        "ko-KR": "이 워크스페이스에서 AI 도구를 사용할 수 없습니다: {tool_name}",
-        "en-US": "AI tool is not available in this workspace: {tool_name}",
+    "ai.tool_unavailable_for_user": {
+        "ko-KR": "이 회사에서 AI 도구를 사용할 수 없습니다: {tool_name}",
+        "en-US": "AI tool is not available in this company: {tool_name}",
     },
     "ai.chat_context_tool_not_allowed": {
         "ko-KR": "AI 어시스턴트에서는 PMS와 문서 컨텍스트 도구만 사용할 수 있습니다.",
@@ -1560,17 +1524,13 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "Runtime run을 찾을 수 없습니다.",
         "en-US": "Runtime run not found.",
     },
-    "ai.workspace_context_missing": {
-        "ko-KR": "요청의 워크스페이스 컨텍스트가 누락되었습니다.",
-        "en-US": "Workspace context is missing on the request.",
-    },
     "ai.mcp_bridge_inspection_disabled": {
         "ko-KR": "AI MCP bridge inspection endpoint가 비활성화되어 있습니다.",
         "en-US": "AI MCP bridge inspection endpoints are disabled.",
     },
-    "ai.unknown_workspace_app": {
-        "ko-KR": "알 수 없는 워크스페이스 앱입니다: {app_id}",
-        "en-US": "Unknown workspace app: {app_id}",
+    "ai.unknown_app": {
+        "ko-KR": "알 수 없는 회사 앱입니다: {app_id}",
+        "en-US": "Unknown company app: {app_id}",
     },
     "ai.tool_command_syntax": {
         "ko-KR": 'AI 도구 명령 형식: /tool <tool_name> {{"arg":"value"}}',
@@ -1628,10 +1588,6 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "요청한 AI 대화 scope가 기존 대화 scope와 일치하지 않습니다.",
         "en-US": "Requested AI conversation scope does not match the existing conversation scope.",
     },
-    "pms.principal_workspace_mismatch": {
-        "ko-KR": "PMS principal의 워크스페이스가 일치하지 않습니다.",
-        "en-US": "PMS principal workspace mismatch.",
-    },
     "pms.principal_user_mismatch": {
         "ko-KR": "PMS principal의 사용자가 일치하지 않습니다.",
         "en-US": "PMS principal user mismatch.",
@@ -1639,10 +1595,6 @@ MESSAGES: dict[str, dict[str, str]] = {
     "pms.write_user_principal_required": {
         "ko-KR": "PMS 쓰기 작업에는 사용자 principal이 필요합니다.",
         "en-US": "PMS write operations require a user principal.",
-    },
-    "pms.workspace_context_unavailable": {
-        "ko-KR": "PMS 워크스페이스 컨텍스트를 사용할 수 없습니다.",
-        "en-US": "PMS workspace context is not available.",
     },
     "pms.update_mutable_field_required": {
         "ko-KR": "PMS 태스크 업데이트에는 변경할 필드를 하나 이상 제공해야 합니다.",
@@ -1876,10 +1828,6 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "알 수 없는 소스 유형입니다: {source_types}",
         "en-US": "Unknown source types: {source_types}",
     },
-    "planner.principal_workspace_mismatch": {
-        "ko-KR": "Planner principal의 워크스페이스가 일치하지 않습니다.",
-        "en-US": "Planner principal workspace mismatch.",
-    },
     "planner.principal_user_mismatch": {
         "ko-KR": "Planner principal의 사용자가 일치하지 않습니다.",
         "en-US": "Planner principal user mismatch.",
@@ -1909,8 +1857,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en-US": "Announcement not found.",
     },
     "announcements.admin_required": {
-        "ko-KR": "공지사항은 워크스페이스 관리자만 작성·수정·삭제할 수 있습니다.",
-        "en-US": "Only workspace admins can create, edit, or delete announcements.",
+        "ko-KR": "공지사항은 플랫폼 관리자만 작성·수정·삭제할 수 있습니다.",
+        "en-US": "Only platform admins can create, edit, or delete announcements.",
     },
     "announcements.company_admin_required": {
         "ko-KR": "사내 주요 공지는 플랫폼 관리자만 작성·수정·삭제할 수 있습니다.",
@@ -1964,10 +1912,6 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "가능 시간 조회 범위는 최대 {days}일을 초과할 수 없습니다.",
         "en-US": "Availability range exceeds maximum {days} days.",
     },
-    "meeting.principal_workspace_mismatch": {
-        "ko-KR": "Meeting principal의 워크스페이스가 일치하지 않습니다.",
-        "en-US": "Meeting principal workspace mismatch.",
-    },
     "meeting.principal_user_mismatch": {
         "ko-KR": "Meeting principal의 사용자가 일치하지 않습니다.",
         "en-US": "Meeting principal user mismatch.",
@@ -1983,10 +1927,6 @@ MESSAGES: dict[str, dict[str, str]] = {
     "meeting.unknown_attendees": {
         "ko-KR": "알 수 없거나 비활성인 참석자 사용자입니다: {user_ids}",
         "en-US": "Unknown or inactive attendee user(s): {user_ids}",
-    },
-    "meeting.attendees_workspace_required": {
-        "ko-KR": "참석자는 회의 워크스페이스에 속해야 합니다: {user_ids}",
-        "en-US": "Attendees must belong to the meeting workspace: {user_ids}",
     },
     "meeting.not_found": {
         "ko-KR": "회의를 찾을 수 없습니다.",
@@ -2004,9 +1944,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "지원하지 않는 범위입니다: {scope}",
         "en-US": "Unsupported scope: {scope}",
     },
-    "meeting.requested_users_workspace_required": {
-        "ko-KR": "요청한 사용자는 회의 워크스페이스에 속해야 합니다: {user_ids}",
-        "en-US": "Requested users must belong to the meeting workspace: {user_ids}",
+    "meeting.requested_users_active_required": {
+        "ko-KR": "요청한 사용자는 활성 회사 사용자여야 합니다: {user_ids}",
+        "en-US": "Requested users must be active company users: {user_ids}",
     },
     "meeting.file_size_limit_exceeded": {
         "ko-KR": "파일 크기가 {limit_mb} MB 제한을 초과했습니다.",
@@ -2195,6 +2135,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     "recording.owner_required": {
         "ko-KR": "녹음 소유자만 이 작업을 수행할 수 있습니다.",
         "en-US": "Only the recording owner can perform this action.",
+    },
+    "recording.result_not_ready": {
+        "ko-KR": "녹음 결과가 아직 게시할 준비가 되지 않았습니다.",
+        "en-US": "The recording result is not ready to publish yet.",
     },
     "recording.target_filter_required": {
         "ko-KR": "첨부 대상 필터에는 app, type, id가 모두 필요합니다.",

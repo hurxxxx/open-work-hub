@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     text,
@@ -19,7 +19,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
-
 
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 
@@ -40,7 +39,7 @@ class RagSyncJob(Base):
             name="ck_rag_sync_jobs_status",
         ),
         CheckConstraint(
-            "scope_kind IN ('workspace','company')",
+            "scope_kind IN ('company')",
             name="ck_rag_sync_jobs_scope_kind",
         ),
         CheckConstraint(
@@ -48,9 +47,8 @@ class RagSyncJob(Base):
             name="ck_rag_sync_jobs_desired_state",
         ),
         Index(
-            "ix_rag_sync_jobs_workspace_lane_status_retry",
+            "ix_rag_sync_jobs_lane_status_retry",
             "scope_kind",
-            "workspace_id",
             "lane",
             "status",
             "next_retry_at",
@@ -62,9 +60,8 @@ class RagSyncJob(Base):
             "status",
         ),
         Index(
-            "ix_rag_sync_jobs_workspace_lane_status_created",
+            "ix_rag_sync_jobs_lane_status_created",
             "scope_kind",
-            "workspace_id",
             "lane",
             "status",
             "created_at",
@@ -76,33 +73,14 @@ class RagSyncJob(Base):
             "updated_at",
         ),
         Index(
-            "uq_rag_sync_jobs_pending_workspace_resource_lane",
-            "scope_kind",
-            "workspace_id",
-            "lane",
-            "resource_type",
-            "resource_id",
-            unique=True,
-            postgresql_where=text(
-                "status = 'pending' AND workspace_id IS NOT NULL AND projection_version IS NULL"
-            ),
-            sqlite_where=text(
-                "status = 'pending' AND workspace_id IS NOT NULL AND projection_version IS NULL"
-            ),
-        ),
-        Index(
             "uq_rag_sync_jobs_pending_company_resource_lane",
             "scope_kind",
             "lane",
             "resource_type",
             "resource_id",
             unique=True,
-            postgresql_where=text(
-                "status = 'pending' AND workspace_id IS NULL AND projection_version IS NULL"
-            ),
-            sqlite_where=text(
-                "status = 'pending' AND workspace_id IS NULL AND projection_version IS NULL"
-            ),
+            postgresql_where=text("status = 'pending' AND projection_version IS NULL"),
+            sqlite_where=text("status = 'pending' AND projection_version IS NULL"),
         ),
         Index(
             "uq_rag_sync_jobs_pending_versioned_resource_lane",
@@ -119,13 +97,8 @@ class RagSyncJob(Base):
     scope_kind: Mapped[str] = mapped_column(
         String(16),
         nullable=False,
-        default="workspace",
-        server_default=text("'workspace'"),
-        index=True,
-    )
-    workspace_id: Mapped[str | None] = mapped_column(
-        ForeignKey("workspaces.id"),
-        nullable=True,
+        default="company",
+        server_default=text("'company'"),
         index=True,
     )
     retrieval_partition_id: Mapped[str | None] = mapped_column(
@@ -189,8 +162,7 @@ class RagVisibilityRecomputeJob(Base):
             name="ck_rag_visibility_recompute_jobs_status",
         ),
         Index(
-            "ix_rag_visibility_recompute_jobs_workspace_status_retry",
-            "workspace_id",
+            "ix_rag_visibility_recompute_jobs_status_retry",
             "status",
             "next_retry_at",
         ),
@@ -207,7 +179,6 @@ class RagVisibilityRecomputeJob(Base):
         ),
         Index(
             "uq_rag_visibility_recompute_jobs_pending_scope",
-            "workspace_id",
             "scope_type",
             "scope_id",
             unique=True,
@@ -217,11 +188,6 @@ class RagVisibilityRecomputeJob(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
-        nullable=False,
-        index=True,
-    )
     scope_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     scope_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     trace_context: Mapped[dict | None] = mapped_column(JSONB_COMPAT, nullable=True)

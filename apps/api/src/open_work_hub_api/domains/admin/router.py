@@ -1,51 +1,106 @@
 from __future__ import annotations
 
-from collections import Counter
-from collections.abc import Iterable
-from dataclasses import asdict, dataclass
-from datetime import UTC, date, datetime, time, timedelta
 import re
 import secrets
+from collections import Counter
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Literal, get_args
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
-from sqlalchemy import delete as sa_delete
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from open_work_hub_api.core.app_registry import AppCatalogItem
 from open_work_hub_api.core.db import get_db_session
-from open_work_hub_api.core.llm import get_allowed_external_llm_providers
 from open_work_hub_api.core.i18n import (
     LocalizedApiMessage,
     localized_http_exception,
     select_locale,
     translate_message,
 )
+from open_work_hub_api.core.llm import get_allowed_external_llm_providers
 from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.admin.people_projection import admin_user_list_projection
+from open_work_hub_api.domains.ai.boundary_safety import (
+    evaluate_external_payload_safety,
+    known_content_origins,
+    normalize_content_origin,
+    normalize_external_safety_values,
+)
+from open_work_hub_api.domains.ai.masking import evaluate_external_payload_masking
+from open_work_hub_api.domains.ai.models import (
+    AiSecurityDetectedValue,
+    AiSecurityExternalTransferException,
+    AiSecurityPolicyRule,
+)
+from open_work_hub_api.domains.ai.privacy_filter import check_privacy_filter_health
+from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
+from open_work_hub_api.domains.ai.runtime.external_egress import (
+    ExternalCapability,
+    allowed_external_providers,
+)
+from open_work_hub_api.domains.ai.runtime.retention import scrub_completed_runtime_records
+from open_work_hub_api.domains.ai.security_policy import (
+    AI_SECURITY_ENFORCEMENT_DISABLED_REASON,
+    AI_SECURITY_LLM_CAPABILITY,
+    CUSTOM_BLOCK_ENTITY_TYPE,
+    DATA_PROTECTION_SETTINGS_ID,
+    EXCEPTION_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS,
+    EXTERNAL_TRANSFER_EXCEPTION_REASON,
+    HARD_EXTERNAL_TRANSFER_BLOCKERS,
+    MASK_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS,
+    AiSecurityDataProtectionAction,
+    AiSecurityExternalAppAction,
+    AiSecurityExternalTransferBlocker,
+    AiSecurityExternalTransferExceptionDecision,
+    AiSecurityPolicyContext,
+    AiSecurityPolicyEffect,
+    ai_security_data_protection_blocker_actions,
+    ai_security_enforcement_enabled,
+    ai_security_external_app_action_for_blockers,
+    ai_security_external_app_actions,
+    evaluate_ai_security_policy,
+    external_transfer_blockers_from_safety,
+    get_ai_security_data_protection_settings,
+    get_or_create_ai_security_data_protection_settings,
+    hard_external_transfer_blockers,
+    normalize_ai_security_blocker_actions,
+    normalize_ai_security_effect,
+    normalize_ai_security_external_app_actions,
+    normalize_ai_security_task_kinds,
+    normalize_custom_block_terms,
+    normalize_external_transfer_blockers,
+    resolve_ai_security_external_transfer_exception,
+)
 from open_work_hub_api.domains.auth.access import (
-    ensure_platform_app_visibility,
-    ensure_workspace_app_entitlements,
-    ensure_workspace_default_pms_space,
     is_platform_admin_user,
-    is_valid_workspace_role,
     load_user_graph,
-    load_active_workspace_by_id,
     normalize_locale,
     normalize_time_zone,
-    normalize_workspace_role,
-    replace_user_system_roles,
     record_audit_log,
-    resolve_team_role,
-    resolve_workspace_role,
+    replace_user_system_roles,
     serialize_auth_user,
-    slugify,
-    team_role_allows,
-    workspace_role_allows,
+)
+from open_work_hub_api.domains.auth.app_availability import (
+    load_app_availability_snapshot,
+)
+from open_work_hub_api.domains.auth.app_bar_categories import (
+    app_bar_category_app_ids_from_catalog,
+)
+from open_work_hub_api.domains.auth.app_catalog import (
+    get_app_catalog_item,
+    iter_app_catalog,
+)
+from open_work_hub_api.domains.auth.app_features import (
+    is_catalog_feature_enabled,
 )
 from open_work_hub_api.domains.auth.date_format_preferences import (
     default_date_format_value,
@@ -60,16 +115,15 @@ from open_work_hub_api.domains.auth.dependencies import (
 from open_work_hub_api.domains.auth.models import (
     AuditLog,
     AuthSession,
+    CompanyAppControl,
     PlatformAppBarCategory,
     PlatformAppBarCategoryApp,
-    PlatformAppVisibility,
-    Team,
-    TeamMember,
     User,
     UserSystemRole,
-    Workspace,
-    WorkspaceAppEntitlement,
-    WorkspaceUserBinding,
+)
+from open_work_hub_api.domains.auth.realtime import (
+    publish_app_availability_access_changed,
+    publish_principal_access_changed,
 )
 from open_work_hub_api.domains.auth.security import (
     derive_login_id_from_email,
@@ -87,93 +141,11 @@ from open_work_hub_api.domains.organization.service import (
     descendant_organization_unit_ids,
     ensure_active_organization_unit,
 )
-from open_work_hub_api.domains.auth.workspace_apps import (
-    get_workspace_app_catalog_item,
-    iter_workspace_app_catalog,
-)
-from open_work_hub_api.domains.auth.app_bar_categories import (
-    app_bar_category_app_ids_from_catalog,
-    is_app_bar_category_app,
-    is_platform_visibility_app,
-)
-from open_work_hub_api.domains.auth.workspace_app_features import (
-    is_workspace_catalog_feature_enabled,
-)
-from open_work_hub_api.core.workspace_app_registry import WorkspaceAppCatalogItem
-from open_work_hub_api.domains.ai.runtime.retention import scrub_completed_runtime_records
-from open_work_hub_api.domains.ai.boundary_safety import (
-    evaluate_external_payload_safety,
-    known_content_origins,
-    normalize_content_origin,
-    normalize_external_safety_values,
-)
-from open_work_hub_api.domains.ai.privacy_filter import check_privacy_filter_health
-from open_work_hub_api.domains.ai.masking import evaluate_external_payload_masking
-from open_work_hub_api.domains.ai.models import (
-    AiSecurityDetectedValue,
-    AiSecurityExternalTransferException,
-    AiSecurityPolicyRule,
-)
-from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
-from open_work_hub_api.domains.ai.runtime.external_egress import (
-    ExternalCapability,
-    allowed_external_providers,
-)
-from open_work_hub_api.domains.ai.security_policy import (
-    AI_SECURITY_ENFORCEMENT_DISABLED_REASON,
-    AI_SECURITY_LLM_CAPABILITY,
-    CUSTOM_BLOCK_ENTITY_TYPE,
-    DATA_PROTECTION_SETTINGS_ID,
-    EXCEPTION_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS,
-    EXTERNAL_TRANSFER_EXCEPTION_REASON,
-    HARD_EXTERNAL_TRANSFER_BLOCKERS,
-    MASK_ELIGIBLE_EXTERNAL_TRANSFER_BLOCKERS,
-    AiSecurityDataProtectionAction,
-    AiSecurityExternalAppAction,
-    AiSecurityExternalTransferExceptionDecision,
-    AiSecurityExternalTransferBlocker,
-    AiSecurityPolicyContext,
-    AiSecurityPolicyEffect,
-    ai_security_enforcement_enabled,
-    ai_security_data_protection_blocker_actions,
-    ai_security_external_app_action_for_blockers,
-    ai_security_external_app_actions,
-    evaluate_ai_security_policy,
-    external_transfer_blockers_from_safety,
-    get_ai_security_data_protection_settings,
-    get_or_create_ai_security_data_protection_settings,
-    hard_external_transfer_blockers,
-    normalize_ai_security_effect,
-    normalize_ai_security_blocker_actions,
-    normalize_ai_security_external_app_actions,
-    normalize_ai_security_task_kinds,
-    normalize_custom_block_terms,
-    normalize_external_transfer_blockers,
-    resolve_ai_security_external_transfer_exception,
-)
-from open_work_hub_api.domains.admin.people_projection import admin_user_list_projection
-from open_work_hub_api.domains.admin.workspace_members import (
-    add_workspace_member_binding,
-    apply_workspace_member_bulk_entry,
-    list_workspace_member_directory,
-    remove_workspace_member_binding,
-    replace_workspace_member_bindings,
-    serialize_workspace_member_binding,
-    update_workspace_member_binding_role,
-)
-from open_work_hub_api.domains.admin.workspace_projection import admin_workspace_item_projection
+from open_work_hub_api.domains.pms.space_models import Team, TeamMember
 from open_work_hub_api.domains.web_search.service import iter_web_search_external_app_profiles
 
 AdminAppVisibilityScope = Literal["core"]
 APP_BAR_ICON_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-
-
-def _invalid_workspace_role_error() -> PydanticCustomError:
-    return PydanticCustomError(
-        "admin.invalid_workspace_role",
-        "Invalid workspace role.",
-        {},
-    )
 
 
 def _valid_login_id_required_error() -> PydanticCustomError:
@@ -184,147 +156,35 @@ def _valid_login_id_required_error() -> PydanticCustomError:
     )
 
 
-class WorkspaceItemResponse(BaseModel):
-    id: str
-    key: str
-    name: str
-    description: str
-    active: bool
-    team_count: int
-    member_count: int = 0
-    meeting_count: int = 0
-    doc_count: int = 0
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-
-class WorkspaceBindingItemResponse(BaseModel):
-    subject_id: str
-    subject_type: Literal["user"]
-    subject_label: str
-    subject_secondary: str | None = None
-    role: str
-
-
-class WorkspaceMemberCandidateResponse(BaseModel):
-    id: str
-    email: str
-    full_name: str
-    display_name: str
-    status: str
-
-
-class WorkspaceMemberItemResponse(BaseModel):
-    subject_id: str
-    subject_type: Literal["user"]
-    subject_label: str
-    subject_secondary: str | None = None
-    role: str
-    user_status: str | None = None
-    last_login_at: datetime | None = None
-    created_at: datetime | None = None
-
-
-class WorkspaceMemberRoleCounts(BaseModel):
-    admin: int = 0
-    member: int = 0
-
-
 class AiRuntimeRetentionScrubResponse(BaseModel):
     scrubbed_run_count: int
     older_than_days: int
 
 
-class WorkspaceMembersResponse(BaseModel):
-    items: list[WorkspaceMemberItemResponse]
-    total: int
-    page: int
-    page_size: int
-    role_counts: WorkspaceMemberRoleCounts
-    user_count: int
-    pending_count: int
-
-
-class TeamItemResponse(BaseModel):
-    id: str
-    workspace_id: str
-    workspace_key: str
-    key: str
-    name: str
-    description: str
-    active: bool
-    member_count: int
-    current_user_role: str | None = None
-
-
-class PlatformAppVisibleWorkspaceResponse(BaseModel):
-    id: str
-    key: str
-    name: str
-
-
-class PlatformAppVisibilityItemResponse(BaseModel):
+class CompanyAppControlItemResponse(BaseModel):
     app_id: str
     title: str
     route_base: str
     icon_key: str
-    availability_scope: Literal["platform", "workspace"] = "workspace"
-    launcher_personal_tools: bool = False
-    kind: str = "mode"
-    visible: bool
-    runtime_enabled: bool
-    visible_workspace_count: int = 0
-    visible_workspaces: list[PlatformAppVisibleWorkspaceResponse] = Field(
-        default_factory=list,
-    )
-    updated_at: datetime | None = None
-
-
-class PlatformAppVisibilityResponse(BaseModel):
-    items: list[PlatformAppVisibilityItemResponse]
-
-
-class WorkspaceAppVisibilityItemResponse(BaseModel):
-    app_id: str
-    title: str
-    route_base: str
-    icon_key: str
-    availability_scope: Literal["workspace"] = "workspace"
-    kind: str = "mode"
-    platform_visible: bool
-    visibility_override: bool | None = None
-    effective_visible: bool
+    execution_context_kind: Literal["personal", "company"]
+    enabled: bool
     runtime_enabled: bool
     updated_at: datetime | None = None
 
 
-class WorkspaceAppVisibilityResponse(BaseModel):
-    workspace_id: str
-    workspace_key: str
-    workspace_name: str
-    items: list[WorkspaceAppVisibilityItemResponse]
+class CompanyAppControlsResponse(BaseModel):
+    items: list[CompanyAppControlItemResponse]
 
 
-class PlatformAppVisibilityUpdateItem(BaseModel):
+class CompanyAppControlUpdateItem(BaseModel):
     app_id: str = Field(..., min_length=1, max_length=64)
-    visible: bool
+    enabled: bool
 
 
-class PlatformAppVisibilityUpdateRequest(BaseModel):
+class CompanyAppControlsUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    items: list[PlatformAppVisibilityUpdateItem] = Field(..., min_length=1, max_length=100)
-
-
-class WorkspaceAppVisibilityUpdateItem(BaseModel):
-    app_id: str = Field(..., min_length=1, max_length=64)
-    visibility_override: bool | None = None
-
-
-class WorkspaceAppVisibilityUpdateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    items: list[WorkspaceAppVisibilityUpdateItem] = Field(..., min_length=1, max_length=100)
+    items: list[CompanyAppControlUpdateItem] = Field(..., min_length=1, max_length=100)
 
 
 class AdminAppBarCategoryAppItemResponse(BaseModel):
@@ -402,227 +262,37 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def _serialize_workspace(db: Session, workspace: Workspace) -> WorkspaceItemResponse:
-    return WorkspaceItemResponse.model_validate(admin_workspace_item_projection(db, workspace))
-
-
-def _platform_app_visibility_rows_by_id(db: Session) -> dict[str, PlatformAppVisibility]:
+def _company_app_control_rows_by_id(db: Session) -> dict[str, CompanyAppControl]:
     return {
         item.app_id: item
         for item in db.scalars(
-            select(PlatformAppVisibility).order_by(PlatformAppVisibility.app_id.asc())
+            select(CompanyAppControl).order_by(CompanyAppControl.app_id.asc())
         ).all()
     }
 
 
-def _catalog_items_for_platform_admin_app_scope(scope: AdminAppVisibilityScope):
-    del scope
-    catalog_items = tuple(iter_workspace_app_catalog())
-    return tuple(app for app in catalog_items if is_platform_visibility_app(app))
-
-
-def _catalog_items_for_workspace_admin_app_scope(scope: AdminAppVisibilityScope):
-    del scope
-    catalog_items = tuple(iter_workspace_app_catalog())
-    return tuple(
-        app
-        for app in catalog_items
-        if is_app_bar_category_app(app) and app.availability_scope == "workspace"
-    )
-
-
-def _serialize_platform_app_visibility(
-    db: Session,
-    *,
-    scope: AdminAppVisibilityScope = "core",
-) -> PlatformAppVisibilityResponse:
-    rows_by_app_id = _platform_app_visibility_rows_by_id(db)
-    catalog_items = tuple(iter_workspace_app_catalog())
-    catalog_by_app_id = {app.app_id: app for app in catalog_items}
-    active_workspaces = list(
-        db.scalars(
-            select(Workspace).where(Workspace.active.is_(True)).order_by(Workspace.name.asc())
-        ).all()
-    )
-    active_workspace_ids = [workspace.id for workspace in active_workspaces]
-    workspace_entitlements_by_id: dict[tuple[str, str], WorkspaceAppEntitlement] = {}
-    if active_workspace_ids:
-        workspace_entitlements_by_id = {
-            (item.workspace_id, item.app_id): item
-            for item in db.scalars(
-                select(WorkspaceAppEntitlement).where(
-                    WorkspaceAppEntitlement.workspace_id.in_(active_workspace_ids)
-                )
-            ).all()
-        }
-
-    def visible_for(app_id: str) -> bool:
-        app = catalog_by_app_id[app_id]
-        row = rows_by_app_id.get(app_id)
-        return app.visible_by_default if row is None else bool(row.visible)
-
-    runtime_cache: dict[str, bool] = {}
-
-    def runtime_enabled_for(app_id: str) -> bool:
-        if app_id in runtime_cache:
-            return runtime_cache[app_id]
-        app = catalog_by_app_id[app_id]
-        runtime_enabled = visible_for(app_id) and _catalog_runtime_feature_enabled(app)
-        runtime_cache[app_id] = bool(runtime_enabled)
-        return runtime_cache[app_id]
-
-    workspace_effective_cache: dict[tuple[str, str], bool] = {}
-
-    def workspace_effective_visible_for(workspace_id: str, app_id: str) -> bool:
-        cache_key = (workspace_id, app_id)
-        if cache_key in workspace_effective_cache:
-            return workspace_effective_cache[cache_key]
-        app = catalog_by_app_id[app_id]
-        entitlement = workspace_entitlements_by_id.get(cache_key)
-        visibility_override = entitlement.visibility_override if entitlement is not None else None
-        effective_visible = (
-            bool(visibility_override)
-            if visibility_override is not None
-            else app.enabled_by_default and visible_for(app_id)
-        )
-        workspace_effective_cache[cache_key] = bool(effective_visible)
-        return workspace_effective_cache[cache_key]
-
-    workspace_runtime_cache: dict[tuple[str, str], bool] = {}
-
-    def workspace_runtime_enabled_for(workspace_id: str, app_id: str) -> bool:
-        cache_key = (workspace_id, app_id)
-        if cache_key in workspace_runtime_cache:
-            return workspace_runtime_cache[cache_key]
-        app = catalog_by_app_id[app_id]
-        runtime_enabled = workspace_effective_visible_for(
-            workspace_id,
-            app_id,
-        ) and _catalog_runtime_feature_enabled(app)
-        workspace_runtime_cache[cache_key] = bool(runtime_enabled)
-        return workspace_runtime_cache[cache_key]
-
-    def visible_workspaces_for(app_id: str) -> list[PlatformAppVisibleWorkspaceResponse]:
-        if catalog_by_app_id[app_id].availability_scope == "platform":
-            return []
-        return [
-            PlatformAppVisibleWorkspaceResponse(
-                id=workspace.id,
-                key=workspace.key,
-                name=workspace.name,
-            )
-            for workspace in active_workspaces
-            if workspace_runtime_enabled_for(workspace.id, app_id)
-        ]
-
-    def response_item_for(app: WorkspaceAppCatalogItem) -> PlatformAppVisibilityItemResponse:
-        visible_workspaces = visible_workspaces_for(app.app_id)
-        return PlatformAppVisibilityItemResponse(
-            app_id=app.app_id,
-            title=app.title,
-            route_base=app.route_base,
-            icon_key=app.icon_key,
-            availability_scope=app.availability_scope,
-            launcher_personal_tools=app.launcher_personal_tools,
-            kind="launcher_app" if is_platform_visibility_app(app) else "mode",
-            visible=visible_for(app.app_id),
-            runtime_enabled=runtime_enabled_for(app.app_id),
-            visible_workspace_count=len(visible_workspaces),
-            visible_workspaces=visible_workspaces,
-            updated_at=rows_by_app_id.get(app.app_id).updated_at
-            if app.app_id in rows_by_app_id
-            else None,
-        )
-
-    return PlatformAppVisibilityResponse(
-        items=[response_item_for(app) for app in _catalog_items_for_platform_admin_app_scope(scope)]
-    )
-
-
-def _workspace_app_entitlement_rows_by_id(
-    db: Session,
-    workspace_id: str,
-) -> dict[str, WorkspaceAppEntitlement]:
-    return {
-        item.app_id: item
-        for item in db.scalars(
-            select(WorkspaceAppEntitlement)
-            .where(WorkspaceAppEntitlement.workspace_id == workspace_id)
-            .order_by(WorkspaceAppEntitlement.app_id.asc())
-        ).all()
-    }
-
-
-def _serialize_workspace_app_visibility(
-    db: Session,
-    workspace: Workspace,
-    *,
-    scope: AdminAppVisibilityScope = "core",
-) -> WorkspaceAppVisibilityResponse:
-    platform_rows_by_app_id = _platform_app_visibility_rows_by_id(db)
-    entitlement_rows_by_app_id = _workspace_app_entitlement_rows_by_id(db, workspace.id)
-    items: list[WorkspaceAppVisibilityItemResponse] = []
-    all_catalog_items = tuple(iter_workspace_app_catalog())
-    scoped_catalog_items = _catalog_items_for_workspace_admin_app_scope(scope)
-    catalog_by_app_id = {app.app_id: app for app in all_catalog_items}
-
-    def platform_visible_for(app_id: str) -> bool:
-        app = catalog_by_app_id[app_id]
-        platform_row = platform_rows_by_app_id.get(app_id)
-        return app.visible_by_default if platform_row is None else bool(platform_row.visible)
-
-    effective_cache: dict[str, bool] = {}
-
-    def effective_visible_for(app_id: str) -> bool:
-        if app_id in effective_cache:
-            return effective_cache[app_id]
-        app = catalog_by_app_id[app_id]
-        entitlement = entitlement_rows_by_app_id.get(app_id)
-        visibility_override = entitlement.visibility_override if entitlement is not None else None
-        effective_visible = (
-            bool(visibility_override)
-            if visibility_override is not None
-            else app.enabled_by_default and platform_visible_for(app_id)
-        )
-        effective_cache[app_id] = bool(effective_visible)
-        return effective_cache[app_id]
-
-    runtime_cache: dict[str, bool] = {}
-
-    def runtime_enabled_for(app_id: str) -> bool:
-        if app_id in runtime_cache:
-            return runtime_cache[app_id]
-        app = catalog_by_app_id[app_id]
-        runtime_enabled = effective_visible_for(app_id) and _catalog_runtime_feature_enabled(app)
-        runtime_cache[app_id] = bool(runtime_enabled)
-        return runtime_cache[app_id]
-
-    for app in scoped_catalog_items:
-        entitlement = entitlement_rows_by_app_id.get(app.app_id)
-        platform_visible = platform_visible_for(app.app_id)
-        visibility_override = entitlement.visibility_override if entitlement is not None else None
-        effective_visible = effective_visible_for(app.app_id)
-        items.append(
-            WorkspaceAppVisibilityItemResponse(
+def _serialize_company_app_controls(db: Session) -> CompanyAppControlsResponse:
+    rows_by_app_id = _company_app_control_rows_by_id(db)
+    catalog_items = tuple(iter_app_catalog())
+    snapshot = load_app_availability_snapshot(db)
+    return CompanyAppControlsResponse(
+        items=[
+            CompanyAppControlItemResponse(
                 app_id=app.app_id,
                 title=app.title,
                 route_base=app.route_base,
                 icon_key=app.icon_key,
-                availability_scope="workspace",
-                kind="launcher_app" if is_app_bar_category_app(app) else "mode",
-                platform_visible=platform_visible,
-                visibility_override=visibility_override,
-                effective_visible=effective_visible,
-                runtime_enabled=runtime_enabled_for(app.app_id),
-                updated_at=entitlement.updated_at if entitlement is not None else None,
+                execution_context_kind=app.execution_context_kind,
+                enabled=bool(rows_by_app_id.get(app.app_id).enabled)
+                if app.app_id in rows_by_app_id
+                else False,
+                runtime_enabled=snapshot.company_enabled(app),
+                updated_at=rows_by_app_id.get(app.app_id).updated_at
+                if app.app_id in rows_by_app_id
+                else None,
             )
-        )
-
-    return WorkspaceAppVisibilityResponse(
-        workspace_id=workspace.id,
-        workspace_key=workspace.key,
-        workspace_name=workspace.name,
-        items=items,
+            for app in catalog_items
+        ]
     )
 
 
@@ -650,8 +320,8 @@ def _app_bar_category_base_rows(db: Session) -> list[PlatformAppBarCategory]:
     )
 
 
-def _app_bar_category_target_catalog_items() -> dict[str, WorkspaceAppCatalogItem]:
-    catalog_items = tuple(iter_workspace_app_catalog())
+def _app_bar_category_target_catalog_items() -> dict[str, AppCatalogItem]:
+    catalog_items = tuple(iter_app_catalog())
     target_app_ids = app_bar_category_app_ids_from_catalog(catalog_items)
     return {app.app_id: app for app in catalog_items if app.app_id in target_app_ids}
 
@@ -675,7 +345,7 @@ def _valid_app_bar_icon_keys() -> set[str]:
         "star",
         "users",
         "wrench",
-        *(app.icon_key for app in iter_workspace_app_catalog()),
+        *(app.icon_key for app in iter_app_catalog()),
     }
 
 
@@ -689,7 +359,7 @@ def _ensure_valid_app_bar_icon_key(icon_key: str) -> None:
 
 
 def _serialize_app_bar_category_item(
-    app: WorkspaceAppCatalogItem,
+    app: AppCatalogItem,
 ) -> AdminAppBarCategoryAppItemResponse:
     return AdminAppBarCategoryAppItemResponse(
         app_id=app.app_id,
@@ -763,8 +433,8 @@ def _app_bar_category_by_id(db: Session, category_id: str) -> PlatformAppBarCate
     return row
 
 
-def _catalog_runtime_feature_enabled(app: WorkspaceAppCatalogItem) -> bool:
-    return app.feature_flag is None or is_workspace_catalog_feature_enabled(
+def _catalog_runtime_feature_enabled(app: AppCatalogItem) -> bool:
+    return app.feature_flag is None or is_catalog_feature_enabled(
         get_settings(),
         app.feature_flag,
     )
@@ -773,91 +443,6 @@ def _catalog_runtime_feature_enabled(app: WorkspaceAppCatalogItem) -> bool:
 def _ensure_platform_admin(context: AuthContext, db: Session) -> None:
     if not is_platform_admin_user(context.user, db):
         raise localized_http_exception(status_code=403, code="admin.platform_admin_required")
-
-
-def _get_active_team(
-    db: Session,
-    team_id: str,
-    *,
-    include_workspace: bool = False,
-    include_members: bool = False,
-) -> Team | None:
-    query = select(Team).where(
-        Team.id == team_id,
-        Team.trashed_at.is_(None),
-    )
-    if include_workspace:
-        query = query.options(joinedload(Team.workspace))
-    if include_members:
-        query = query.options(selectinload(Team.members))
-    return db.scalar(query)
-
-
-def _ensure_workspace_scope(
-    db: Session,
-    user: User,
-    workspace_id: str,
-    *,
-    min_role: str = "member",
-) -> Workspace:
-    workspace = load_active_workspace_by_id(db, workspace_id)
-    if workspace is None:
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
-    if is_platform_admin_user(user, db):
-        return workspace
-
-    role = resolve_workspace_role(db, user, workspace.id)
-    if not workspace_role_allows(role, min_role):
-        raise localized_http_exception(status_code=403, code="workspace.access_required")
-    return workspace
-
-
-def _ensure_admin_workspace_scope(
-    db: Session,
-    user: User,
-    workspace_id: str,
-) -> Workspace:
-    """Like `_ensure_workspace_scope` but allows archived (active=false) workspaces.
-
-    Used by admin endpoints that need to manage soft-deleted workspaces.
-    Only platform admins or workspace admin role holders pass.
-    """
-    workspace = db.scalar(
-        select(Workspace).options(selectinload(Workspace.teams)).where(Workspace.id == workspace_id)
-    )
-    if workspace is None:
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
-    if is_platform_admin_user(user, db):
-        return workspace
-    role = resolve_workspace_role(db, user, workspace.id)
-    if not workspace_role_allows(role, "admin"):
-        raise localized_http_exception(status_code=403, code="workspace.access_required")
-    return workspace
-
-
-def _ensure_team_scope(
-    db: Session,
-    user: User,
-    team_id: str,
-    *,
-    min_role: str = "member",
-    include_workspace: bool = False,
-    include_members: bool = False,
-) -> Team:
-    team = _get_active_team(
-        db,
-        team_id,
-        include_workspace=include_workspace,
-        include_members=include_members,
-    )
-    if team is None or not team.active or not team.workspace.active:
-        raise localized_http_exception(status_code=404, code="team.not_found")
-    if is_platform_admin_user(user, db):
-        return team
-    role = resolve_team_role(db, user, team)
-    if not team_role_allows(role, min_role):
-        raise localized_http_exception(status_code=403, code="team.access_required")
-    return team
 
 
 class AuditLogItemResponse(BaseModel):
@@ -1119,8 +704,6 @@ class AiSecurityPolicyRuleResponse(BaseModel):
     enabled: bool
     user_id: str | None = None
     user_name: str | None = None
-    workspace_id: str | None = None
-    workspace_name: str | None = None
     app_id: str | None = None
     task_kind: str | None = None
     task_kinds: list[str] = Field(default_factory=list)
@@ -1139,7 +722,6 @@ class AiSecurityPolicyRuleUpsertRequest(BaseModel):
     description: str = Field(default="", max_length=1000)
     enabled: bool = True
     user_id: str | None = Field(default=None, max_length=36)
-    workspace_id: str | None = Field(default=None, max_length=36)
     app_id: str | None = Field(default=None, max_length=64)
     task_kind: str | None = Field(default=None, max_length=128)
     task_kinds: list[str] = Field(default_factory=list, max_length=50)
@@ -1151,7 +733,6 @@ class AiSecurityPolicyRuleUpsertRequest(BaseModel):
     @field_validator(
         "name",
         "user_id",
-        "workspace_id",
         "app_id",
         "task_kind",
         "capability",
@@ -1218,8 +799,6 @@ class AiSecurityExternalTransferExceptionResponse(BaseModel):
     enabled: bool
     user_id: str | None = None
     user_name: str | None = None
-    workspace_id: str | None = None
-    workspace_name: str | None = None
     app_id: str | None = None
     task_kind: str | None = None
     task_kinds: list[str] = Field(default_factory=list)
@@ -1239,7 +818,6 @@ class AiSecurityExternalTransferExceptionUpsertRequest(BaseModel):
     description: str = Field(default="", max_length=1000)
     enabled: bool = True
     user_id: str | None = Field(default=None, max_length=36)
-    workspace_id: str | None = Field(default=None, max_length=36)
     app_id: str | None = Field(default=None, max_length=64)
     task_kind: str | None = Field(default=None, max_length=128)
     task_kinds: list[str] = Field(default_factory=list, max_length=50)
@@ -1255,7 +833,6 @@ class AiSecurityExternalTransferExceptionUpsertRequest(BaseModel):
     @field_validator(
         "name",
         "user_id",
-        "workspace_id",
         "app_id",
         "task_kind",
         "capability",
@@ -1468,8 +1045,6 @@ class AiSecurityMonitoringResponse(BaseModel):
 
 class AiSecuritySimulationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-    workspace_id: str | None = Field(default=None, max_length=36)
     actor_user_id: str | None = Field(default=None, max_length=36)
     app_id: str | None = Field(default=None, max_length=64)
     task_kind: str | None = Field(default=None, max_length=128)
@@ -1530,8 +1105,9 @@ class AdminUserItemResponse(BaseModel):
     time_zone: str
     date_format: str
     system_roles: list[str]
-    workspaces: list[dict[str, object]]
-    workspace_roles: list[dict[str, str]]
+    group_ids: list[str]
+    managed_organization_unit_ids: list[str]
+    is_department_head: bool
     must_change_password: bool
     last_login_at: datetime | None
     created_at: datetime
@@ -1548,97 +1124,6 @@ class AdminUsersResponse(BaseModel):
 class CreatedUserResponse(BaseModel):
     user: AdminUserItemResponse
     temporary_password: str
-
-
-class WorkspaceUpsertRequest(BaseModel):
-    key: str | None = Field(default=None, max_length=48)
-    name: str = Field(..., min_length=2, max_length=120)
-    description: str = Field(default="", max_length=1000)
-    active: bool = True
-
-
-class TeamUpsertRequest(BaseModel):
-    key: str | None = Field(default=None, max_length=48)
-    name: str = Field(..., min_length=2, max_length=120)
-    description: str = Field(default="", max_length=1000)
-    active: bool = True
-
-
-class WorkspaceBindingInput(BaseModel):
-    subject_id: str
-    role: str = Field(default="member", max_length=24)
-
-    @field_validator("role")
-    @classmethod
-    def validate_role(cls, value: str) -> str:
-        if not is_valid_workspace_role(value):
-            raise _invalid_workspace_role_error()
-        normalized = normalize_workspace_role(value)
-        assert normalized is not None
-        return normalized
-
-
-class WorkspaceBindingsUpdateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    users: list[WorkspaceBindingInput] = Field(default_factory=list)
-
-
-class WorkspaceMemberUpsertRequest(BaseModel):
-    subject_id: str
-    subject_type: Literal["user"]
-    role: str = Field(default="member", max_length=24)
-
-    @field_validator("role")
-    @classmethod
-    def validate_role(cls, value: str) -> str:
-        if not is_valid_workspace_role(value):
-            raise _invalid_workspace_role_error()
-        normalized = normalize_workspace_role(value)
-        assert normalized is not None
-        return normalized
-
-
-class WorkspaceMemberRoleUpdateRequest(BaseModel):
-    role: str = Field(..., max_length=24)
-
-    @field_validator("role")
-    @classmethod
-    def validate_role(cls, value: str) -> str:
-        if not is_valid_workspace_role(value):
-            raise _invalid_workspace_role_error()
-        normalized = normalize_workspace_role(value)
-        assert normalized is not None
-        return normalized
-
-
-class WorkspaceMemberBulkSubject(BaseModel):
-    subject_type: Literal["user"]
-    subject_id: str
-    role: str | None = None
-
-    @field_validator("role")
-    @classmethod
-    def validate_role(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if not is_valid_workspace_role(value):
-            raise _invalid_workspace_role_error()
-        return normalize_workspace_role(value)
-
-
-class WorkspaceMemberBulkRequest(BaseModel):
-    action: Literal["add", "remove", "update_role"]
-    subjects: list[WorkspaceMemberBulkSubject] = Field(..., min_length=1, max_length=200)
-
-
-class WorkspaceMemberBulkResponse(BaseModel):
-    succeeded: int
-    failed: list[dict[str, str]] = Field(default_factory=list)
-
-
-class TeamMembersUpdateRequest(BaseModel):
-    user_ids: list[str] = Field(default_factory=list)
 
 
 class AdminUserCreateRequest(BaseModel):
@@ -1752,7 +1237,6 @@ MAX_AUDIT_LOG_RANGE_DAYS = 3650
 ADMIN_USER_LIST_OPTIONS = (
     selectinload(User.primary_organization_unit),
     selectinload(User.system_role_links),
-    selectinload(User.workspace_bindings).joinedload(WorkspaceUserBinding.workspace),
 )
 
 
@@ -1935,7 +1419,7 @@ def _serialize_ai_security_data_protection(db: Session) -> AiSecurityDataProtect
 
 
 def _ai_security_app_label(app_id: str) -> str | None:
-    catalog_item = get_workspace_app_catalog_item(app_id)
+    catalog_item = get_app_catalog_item(app_id)
     if catalog_item is not None:
         return catalog_item.title
     return None
@@ -1971,7 +1455,7 @@ def _ai_security_condition_options() -> AiSecurityConditionOptionsResponse:
     ]
     return AiSecurityConditionOptionsResponse(
         apps=_ai_security_condition_option_items(
-            (app.app_id, app.title) for app in iter_workspace_app_catalog()
+            (app.app_id, app.title) for app in iter_app_catalog()
         ),
         external_apps=_ai_security_condition_option_items(
             (item.app_id, item.app_label) for item in _ai_security_external_app_candidates()
@@ -2050,8 +1534,6 @@ def _serialize_ai_security_rule(
         enabled=rule.enabled,
         user_id=rule.user_id,
         user_name=labels["users"].get(rule.user_id or ""),
-        workspace_id=rule.workspace_id,
-        workspace_name=labels["workspaces"].get(rule.workspace_id or ""),
         app_id=rule.app_id,
         task_kind=task_kinds[0] if len(task_kinds) == 1 else None,
         task_kinds=task_kinds,
@@ -2079,8 +1561,6 @@ def _serialize_ai_security_exception(
         enabled=exception.enabled,
         user_id=exception.user_id,
         user_name=labels["users"].get(exception.user_id or ""),
-        workspace_id=exception.workspace_id,
-        workspace_name=labels["workspaces"].get(exception.workspace_id or ""),
         app_id=exception.app_id,
         task_kind=task_kinds[0] if len(task_kinds) == 1 else None,
         task_kinds=task_kinds,
@@ -2097,49 +1577,29 @@ def _serialize_ai_security_exception(
 
 
 def _ai_security_rule_label_maps(
-    db: Session,
-    rules: list[AiSecurityPolicyRule],
+    db: Session, rules: list[AiSecurityPolicyRule]
 ) -> dict[str, dict[str, str]]:
-    user_ids = {rule.user_id for rule in rules if rule.user_id}
-    workspace_ids = {rule.workspace_id for rule in rules if rule.workspace_id}
-    users = (
-        dict(db.execute(select(User.id, User.full_name).where(User.id.in_(user_ids))).all())
+    user_ids = {item.user_id for item in rules if item.user_id}
+    return {
+        "users": dict(
+            db.execute(select(User.id, User.full_name).where(User.id.in_(user_ids))).all()
+        )
         if user_ids
         else {}
-    )
-    workspaces = (
-        dict(
-            db.execute(
-                select(Workspace.id, Workspace.name).where(Workspace.id.in_(workspace_ids))
-            ).all()
-        )
-        if workspace_ids
-        else {}
-    )
-    return {"users": users, "workspaces": workspaces}
+    }
 
 
 def _ai_security_exception_label_maps(
-    db: Session,
-    exceptions: list[AiSecurityExternalTransferException],
+    db: Session, exceptions: list[AiSecurityExternalTransferException]
 ) -> dict[str, dict[str, str]]:
     user_ids = {item.user_id for item in exceptions if item.user_id}
-    workspace_ids = {item.workspace_id for item in exceptions if item.workspace_id}
-    users = (
-        dict(db.execute(select(User.id, User.full_name).where(User.id.in_(user_ids))).all())
+    return {
+        "users": dict(
+            db.execute(select(User.id, User.full_name).where(User.id.in_(user_ids))).all()
+        )
         if user_ids
         else {}
-    )
-    workspaces = (
-        dict(
-            db.execute(
-                select(Workspace.id, Workspace.name).where(Workspace.id.in_(workspace_ids))
-            ).all()
-        )
-        if workspace_ids
-        else {}
-    )
-    return {"users": users, "workspaces": workspaces}
+    }
 
 
 def _validate_ai_security_rule_references(
@@ -2148,11 +1608,6 @@ def _validate_ai_security_rule_references(
 ) -> None:
     if payload.user_id and db.scalar(select(User.id).where(User.id == payload.user_id)) is None:
         raise localized_http_exception(status_code=404, code="auth.user_not_found")
-    if (
-        payload.workspace_id
-        and db.scalar(select(Workspace.id).where(Workspace.id == payload.workspace_id)) is None
-    ):
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
 
 
 def _apply_ai_security_rule_payload(
@@ -2165,7 +1620,6 @@ def _apply_ai_security_rule_payload(
     rule.description = payload.description.strip()
     rule.enabled = payload.enabled
     rule.user_id = payload.user_id
-    rule.workspace_id = payload.workspace_id
     rule.app_id = payload.app_id
     rule.task_kinds_json = normalize_ai_security_task_kinds(payload.task_kinds)
     rule.task_kind = rule.task_kinds_json[0] if len(rule.task_kinds_json) == 1 else None
@@ -2189,7 +1643,6 @@ def _apply_ai_security_exception_payload(
     exception.description = payload.description.strip()
     exception.enabled = payload.enabled
     exception.user_id = payload.user_id
-    exception.workspace_id = payload.workspace_id
     exception.app_id = payload.app_id
     exception.task_kinds_json = normalize_ai_security_task_kinds(payload.task_kinds)
     exception.task_kind = (
@@ -2211,7 +1664,6 @@ def _ai_security_rule_audit_payload(rule: AiSecurityPolicyRule) -> dict[str, obj
         "enabled": rule.enabled,
         "effect": normalize_ai_security_effect(rule.effect),
         "user_id": rule.user_id,
-        "workspace_id": rule.workspace_id,
         "app_id": rule.app_id,
         "task_kind": rule.task_kind,
         "task_kinds": _ai_security_scope_task_kinds(rule.task_kind, rule.task_kinds_json),
@@ -2228,7 +1680,6 @@ def _ai_security_exception_audit_payload(
         "exception_id": exception.id,
         "enabled": exception.enabled,
         "user_id": exception.user_id,
-        "workspace_id": exception.workspace_id,
         "app_id": exception.app_id,
         "task_kind": exception.task_kind,
         "task_kinds": _ai_security_scope_task_kinds(
@@ -3646,13 +3097,13 @@ def _build_ai_team_summary(
     since: datetime,
     until: datetime,
 ) -> AdminUsageAiTeamSummaryResponse:
+    from open_work_hub_api.domains.ai.runtime_status import inspect_registered_llm_runtime
     from open_work_hub_api.domains.community.models import (
         CommunityChannel,
         CommunityComment,
         CommunityPost,
     )
     from open_work_hub_api.domains.community.service import DEFAULT_CHANNEL_KEY
-    from open_work_hub_api.domains.ai.runtime_status import inspect_registered_llm_runtime
 
     health = inspect_registered_llm_runtime(db, probe="configured").pools.public_dict(
         locale="ko-KR",
@@ -4195,157 +3646,89 @@ def _build_usage_dashboard(
     )
 
 
-@router.get("/app-visibility", response_model=PlatformAppVisibilityResponse)
-def list_platform_app_visibility(
-    scope: AdminAppVisibilityScope = Query(default="core"),
+@router.get("/apps/company-controls", response_model=CompanyAppControlsResponse)
+def list_company_app_controls(
     context: AuthContext = Depends(require_permission("admin.access")),
     db: Session = Depends(get_db_session),
-) -> PlatformAppVisibilityResponse:
+) -> CompanyAppControlsResponse:
     _ensure_platform_admin(context, db)
-    ensure_platform_app_visibility(db)
-    db.commit()
-    return _serialize_platform_app_visibility(db, scope=scope)
+    return _serialize_company_app_controls(db)
 
 
-@router.patch("/app-visibility", response_model=PlatformAppVisibilityResponse)
-def update_platform_app_visibility(
-    payload: PlatformAppVisibilityUpdateRequest,
-    scope: AdminAppVisibilityScope = Query(default="core"),
+def _active_company_user_ids(db: Session) -> set[str]:
+    return set(
+        db.scalars(
+            select(User.id).where(
+                User.status == "active",
+                User.login_blocked.is_(False),
+            )
+        ).all()
+    )
+
+
+# Policy writes intentionally invalidate from committed storage deltas instead of
+# suppressing events from a separately-read effective snapshot. This can refresh a
+# few unaffected sessions, but it cannot miss the final state when company/default/
+# override rows are changed concurrently.
+
+
+@router.patch("/apps/company-controls", response_model=CompanyAppControlsResponse)
+def update_company_app_controls(
+    payload: CompanyAppControlsUpdateRequest,
+    request: Request,
     context: AuthContext = Depends(require_permission("admin.access")),
     db: Session = Depends(get_db_session),
-) -> PlatformAppVisibilityResponse:
+) -> CompanyAppControlsResponse:
     _ensure_platform_admin(context, db)
-    ensure_platform_app_visibility(db)
-    rows_by_app_id = _platform_app_visibility_rows_by_id(db)
+    rows_by_app_id = _company_app_control_rows_by_id(db)
     changed_items: list[dict[str, object]] = []
+    access_changed = False
     now = _utcnow()
 
     for item in payload.items:
-        catalog_item = get_workspace_app_catalog_item(item.app_id)
-        if catalog_item is None or not is_platform_visibility_app(catalog_item):
+        catalog_item = get_app_catalog_item(item.app_id)
+        if catalog_item is None:
             raise localized_http_exception(
                 status_code=400,
-                code="admin.unknown_workspace_app",
+                code="admin.unknown_app",
                 app_id=item.app_id,
             )
         row = rows_by_app_id.get(item.app_id)
         if row is None:
-            row = PlatformAppVisibility(
-                id=new_id(),
+            access_changed = True
+            row = CompanyAppControl(
                 app_id=item.app_id,
-                visible=item.visible,
+                enabled=item.enabled,
+                updated_by_user_id=context.user.id,
                 created_at=now,
                 updated_at=now,
             )
             db.add(row)
             rows_by_app_id[item.app_id] = row
-        elif row.visible != item.visible:
-            row.visible = item.visible
+        elif row.enabled != item.enabled:
+            access_changed = True
+            row.enabled = item.enabled
+            row.updated_by_user_id = context.user.id
             row.updated_at = now
             db.add(row)
-        changed_items.append({"app_id": item.app_id, "visible": item.visible})
+        changed_items.append({"app_id": item.app_id, "enabled": item.enabled})
 
     record_audit_log(
         db,
         actor_user_id=context.user.id,
-        action="admin.app_visibility.update",
-        entity_kind="platform_app_visibility",
+        action="admin.company_app_controls.update",
+        entity_kind="company_app_control",
         entity_id=None,
-        summary="Updated platform app visibility",
+        summary="Updated company app controls",
         payload={"items": changed_items},
     )
+    affected_user_ids = _active_company_user_ids(db) if access_changed else set()
     db.commit()
-    return _serialize_platform_app_visibility(db, scope=scope)
-
-
-@router.get(
-    "/workspaces/{workspace_id}/app-visibility",
-    response_model=WorkspaceAppVisibilityResponse,
-)
-def list_workspace_app_visibility(
-    workspace_id: str,
-    scope: AdminAppVisibilityScope = Query(default="core"),
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> WorkspaceAppVisibilityResponse:
-    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
-    ensure_platform_app_visibility(db)
-    ensure_workspace_app_entitlements(db)
-    db.commit()
-    return _serialize_workspace_app_visibility(db, workspace, scope=scope)
-
-
-@router.patch(
-    "/workspaces/{workspace_id}/app-visibility",
-    response_model=WorkspaceAppVisibilityResponse,
-)
-def update_workspace_app_visibility(
-    workspace_id: str,
-    payload: WorkspaceAppVisibilityUpdateRequest,
-    scope: AdminAppVisibilityScope = Query(default="core"),
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> WorkspaceAppVisibilityResponse:
-    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
-    ensure_platform_app_visibility(db)
-    ensure_workspace_app_entitlements(db)
-    rows_by_app_id = _workspace_app_entitlement_rows_by_id(db, workspace.id)
-    changed_items: list[dict[str, object]] = []
-    now = _utcnow()
-
-    for item in payload.items:
-        catalog_item = get_workspace_app_catalog_item(item.app_id)
-        if (
-            catalog_item is None
-            or not is_app_bar_category_app(catalog_item)
-            or catalog_item.availability_scope != "workspace"
-        ):
-            raise localized_http_exception(
-                status_code=400,
-                code="admin.unknown_workspace_app",
-                app_id=item.app_id,
-            )
-        if catalog_item.platform_admin_activation_required and not is_platform_admin_user(
-            context.user, db
-        ):
-            raise localized_http_exception(
-                status_code=403,
-                code="admin.platform_admin_required",
-            )
-        row = rows_by_app_id.get(item.app_id)
-        if row is None:
-            row = WorkspaceAppEntitlement(
-                id=new_id(),
-                workspace_id=workspace.id,
-                app_id=item.app_id,
-                visibility_override=item.visibility_override,
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(row)
-            rows_by_app_id[item.app_id] = row
-        elif row.visibility_override != item.visibility_override:
-            row.visibility_override = item.visibility_override
-            row.updated_at = now
-            db.add(row)
-        changed_items.append(
-            {
-                "app_id": item.app_id,
-                "visibility_override": item.visibility_override,
-            }
-        )
-
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.workspace_app_visibility.update",
-        entity_kind="workspace",
-        entity_id=workspace.id,
-        summary=f"Updated app visibility overrides for workspace {workspace.name}",
-        payload={"items": changed_items},
+    publish_app_availability_access_changed(
+        getattr(request.app.state, "app_realtime", None),
+        affected_user_ids,
     )
-    db.commit()
-    return _serialize_workspace_app_visibility(db, workspace, scope=scope)
+    return _serialize_company_app_controls(db)
 
 
 @router.get("/app-bar-categories", response_model=AdminAppBarCategoriesResponse)
@@ -4587,9 +3970,11 @@ def list_users(
 @router.post("/users", response_model=CreatedUserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: AdminUserCreateRequest,
+    request: Request,
     context: AuthContext = Depends(require_permission("user.write")),
     db: Session = Depends(get_db_session),
 ) -> CreatedUserResponse:
+    _lock_account_administration(db, context)
     email = normalize_email(payload.email)
     if db.scalar(select(User).where(User.email == email)) is not None:
         raise localized_http_exception(status_code=409, code="admin.user_already_exists")
@@ -4627,9 +4012,10 @@ def create_user(
         entity_kind="user",
         entity_id=user.id,
         summary=f"Created user {user.email}",
-        payload={"system_roles": payload.system_roles},
+        payload={"after": _account_access_snapshot(db, user)},
     )
     db.commit()
+    publish_principal_access_changed(getattr(request.app.state, "app_realtime", None), [user.id])
     return CreatedUserResponse(
         user=_serialize_admin_user(db, user),
         temporary_password=temporary_password,
@@ -4652,12 +4038,17 @@ def get_user(
 def update_user(
     user_id: str,
     payload: AdminUserUpdateRequest,
+    request: Request,
     context: AuthContext = Depends(require_permission("user.write")),
     db: Session = Depends(get_db_session),
 ) -> AdminUserItemResponse:
-    user = db.scalar(select(User).where(User.id == user_id))
+    _lock_account_administration(db, context)
+    user = db.scalar(select(User).where(User.id == user_id).with_for_update())
     if user is None:
         raise localized_http_exception(status_code=404, code="auth.user_not_found")
+
+    before = _account_access_snapshot(db, user)
+    _ensure_administrator_survives(db, user, payload)
 
     if payload.full_name is not None:
         user.full_name = payload.full_name.strip()
@@ -4672,6 +4063,10 @@ def update_user(
         user.primary_organization_unit_id = payload.primary_organization_unit_id
     if payload.status is not None:
         user.status = payload.status
+        if payload.status != "active":
+            revoke_active_user_sessions(
+                db, user_id=user.id, revoked_at=datetime.now(UTC).replace(tzinfo=None)
+            )
     if payload.login_blocked is not None:
         user.login_blocked = payload.login_blocked
         if payload.login_blocked:
@@ -4702,9 +4097,10 @@ def update_user(
         entity_kind="user",
         entity_id=user.id,
         summary=f"Updated user {user.email}",
-        payload={"system_roles": payload.system_roles} if payload.system_roles is not None else {},
+        payload={"before": before, "after": _account_access_snapshot(db, user)},
     )
     db.commit()
+    publish_principal_access_changed(getattr(request.app.state, "app_realtime", None), [user.id])
     return _serialize_admin_user(db, user)
 
 
@@ -4712,6 +4108,7 @@ def update_user(
 def reset_user_password(
     user_id: str,
     payload: ResetPasswordRequest,
+    request: Request,
     context: AuthContext = Depends(require_permission("user.write")),
     db: Session = Depends(get_db_session),
 ) -> ResetPasswordResponse:
@@ -4721,6 +4118,9 @@ def reset_user_password(
     temporary_password = payload.temporary_password or _generate_temporary_password()
     user.password_hash = hash_password(temporary_password)
     user.must_change_password = True
+    revoke_active_user_sessions(
+        db, user_id=user.id, revoked_at=datetime.now(UTC).replace(tzinfo=None)
+    )
     db.add(user)
     record_audit_log(
         db,
@@ -4731,15 +4131,18 @@ def reset_user_password(
         summary=f"Reset password for {user.email}",
     )
     db.commit()
+    publish_principal_access_changed(getattr(request.app.state, "app_realtime", None), [user.id])
     return ResetPasswordResponse(temporary_password=temporary_password)
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: str,
+    request: Request,
     context: AuthContext = Depends(require_permission("user.write")),
     db: Session = Depends(get_db_session),
 ) -> None:
+    _lock_account_administration(db, context)
     if user_id == context.user.id:
         raise localized_http_exception(status_code=400, code="admin.self_delete_denied")
 
@@ -4747,12 +4150,17 @@ def delete_user(
     if user is None:
         raise localized_http_exception(status_code=404, code="auth.user_not_found")
     email = user.email
+    # Revoke delegated sessions before ON DELETE SET NULL removes their origin.
+    revoke_active_user_sessions(
+        db,
+        user_id=user.id,
+        revoked_at=datetime.now(UTC).replace(tzinfo=None),
+    )
     db.execute(
         sa_update(AuditLog).where(AuditLog.actor_user_id == user_id).values(actor_user_id=None)
     )
     db.execute(sa_delete(AuthSession).where(AuthSession.user_id == user_id))
     db.execute(sa_delete(UserSystemRole).where(UserSystemRole.user_id == user_id))
-    db.execute(sa_delete(WorkspaceUserBinding).where(WorkspaceUserBinding.user_id == user_id))
     db.execute(sa_delete(TeamMember).where(TeamMember.user_id == user_id))
     db.delete(user)
     record_audit_log(
@@ -4767,632 +4175,15 @@ def delete_user(
 
     try:
         db.commit()
+        publish_principal_access_changed(
+            getattr(request.app.state, "app_realtime", None), [user_id]
+        )
     except IntegrityError as exc:
         db.rollback()
         raise localized_http_exception(
             status_code=409,
             code="admin.user_linked_records_delete_denied",
         ) from exc
-
-
-@router.get("/workspaces", response_model=list[WorkspaceItemResponse])
-def list_workspaces(
-    include_archived: bool = Query(default=False),
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> list[WorkspaceItemResponse]:
-    is_admin = is_platform_admin_user(context.user, db)
-    query = select(Workspace).options(selectinload(Workspace.teams))
-    if not (include_archived and is_admin):
-        query = query.where(Workspace.active.is_(True))
-    query = query.order_by(Workspace.name.asc())
-    items = db.scalars(query).all()
-    if not is_admin:
-        accessible_workspace_ids = {
-            item["workspace_id"]
-            for item in serialize_auth_user(db, context.user)["workspace_roles"]
-        }
-        items = [item for item in items if item.id in accessible_workspace_ids]
-    return [_serialize_workspace(db, item) for item in items]
-
-
-@router.post(
-    "/workspaces", response_model=WorkspaceItemResponse, status_code=status.HTTP_201_CREATED
-)
-def create_workspace(
-    payload: WorkspaceUpsertRequest,
-    context: AuthContext = Depends(require_permission("workspace.write")),
-    db: Session = Depends(get_db_session),
-) -> WorkspaceItemResponse:
-    workspace_id = new_id()
-    key = payload.key.strip() if payload.key and payload.key.strip() else workspace_id
-    if db.scalar(select(Workspace).where(Workspace.key == key)) is not None:
-        raise localized_http_exception(status_code=409, code="admin.workspace_key_exists")
-
-    workspace = Workspace(
-        id=workspace_id,
-        key=key,
-        name=payload.name.strip(),
-        description=payload.description.strip(),
-        active=payload.active,
-    )
-    db.add(workspace)
-    db.flush()
-    ensure_workspace_default_pms_space(db, workspace)
-    ensure_workspace_app_entitlements(db)
-    db.add(
-        WorkspaceUserBinding(
-            id=new_id(),
-            workspace_id=workspace.id,
-            user_id=context.user.id,
-            role="admin",
-        )
-    )
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.workspace.create",
-        entity_kind="workspace",
-        entity_id=workspace.id,
-        summary=f"Created workspace {workspace.name}",
-    )
-    db.commit()
-    db.refresh(workspace)
-    return _serialize_workspace(db, workspace)
-
-
-@router.patch("/workspaces/{workspace_id}", response_model=WorkspaceItemResponse)
-def update_workspace(
-    workspace_id: str,
-    payload: WorkspaceUpsertRequest,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> WorkspaceItemResponse:
-    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
-
-    workspace.key = payload.key or workspace.key
-    workspace.name = payload.name.strip()
-    workspace.description = payload.description.strip()
-    workspace.active = payload.active
-    db.add(workspace)
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.workspace.update",
-        entity_kind="workspace",
-        entity_id=workspace.id,
-        summary=f"Updated workspace {workspace.name}",
-    )
-    db.commit()
-    db.refresh(workspace)
-    return _serialize_workspace(db, workspace)
-
-
-@router.get(
-    "/workspaces/{workspace_id}/bindings", response_model=list[WorkspaceBindingItemResponse]
-)
-def list_workspace_bindings(
-    workspace_id: str,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> list[WorkspaceBindingItemResponse]:
-    _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
-    workspace = db.scalar(
-        select(Workspace)
-        .options(selectinload(Workspace.user_bindings).joinedload(WorkspaceUserBinding.user))
-        .where(Workspace.id == workspace_id)
-    )
-    if workspace is None:
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
-
-    items = [
-        WorkspaceBindingItemResponse(
-            subject_id=binding.user_id,
-            subject_type="user",
-            subject_label=binding.user.full_name or binding.user.email,
-            subject_secondary=binding.user.email,
-            role=normalize_workspace_role(binding.role) or binding.role,
-        )
-        for binding in workspace.user_bindings
-    ]
-    return items
-
-
-@router.put(
-    "/workspaces/{workspace_id}/bindings", response_model=list[WorkspaceBindingItemResponse]
-)
-def replace_workspace_bindings(
-    workspace_id: str,
-    payload: WorkspaceBindingsUpdateRequest,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> list[WorkspaceBindingItemResponse]:
-    _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
-    workspace = db.scalar(
-        select(Workspace)
-        .options(selectinload(Workspace.user_bindings))
-        .where(Workspace.id == workspace_id)
-    )
-    if workspace is None:
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
-
-    user_role_map = {item.subject_id: item.role for item in payload.users}
-    replace_workspace_member_bindings(
-        db,
-        workspace,
-        actor_user_id=context.user.id,
-        requested_roles_by_user_id=user_role_map,
-    )
-
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.workspace.bindings.replace",
-        entity_kind="workspace",
-        entity_id=workspace.id,
-        summary=f"Replaced workspace bindings for {workspace.name}",
-    )
-    db.commit()
-    return list_workspace_bindings(workspace_id, context, db)
-
-
-def _serialize_user_binding(binding: WorkspaceUserBinding) -> WorkspaceBindingItemResponse:
-    item = serialize_workspace_member_binding(binding)
-    return WorkspaceBindingItemResponse(
-        subject_id=item.subject_id,
-        subject_type=item.subject_type,
-        subject_label=item.subject_label,
-        subject_secondary=item.subject_secondary,
-        role=item.role,
-    )
-
-
-@router.post(
-    "/workspaces/{workspace_id}/members",
-    response_model=WorkspaceBindingItemResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def add_workspace_member(
-    workspace_id: str,
-    payload: WorkspaceMemberUpsertRequest,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> WorkspaceBindingItemResponse:
-    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
-
-    binding = add_workspace_member_binding(
-        db,
-        workspace,
-        subject_id=payload.subject_id,
-        role=payload.role,
-        duplicate_code="admin.user_already_workspace_member",
-    )
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.workspace.member.add",
-        entity_kind="workspace",
-        entity_id=workspace.id,
-        summary=f"Added user to {workspace.name}",
-        payload={"subject_type": "user", "subject_id": payload.subject_id, "role": payload.role},
-    )
-    db.commit()
-    return _serialize_user_binding(binding)
-
-
-@router.patch(
-    "/workspaces/{workspace_id}/members/{subject_type}/{subject_id}",
-    response_model=WorkspaceBindingItemResponse,
-)
-def update_workspace_member_role(
-    workspace_id: str,
-    subject_type: Literal["user"],
-    subject_id: str,
-    payload: WorkspaceMemberRoleUpdateRequest,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> WorkspaceBindingItemResponse:
-    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
-
-    binding = update_workspace_member_binding_role(
-        db,
-        workspace,
-        actor_user_id=context.user.id,
-        subject_id=subject_id,
-        role=payload.role,
-    )
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.workspace.member.role.update",
-        entity_kind="workspace",
-        entity_id=workspace.id,
-        summary=f"Changed user role in {workspace.name}",
-        payload={"subject_type": "user", "subject_id": subject_id, "role": payload.role},
-    )
-    db.commit()
-    return _serialize_user_binding(binding)
-
-
-@router.delete(
-    "/workspaces/{workspace_id}/members/{subject_type}/{subject_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def remove_workspace_member(
-    workspace_id: str,
-    subject_type: Literal["user"],
-    subject_id: str,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> None:
-    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
-
-    remove_workspace_member_binding(
-        db,
-        workspace,
-        actor_user_id=context.user.id,
-        subject_id=subject_id,
-    )
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.workspace.member.remove",
-        entity_kind="workspace",
-        entity_id=workspace.id,
-        summary=f"Removed {subject_type} from {workspace.name}",
-        payload={"subject_type": subject_type, "subject_id": subject_id},
-    )
-    db.commit()
-
-
-@router.get(
-    "/workspaces/{workspace_id}/members",
-    response_model=WorkspaceMembersResponse,
-)
-def list_workspace_members(
-    workspace_id: str,
-    q: str | None = Query(default=None, max_length=120),
-    role: list[str] | None = Query(default=None),
-    subject_type: Literal["user"] | None = Query(default=None),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=25, ge=1, le=200),
-    pending_only: bool = Query(default=False),
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> WorkspaceMembersResponse:
-    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
-
-    normalized_query = q.strip() if q else ""
-    directory = list_workspace_member_directory(
-        db,
-        workspace,
-        query=normalized_query,
-        role_filters=role,
-        subject_type=subject_type,
-        page=page,
-        page_size=page_size,
-        pending_only=pending_only,
-    )
-    return WorkspaceMembersResponse(
-        items=[WorkspaceMemberItemResponse(**asdict(item)) for item in directory.items],
-        total=directory.total,
-        page=directory.page,
-        page_size=directory.page_size,
-        role_counts=WorkspaceMemberRoleCounts(**directory.role_counts),
-        user_count=directory.user_count,
-        pending_count=directory.pending_count,
-    )
-
-
-@router.post(
-    "/workspaces/{workspace_id}/members/bulk",
-    response_model=WorkspaceMemberBulkResponse,
-)
-def bulk_workspace_members(
-    workspace_id: str,
-    payload: WorkspaceMemberBulkRequest,
-    request: Request,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> WorkspaceMemberBulkResponse:
-    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
-
-    succeeded = 0
-    failed: list[dict[str, str]] = []
-
-    for entry in payload.subjects:
-        savepoint = db.begin_nested()
-        try:
-            apply_workspace_member_bulk_entry(
-                db,
-                workspace,
-                actor_user_id=context.user.id,
-                action=payload.action,
-                subject_type=entry.subject_type,
-                subject_id=entry.subject_id,
-                role=entry.role,
-            )
-            db.flush()
-            savepoint.commit()
-            succeeded += 1
-        except HTTPException as exc:
-            savepoint.rollback()
-            failure = {
-                "subject_type": entry.subject_type,
-                "subject_id": entry.subject_id,
-                "detail": _exception_detail(exc, request),
-            }
-            if code := _exception_code(exc):
-                failure["code"] = code
-            failed.append(failure)
-
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action=f"admin.workspace.members.bulk.{payload.action}",
-        entity_kind="workspace",
-        entity_id=workspace.id,
-        summary=f"Bulk {payload.action} on {workspace.name}",
-        payload={"succeeded": succeeded, "failed_count": len(failed)},
-    )
-    db.commit()
-    return WorkspaceMemberBulkResponse(succeeded=succeeded, failed=failed)
-
-
-@router.get(
-    "/workspaces/{workspace_id}/member-candidates",
-    response_model=list[WorkspaceMemberCandidateResponse],
-)
-def list_workspace_member_candidates(
-    workspace_id: str,
-    q: str | None = Query(default=None, max_length=120),
-    limit: int = Query(default=100, ge=1, le=200),
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> list[WorkspaceMemberCandidateResponse]:
-    _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
-
-    normalized_query = q.strip() if q else ""
-    query = (
-        select(User).where(User.status.in_(("active", "invited"))).order_by(User.full_name.asc())
-    )
-    if normalized_query:
-        search_pattern = f"%{normalized_query}%"
-        query = query.where(
-            or_(
-                User.email.ilike(search_pattern),
-                User.full_name.ilike(search_pattern),
-                User.display_name.ilike(search_pattern),
-            )
-        )
-    users = db.scalars(query.limit(limit)).all()
-    return [
-        WorkspaceMemberCandidateResponse(
-            id=item.id,
-            email=item.email,
-            full_name=item.full_name,
-            display_name=item.display_name or item.full_name,
-            status=item.status,
-        )
-        for item in users
-    ]
-
-
-@router.get("/teams", response_model=list[TeamItemResponse])
-def list_teams(
-    workspace_id: str | None = None,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> list[TeamItemResponse]:
-    query = (
-        select(Team)
-        .options(joinedload(Team.workspace), selectinload(Team.members))
-        .where(Team.trashed_at.is_(None))
-    )
-    if workspace_id:
-        _ensure_workspace_scope(db, context.user, workspace_id, min_role="member")
-        query = query.where(Team.workspace_id == workspace_id)
-    items = db.scalars(query.order_by(Team.name.asc())).all()
-    if not is_platform_admin_user(context.user, db) and workspace_id is None:
-        accessible_workspace_ids = {
-            item["workspace_id"]
-            for item in serialize_auth_user(db, context.user)["workspace_roles"]
-        }
-        items = [item for item in items if item.workspace_id in accessible_workspace_ids]
-    return [
-        TeamItemResponse(
-            id=item.id,
-            workspace_id=item.workspace_id,
-            workspace_key=item.workspace.key,
-            key=item.key,
-            name=item.name,
-            description=item.description,
-            active=item.active,
-            member_count=len(item.members),
-            current_user_role=resolve_team_role(db, context.user, item),
-        )
-        for item in items
-    ]
-
-
-@router.post(
-    "/workspaces/{workspace_id}/teams",
-    response_model=TeamItemResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_team(
-    workspace_id: str,
-    payload: TeamUpsertRequest,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> TeamItemResponse:
-    workspace = _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
-    key = payload.key or slugify(payload.name)
-    if (
-        db.scalar(select(Team).where(Team.workspace_id == workspace.id, Team.key == key))
-        is not None
-    ):
-        raise localized_http_exception(status_code=409, code="admin.team_key_exists")
-
-    team = Team(
-        id=new_id(),
-        workspace_id=workspace.id,
-        key=key,
-        name=payload.name.strip(),
-        description=payload.description.strip(),
-        active=payload.active,
-    )
-    db.add(team)
-    db.flush()
-    db.add(
-        TeamMember(
-            id=new_id(),
-            team_id=team.id,
-            user_id=context.user.id,
-            role="owner",
-        )
-    )
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.team.create",
-        entity_kind="team",
-        entity_id=team.id,
-        summary=f"Created team {team.name}",
-    )
-    db.commit()
-    return TeamItemResponse(
-        id=team.id,
-        workspace_id=team.workspace_id,
-        workspace_key=workspace.key,
-        key=team.key,
-        name=team.name,
-        description=team.description,
-        active=team.active,
-        member_count=1,
-        current_user_role="owner",
-    )
-
-
-@router.patch("/teams/{team_id}", response_model=TeamItemResponse)
-def update_team(
-    team_id: str,
-    payload: TeamUpsertRequest,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> TeamItemResponse:
-    team = _ensure_team_scope(
-        db,
-        context.user,
-        team_id,
-        min_role="admin",
-        include_workspace=True,
-        include_members=True,
-    )
-    team.key = payload.key or team.key
-    team.name = payload.name.strip()
-    team.description = payload.description.strip()
-    team.active = payload.active
-    db.add(team)
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.team.update",
-        entity_kind="team",
-        entity_id=team.id,
-        summary=f"Updated team {team.name}",
-    )
-    db.commit()
-    return TeamItemResponse(
-        id=team.id,
-        workspace_id=team.workspace_id,
-        workspace_key=team.workspace.key,
-        key=team.key,
-        name=team.name,
-        description=team.description,
-        active=team.active,
-        member_count=len(team.members),
-        current_user_role=resolve_team_role(db, context.user, team),
-    )
-
-
-@router.delete("/teams/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_team(
-    team_id: str,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> None:
-    team = _ensure_team_scope(db, context.user, team_id, min_role="admin")
-    team.trashed_at = _utcnow()
-    db.add(team)
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.team.delete",
-        entity_kind="team",
-        entity_id=team.id,
-        summary=f"Moved team {team.name} to trash",
-    )
-    db.commit()
-
-
-@router.get("/teams/{team_id}/members", response_model=list[AdminUserItemResponse])
-def list_team_members(
-    team_id: str,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> list[AdminUserItemResponse]:
-    team = _ensure_team_scope(
-        db,
-        context.user,
-        team_id,
-        min_role="member",
-        include_members=True,
-    )
-    members = db.scalars(
-        select(User)
-        .join(TeamMember, TeamMember.user_id == User.id)
-        .where(TeamMember.team_id == team.id)
-        .order_by(User.full_name.asc())
-    ).all()
-    return [_serialize_admin_user(db, member) for member in members]
-
-
-@router.put("/teams/{team_id}/members", response_model=list[AdminUserItemResponse])
-def replace_team_members(
-    team_id: str,
-    payload: TeamMembersUpdateRequest,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> list[AdminUserItemResponse]:
-    team = _ensure_team_scope(
-        db,
-        context.user,
-        team_id,
-        min_role="admin",
-        include_members=True,
-    )
-
-    requested_ids = set(payload.user_ids)
-    current_ids = {member.user_id for member in team.members}
-    for member in list(team.members):
-        if member.user_id not in requested_ids:
-            db.delete(member)
-    for user_id in requested_ids - current_ids:
-        if db.scalar(select(User.id).where(User.id == user_id)) is not None:
-            db.add(TeamMember(id=new_id(), team_id=team.id, user_id=user_id))
-
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.team.members.replace",
-        entity_kind="team",
-        entity_id=team.id,
-        summary=f"Replaced members for team {team.name}",
-        payload={"user_ids": sorted(requested_ids)},
-    )
-    db.commit()
-    return list_team_members(team_id, context, db)
 
 
 @router.get("/ai-security/summary", response_model=AiSecuritySummaryResponse)
@@ -5838,7 +4629,6 @@ def simulate_ai_security_policy(
     security_decision = evaluate_ai_security_policy(
         db,
         AiSecurityPolicyContext(
-            workspace_id=payload.workspace_id,
             actor_user_id=payload.actor_user_id,
             app_id=payload.app_id,
             task_kind=payload.task_kind,
@@ -5870,7 +4660,6 @@ def simulate_ai_security_policy(
         exception_decision = resolve_ai_security_external_transfer_exception(
             db,
             AiSecurityPolicyContext(
-                workspace_id=payload.workspace_id,
                 actor_user_id=payload.actor_user_id,
                 app_id=payload.app_id,
                 task_kind=payload.task_kind,
@@ -6270,3 +5059,56 @@ def scrub_ai_runtime_retention_payloads(
         scrubbed_run_count=scrubbed_count,
         older_than_days=retention_days,
     )
+
+
+def _lock_account_administration(db: Session, context: AuthContext) -> None:
+    # Serialize grants, revocations and account state changes across administrators.
+    db.execute(select(func.pg_advisory_xact_lock(func.hashtext("platform_account_access"))))
+    if not is_platform_admin_user(context.user, db):
+        raise localized_http_exception(
+            status_code=403, code="auth.system_role_required", roles="platform_admin"
+        )
+
+
+def _account_access_snapshot(db: Session, user: User) -> dict:
+    return {
+        "status": user.status,
+        "login_blocked": user.login_blocked,
+        "primary_organization_unit_id": user.primary_organization_unit_id,
+        "system_roles": sorted(
+            db.scalars(select(UserSystemRole.role).where(UserSystemRole.user_id == user.id))
+        ),
+    }
+
+
+def _ensure_administrator_survives(
+    db: Session, user: User, payload: AdminUserUpdateRequest
+) -> None:
+    current = _account_access_snapshot(db, user)
+    if (
+        "platform_admin" not in current["system_roles"]
+        or user.status != "active"
+        or user.login_blocked
+    ):
+        return
+    next_roles = (
+        payload.system_roles if payload.system_roles is not None else current["system_roles"]
+    )
+    remains_active = (payload.status or user.status) == "active" and not (
+        payload.login_blocked if payload.login_blocked is not None else user.login_blocked
+    )
+    if "platform_admin" in next_roles and remains_active:
+        return
+    other = db.scalar(
+        select(User.id)
+        .join(UserSystemRole, UserSystemRole.user_id == User.id)
+        .where(
+            User.id != user.id,
+            User.status == "active",
+            User.login_blocked.is_(False),
+            UserSystemRole.role == "platform_admin",
+        )
+        .limit(1)
+    )
+    if other is None:
+        raise localized_http_exception(status_code=409, code="admin.last_active_admin_required")

@@ -36,9 +36,9 @@
       "types": "./dist/sub-sidebar-frame.d.ts",
       "import": "./dist/sub-sidebar-frame.js"
     },
-    "./workspace-access": {
-      "types": "./dist/workspace-access.d.ts",
-      "import": "./dist/workspace-access.js"
+    "./app-access": {
+      "types": "./dist/app-access.d.ts",
+      "import": "./dist/app-access.js"
     }
   },
   "scripts": {

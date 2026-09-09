@@ -1,10 +1,10 @@
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import { Bot, FileUp, Folder } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { Link, useLocation } from 'react-router-dom';
 
 import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
 import { cn } from '@/src/lib/utils';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import { FilesSidebarFolders } from './sidebar-folders';
 
 export const filesSidebarConfig: AppSidebarConfig = {
@@ -28,35 +28,34 @@ export const filesSidebarConfig: AppSidebarConfig = {
       },
     },
   ],
-  afterCategories: ({ currentWorkspaceSlug, filteredItems, onNavigate }) => (
+  afterCategories: ({ filteredItems, onNavigate }) => (
     <div>
       <FilesChatSidebarLink
-        currentWorkspaceSlug={currentWorkspaceSlug}
         hasBootstrapItem={filteredItems.some(
           (item) => item.id === 'files-chat',
         )}
         onNavigate={onNavigate}
       />
-      <FilesSidebarFolders currentWorkspaceSlug={currentWorkspaceSlug} />
+      <FilesSidebarFolders />
     </div>
   ),
 };
 
 export function FilesChatSidebarLink({
-  currentWorkspaceSlug,
   hasBootstrapItem,
   onNavigate,
 }: {
-  currentWorkspaceSlug: string | null;
   hasBootstrapItem: boolean;
   onNavigate?: () => void;
 }) {
   const { t } = useTranslation('shell');
   const location = useLocation();
-  if (!currentWorkspaceSlug || hasBootstrapItem) {
+  if (hasBootstrapItem) {
     return null;
   }
-  const chatPath = `${buildWorkspaceAppPath(currentWorkspaceSlug, 'files')}/chat`;
+  const chatPath = buildAppHref({
+    routeId: 'files.chat',
+  });
   return (
     <Link
       to={chatPath}

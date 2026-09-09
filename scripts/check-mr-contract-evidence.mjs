@@ -31,7 +31,7 @@ export const REQUIRED_CHECK_IDS = Object.freeze([
   'ai',
   'worker',
   'compatibility',
-  'workspace-keyword-search',
+  'company-keyword-search',
   'merge-result',
   'scope-clean',
   'affected-checks',
@@ -45,7 +45,7 @@ export const REQUIRED_FIELD_IDS = Object.freeze([
   'contract-boundaries',
   'contract-interfaces',
   'contract-runtime',
-  'workspace-keyword-search',
+  'company-keyword-search',
   'safety-evidence',
   'target-state',
   'source-sha',
@@ -58,7 +58,7 @@ export const CORE_REQUIRED_CHECK_IDS = Object.freeze([
   'hidden-default',
   'extension-contracts',
   'activation-owner',
-  'workspace-keyword-search',
+  'company-keyword-search',
   'merge-result',
   'affected-checks',
   'core-review',
@@ -70,7 +70,7 @@ export const CORE_REQUIRED_FIELD_IDS = Object.freeze([
   'app-boundary',
   'activation',
   'compatibility',
-  'workspace-keyword-search',
+  'company-keyword-search',
   'target-state',
   'source-sha',
   'verification',
@@ -78,13 +78,18 @@ export const CORE_REQUIRED_FIELD_IDS = Object.freeze([
 ]);
 
 const CORE_API_DOMAINS = new Set([
+  'admin',
   'ai',
   'auth',
+  'content_access',
   'files',
+  'groups',
+  'organization',
   'rag',
   'retrieval',
   'search',
   'storage',
+  // Changes deleting the retired domain still require core evidence.
   'workspaces',
 ]);
 
@@ -108,6 +113,7 @@ export function isDomainAppDeliveryPath(filePath) {
 
 export function isProtectedCorePath(filePath) {
   return (
+    CORE_API_DOMAINS.has(apiDomainForPath(filePath)) ||
     filePath === '.gitlab-ci.yml' ||
     /^ops\/ci\//.test(filePath) ||
     /^scripts\/(?:ci\/|check-|.*\.test\.mjs$)/.test(filePath) ||
@@ -119,7 +125,7 @@ export function isProtectedCorePath(filePath) {
   );
 }
 
-export function isWorkspaceKeywordSearchContractPath(filePath) {
+export function isCompanyKeywordSearchContractPath(filePath) {
   return (
     /^apps\/api\/src\/open_work_hub_api\/domains\/search\//.test(filePath) ||
     /^apps\/api\/src\/open_work_hub_api\/domains\/[^/]+\/search_(?:hooks|projection|registration)\.py$/.test(
@@ -217,26 +223,26 @@ function checkFieldValue(fieldId, value, failures) {
   }
 }
 
-function checkWorkspaceEvidence({
+function checkSearchEvidence({
   value,
-  workspaceKeywordSearchContractChange,
+  companyKeywordSearchContractChange,
   failures,
 }) {
   if (!value || /^(?:REPLACE_ME|TBD|TODO)$/i.test(value)) return;
   if (/^none\b/i.test(value)) {
-    if (workspaceKeywordSearchContractChange) {
+    if (companyKeywordSearchContractChange) {
       failures.push(
-        'workspace-keyword-search changes require "workspace - ..." evidence; "none" is not allowed.',
+        'company-keyword-search changes require "company - ..." evidence; "none" is not allowed.',
       );
     }
     if (!/^none\s+[--]\s+\S.{2,}$/i.test(value)) {
       failures.push(
-        'workspace-keyword-search evidence must use "none - reason" with a concrete reason.',
+        'company-keyword-search evidence must use "none - reason" with a concrete reason.',
       );
     }
     return;
   }
-  if (/^workspace\b/i.test(value)) {
+  if (/^company\b/i.test(value)) {
     const missingEvidence = [
       'owner',
       'entity',
@@ -250,14 +256,14 @@ function checkWorkspaceEvidence({
     ].filter((token) => !value.toLowerCase().includes(token));
     if (missingEvidence.length > 0) {
       failures.push(
-        'workspace-keyword-search workspace evidence is missing: ' +
+        'company-keyword-search company evidence is missing: ' +
           missingEvidence.join(', '),
       );
     }
     return;
   }
   failures.push(
-    'workspace-keyword-search evidence must start with "none - reason" or "workspace - ...".',
+    'company-keyword-search evidence must start with "none - reason" or "company - ...".',
   );
 }
 
@@ -291,7 +297,7 @@ export function checkMergeRequestContractEvidence({
     (filePath) =>
       isDomainAppDeliveryPath(filePath) ||
       isProtectedCorePath(filePath) ||
-      isWorkspaceKeywordSearchContractPath(filePath),
+      isCompanyKeywordSearchContractPath(filePath),
   );
   const evidenceKind = selectEvidenceKind(description, changedPaths);
   if (!evidenceKind) {
@@ -371,10 +377,10 @@ export function checkMergeRequestContractEvidence({
     checkFieldValue(fieldId, value, failures);
   }
 
-  checkWorkspaceEvidence({
-    value: fieldValues.get('workspace-keyword-search') ?? '',
-    workspaceKeywordSearchContractChange: changedPaths.some(
-      isWorkspaceKeywordSearchContractPath,
+  checkSearchEvidence({
+    value: fieldValues.get('company-keyword-search') ?? '',
+    companyKeywordSearchContractChange: changedPaths.some(
+      isCompanyKeywordSearchContractPath,
     ),
     failures,
   });

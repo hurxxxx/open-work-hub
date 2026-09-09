@@ -7,7 +7,6 @@ from typing import Any, Literal, Protocol
 from open_work_hub_api.core.i18n import LocalizedApiMessage
 from open_work_hub_api.core.llm_adapters import StreamChunk
 
-
 OfficialProviderHealthStatus = Literal["ready", "unavailable", "model_missing"]
 
 

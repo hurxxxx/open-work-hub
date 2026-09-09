@@ -41,9 +41,8 @@ describe('useDocsCollabSnapshotSaveController', () => {
 
   it('debounces collaboration snapshot saves and persists the latest blocks', async () => {
     vi.useFakeTimers();
-    const { result, saveSnapshot, onSavedSnapshot, snapshot } = renderController({
-      workspaceSlug: 'general',
-    });
+    const { result, saveSnapshot, onSavedSnapshot, snapshot } =
+      renderController({});
     const oldBlocks = [{ type: 'paragraph', content: [{ text: 'Old' }] }];
     const latestBlocks = [{ type: 'paragraph', content: [{ text: 'Latest' }] }];
 
@@ -61,7 +60,6 @@ describe('useDocsCollabSnapshotSaveController', () => {
       'token-1',
       'native_doc_page__page-1',
       { content_blocks: latestBlocks },
-      'general',
     );
     expect(onSavedSnapshot).toHaveBeenCalledWith(snapshot);
   });
@@ -86,7 +84,6 @@ describe('useDocsCollabSnapshotSaveController', () => {
       'token-1',
       'native_doc_page__page-1',
       { content_blocks: blocks },
-      undefined,
     );
   });
 
@@ -110,7 +107,6 @@ describe('useDocsCollabSnapshotSaveController', () => {
       'token-1',
       'native_doc_page__page-1',
       { content_blocks: blocks, yjs_state: 'base64-yjs-state' },
-      undefined,
     );
   });
 
@@ -129,7 +125,6 @@ describe('useDocsCollabSnapshotSaveController', () => {
       'token-1',
       'native_doc_page__page-1',
       { content_blocks: blocks },
-      undefined,
       { keepalive: true },
     );
   });

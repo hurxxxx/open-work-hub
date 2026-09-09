@@ -9,12 +9,9 @@ import {
 import { useMemo, useState } from 'react';
 
 import { cn } from '@/src/lib/utils';
-import type { WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
-import type { WorkspaceBootstrapAppBarCategory } from '@/src/platform/workspaces/workspaces-api';
-import {
-  type AppBarTranslator,
-  type AppBarWorkspaceItem,
-} from './app-bar-model';
+import type { ShellAppId } from '@/src/platform/apps/app-links';
+import type { BootstrapAppBarCategory } from '@/src/platform/apps/apps-api';
+import { type AppBarLaunchItem, type AppBarTranslator } from './app-bar-model';
 
 export function AppBarEditor({
   appBarLayoutError,
@@ -32,15 +29,15 @@ export function AppBarEditor({
 }: {
   appBarLayoutError: string | null;
   appBarLayoutSaving: boolean;
-  draftItems: AppBarWorkspaceItem[];
-  draftPinnedAppIds: WorkspaceAppId[];
-  launcherCategories: WorkspaceBootstrapAppBarCategory[];
+  draftItems: AppBarLaunchItem[];
+  draftPinnedAppIds: ShellAppId[];
+  launcherCategories: BootstrapAppBarCategory[];
   onClose: () => void;
-  onMovePinnedApp: (appId: WorkspaceAppId, direction: -1 | 1) => void;
+  onMovePinnedApp: (appId: ShellAppId, direction: -1 | 1) => void;
   onReset: () => void;
   onSave: () => void;
-  onTogglePinnedApp: (appId: WorkspaceAppId, checked: boolean) => void;
-  pinnedEligibleAppIds: ReadonlySet<WorkspaceAppId>;
+  onTogglePinnedApp: (appId: ShellAppId, checked: boolean) => void;
+  pinnedEligibleAppIds: ReadonlySet<ShellAppId>;
   t: AppBarTranslator;
 }) {
   const [query, setQuery] = useState('');
@@ -225,7 +222,7 @@ export function AppBarEditor({
 interface AppBarEditorCategoryGroup {
   id: string;
   title: string;
-  items: AppBarWorkspaceItem[];
+  items: AppBarLaunchItem[];
 }
 
 function buildEditorCategoryGroups({
@@ -235,18 +232,18 @@ function buildEditorCategoryGroups({
   pinnedEligibleAppIds,
   t,
 }: {
-  draftItems: AppBarWorkspaceItem[];
-  itemById: ReadonlyMap<WorkspaceAppId, AppBarWorkspaceItem>;
-  launcherCategories: WorkspaceBootstrapAppBarCategory[];
-  pinnedEligibleAppIds: ReadonlySet<WorkspaceAppId>;
+  draftItems: AppBarLaunchItem[];
+  itemById: ReadonlyMap<ShellAppId, AppBarLaunchItem>;
+  launcherCategories: BootstrapAppBarCategory[];
+  pinnedEligibleAppIds: ReadonlySet<ShellAppId>;
   t: AppBarTranslator;
 }): AppBarEditorCategoryGroup[] {
-  const groupedAppIds = new Set<WorkspaceAppId>();
+  const groupedAppIds = new Set<ShellAppId>();
   const groups: AppBarEditorCategoryGroup[] = [];
 
   for (const category of launcherCategories) {
     const items = category.items.flatMap((launcherItem) => {
-      const appId = launcherItem.app_id as WorkspaceAppId;
+      const appId = launcherItem.app_id as ShellAppId;
       const item = itemById.get(appId);
       if (
         !launcherItem.enabled ||
@@ -292,9 +289,9 @@ function EditorAppRow({
   reorderable,
   t,
 }: {
-  item: AppBarWorkspaceItem;
-  onMovePinnedApp: (appId: WorkspaceAppId, direction: -1 | 1) => void;
-  onTogglePinnedApp: (appId: WorkspaceAppId, checked: boolean) => void;
+  item: AppBarLaunchItem;
+  onMovePinnedApp: (appId: ShellAppId, direction: -1 | 1) => void;
+  onTogglePinnedApp: (appId: ShellAppId, checked: boolean) => void;
   pinned: boolean;
   pinnedIndex: number;
   pinnedTotal: number;

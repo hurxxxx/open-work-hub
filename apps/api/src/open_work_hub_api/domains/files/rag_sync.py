@@ -40,7 +40,6 @@ from open_work_hub_api.domains.source_access.resource_types import FILE_MANAGER_
 class _FileProjectionEnvelope:
     retrieval_partition_id: str
     scope_kind: RagScopeKind
-    workspace_id: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +96,6 @@ def enqueue_file_retrieval_sync(
             else RetrievalProjectionDesiredState.ACTIVE
         ),
         content_checksum=file.extraction_content_checksum,
-        diagnostic_workspace_id=file.workspace_id,
     )
     if not FILES_RETRIEVAL_ACTIVE:
         return
@@ -113,7 +111,6 @@ def enqueue_file_retrieval_sync(
     enqueue_rag_sync_job(
         db,
         scope_kind=envelope.scope_kind,
-        workspace_id=envelope.workspace_id,
         resource_type=FILE_MANAGER_FILE_RESOURCE_TYPE,
         resource_id=file.id,
         operation=operation,
@@ -173,7 +170,6 @@ def adopt_legacy_file_retrieval_heads(
             change_kind=RetrievalProjectionChangeKind.REPAIR,
             desired_state=desired_state,
             content_checksum=content_checksum,
-            diagnostic_workspace_id=file.workspace_id,
             trace_context={"reconciliation": "legacy_files_adoption"},
         )
 
@@ -251,19 +247,17 @@ def stage_file_retrieval_reconciliation(
         if not _projection_event_is_current_head(event=event, head=head):
             continue
         projection_event = _projection_event_ref(event)
-        envelope, managed_workspace_id = _resolve_reconciliation_envelope(
+        envelope = _resolve_reconciliation_envelope(
             db,
             projection_event=projection_event,
         )
         stage_file_search_reconciliation_job(
             db,
             projection_event=projection_event,
-            workspace_id=managed_workspace_id,
         )
         enqueue_rag_sync_job(
             db,
             scope_kind=envelope.scope_kind,
-            workspace_id=envelope.workspace_id,
             resource_type=projection_event.resource_type,
             resource_id=projection_event.resource_id,
             operation=_reconciliation_rag_operation(projection_event),
@@ -395,61 +389,31 @@ def mark_file_projection_failed(
 
 
 def _resolve_file_projection_envelope(
-    db: Session,
-    *,
-    file: FileManagerFile,
+    db: Session, *, file: FileManagerFile
 ) -> _FileProjectionEnvelope:
     if file.corpus_id is None:
-        if file.retrieval_partition_id is None:
-            assign_default_partition(
-                db,
-                target=file,
-                source_namespace="files",
-                candidate_scope_kind="workspace",
-                workspace_id=file.workspace_id,
-            )
-        return _FileProjectionEnvelope(
-            retrieval_partition_id=str(file.retrieval_partition_id),
-            scope_kind=RagScopeKind.WORKSPACE,
-            workspace_id=file.workspace_id,
+        assign_default_partition(
+            db, target=file, source_namespace="files", candidate_scope_kind="company"
         )
-
+        return _FileProjectionEnvelope(
+            retrieval_partition_id=str(file.retrieval_partition_id), scope_kind=RagScopeKind.COMPANY
+        )
     corpus = db.get(FileManagerCorpus, file.corpus_id)
-    if corpus is None:
-        raise ValueError(f"File corpus is missing: {file.corpus_id}")
-    if corpus.managed_workspace_id != file.workspace_id:
-        raise ValueError("File workspace does not match its corpus manager")
-    if file.retrieval_partition_id is None:
-        file.retrieval_partition_id = corpus.retrieval_partition_id
-    elif str(file.retrieval_partition_id) != str(corpus.retrieval_partition_id):
+    if corpus is None or file.retrieval_partition_id != corpus.retrieval_partition_id:
         raise ValueError("File partition does not match its corpus")
-
     partition = db.get(RetrievalPartition, corpus.retrieval_partition_id)
-    expected_workspace_id = (
-        corpus.managed_workspace_id if corpus.access_scope_kind == "workspace" else None
-    )
     if (
         partition is None
         or partition.source_namespace != "files"
         or partition.is_default_ingest
         or partition.state != RetrievalPartitionState.ACTIVE.value
-        or partition.managed_workspace_id != corpus.managed_workspace_id
-        or partition.candidate_scope_kind != corpus.access_scope_kind
-        or partition.candidate_workspace_id != expected_workspace_id
+        or partition.candidate_scope_kind != "company"
         or partition.candidate_user_id is not None
+        or partition.metadata_version != corpus.metadata_version
     ):
-        raise ValueError("File corpus partition metadata does not match its source ACL")
-
-    if corpus.access_scope_kind == "company":
-        return _FileProjectionEnvelope(
-            retrieval_partition_id=str(corpus.retrieval_partition_id),
-            scope_kind=RagScopeKind.COMPANY,
-            workspace_id=None,
-        )
+        raise ValueError("File corpus partition metadata does not match its source")
     return _FileProjectionEnvelope(
-        retrieval_partition_id=str(corpus.retrieval_partition_id),
-        scope_kind=RagScopeKind.WORKSPACE,
-        workspace_id=corpus.managed_workspace_id,
+        retrieval_partition_id=partition.id, scope_kind=RagScopeKind.COMPANY
     )
 
 
@@ -487,56 +451,29 @@ def _projection_event_ref(event: RetrievalProjectionEvent) -> ProjectionEventRef
         desired_state=event.desired_state,
         content_checksum=event.content_checksum,
         visibility_checksum=event.visibility_checksum,
-        diagnostic_workspace_id=event.diagnostic_workspace_id,
     )
 
 
 def _resolve_reconciliation_envelope(
-    db: Session,
-    *,
-    projection_event: ProjectionEventRef,
-) -> tuple[_FileProjectionEnvelope, str]:
+    db: Session, *, projection_event: ProjectionEventRef
+) -> _FileProjectionEnvelope:
     file = db.get(FileManagerFile, projection_event.resource_id, populate_existing=True)
     if file is not None:
         envelope = _resolve_file_projection_envelope(db, file=file)
         if envelope.retrieval_partition_id != projection_event.retrieval_partition_id:
             raise ValueError("Files reconciliation source partition does not match its event")
-        return envelope, file.workspace_id
-
+        return envelope
     partition = db.get(RetrievalPartition, projection_event.retrieval_partition_id)
     if (
         partition is None
         or partition.source_namespace != "files"
         or partition.state != RetrievalPartitionState.ACTIVE.value
         or partition.candidate_user_id is not None
-        or partition.candidate_scope_kind not in {"company", "workspace"}
+        or partition.candidate_scope_kind != "company"
     ):
         raise ValueError("Files reconciliation partition metadata is invalid")
-    diagnostic_workspace_id = str(projection_event.diagnostic_workspace_id or "").strip()
-    if not diagnostic_workspace_id:
-        raise ValueError("Files reconciliation requires diagnostic_workspace_id")
-    if partition.managed_workspace_id != diagnostic_workspace_id:
-        raise ValueError("Files reconciliation partition manager does not match its event")
-    if partition.candidate_scope_kind == "company":
-        if partition.candidate_workspace_id is not None:
-            raise ValueError("Company Files reconciliation partition has a workspace candidate")
-        return (
-            _FileProjectionEnvelope(
-                retrieval_partition_id=projection_event.retrieval_partition_id,
-                scope_kind=RagScopeKind.COMPANY,
-                workspace_id=None,
-            ),
-            diagnostic_workspace_id,
-        )
-    if partition.candidate_workspace_id != diagnostic_workspace_id:
-        raise ValueError("Workspace Files reconciliation partition target does not match its event")
-    return (
-        _FileProjectionEnvelope(
-            retrieval_partition_id=projection_event.retrieval_partition_id,
-            scope_kind=RagScopeKind.WORKSPACE,
-            workspace_id=diagnostic_workspace_id,
-        ),
-        diagnostic_workspace_id,
+    return _FileProjectionEnvelope(
+        retrieval_partition_id=partition.id, scope_kind=RagScopeKind.COMPANY
     )
 
 

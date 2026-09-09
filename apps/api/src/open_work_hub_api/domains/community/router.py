@@ -8,10 +8,12 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.access import is_platform_admin_user
+from open_work_hub_api.domains.auth.app_gate import require_app_access
 from open_work_hub_api.domains.auth.dependencies import require_current_user
 from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.auth.workspace_app_gate import require_platform_app_enabled
-from open_work_hub_api.domains.community.app_catalog import COMMUNITY_WORKSPACE_APP
+from open_work_hub_api.domains.community.app_catalog import COMMUNITY_APP
+from open_work_hub_api.domains.content_access.dependencies import require_content_grant_issuer
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
 from open_work_hub_api.domains.dm import realtime_events
 
 from . import service
@@ -19,8 +21,8 @@ from .models import CommunityChannel, CommunityComment, CommunityPost
 from .schemas import (
     CommunityChannelCreateRequest,
     CommunityChannelOut,
-    CommunityChannelUpdateRequest,
     CommunityChannelsResponse,
+    CommunityChannelUpdateRequest,
     CommunityCommentCreateRequest,
     CommunityCommentOut,
     CommunityCommentUpdateRequest,
@@ -34,8 +36,8 @@ from .schemas import (
     CommunityUnlockRequest,
 )
 
-require_community_app_enabled = require_platform_app_enabled(
-    COMMUNITY_WORKSPACE_APP.app_id,
+require_community_app_enabled = require_app_access(
+    COMMUNITY_APP.app_id,
     error_code="platform.app_disabled",
 )
 
@@ -429,6 +431,7 @@ def resolve_community_post_media(
     payload: CommunityMediaResolveRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> CommunityMediaResolveResponse:
     post = _get_post_or_404(db, post_id=post_id)
     try:
@@ -438,6 +441,7 @@ def resolve_community_post_media(
             urls=payload.urls,
             viewer=current_user,
             viewer_is_admin=is_platform_admin_user(current_user, db),
+            content_grant_issuer=content_grant_issuer,
             password=payload.password,
         )
     except service.CommunityMediaAccessDeniedError:

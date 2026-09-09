@@ -17,7 +17,6 @@ import {
   viewFromSearch,
   whiteboardViewReducer,
   writeStoredLayoutMode,
-  type WhiteboardHubPathUser,
 } from './whiteboard-hub-model';
 
 function hubItem(
@@ -36,16 +35,6 @@ function detail(overrides: Partial<WhiteboardDetail> = {}): WhiteboardDetail {
     scene: { elements: [], appState: {}, files: {} },
     ...overrides,
   } as WhiteboardDetail;
-}
-
-function pathUser(): WhiteboardHubPathUser {
-  return {
-    default_workspace_id: 'workspace-default',
-    workspaces: [
-      { id: 'workspace-default', slug: 'default' },
-      { id: 'workspace-side', slug: 'side' },
-    ],
-  } as WhiteboardHubPathUser;
 }
 
 function memoryStorage(
@@ -151,13 +140,32 @@ describe('whiteboard hub model', () => {
     });
   });
 
-  it('builds create payloads for contextual and workspace-created boards', () => {
+  it('keeps personal ownership by default and requires explicit company acknowledgment', () => {
+    const options = { title: 'Untitled', targetFilter: null, itemCount: 4 };
+    expect(buildWhiteboardCreatePayload(options)).toEqual({
+      title: 'Untitled',
+      source_app: 'whiteboard',
+      source_kind: 'manual',
+      primary_target: null,
+      company_visible: false,
+      company_admin_read_acknowledged: false,
+    });
     expect(
       buildWhiteboardCreatePayload({
-        title: 'Untitled',
-        targetFilter: { app: 'pms', type: 'issue', id: 'issue-1' },
-        currentWorkspaceId: 'workspace-1',
-        itemCount: 4,
+        ...options,
+        visibility: 'company',
+        companyAdminReadAcknowledged: true,
+      }),
+    ).toMatchObject({
+      primary_target: null,
+      company_visible: true,
+      company_admin_read_acknowledged: true,
+    });
+    expect(
+      buildWhiteboardCreatePayload({
+        ...options,
+        targetFilter: { app: 'pms', type: 'space', id: 'space-1' },
+        companyAdminReadAcknowledged: true,
       }),
     ).toEqual({
       title: 'Untitled',
@@ -165,58 +173,13 @@ describe('whiteboard hub model', () => {
       source_kind: 'manual',
       primary_target: {
         app: 'pms',
-        type: 'issue',
-        id: 'issue-1',
+        type: 'space',
+        id: 'space-1',
         sort_order: 4,
+        company_admin_read_acknowledged: true,
       },
-    });
-
-    expect(
-      buildWhiteboardCreatePayload({
-        title: 'Untitled',
-        targetFilter: null,
-        currentWorkspaceId: 'workspace-1',
-        itemCount: 4,
-      }),
-    ).toEqual({
-      title: 'Untitled',
-      source_app: 'whiteboard',
-      source_kind: 'manual',
-      primary_target: null,
-    });
-
-    expect(
-      buildWhiteboardCreatePayload({
-        title: 'Untitled',
-        targetFilter: null,
-        currentWorkspaceId: 'workspace-1',
-        itemCount: 4,
-        visibility: 'workspace',
-      }),
-    ).toEqual({
-      title: 'Untitled',
-      source_app: 'whiteboard',
-      source_kind: 'manual',
-      primary_target: {
-        app: 'whiteboard',
-        type: 'workspace_sidebar',
-        id: 'workspace-1',
-        sort_order: 0,
-      },
-    });
-
-    expect(
-      buildWhiteboardCreatePayload({
-        title: 'Untitled',
-        targetFilter: null,
-        currentWorkspaceId: null,
-        itemCount: 4,
-        visibility: 'workspace',
-      }),
-    ).toMatchObject({
-      source_app: 'whiteboard',
-      source_kind: 'manual',
-      primary_target: null,
+      company_visible: false,
+      company_admin_read_acknowledged: true,
     });
   });
 
@@ -227,22 +190,14 @@ describe('whiteboard hub model', () => {
       buildWhiteboardHubItemPath({
         itemId: 'board-1',
         searchParams,
-        user: pathUser(),
-        workspaceSlug: 'team space',
       }),
-    ).toBe(
-      '/w/team%20space/whiteboard/board-1?view=recent&target_id=target-1',
-    );
+    ).toBe('/apps/whiteboard/boards/board-1?target_id=target-1&view=recent');
 
     expect(
       buildWhiteboardHubRootPath({
         searchParams,
-        user: pathUser(),
-        workspaceSlug: null,
       }),
-    ).toBe(
-      '/w/default/whiteboard?view=recent&target_id=target-1',
-    );
+    ).toBe('/apps/whiteboard?target_id=target-1&view=recent');
   });
 
   it('reads and writes the stored layout mode', () => {

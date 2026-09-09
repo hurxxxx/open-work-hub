@@ -14,12 +14,14 @@ WEB_SEARCH_WORKLOAD_IDS = {
 
 
 def register_ai_capabilities(registry: "AiCapabilityRegistry") -> None:
-    registrations = ((
-        "web_search.answer",
-        "web_search_answer",
-        "web-search",
-        "Public web search answer synthesis.",
-    ),)
+    registrations = (
+        (
+            "web_search.answer",
+            "web_search_answer",
+            "web-search",
+            "Public web search answer synthesis.",
+        ),
+    )
     for workload_id, task_kind, app_id, description in registrations:
         catalog_key = "webSearchAnswer"
         registry.register_llm_workload(

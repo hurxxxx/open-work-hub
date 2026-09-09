@@ -1,3 +1,9 @@
-export { videoChatManifest } from './manifest';
-export { videoChatWorkspaceRoutes } from './routes';
+import { videoChatManifest } from './manifest';
+import { videoChatAppRoutes } from './routes';
 
+export { videoChatAppRoutes, videoChatManifest };
+
+export const videoChatModule = {
+  manifest: videoChatManifest,
+  appRoutes: videoChatAppRoutes,
+} as const;

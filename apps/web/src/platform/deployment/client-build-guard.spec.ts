@@ -16,10 +16,10 @@ function makeRuntime(response: Response) {
   return {
     fetch,
     replace,
-    runtime: {
+    runtime: Object.assign(new EventTarget(), {
       fetch,
       location: {
-        href: 'https://app.test/w/hq/pms',
+        href: 'https://app.test/apps/pms',
         origin: 'https://app.test',
         replace,
       },
@@ -31,7 +31,7 @@ function makeRuntime(response: Response) {
         getItem: vi.fn((key: string) => storage.get(key) ?? null),
         setItem: vi.fn((key: string, value: string) => storage.set(key, value)),
       },
-    },
+    }),
   };
 }
 
@@ -40,7 +40,7 @@ describe('client build fetch guard', () => {
     const { fetch, runtime } = makeRuntime(new Response('{}', { status: 200 }));
     installClientBuildFetchGuard(runtime, { buildId: 'build-current' });
 
-    await runtime.fetch('/api/v1/workspaces', {
+    await runtime.fetch('/api/v1/apps/bootstrap', {
       headers: { Authorization: 'Bearer token' },
     });
 
@@ -56,7 +56,10 @@ describe('client build fetch guard', () => {
 
     await runtime.fetch('https://files.example.test/download');
 
-    const [, init] = fetch.mock.calls[0] as [RequestInfo | URL, RequestInit | undefined];
+    const [, init] = fetch.mock.calls[0] as [
+      RequestInfo | URL,
+      RequestInit | undefined,
+    ];
     expect(new Headers(init?.headers).has(CLIENT_BUILD_HEADER)).toBe(false);
   });
 
@@ -86,12 +89,12 @@ describe('client build fetch guard', () => {
       reloadOptions: { nowMs: () => 3000 },
     });
 
-    await runtime.fetch('/api/v1/workspaces');
-    await runtime.fetch('/api/v1/workspaces');
+    await runtime.fetch('/api/v1/apps/bootstrap');
+    await runtime.fetch('/api/v1/apps/bootstrap');
 
     expect(replace).toHaveBeenCalledTimes(1);
     expect(replace).toHaveBeenCalledWith(
-      'https://app.test/w/hq/pms?__reload=3000',
+      'https://app.test/apps/pms?__reload=3000',
     );
   });
 
@@ -135,16 +138,19 @@ describe('client build fetch guard', () => {
     request.responseHeaders.set('X-Open-Work-Hub-Reload-Required', '1');
     request.dispatchEvent(new Event('load'));
     expect(replace).toHaveBeenCalledWith(
-      'https://app.test/w/hq/pms?__reload=4000',
+      'https://app.test/apps/pms?__reload=4000',
     );
   });
 
   it('clears API classification when an XMLHttpRequest is reused externally', () => {
     class FakeXhr extends EventTarget {
       headers = new Headers();
+      method = '';
+      url = '';
 
-      open() {
-        return undefined;
+      open(method: string, url: string | URL) {
+        this.method = method;
+        this.url = String(url);
       }
 
       send() {
@@ -172,6 +178,8 @@ describe('client build fetch guard', () => {
     request.send();
 
     expect(request.headers.has(CLIENT_BUILD_HEADER)).toBe(false);
+    expect(request.method).toBe('GET');
+    expect(request.url).toBe('https://files.example.test/download');
   });
 
   it('pins same-origin API websockets and reloads on the guard close code', () => {
@@ -198,7 +206,7 @@ describe('client build fetch guard', () => {
     });
 
     const socket = new browserRuntime.WebSocket(
-      'wss://app.test/api/v1/realtime/ws?workspace=hq',
+      'wss://app.test/api/v1/realtime/ws?client_build_id=build-1',
     ) as unknown as FakeWebSocket;
     const socketUrl = new URL(socket.url);
     expect(socketUrl.searchParams.get(CLIENT_BUILD_WEBSOCKET_QUERY_PARAM)).toBe(
@@ -211,7 +219,7 @@ describe('client build fetch guard', () => {
     });
     socket.dispatchEvent(closeEvent);
     expect(replace).toHaveBeenCalledWith(
-      'https://app.test/w/hq/pms?__reload=5000',
+      'https://app.test/apps/pms?__reload=5000',
     );
   });
 });

@@ -1,13 +1,12 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
-import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type BentoHubView = 'all' | 'mine' | 'archived';
-export type BentoVisibility = 'personal' | 'workspace';
+export type BentoVisibility = 'personal' | 'company';
 export type BentoGenerationLanguage = 'auto' | 'ko' | 'en';
 
 export interface BentoDocumentItem {
   id: string;
-  workspace_id: string;
+
   title: string;
   visibility: BentoVisibility;
   version: number;
@@ -71,14 +70,9 @@ async function request<T>(
   path: string,
   token: string,
   init: RequestInit = {},
-  workspaceSlug?: string | null,
 ): Promise<T> {
   try {
-    return await apiFetchJson<T>(
-      rewriteWorkspaceApiPath(path, workspaceSlug),
-      token,
-      init,
-    );
+    return await apiFetchJson<T>(path, token, init);
   } catch (error) {
     if (error instanceof ApiRequestError) {
       throw new BentoApiError(error.status, error.message);
@@ -102,13 +96,11 @@ function withQuery(
 export function listBentoDocuments(
   token: string,
   params: { view?: BentoHubView; q?: string },
-  workspaceSlug?: string | null,
 ): Promise<BentoHubResponse> {
   return request<BentoHubResponse>(
     withQuery(`${API_BASE}/hub`, params),
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -116,17 +108,15 @@ export function createBentoDocument(
   token: string,
   payload: {
     title: string;
+    company_admin_read_acknowledged?: boolean;
     visibility?: BentoVisibility;
     document_json?: string;
   },
-  workspaceSlug?: string | null,
 ): Promise<BentoDocumentDetail> {
-  return request<BentoDocumentDetail>(
-    `${API_BASE}/items`,
-    token,
-    { method: 'POST', body: JSON.stringify(payload) },
-    workspaceSlug,
-  );
+  return request<BentoDocumentDetail>(`${API_BASE}/items`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function generateBentoDocument(
@@ -135,28 +125,24 @@ export function generateBentoDocument(
     prompt: string;
     slide_count?: number;
     language?: BentoGenerationLanguage;
+    company_admin_read_acknowledged?: boolean;
     visibility?: BentoVisibility;
   },
-  workspaceSlug?: string | null,
 ): Promise<BentoAiJob> {
-  return request<BentoAiJob>(
-    `${API_BASE}/items/generate`,
-    token,
-    { method: 'POST', body: JSON.stringify(payload) },
-    workspaceSlug,
-  );
+  return request<BentoAiJob>(`${API_BASE}/items/generate`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getBentoDocument(
   token: string,
   documentId: string,
-  workspaceSlug?: string | null,
 ): Promise<BentoDocumentDetail> {
   return request<BentoDocumentDetail>(
     `${API_BASE}/items/${encodeURIComponent(documentId)}`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
@@ -168,46 +154,37 @@ export function editBentoDocumentWithAi(
     prompt: string;
     language?: BentoGenerationLanguage;
   },
-  workspaceSlug?: string | null,
 ): Promise<BentoAiJob> {
   return request<BentoAiJob>(
     `${API_BASE}/items/${encodeURIComponent(documentId)}/ai-edit`,
     token,
     { method: 'POST', body: JSON.stringify(payload) },
-    workspaceSlug,
   );
 }
 
-export function listBentoAiJobs(
-  token: string,
-  workspaceSlug?: string | null,
-): Promise<BentoAiJob[]> {
-  return request<BentoAiJob[]>(`${API_BASE}/ai-jobs`, token, {}, workspaceSlug);
+export function listBentoAiJobs(token: string): Promise<BentoAiJob[]> {
+  return request<BentoAiJob[]>(`${API_BASE}/ai-jobs`, token, {});
 }
 
 export function getBentoAiJob(
   token: string,
   jobId: string,
-  workspaceSlug?: string | null,
 ): Promise<BentoAiJob> {
   return request<BentoAiJob>(
     `${API_BASE}/ai-jobs/${encodeURIComponent(jobId)}`,
     token,
     {},
-    workspaceSlug,
   );
 }
 
 export function cancelBentoAiJob(
   token: string,
   jobId: string,
-  workspaceSlug?: string | null,
 ): Promise<BentoAiJob> {
   return request<BentoAiJob>(
     `${API_BASE}/ai-jobs/${encodeURIComponent(jobId)}/cancel`,
     token,
     { method: 'POST' },
-    workspaceSlug,
   );
 }
 
@@ -217,54 +194,47 @@ export function updateBentoDocument(
   payload: {
     version: number;
     title?: string;
+    company_admin_read_acknowledged?: boolean;
     visibility?: BentoVisibility;
     document_json?: string;
   },
-  workspaceSlug?: string | null,
 ): Promise<BentoDocumentDetail> {
   return request<BentoDocumentDetail>(
     `${API_BASE}/items/${encodeURIComponent(documentId)}`,
     token,
     { method: 'PATCH', body: JSON.stringify(payload) },
-    workspaceSlug,
   );
 }
 
 export function archiveBentoDocument(
   token: string,
   documentId: string,
-  workspaceSlug?: string | null,
 ): Promise<void> {
   return request<void>(
     `${API_BASE}/items/${encodeURIComponent(documentId)}`,
     token,
     { method: 'DELETE' },
-    workspaceSlug,
   );
 }
 
 export function restoreBentoDocument(
   token: string,
   documentId: string,
-  workspaceSlug?: string | null,
 ): Promise<BentoDocumentDetail> {
   return request<BentoDocumentDetail>(
     `${API_BASE}/items/${encodeURIComponent(documentId)}/restore`,
     token,
     { method: 'POST' },
-    workspaceSlug,
   );
 }
 
 export function permanentlyDeleteBentoDocument(
   token: string,
   documentId: string,
-  workspaceSlug?: string | null,
 ): Promise<void> {
   return request<void>(
     `${API_BASE}/items/${encodeURIComponent(documentId)}/permanent`,
     token,
     { method: 'DELETE' },
-    workspaceSlug,
   );
 }

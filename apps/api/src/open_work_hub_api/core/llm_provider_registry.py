@@ -148,8 +148,7 @@ def external_llm_provider_ids(*, official_only: bool = False) -> tuple[str, ...]
         sorted(
             provider_id
             for provider_id, descriptor in _providers_by_id.items()
-            if descriptor.route_mode == "external"
-            and (not official_only or descriptor.official)
+            if descriptor.route_mode == "external" and (not official_only or descriptor.official)
         )
     )
 

@@ -25,7 +25,6 @@ from open_work_hub_api.domains.ai.runtime.external_planner_hints import (
     external_planner_hint_for_runtime_profile,
 )
 
-
 EXTERNAL_PLANNER_ADAPTER_ID = "external_planner_v0"
 
 ExternalPlannerStatus = ExternalCapabilityRequestStatus
@@ -34,9 +33,7 @@ ExternalPlannerExecutionStatus = ExternalCapabilityExecutionStatus
 ExternalPlannerExecutionDisabledReason = ExternalCapabilityExecutionDisabledReason
 
 _PLANNER_REQUEST_SUMMARY_PROJECTION = external_request_summary_projection(
-    (
-        RedactedSummaryField("message_count", source_attr="messages", codec="count"),
-    )
+    (RedactedSummaryField("message_count", source_attr="messages", codec="count"),)
 )
 _PLANNER_EXECUTION_SUMMARY_PROJECTION = external_execution_summary_projection(
     (
@@ -188,7 +185,7 @@ def _planner_messages(
             "content": (
                 "You are an external graph planner. Use only the sanitized "
                 "user prompt and listed agent ids. Do not infer private "
-                "workspace facts or request raw user content."
+                "company or personal facts or request raw user content."
             ),
         },
         {

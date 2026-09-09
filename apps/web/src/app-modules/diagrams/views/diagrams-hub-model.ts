@@ -1,12 +1,8 @@
-import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import type { DiagramHubView, DiagramItem } from '../api/diagrams-api';
 
 export type DiagramLayoutMode = 'grid' | 'list';
 type LayoutModeStorage = Pick<Storage, 'getItem' | 'setItem'>;
-type DiagramHubPathUser = Parameters<typeof resolveDefaultWorkspaceAppPath>[0];
 
 export interface DiagramsHubState {
   items: DiagramItem[];
@@ -74,31 +70,18 @@ export function viewFromSearch(value: string | null): DiagramHubView {
   return 'all';
 }
 
-export function itemPath({
-  itemId,
-  user,
-  workspaceSlug,
-}: {
-  itemId: string;
-  user: DiagramHubPathUser;
-  workspaceSlug?: string | null;
-}): string {
-  const suffix = `/${encodeURIComponent(itemId)}`;
-  return workspaceSlug
-    ? buildWorkspaceAppPath(workspaceSlug, 'diagrams', suffix)
-    : resolveDefaultWorkspaceAppPath(user, 'diagrams', suffix);
+export function itemPath({ itemId }: { itemId: string }): string {
+  return buildAppHref({
+    routeId: 'diagrams.diagram',
+    pathParams: { diagramId: itemId },
+  });
 }
 
-export function rootPath(
-  workspaceSlug: string | undefined | null,
-  user: DiagramHubPathUser,
-  searchParams: URLSearchParams,
-): string {
-  const basePath = workspaceSlug
-    ? buildWorkspaceAppPath(workspaceSlug, 'diagrams')
-    : resolveDefaultWorkspaceAppPath(user, 'diagrams');
-  const query = searchParams.toString();
-  return query ? `${basePath}?${query}` : basePath;
+export function rootPath(searchParams: URLSearchParams): string {
+  return buildAppHref({
+    routeId: 'diagrams.root',
+    queryParams: Object.fromEntries(searchParams),
+  });
 }
 
 function getBrowserLayoutStorage(): LayoutModeStorage | null {

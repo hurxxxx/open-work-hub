@@ -27,22 +27,18 @@ describe('usePmsTaskListGroupPreference', () => {
     );
   });
 
-  it('loads the account preference for the current workspace', async () => {
+  it('loads the account preference for the current user', async () => {
     apiMocks.getPmsViewPreferences.mockResolvedValue({
       task_list_group_by: 'assignee',
     });
     const { result } = renderHook(() =>
       usePmsTaskListGroupPreference({
         enabled: true,
-        workspaceSlug: 'workspace-1',
       }),
     );
 
     await waitFor(() => expect(result.current.groupBy).toBe('assignee'));
-    expect(apiMocks.getPmsViewPreferences).toHaveBeenCalledWith(
-      'token-1',
-      'workspace-1',
-    );
+    expect(apiMocks.getPmsViewPreferences).toHaveBeenCalledWith('token-1');
   });
 
   it('serializes rapid changes so the last selection is persisted last', async () => {
@@ -60,7 +56,6 @@ describe('usePmsTaskListGroupPreference', () => {
     const { result } = renderHook(() =>
       usePmsTaskListGroupPreference({
         enabled: true,
-        workspaceSlug: 'workspace-1',
       }),
     );
     await waitFor(() =>
@@ -84,7 +79,6 @@ describe('usePmsTaskListGroupPreference', () => {
       2,
       'token-1',
       { task_list_group_by: 'none' },
-      'workspace-1',
     );
   });
 });

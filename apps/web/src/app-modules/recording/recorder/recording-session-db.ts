@@ -1,4 +1,8 @@
-import { deleteOpfsSession, readOpfsChunk, writeOpfsChunk } from './recording-blob-store';
+import {
+  deleteOpfsSession,
+  readOpfsChunk,
+  writeOpfsChunk,
+} from './recording-blob-store';
 
 export interface RecordingTargetRef {
   app: string;
@@ -10,7 +14,7 @@ export type RecordingSessionSource = 'quick_record' | 'live_recording';
 
 export interface RecordingSessionState {
   stagingId: string;
-  workspaceSlug: string;
+  userId: string;
   scopeKey: string;
   idempotencyKey: string;
   mimeType: string;
@@ -28,7 +32,6 @@ export interface RecordingSessionState {
   uploadCompletedAt: number | null;
   interruptedAt: number | null;
   interruptionReason: string | null;
-  meetingId?: string | null;
 }
 
 export interface RecordingChunkState {
@@ -46,8 +49,8 @@ type StoredRecordingChunkState = Omit<RecordingChunkState, 'blob'> & {
   blob?: Blob | null;
 };
 
-const DB_NAME = 'open-work-hub-recording';
-const DB_VERSION = 3;
+const DB_NAME = 'open-work-hub-personal-recording';
+const DB_VERSION = 1;
 const SESSION_STORE = 'sessions';
 const CHUNK_STORE = 'chunks';
 
@@ -57,25 +60,15 @@ function openDb(): Promise<IDBDatabase> {
     request.onerror = () => reject(request.error);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(SESSION_STORE)) {
-        const store = db.createObjectStore(SESSION_STORE, { keyPath: 'stagingId' });
-        store.createIndex('meetingId', 'meetingId', { unique: false });
-        store.createIndex('workspaceSlug', 'workspaceSlug', { unique: false });
-        store.createIndex('scopeKey', 'scopeKey', { unique: false });
-      } else {
-        const store = request.transaction?.objectStore(SESSION_STORE);
-        if (store && !store.indexNames.contains('meetingId')) {
-          store.createIndex('meetingId', 'meetingId', { unique: false });
-        }
-        if (store && !store.indexNames.contains('workspaceSlug')) {
-          store.createIndex('workspaceSlug', 'workspaceSlug', { unique: false });
-        }
-        if (store && !store.indexNames.contains('scopeKey')) {
-          store.createIndex('scopeKey', 'scopeKey', { unique: false });
-        }
-      }
+      const sessions = db.createObjectStore(SESSION_STORE, {
+        keyPath: 'stagingId',
+      });
+      sessions.createIndex('userId', 'userId', { unique: false });
+      sessions.createIndex('scopeKey', 'scopeKey', { unique: false });
       if (!db.objectStoreNames.contains(CHUNK_STORE)) {
-        const store = db.createObjectStore(CHUNK_STORE, { keyPath: ['stagingId', 'seq'] });
+        const store = db.createObjectStore(CHUNK_STORE, {
+          keyPath: ['stagingId', 'seq'],
+        });
         store.createIndex('stagingId', 'stagingId', { unique: false });
       }
     };
@@ -126,49 +119,54 @@ function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
 }
 
 export function buildRecordingScopeKey(
-  workspaceSlug: string,
+  userId: string,
   target: RecordingTargetRef | null | undefined,
 ): string {
   if (!target) {
-    return `${workspaceSlug}:recording:unlinked`;
+    return `${userId}:recording:unlinked`;
   }
-  return `${workspaceSlug}:${target.app}:${target.type}:${target.id}`;
+  return `${userId}:${target.app}:${target.type}:${target.id}`;
 }
 
-export function sessionTarget(session: RecordingSessionState): RecordingTargetRef | null {
-  if (session.initialTargetApp && session.initialTargetType && session.initialTargetId) {
+export function sessionTarget(
+  session: RecordingSessionState,
+): RecordingTargetRef | null {
+  if (
+    session.initialTargetApp &&
+    session.initialTargetType &&
+    session.initialTargetId
+  ) {
     return {
       app: session.initialTargetApp,
       type: session.initialTargetType,
       id: session.initialTargetId,
     };
   }
-  if (session.meetingId) {
-    return { app: 'meeting', type: 'meeting', id: session.meetingId };
-  }
   return null;
 }
 
-function normalizeSession(value: Partial<RecordingSessionState>): RecordingSessionState {
-  const legacyMeetingId = value.meetingId ?? null;
-  const target = value.initialTargetApp && value.initialTargetType && value.initialTargetId
-    ? {
-        app: value.initialTargetApp,
-        type: value.initialTargetType,
-        id: value.initialTargetId,
-      }
-    : legacyMeetingId
-      ? { app: 'meeting', type: 'meeting', id: legacyMeetingId }
+function normalizeSession(
+  value: Partial<RecordingSessionState>,
+): RecordingSessionState {
+  const target =
+    value.initialTargetApp && value.initialTargetType && value.initialTargetId
+      ? {
+          app: value.initialTargetApp,
+          type: value.initialTargetType,
+          id: value.initialTargetId,
+        }
       : null;
-  const workspaceSlug = value.workspaceSlug ?? '';
   return {
     stagingId: value.stagingId ?? '',
-    workspaceSlug,
-    scopeKey: value.scopeKey ?? buildRecordingScopeKey(workspaceSlug, target),
+    userId: value.userId ?? '',
+    scopeKey:
+      value.scopeKey ?? buildRecordingScopeKey(value.userId ?? '', target),
     idempotencyKey: value.idempotencyKey ?? '',
     mimeType: value.mimeType ?? 'audio/webm',
     title: value.title ?? null,
-    source: value.source ?? (target?.app === 'meeting' ? 'live_recording' : 'quick_record'),
+    source:
+      value.source ??
+      (target?.app === 'meeting' ? 'live_recording' : 'quick_record'),
     initialTargetApp: value.initialTargetApp ?? target?.app ?? null,
     initialTargetType: value.initialTargetType ?? target?.type ?? null,
     initialTargetId: value.initialTargetId ?? target?.id ?? null,
@@ -181,24 +179,31 @@ function normalizeSession(value: Partial<RecordingSessionState>): RecordingSessi
     uploadCompletedAt: value.uploadCompletedAt ?? null,
     interruptedAt: value.interruptedAt ?? null,
     interruptionReason: value.interruptionReason ?? null,
-    meetingId: legacyMeetingId,
   };
 }
 
-export async function upsertSession(session: RecordingSessionState): Promise<void> {
+export async function upsertSession(
+  session: RecordingSessionState,
+): Promise<void> {
   await withStore(SESSION_STORE, 'readwrite', (store) =>
-    requestToPromise(store.put(normalizeSession(session))).then(() => undefined),
+    requestToPromise(store.put(normalizeSession(session))).then(
+      () => undefined,
+    ),
   );
 }
 
-export async function getSession(stagingId: string): Promise<RecordingSessionState | null> {
+export async function getSession(
+  stagingId: string,
+): Promise<RecordingSessionState | null> {
   return withStore(SESSION_STORE, 'readonly', (store) =>
-    requestToPromise(store.get(stagingId)).then((value) => (value ? normalizeSession(value) : null)),
+    requestToPromise(store.get(stagingId)).then((value) =>
+      value ? normalizeSession(value) : null,
+    ),
   );
 }
 
 export async function listIncompleteSessions(options: {
-  workspaceSlug: string;
+  userId: string;
   scopeKey?: string | null;
 }): Promise<RecordingSessionState[]> {
   return withStore(SESSION_STORE, 'readonly', async (store) => {
@@ -211,7 +216,7 @@ export async function listIncompleteSessions(options: {
       if (item.completedAt != null) {
         continue;
       }
-      if (options.workspaceSlug && item.workspaceSlug !== options.workspaceSlug) {
+      if (!options.userId || item.userId !== options.userId) {
         continue;
       }
       if (options.scopeKey && item.scopeKey !== options.scopeKey) {
@@ -223,16 +228,21 @@ export async function listIncompleteSessions(options: {
   });
 }
 
-async function getStoredChunks(stagingId: string): Promise<StoredRecordingChunkState[]> {
+async function getStoredChunks(
+  stagingId: string,
+): Promise<StoredRecordingChunkState[]> {
   return withStore(CHUNK_STORE, 'readonly', async (store) => {
     const index = store.index('stagingId');
-    const all = ((await requestToPromise(index.getAll(IDBKeyRange.only(stagingId)))) ?? []) as
-      StoredRecordingChunkState[];
+    const all = ((await requestToPromise(
+      index.getAll(IDBKeyRange.only(stagingId)),
+    )) ?? []) as StoredRecordingChunkState[];
     return all.sort((left, right) => left.seq - right.seq);
   });
 }
 
-async function hydrateChunk(chunk: StoredRecordingChunkState): Promise<RecordingChunkState | null> {
+async function hydrateChunk(
+  chunk: StoredRecordingChunkState,
+): Promise<RecordingChunkState | null> {
   if (chunk.storageBackend === 'opfs' && chunk.storagePath) {
     const blob = await readOpfsChunk(chunk.stagingId, chunk.storagePath);
     if (blob) {
@@ -278,21 +288,30 @@ async function putChunkRecord(chunk: StoredRecordingChunkState): Promise<void> {
   );
 }
 
-export async function getChunks(stagingId: string): Promise<RecordingChunkState[]> {
+export async function getChunks(
+  stagingId: string,
+): Promise<RecordingChunkState[]> {
   const all = await getStoredChunks(stagingId);
   const hydrated = await Promise.all(all.map((chunk) => hydrateChunk(chunk)));
-  return hydrated.filter((chunk): chunk is RecordingChunkState => chunk != null);
+  return hydrated.filter(
+    (chunk): chunk is RecordingChunkState => chunk != null,
+  );
 }
 
-export async function getPendingChunks(stagingId: string): Promise<RecordingChunkState[]> {
+export async function getPendingChunks(
+  stagingId: string,
+): Promise<RecordingChunkState[]> {
   const all = await getChunks(stagingId);
   return all.filter((chunk) => chunk.uploadedAt == null);
 }
 
-export async function markChunkUploaded(stagingId: string, seq: number): Promise<void> {
-  const existing = await withStore(CHUNK_STORE, 'readonly', (store) =>
+export async function markChunkUploaded(
+  stagingId: string,
+  seq: number,
+): Promise<void> {
+  const existing = (await withStore(CHUNK_STORE, 'readonly', (store) =>
     requestToPromise(store.get([stagingId, seq] as [string, number])),
-  ) as StoredRecordingChunkState | undefined;
+  )) as StoredRecordingChunkState | undefined;
   if (!existing) {
     return;
   }
@@ -308,11 +327,15 @@ export async function clearSession(stagingId: string): Promise<void> {
   await deleteSessionRecord(stagingId);
 }
 
-function deleteStoredChunks(chunks: StoredRecordingChunkState[]): Promise<void> {
+function deleteStoredChunks(
+  chunks: StoredRecordingChunkState[],
+): Promise<void> {
   return withStore(CHUNK_STORE, 'readwrite', (store) =>
     Promise.all(
       chunks.map((chunk) =>
-        requestToPromise(store.delete([chunk.stagingId, chunk.seq] as [string, number])),
+        requestToPromise(
+          store.delete([chunk.stagingId, chunk.seq] as [string, number]),
+        ),
       ),
     ).then(() => undefined),
   );
@@ -341,7 +364,9 @@ export async function updateSessionProgress(
   await upsertSession({ ...session, ...update });
 }
 
-export async function buildSessionBlob(stagingId: string): Promise<Blob | null> {
+export async function buildSessionBlob(
+  stagingId: string,
+): Promise<Blob | null> {
   const chunks = await getChunks(stagingId);
   if (chunks.length === 0) {
     return null;

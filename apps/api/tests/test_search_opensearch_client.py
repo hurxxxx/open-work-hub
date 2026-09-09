@@ -125,7 +125,6 @@ class ScriptedKeywordClient(OpenSearchKeywordClient):
 
 def _document(entity_id: str, body: str) -> dict:
     return {
-        "workspace_id": "workspace-1",
         "entity_type": "plugin_chunk",
         "entity_id": entity_id,
         "title": entity_id,
@@ -137,13 +136,11 @@ def _document(entity_id: str, body: str) -> dict:
 def _partitioned_document(
     entity_id: str,
     *,
-    workspace_id: str = "workspace-1",
     partition_id: str = "a3b6638a-7547-45f8-81f2-973bfa6080d6",
     projection_version: int = 7,
 ) -> dict[str, Any]:
     return {
         **_document(entity_id, "heater"),
-        "workspace_id": workspace_id,
         "resource_type": "file_manager_file",
         "retrieval_partition_id": partition_id,
         "projection_version": projection_version,
@@ -372,20 +369,22 @@ def test_content_sha256_hashes_canonical_documents_in_stable_order() -> None:
     client = ScriptedKeywordClient(existing_indices={target}, target_index_name=target)
     hits = [
         {
-            "_id": "workspace-1:file:file-1",
+            "_id": canonical_search_document_id(
+                resource_type="file_manager_file", resource_id="file-1"
+            ),
             "_source": {
-                "workspace_id": "workspace-1",
                 "entity_type": "file",
                 "entity_id": "file-1",
                 "title": "히터 사양",
             },
-            "sort": ["workspace-1", "file", "file-1"],
+            "sort": ["file", "file-1"],
         }
     ]
     original_request = client._request
 
     def request(method: str, path: str, **kwargs: Any) -> _Response:
         if method == "POST" and path.endswith("/_search"):
+            assert kwargs["json"]["sort"] == [{"entity_type": "asc"}, {"entity_id": "asc"}]
             return _Response({"hits": {"hits": hits}})
         return original_request(method, path, **kwargs)
 
@@ -398,6 +397,54 @@ def test_content_sha256_hashes_canonical_documents_in_stable_order() -> None:
     ).encode()
 
     assert client.content_sha256() == hashlib.sha256(canonical + b"\n").hexdigest()
+
+
+def test_content_sha256_paginates_with_the_canonical_two_field_cursor(monkeypatch) -> None:
+    from open_work_hub_api.domains.search import opensearch
+
+    monkeypatch.setattr(opensearch, "MAX_BULK_INDEX_DOCUMENTS", 1)
+    target = keyword_search_versioned_index_name("test", generation="release_20260721")
+    client = ScriptedKeywordClient(existing_indices={target}, target_index_name=target)
+    hits = [
+        {
+            "_id": canonical_search_document_id(
+                resource_type="file_manager_file", resource_id=f"file-{index}"
+            ),
+            "_source": {"entity_type": "file", "entity_id": f"file-{index}"},
+            "sort": ["file", f"file-{index}"],
+        }
+        for index in (1, 2)
+    ]
+    requests: list[dict[str, Any]] = []
+    original_request = client._request
+
+    def request(method: str, path: str, **kwargs: Any) -> _Response:
+        if method == "POST" and path.endswith("/_search"):
+            body = kwargs["json"]
+            assert body["sort"] == [{"entity_type": "asc"}, {"entity_id": "asc"}]
+            requests.append(body)
+            offset = len(requests) - 1
+            return _Response({"hits": {"hits": hits[offset : offset + 1]}})
+        return original_request(method, path, **kwargs)
+
+    client._request = request  # type: ignore[method-assign]
+    canonical = b"".join(
+        json.dumps(
+            {"_id": hit["_id"], "_source": hit["_source"]},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        + b"\n"
+        for hit in hits
+    )
+
+    assert client.content_sha256() == hashlib.sha256(canonical).hexdigest()
+    assert [body.get("search_after") for body in requests] == [
+        None,
+        ["file", "file-1"],
+        ["file", "file-2"],
+    ]
 
 
 def test_versioned_index_activation_rejects_incompatible_schema() -> None:
@@ -472,7 +519,7 @@ def test_versioned_rebuild_search_targets_named_generation_not_alias() -> None:
         calls.append((method, path)) or _Response({"hits": {"hits": []}})
     )
 
-    client.search(KeywordSearchQuery(workspace_id="workspace-1", text="heater"))
+    client.search(KeywordSearchQuery(text="heater"))
 
     assert calls == [
         (
@@ -493,12 +540,11 @@ def test_existing_index_mapping_update_includes_every_acl_query_field() -> None:
     assert keyword_acl_query_field_names() <= mapping_call[2]["json"]["properties"].keys()
 
 
-def test_workspace_document_count_can_be_scoped_to_entity_types() -> None:
+def test_company_document_count_can_be_scoped_to_entity_types() -> None:
     client = RecordingKeywordClient()
 
     assert (
-        client.count_workspace_documents(
-            workspace_id="workspace-1",
+        client.count_company_documents(
             entity_types=("doc", "pms_task"),
         )
         == 0
@@ -506,16 +552,9 @@ def test_workspace_document_count_can_be_scoped_to_entity_types() -> None:
 
     count_call = client.calls[-1]
     assert count_call[:2] == ("POST", f"/{client.index_name}/_count")
-    assert count_call[2]["json"] == {
-        "query": {
-            "bool": {
-                "filter": [
-                    {"term": {"workspace_id": "workspace-1"}},
-                    {"terms": {"entity_type": ["doc", "pms_task"]}},
-                ]
-            }
-        }
-    }
+    assert count_call[2]["json"] == {"query": {"terms": {"entity_type": ["doc", "pms_task"]}}}
+    client.count_company_documents()
+    assert client.calls[-1][2]["json"] == {"query": {"match_all": {}}}
 
 
 def test_candidate_search_forwards_request_timeout() -> None:
@@ -523,7 +562,6 @@ def test_candidate_search_forwards_request_timeout() -> None:
 
     client.search(
         KeywordSearchQuery(
-            workspace_id="workspace-1",
             request_timeout_seconds=5.0,
         )
     )
@@ -540,7 +578,6 @@ def test_partitioned_candidate_search_requires_explicit_partition_terms() -> Non
 
     client.search(
         KeywordSearchQuery(
-            workspace_id="diagnostic-workspace",
             retrieval_partition_ids=("a3b6638a-7547-45f8-81f2-973bfa6080d6",),
             text="heater",
         )
@@ -560,7 +597,7 @@ def test_partitioned_candidate_search_rejects_missing_partition_terms() -> None:
     )
 
     with pytest.raises(OpenSearchError, match="require retrieval_partition_ids"):
-        client.search(KeywordSearchQuery(workspace_id="diagnostic-workspace", text="heater"))
+        client.search(KeywordSearchQuery(text="heater"))
 
 
 def test_legacy_candidate_search_rejects_partition_terms() -> None:
@@ -569,7 +606,6 @@ def test_legacy_candidate_search_rejects_partition_terms() -> None:
     with pytest.raises(OpenSearchError, match="partitioned v3 generation"):
         client.search(
             KeywordSearchQuery(
-                workspace_id="diagnostic-workspace",
                 retrieval_partition_ids=("a3b6638a-7547-45f8-81f2-973bfa6080d6",),
                 text="heater",
             )
@@ -580,14 +616,13 @@ def test_legacy_candidate_search_rejects_partition_terms() -> None:
 
 def test_partitioned_candidate_search_rejects_empty_partition_scope() -> None:
     with pytest.raises(ValueError, match="retrieval_partition_ids"):
-        KeywordSearchQuery(workspace_id="diagnostic-workspace", retrieval_partition_ids=())
+        KeywordSearchQuery(retrieval_partition_ids=())
 
 
 def test_opensearch_pit_search_uses_global_endpoint_and_stable_tiebreaker() -> None:
     client = RecordingKeywordClient()
     client.search(
         KeywordSearchQuery(
-            workspace_id="workspace-1",
             text="heater",
             point_in_time_id="pit-1",
             search_after=(1.5, "2026-07-22", 42),
@@ -664,11 +699,10 @@ def test_bulk_document_chunks_split_by_document_count() -> None:
     ]
 
 
-def test_rebuild_workspace_indexes_documents_before_deleting_stale_documents() -> None:
+def test_rebuild_company_indexes_documents_before_deleting_stale_documents() -> None:
     client = RecordingKeywordClient()
 
-    client.rebuild_workspace(
-        workspace_id="workspace-1",
+    client.rebuild_company_index(
         documents=[_document("one", "body")],
     )
 
@@ -678,9 +712,9 @@ def test_rebuild_workspace_indexes_documents_before_deleting_stale_documents() -
     assert bulk_index < stale_delete
 
     delete_payload = client.calls[stale_delete][2]["json"]
-    assert delete_payload["query"]["bool"]["filter"] == [{"term": {"workspace_id": "workspace-1"}}]
+    assert "filter" not in delete_payload["query"]["bool"]
     assert delete_payload["query"]["bool"]["must_not"] == [
-        {"ids": {"values": ["workspace-1:plugin_chunk:one"]}}
+        {"ids": {"values": ["plugin_chunk:one"]}}
     ]
 
 
@@ -693,7 +727,7 @@ def test_legacy_live_write_keeps_scope_bound_id_without_external_version() -> No
     method, path, kwargs = client.calls[-1]
     assert (method, path) == (
         "PUT",
-        f"/{client.index_name}/_doc/workspace-1:plugin_chunk:one",
+        f"/{client.index_name}/_doc/plugin_chunk:one",
     )
     assert kwargs["params"] == {"refresh": "true"}
 
@@ -751,7 +785,6 @@ def test_partitioned_v3_operations_reject_a_changed_live_index_target() -> None:
         lambda: client.bulk_index_partitioned_documents([document]),
         lambda: client.search(
             KeywordSearchQuery(
-                workspace_id="workspace-1",
                 retrieval_partition_ids=("a3b6638a-7547-45f8-81f2-973bfa6080d6",),
             )
         ),
@@ -771,17 +804,15 @@ def test_partitioned_v3_rejects_legacy_mutation_apis() -> None:
     )
 
     operations = (
-        lambda: client.rebuild_workspace(
-            workspace_id="workspace-1",
+        lambda: client.rebuild_company_index(
             documents=[_document("one", "body")],
         ),
         lambda: client.upsert_document(_document("one", "body")),
         lambda: client.delete_document(
-            workspace_id="workspace-1",
             entity_type="plugin_chunk",
             entity_id="one",
         ),
-        lambda: client.count_workspace_documents(workspace_id="workspace-1"),
+        lambda: client.count_company_documents(),
     )
 
     for operation in operations:
@@ -956,7 +987,6 @@ def test_partitioned_write_uses_scope_neutral_id_and_strict_external_version() -
     first = _partitioned_document("file-1")
     moved = _partitioned_document(
         "file-1",
-        workspace_id="workspace-2",
         partition_id="98d869c5-370a-40ab-8eca-56e9ce2bb810",
         projection_version=8,
     )

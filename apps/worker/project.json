@@ -10,8 +10,8 @@
       "options": {
         "cwd": "apps/worker",
         "commands": [
-          "queues=\"$(uv run --python 3.12 python -m open_work_hub_worker.queue_contract --celery-queues)\" && OPEN_WORK_HUB_WORKER_QUEUE_GROUP=all uv run --python 3.12 celery -A open_work_hub_worker.celery_app:celery_app worker --loglevel=info -Q \"$queues\"",
-          "OPEN_WORK_HUB_WORKER_QUEUE_GROUP=beat uv run --python 3.12 celery -A open_work_hub_worker.celery_app:celery_app beat --loglevel=info"
+          "env -u OPENROUTER_API_KEY sh -c 'queues=\"$(uv run --python 3.12 python -m open_work_hub_worker.queue_contract --celery-queues)\" && OPEN_WORK_HUB_WORKER_QUEUE_GROUP=all uv run --python 3.12 celery -A open_work_hub_worker.celery_app:celery_app worker --loglevel=info --concurrency=2 -Q \"$queues\"'",
+          "env -u OPENROUTER_API_KEY OPEN_WORK_HUB_WORKER_QUEUE_GROUP=beat uv run --python 3.12 celery -A open_work_hub_worker.celery_app:celery_app beat --loglevel=info"
         ],
         "parallel": true
       }

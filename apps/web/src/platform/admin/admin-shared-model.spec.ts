@@ -4,32 +4,12 @@ import {
   emptySubjectSelection,
   formatStatusLabel,
   formatUserApps,
-  getWorkspaceRoleLabel,
-  getWorkspaceRoleOptions,
   removeSubject,
   selectionSize,
   toggleSubject,
 } from './admin-shared-model';
 
 describe('admin shared model', () => {
-  it('formats workspace role options and fallback labels', () => {
-    const t = (key: string) => `translated:${key}`;
-
-    expect(getWorkspaceRoleOptions(t)).toEqual([
-      {
-        value: 'admin',
-        label: 'translated:apps:admin.shared.roles.admin.label',
-        description: 'translated:apps:admin.shared.roles.admin.description',
-      },
-      {
-        value: 'member',
-        label: 'translated:apps:admin.shared.roles.member.label',
-        description: 'translated:apps:admin.shared.roles.member.description',
-      },
-    ]);
-    expect(getWorkspaceRoleLabel('owner', t)).toBe('owner');
-  });
-
   it('formats status and app labels', () => {
     const t = (key: string) => `translated:${key}`;
 

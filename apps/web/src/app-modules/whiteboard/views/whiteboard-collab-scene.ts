@@ -134,7 +134,12 @@ export function buildCollabSceneFromMaps({
 }
 
 export function writeCollabSceneToMaps(
-  { elementsMap, elementOrder, filesMap, appStateMap }: WhiteboardCollabSceneMaps,
+  {
+    elementsMap,
+    elementOrder,
+    filesMap,
+    appStateMap,
+  }: WhiteboardCollabSceneMaps,
   scene: WhiteboardScene,
 ): void {
   const normalized = normalizeWhiteboardScene(scene);

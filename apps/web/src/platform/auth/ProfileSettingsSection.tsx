@@ -1,10 +1,8 @@
-import type { Dispatch, FormEvent } from 'react';
-import { Button } from '@open-work-hub/ui/primitives/button';
 import { cn } from '@/src/lib/utils';
+import { Button } from '@open-work-hub/ui/primitives/button';
+import type { Dispatch, FormEvent } from 'react';
 
 import type { AuthUser } from './auth-api';
-import { SettingsFieldRow } from './SettingsFieldRow';
-import { SettingsSectionHeader } from './SettingsSectionHeader';
 import {
   fieldClassName,
   getUserInitials,
@@ -12,6 +10,8 @@ import {
   type ProfilePageState,
   type SettingsTranslator,
 } from './settings-page-model';
+import { SettingsFieldRow } from './SettingsFieldRow';
+import { SettingsSectionHeader } from './SettingsSectionHeader';
 
 export function ProfileSettingsSection({
   dispatch,

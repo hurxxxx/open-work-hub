@@ -18,7 +18,6 @@ function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     end: '2026-03-10T10:00:00+09:00',
     allDay: false,
     color: '#3b82f6',
-    workspace: { id: 'workspace-1', slug: 'hq', name: 'HQ' },
     metadata: {
       attendeeCount: null,
       location: null,
@@ -162,7 +161,6 @@ describe('planner calendar schedule workflow', () => {
 
     expect(scheduleAdapters.updateMeeting).toHaveBeenCalledWith(
       'token',
-      'hq',
       'meeting-1',
       { end_at: '2026-03-10T11:00:00+09:00' },
     );

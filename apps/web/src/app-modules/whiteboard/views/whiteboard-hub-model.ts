@@ -1,7 +1,4 @@
-import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import type {
   createWhiteboard,
   listWhiteboardHub,
@@ -29,10 +26,6 @@ export type WhiteboardSortOption = {
 };
 export type WhiteboardHubListParams = Parameters<typeof listWhiteboardHub>[1];
 export type WhiteboardCreatePayload = Parameters<typeof createWhiteboard>[1];
-export type WhiteboardHubPathUser = Parameters<
-  typeof resolveDefaultWorkspaceAppPath
->[0];
-
 export interface WhiteboardTargetFilter {
   app: string;
   type: string;
@@ -239,52 +232,46 @@ export function buildWhiteboardHubListParams(options: {
 export function buildWhiteboardCreatePayload(options: {
   title: string;
   targetFilter: WhiteboardTargetFilter | null;
-  currentWorkspaceId: string | null | undefined;
   itemCount: number;
   visibility?: WhiteboardVisibility;
+  companyAdminReadAcknowledged?: boolean;
 }): WhiteboardCreatePayload {
-  const visibility =
-    options.visibility ?? (options.targetFilter ? 'workspace' : 'personal');
-  let primaryTarget: WhiteboardCreatePayload['primary_target'] = null;
-  if (visibility === 'workspace') {
-    primaryTarget = options.targetFilter
-      ? { ...options.targetFilter, sort_order: options.itemCount }
-      : options.currentWorkspaceId
-        ? {
-            app: 'whiteboard',
-            type: 'workspace_sidebar',
-            id: options.currentWorkspaceId,
-            sort_order: 0,
-          }
-        : null;
-  }
-
+  const primaryTarget = options.targetFilter
+    ? {
+        ...options.targetFilter,
+        sort_order: options.itemCount,
+        company_admin_read_acknowledged:
+          options.companyAdminReadAcknowledged ?? false,
+      }
+    : null;
   return {
     title: options.title,
     source_app: primaryTarget?.app === 'pms' ? 'pms' : 'whiteboard',
     source_kind: 'manual',
     primary_target: primaryTarget,
+    company_visible: options.visibility === 'company' && !primaryTarget,
+    company_admin_read_acknowledged:
+      options.companyAdminReadAcknowledged ?? false,
   };
 }
 
 export function buildWhiteboardHubItemPath(options: {
   itemId: string;
   searchParams: URLSearchParams;
-  user: WhiteboardHubPathUser;
-  workspaceSlug?: string | null;
 }): string {
-  const suffix = `/${options.itemId}${searchSuffix(options.searchParams)}`;
-  return buildWhiteboardHubPath({ ...options, suffix });
+  return buildAppHref({
+    routeId: 'whiteboard.board',
+    pathParams: { whiteboardId: options.itemId },
+    queryParams: Object.fromEntries(options.searchParams),
+  });
 }
 
 export function buildWhiteboardHubRootPath(options: {
   searchParams: URLSearchParams;
-  user: WhiteboardHubPathUser;
-  workspaceSlug?: string | null;
 }): string {
-  return buildWhiteboardHubPath({
-    ...options,
-    suffix: searchSuffix(options.searchParams),
+  return buildAppHref({
+    routeId: 'whiteboard.root',
+    queryParams: Object.fromEntries(options.searchParams),
   });
 }
 
@@ -301,25 +288,6 @@ export function writeStoredLayoutMode(
 ): void {
   if (!storage) return;
   storage.setItem(VIEW_MODE_STORAGE_KEY, layoutMode);
-}
-
-function buildWhiteboardHubPath(options: {
-  suffix: string;
-  user: WhiteboardHubPathUser;
-  workspaceSlug?: string | null;
-}): string {
-  return options.workspaceSlug
-    ? buildWorkspaceAppPath(options.workspaceSlug, 'whiteboard', options.suffix)
-    : resolveDefaultWorkspaceAppPath(
-        options.user,
-        'whiteboard',
-        options.suffix,
-      );
-}
-
-function searchSuffix(searchParams: URLSearchParams): string {
-  const search = searchParams.toString();
-  return search ? `?${search}` : '';
 }
 
 function getBrowserLayoutStorage(): LayoutModeStorage | null {

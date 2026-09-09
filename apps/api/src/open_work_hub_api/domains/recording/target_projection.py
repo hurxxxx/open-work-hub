@@ -4,14 +4,16 @@ from collections.abc import Iterable
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from open_work_hub_api.domains.docs.models import NativeDoc
 from open_work_hub_api.domains.meeting.models import Meeting
 from open_work_hub_api.domains.pms.models import Task
 from open_work_hub_api.domains.recording.models import Recording, RecordingTarget
-from open_work_hub_api.domains.recording.schemas import RecordingOut
-
+from open_work_hub_api.domains.recording.schemas import (
+    RecordingDetailOut,
+    RecordingListItem,
+)
 
 TargetTitleKey = tuple[str, str, str]
 
@@ -62,18 +64,47 @@ def serialize_recording(
     recording: Recording,
     *,
     title_map: dict[TargetTitleKey, str],
-) -> RecordingOut:
-    out = RecordingOut.model_validate(recording)
+) -> RecordingDetailOut:
+    out = RecordingDetailOut.model_validate(recording)
     out.targets = [
-        target.model_copy(
-            update={"target_title": title_map.get(target_title_key(target))}
-        )
+        target.model_copy(update={"target_title": title_map.get(target_title_key(target))})
         for target in out.targets
+    ]
+    publication_doc_ids = {
+        publication.target_resource_id
+        for publication in out.publications
+        if publication.target_app == "docs"
+    }
+    publication_titles = {
+        doc_id: title for doc_id, title in recording_doc_titles(recording, publication_doc_ids)
+    }
+    out.publications = [
+        publication.model_copy(
+            update={"target_title": publication_titles.get(publication.target_resource_id)}
+        )
+        for publication in out.publications
     ]
     return out
 
 
-def serialize_recording_with_target_titles(db: Session, recording: Recording) -> RecordingOut:
+def recording_doc_titles(
+    recording: Recording,
+    doc_ids: set[str],
+) -> list[tuple[str, str]]:
+    if not doc_ids:
+        return []
+    session = object_session(recording)
+    if session is None:
+        return []
+    return list(
+        session.execute(select(NativeDoc.id, NativeDoc.title).where(NativeDoc.id.in_(doc_ids)))
+    )
+
+
+def serialize_recording_with_target_titles(
+    db: Session,
+    recording: Recording,
+) -> RecordingDetailOut:
     return serialize_recording(
         recording,
         title_map=load_target_title_map(db, list(recording.targets)),
@@ -83,12 +114,18 @@ def serialize_recording_with_target_titles(db: Session, recording: Recording) ->
 def serialize_recordings_with_target_titles(
     db: Session,
     recordings: Iterable[Recording],
-) -> list[RecordingOut]:
+) -> list[RecordingListItem]:
     recordings_list = list(recordings)
     title_map = load_target_title_map(
         db,
         [target for recording in recordings_list for target in recording.targets],
     )
-    return [
-        serialize_recording(recording, title_map=title_map) for recording in recordings_list
-    ]
+    results: list[RecordingListItem] = []
+    for recording in recordings_list:
+        out = RecordingListItem.model_validate(recording)
+        out.targets = [
+            target.model_copy(update={"target_title": title_map.get(target_title_key(target))})
+            for target in out.targets
+        ]
+        results.append(out)
+    return results

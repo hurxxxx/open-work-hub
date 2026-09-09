@@ -20,9 +20,10 @@ from open_work_hub_api.core.llm_official_providers import (
     complete_official_provider_chat,
     stream_official_provider_chat,
 )
-from open_work_hub_api.core.llm_provider_registry import external_llm_provider_descriptor
-from open_work_hub_api.core.llm_provider_registry import external_llm_provider_ids
-
+from open_work_hub_api.core.llm_provider_registry import (
+    external_llm_provider_descriptor,
+    external_llm_provider_ids,
+)
 
 LlmExecutionHealthStatus = Literal["ready", "unavailable", "model_missing"]
 SyncPoolClientFactory = Callable[[str, str | None], Any]
@@ -107,7 +108,9 @@ def select_llm_execution_adapter(
         adapter = _adapters_by_key.get((normalized_pool, None))
         if adapter is not None:
             return adapter
-    raise ValueError(f"no LLM execution adapter registered for {normalized_pool}/{normalized_provider}")
+    raise ValueError(
+        f"no LLM execution adapter registered for {normalized_pool}/{normalized_provider}"
+    )
 
 
 def supports_tool_calling(pool: str, provider: str | None = None) -> bool:
@@ -116,12 +119,7 @@ def supports_tool_calling(pool: str, provider: str | None = None) -> bool:
 
 def llm_execution_adapter_keys() -> tuple[str, ...]:
     ensure_default_llm_execution_adapters_registered()
-    return tuple(
-        sorted(
-            f"{pool}:{provider or '*'}"
-            for pool, provider in _adapters_by_key
-        )
-    )
+    return tuple(sorted(f"{pool}:{provider or '*'}" for pool, provider in _adapters_by_key))
 
 
 def reset_llm_execution_adapters() -> None:

@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -21,7 +21,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
 
-
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 
 
@@ -29,24 +28,15 @@ class MailAccount(Base):
     __tablename__ = "mail_accounts"
     __table_args__ = (
         UniqueConstraint(
-            "workspace_id",
             "user_id",
             "email_address",
-            name="uq_mail_accounts_workspace_user_email",
+            name="uq_mail_accounts_user_email",
         ),
-        Index("ix_mail_accounts_workspace_user", "workspace_id", "user_id"),
+        Index("ix_mail_accounts_user", "user_id"),
         Index("ix_mail_accounts_user_created", "user_id", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    # Preserve pre-global scope for audit and rollback without using it for
-    # personal ownership. New rows intentionally leave this value empty.
-    legacy_workspace_id: Mapped[str | None] = mapped_column(
-        "workspace_id",
-        ForeignKey("workspaces.id"),
-        nullable=True,
-        index=True,
-    )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     email_address: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(160), default="", nullable=False)
@@ -118,12 +108,6 @@ class MailMailbox(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    legacy_workspace_id: Mapped[str | None] = mapped_column(
-        "workspace_id",
-        ForeignKey("workspaces.id"),
-        nullable=True,
-        index=True,
-    )
     legacy_user_id: Mapped[str | None] = mapped_column(
         "user_id",
         ForeignKey("users.id"),
@@ -171,14 +155,12 @@ class MailMessage(Base):
             "is_starred",
         ),
         Index(
-            "ix_mail_messages_workspace_user_received",
-            "workspace_id",
+            "ix_mail_messages_user_received",
             "user_id",
             "received_at",
         ),
         Index(
-            "ix_mail_messages_workspace_user_flags",
-            "workspace_id",
+            "ix_mail_messages_user_flags",
             "user_id",
             "is_read",
             "is_starred",
@@ -187,12 +169,6 @@ class MailMessage(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    legacy_workspace_id: Mapped[str | None] = mapped_column(
-        "workspace_id",
-        ForeignKey("workspaces.id"),
-        nullable=True,
-        index=True,
-    )
     legacy_user_id: Mapped[str | None] = mapped_column(
         "user_id",
         ForeignKey("users.id"),
@@ -293,8 +269,7 @@ class MailDraft(Base):
     __tablename__ = "mail_drafts"
     __table_args__ = (
         Index(
-            "ix_mail_drafts_workspace_user_status",
-            "workspace_id",
+            "ix_mail_drafts_user_status",
             "user_id",
             "status",
         ),
@@ -302,12 +277,6 @@ class MailDraft(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    legacy_workspace_id: Mapped[str | None] = mapped_column(
-        "workspace_id",
-        ForeignKey("workspaces.id"),
-        nullable=True,
-        index=True,
-    )
     legacy_user_id: Mapped[str | None] = mapped_column(
         "user_id",
         ForeignKey("users.id"),
@@ -369,12 +338,6 @@ class MailSyncState(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    legacy_workspace_id: Mapped[str | None] = mapped_column(
-        "workspace_id",
-        ForeignKey("workspaces.id"),
-        nullable=True,
-        index=True,
-    )
     legacy_user_id: Mapped[str | None] = mapped_column(
         "user_id",
         ForeignKey("users.id"),
@@ -434,12 +397,6 @@ class MailSyncJob(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    legacy_workspace_id: Mapped[str | None] = mapped_column(
-        "workspace_id",
-        ForeignKey("workspaces.id"),
-        nullable=True,
-        index=True,
-    )
     legacy_user_id: Mapped[str | None] = mapped_column(
         "user_id",
         ForeignKey("users.id"),

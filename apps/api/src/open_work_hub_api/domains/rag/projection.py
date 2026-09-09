@@ -7,8 +7,7 @@ from open_work_hub_api.domains.rag.projection_builders import build_projection_r
 
 def build_projection(
     *,
-    workspace_id: str | None,
-    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE,
+    scope_kind: RagScopeKind = RagScopeKind.COMPANY,
     resource_type: str,
     resource_id: str,
     source_kind: str,
@@ -21,7 +20,6 @@ def build_projection(
     chunks: list[RagChunk] | None = None,
 ) -> RagProjection:
     return build_projection_record(
-        workspace_id=workspace_id,
         scope_kind=scope_kind,
         resource_type=resource_type,
         resource_id=resource_id,

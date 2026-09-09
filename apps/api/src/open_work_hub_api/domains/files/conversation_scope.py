@@ -25,8 +25,8 @@ from open_work_hub_api.domains.ai.gateway import (
     LlmWorkloadContext,
     execute_llm,
 )
-from open_work_hub_api.domains.auth.access import resolve_workspace_enabled_app_ids
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.app_availability import resolve_company_enabled_app_ids
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.conversations.models import Conversation
 from open_work_hub_api.domains.conversations.scope_registry import (
@@ -45,9 +45,8 @@ from open_work_hub_api.domains.files.chat_retrieval import (
     query_file_chat_evidence,
 )
 
-
 FILES_CONVERSATION_SCOPE_REF = "files"
-FILES_CONVERSATION_SCOPE_RESOURCE_ID = "workspace"
+FILES_CONVERSATION_SCOPE_RESOURCE_ID = "company"
 FILES_RAG_SOURCES_ARTIFACT_TYPE = "files-rag-sources"
 MAX_FILES_CHAT_EVIDENCE_ITEMS = 8
 MAX_FILES_CHAT_EVIDENCE_CHARS = 12_000
@@ -88,14 +87,17 @@ class FilesConversationScopeAdapter:
         self,
         *,
         db: Session,
-        workspace: Workspace,
         principal: CallerPrincipal,
         user: User,
         scope_resource_id: str,
     ) -> None:
         if scope_resource_id != FILES_CONVERSATION_SCOPE_RESOURCE_ID:
             raise ValueError("unsupported files conversation resource")
-        if FILES_APP_ID not in set(resolve_workspace_enabled_app_ids(db, workspace.id)):
+        if FILES_APP_ID not in set(
+            resolve_company_enabled_app_ids(
+                db,
+            )
+        ):
             raise localized_http_exception(
                 status_code=status.HTTP_403_FORBIDDEN,
                 code="files.app_disabled",
@@ -105,7 +107,6 @@ class FilesConversationScopeAdapter:
         self,
         *,
         db: Session,
-        workspace: Workspace,
         principal: CallerPrincipal,
         user: User,
         scope_resource_id: str,
@@ -127,7 +128,6 @@ class FilesConversationScopeAdapter:
         self,
         *,
         db: Session,
-        workspace: Workspace,
         principal: CallerPrincipal,
         user: User,
         scope_resource_id: str,
@@ -140,7 +140,6 @@ class FilesConversationScopeAdapter:
 
         retrieval_query = _rewrite_retrieval_query(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             conversation=conversation,
@@ -150,7 +149,6 @@ class FilesConversationScopeAdapter:
         try:
             evidence = query_file_chat_evidence(
                 db,
-                workspace=workspace,
                 user=user,
                 query=retrieval_query,
                 limit=MAX_FILES_CHAT_EVIDENCE_ITEMS,
@@ -159,7 +157,6 @@ class FilesConversationScopeAdapter:
             if not evidence.items:
                 relaxed_query = _relax_retrieval_query(
                     db,
-                    workspace=workspace,
                     principal=principal,
                     user=user,
                     conversation=conversation,
@@ -168,7 +165,6 @@ class FilesConversationScopeAdapter:
                 if relaxed_query is not None and relaxed_query != retrieval_query:
                     evidence = query_file_chat_evidence(
                         db,
-                        workspace=workspace,
                         user=user,
                         query=relaxed_query,
                         limit=MAX_FILES_CHAT_EVIDENCE_ITEMS,
@@ -201,7 +197,6 @@ def iter_extension_conversation_scope_adapters() -> tuple[FilesConversationScope
 def _rewrite_retrieval_query(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     conversation: Conversation | None,
@@ -214,7 +209,6 @@ def _rewrite_retrieval_query(
 
     return _execute_query_rewrite(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         conversation=conversation,
@@ -234,7 +228,6 @@ def _rewrite_retrieval_query(
 def _relax_retrieval_query(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     conversation: Conversation | None,
@@ -275,7 +268,6 @@ def _relax_retrieval_query(
     try:
         completion_text = _execute_query_rewrite_completion(
             db,
-            workspace=workspace,
             principal=principal,
             user=user,
             conversation=conversation,
@@ -318,7 +310,6 @@ def _preserves_query_anchors(*, original_query: str, relaxed_query: str) -> bool
 def _execute_query_rewrite(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     conversation: Conversation | None,
@@ -341,7 +332,6 @@ def _execute_query_rewrite(
     ]
     completion_text = _execute_query_rewrite_completion(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         conversation=conversation,
@@ -359,7 +349,6 @@ def _execute_query_rewrite(
 def _execute_query_rewrite_completion(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     conversation: Conversation | None,
@@ -371,7 +360,6 @@ def _execute_query_rewrite_completion(
         FILES_RAG_QUERY_REWRITE_WORKLOAD_ID,
         LlmWorkloadContext(
             source=source,
-            workspace_id=workspace.id,
             actor_user_id=user.id,
             principal_kind=principal.kind,
             principal_id=principal.principal_id,

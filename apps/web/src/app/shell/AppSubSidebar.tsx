@@ -1,4 +1,10 @@
 import { SubSidebar } from '@/src/components/layout/SubSidebar';
+import type { AdminSectionAccessResolver } from '@/src/platform/admin/admin-permissions';
+import type {
+  BootstrapApp,
+  BootstrapNavItem,
+} from '@/src/platform/apps/apps-api';
+import type { ReactNode } from 'react';
 import {
   EMPTY_LAUNCHER_GLOBAL_PATHS,
   type AppBarItem,
@@ -6,11 +12,6 @@ import {
   type NavItem,
 } from './navigation-types';
 import type { AppSidebarConfig } from './sidebar-types';
-import type {
-  WorkspaceBootstrapApp,
-  WorkspaceBootstrapNavItem,
-} from '@/src/platform/workspaces/workspaces-api';
-import type { AdminSectionAccessResolver } from '@/src/platform/admin/admin-permissions';
 
 const getNoopAppModuleManifest = () => null;
 
@@ -28,10 +29,10 @@ export function AppSubSidebar({
   activeAppId,
   activeNavItemId,
   appBarItems,
-  currentWorkspaceSlug,
-  enabledWorkspaceAppIds,
+  enabledShellAppIds,
   getAppModuleManifest = getNoopAppModuleManifest,
   getAppSidebarConfig,
+  headerSlot,
   hasAdminSectionAccess,
   launcherGlobalPaths = EMPTY_LAUNCHER_GLOBAL_PATHS,
   navItems,
@@ -40,16 +41,17 @@ export function AppSubSidebar({
   overlay,
   pinned,
   variant,
-  workspaceApps,
-  workspaceNavItems,
+  apps,
+  appNavItems,
 }: {
   activeAppId: string;
   activeNavItemId: string;
   appBarItems?: readonly AppBarItem[];
-  currentWorkspaceSlug: string | null;
-  enabledWorkspaceAppIds?: readonly string[];
+
+  enabledShellAppIds?: readonly string[];
   getAppModuleManifest?: (appId: string) => unknown | null;
   getAppSidebarConfig?: (appId: string) => AppSidebarConfig | null;
+  headerSlot?: ReactNode;
   hasAdminSectionAccess?: AdminSectionAccessResolver;
   launcherGlobalPaths?: LauncherGlobalPaths;
   navItems?: readonly NavItem[];
@@ -58,8 +60,8 @@ export function AppSubSidebar({
   overlay?: boolean;
   pinned?: boolean;
   variant?: 'desktop' | 'mobile';
-  workspaceApps: WorkspaceBootstrapApp[];
-  workspaceNavItems: WorkspaceBootstrapNavItem[];
+  apps: BootstrapApp[];
+  appNavItems: BootstrapNavItem[];
 }) {
   if (!isRegisteredAppModuleId({ getAppModuleManifest, value: activeAppId })) {
     return null;
@@ -70,9 +72,9 @@ export function AppSubSidebar({
       activeAppId={activeAppId}
       activeNavItemId={activeNavItemId}
       appBarItems={appBarItems}
-      currentWorkspaceSlug={currentWorkspaceSlug}
-      enabledWorkspaceAppIds={enabledWorkspaceAppIds}
+      enabledShellAppIds={enabledShellAppIds}
       getAppSidebarConfig={getAppSidebarConfig}
+      headerSlot={headerSlot}
       hasAdminSectionAccess={hasAdminSectionAccess}
       launcherGlobalPaths={launcherGlobalPaths}
       navItems={navItems}
@@ -81,8 +83,8 @@ export function AppSubSidebar({
       overlay={overlay}
       pinned={pinned}
       variant={variant}
-      workspaceApps={workspaceApps}
-      workspaceNavItems={workspaceNavItems}
+      apps={apps}
+      appNavItems={appNavItems}
     />
   );
 }

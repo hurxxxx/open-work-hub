@@ -8,15 +8,15 @@ import {
   type DragEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
+  authenticatedContentObjectUrl,
+  downloadAuthenticatedContent,
   downloadBlobAsFile,
-  openDownloadUrl,
 } from '@/src/platform/browser/browser-download';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
-import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import {
   browseFiles,
   bulkDeleteFileItems,
@@ -72,17 +72,18 @@ function isFileDrag(event: DragEvent<HTMLElement>) {
 
 export function useFileManagerController() {
   const { t, i18n } = useTranslation(['apps', 'common']);
-  const { workspaceSlug } = useParams();
+
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
   const { hasActiveUploads, startUpload } = useFileUploadManager();
-  const workspaceBootstrap = useWorkspaceBootstrapContext();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
   const foregroundLoadAbortRef = useRef<AbortController | null>(null);
   const loadRequestSeqRef = useRef(0);
+  const previewRequestSeqRef = useRef(0);
+  const previewObjectUrlRef = useRef<string | null>(null);
   const folderId = searchParams.get('folder');
   const [browse, setBrowse] = useState<FileBrowseResponse | null>(null);
   const [loadState, setLoadState] = useState<LoadState>('idle');
@@ -105,15 +106,38 @@ export function useFileManagerController() {
     useState<FileVisibility>('private');
   const [savingFolder, setSavingFolder] = useState(false);
 
-  const workspaceName =
-    workspaceBootstrap.data?.workspace.name ?? workspaceSlug ?? '';
+  const closeImagePreview = useCallback(() => {
+    previewRequestSeqRef.current += 1;
+    if (previewObjectUrlRef.current) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+      previewObjectUrlRef.current = null;
+    }
+    setImagePreview(null);
+  }, []);
+
+  useEffect(
+    () => () => {
+      previewRequestSeqRef.current += 1;
+      if (previewObjectUrlRef.current) {
+        URL.revokeObjectURL(previewObjectUrlRef.current);
+        previewObjectUrlRef.current = null;
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    closeImagePreview();
+  }, [closeImagePreview, token]);
+
+  const companyName = t('common:labels.company');
   const currentFolder = browse?.current_folder ?? null;
   const effectiveUploadVisibility =
     currentFolder?.visibility ?? uploadVisibility;
 
   const load = useCallback(
     async (options: { silent?: boolean } = {}) => {
-      if (!token || !workspaceSlug) {
+      if (!token) {
         return false;
       }
       if (options.silent && foregroundLoadAbortRef.current !== null) {
@@ -130,7 +154,7 @@ export function useFileManagerController() {
         setError(null);
       }
       try {
-        const response = await browseFiles(token, workspaceSlug, folderId, {
+        const response = await browseFiles(token, folderId, {
           signal: controller.signal,
         });
         if (
@@ -167,7 +191,7 @@ export function useFileManagerController() {
         }
       }
     },
-    [folderId, t, token, workspaceSlug],
+    [folderId, t, token],
   );
 
   useEffect(() => {
@@ -199,13 +223,9 @@ export function useFileManagerController() {
       const detail = (
         event as CustomEvent<{
           folderId?: string | null;
-          workspaceSlug?: string;
         }>
       ).detail;
-      if (
-        detail?.workspaceSlug !== workspaceSlug ||
-        (detail.folderId ?? null) !== (folderId ?? null)
-      ) {
+      if ((detail.folderId ?? null) !== (folderId ?? null)) {
         return;
       }
       void load();
@@ -220,7 +240,7 @@ export function useFileManagerController() {
         uploadCompletedHandler,
       );
     };
-  }, [folderId, load, workspaceSlug]);
+  }, [folderId, load]);
 
   const folders = useMemo(() => browse?.folders ?? [], [browse?.folders]);
   const files = useMemo(() => browse?.files ?? [], [browse?.files]);
@@ -338,7 +358,7 @@ export function useFileManagerController() {
   }
 
   async function handleFolderSubmit() {
-    if (!token || !workspaceSlug || !folderDialog) {
+    if (!token || !folderDialog) {
       return;
     }
     setSavingFolder(true);
@@ -351,13 +371,20 @@ export function useFileManagerController() {
           currentFolderVisibility: currentFolder?.visibility,
           selectedVisibility: folderVisibility,
         });
-        await createFileFolder(token, workspaceSlug, {
+        if (
+          plan.payload.visibility === 'company' &&
+          !window.confirm(t('shell:contentPublication.confirm'))
+        )
+          return;
+        await createFileFolder(token, {
+          company_admin_read_acknowledged:
+            plan.payload.visibility === 'company',
           name: plan.payload.name,
           parent_id: plan.payload.parent_id,
           visibility: plan.payload.visibility,
         });
       } else {
-        await updateFileFolder(token, workspaceSlug, folderDialog.folder.id, {
+        await updateFileFolder(token, folderDialog.folder.id, {
           name: folderName,
         });
       }
@@ -377,22 +404,27 @@ export function useFileManagerController() {
 
   const uploadFiles = useCallback(
     (selectedFilesValue: File[]) => {
-      if (!token || !workspaceSlug || selectedFilesValue.length === 0) {
+      if (!token || selectedFilesValue.length === 0) {
         return;
       }
       setError(null);
+      if (
+        effectiveUploadVisibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
       const accepted = startUpload({
+        companyAdminReadAcknowledged: effectiveUploadVisibility === 'company',
         files: selectedFilesValue,
         folderId,
         token,
         uploadVisibility: effectiveUploadVisibility,
-        workspaceSlug,
       });
       if (!accepted) {
         setError(t('files.errors.uploadAlreadyRunning'));
       }
     },
-    [effectiveUploadVisibility, folderId, startUpload, t, token, workspaceSlug],
+    [effectiveUploadVisibility, folderId, startUpload, t, token],
   );
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -452,14 +484,14 @@ export function useFileManagerController() {
   }
 
   async function handleDownload(file: FileItem) {
-    if (!token || !workspaceSlug) {
+    if (!token) {
       return;
     }
     setBusyId(file.id);
     setError(null);
     try {
-      const response = await getFileDownloadUrl(token, workspaceSlug, file.id);
-      openDownloadUrl(response.url);
+      const response = await getFileDownloadUrl(token, file.id);
+      await downloadAuthenticatedContent(token, response.url, file.filename);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -472,14 +504,28 @@ export function useFileManagerController() {
   }
 
   async function handlePreview(file: FileItem) {
-    if (!token || !workspaceSlug) {
+    if (!token) {
       return;
     }
     setPreviewBusyId(file.id);
     setError(null);
+    const sequence = previewRequestSeqRef.current + 1;
+    previewRequestSeqRef.current = sequence;
     try {
-      const response = await getFilePreviewUrl(token, workspaceSlug, file.id);
-      setImagePreview({ file, url: response.url });
+      const response = await getFilePreviewUrl(token, file.id);
+      const objectUrl = await authenticatedContentObjectUrl(
+        token,
+        response.url,
+      );
+      if (previewRequestSeqRef.current !== sequence) {
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+      if (previewObjectUrlRef.current) {
+        URL.revokeObjectURL(previewObjectUrlRef.current);
+      }
+      previewObjectUrlRef.current = objectUrl;
+      setImagePreview({ file, url: objectUrl });
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -492,7 +538,7 @@ export function useFileManagerController() {
   }
 
   async function handleDeleteFile(file: FileItem) {
-    if (!token || !workspaceSlug) {
+    if (!token) {
       return;
     }
     if (
@@ -503,7 +549,7 @@ export function useFileManagerController() {
     setBusyId(file.id);
     setError(null);
     try {
-      await deleteDriveFile(token, workspaceSlug, file.id);
+      await deleteDriveFile(token, file.id);
       window.dispatchEvent(new CustomEvent(FILES_CHANGED_EVENT));
       await load();
     } catch (caughtError) {
@@ -518,7 +564,7 @@ export function useFileManagerController() {
   }
 
   async function handleDeleteFolder(folder: FileFolderItem) {
-    if (!token || !workspaceSlug) {
+    if (!token) {
       return;
     }
     if (
@@ -533,7 +579,7 @@ export function useFileManagerController() {
     setBusyId(plan.busyId);
     setError(null);
     try {
-      await deleteFileFolder(token, workspaceSlug, plan.folderId);
+      await deleteFileFolder(token, plan.folderId);
       if (plan.afterSuccess.kind === 'navigate-root-and-clear-browse') {
         navigateToFolder(plan.afterSuccess.targetFolderId);
         setBrowse(null);
@@ -553,7 +599,7 @@ export function useFileManagerController() {
   }
 
   async function handleBulkDelete() {
-    if (!token || !workspaceSlug || selectedCount === 0) {
+    if (!token || selectedCount === 0) {
       return;
     }
     if (
@@ -570,7 +616,7 @@ export function useFileManagerController() {
     setBulkAction('delete');
     setError(null);
     try {
-      await bulkDeleteFileItems(token, workspaceSlug, plan.payload);
+      await bulkDeleteFileItems(token, plan.payload);
       clearSelection();
       window.dispatchEvent(new CustomEvent(FILES_CHANGED_EVENT));
       await load();
@@ -586,7 +632,7 @@ export function useFileManagerController() {
   }
 
   async function handleBulkDownload() {
-    if (!token || !workspaceSlug || selectedCount === 0) {
+    if (!token || selectedCount === 0) {
       return;
     }
     const plan = planFileManagerBulkDownload(filteredSelection, files);
@@ -601,7 +647,7 @@ export function useFileManagerController() {
     setBulkAction('download');
     setError(null);
     try {
-      const archive = await downloadFileArchive(token, workspaceSlug, {
+      const archive = await downloadFileArchive(token, {
         fileIds: plan.payload.fileIds,
         folderIds: plan.payload.folderIds,
       });
@@ -647,6 +693,7 @@ export function useFileManagerController() {
     handlePreview,
     hasActiveUploads,
     imagePreview,
+    closeImagePreview,
     i18nLanguage: i18n.language,
     isEmpty,
     load,
@@ -664,10 +711,9 @@ export function useFileManagerController() {
     setFolderName,
     setFolderSelected,
     setFolderVisibility,
-    setImagePreview,
     setUploadVisibility,
     timeZone,
     uploadVisibility,
-    workspaceName,
+    companyName,
   };
 }

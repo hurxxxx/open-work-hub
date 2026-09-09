@@ -34,7 +34,7 @@ import {
   normalizeDmUpdateConversationRequest,
   normalizeDmUserListResponse,
   readyDmPendingAttachmentIds,
-  resolveDmAttachmentUrl,
+  normalizeDmMessageAttachment,
   resolveDmComposerSendCommand,
   shouldSubmitDmComposerKey,
   totalDmUnreadCount,
@@ -149,45 +149,15 @@ describe('dmRoutes', () => {
     expect(DM_PARTICIPANT_IDS_MAX_LENGTH).toBe(50);
   });
 
-  it('resolves only same-origin DM attachment URLs', () => {
-    expect(
-      resolveDmAttachmentUrl(
-        '/api/v1/dm/attachments/a/preview',
-        'https://workspace.example.test',
-      ),
-    ).toBe('https://workspace.example.test/api/v1/dm/attachments/a/preview');
-    expect(
-      resolveDmAttachmentUrl(
-        '/api/v1/dm/attachments/a/content?expires=1&signature=s&disposition=inline',
-        'https://workspace.example.test',
-      ),
-    ).toBe(
-      'https://workspace.example.test/api/v1/dm/attachments/a/content?expires=1&signature=s&disposition=inline',
-    );
-    expect(
-      resolveDmAttachmentUrl(
-        'https://cdn.example.test/a.png',
-        'https://workspace.example.test',
-      ),
-    ).toBeNull();
-    expect(
-      resolveDmAttachmentUrl(
-        '/api/v1/users/me',
-        'https://workspace.example.test',
-      ),
-    ).toBeNull();
-    expect(
-      resolveDmAttachmentUrl(
-        '/api/v1/dm/attachments/a%2Fb/preview',
-        'https://workspace.example.test',
-      ),
-    ).toBeNull();
-    expect(
-      resolveDmAttachmentUrl(
-        '/api/v1/dm/attachments/a/preview#fragment',
-        'https://workspace.example.test',
-      ),
-    ).toBeNull();
+  it('keeps session-bound URLs out of attachment metadata and realtime projections', () => {
+    const normalized = normalizeDmMessageAttachment({
+      ...attachment(),
+      download_url: '/api/v1/content#grant=private-session',
+      preview_url: '/api/v1/dm/attachments/a/content?signature=old',
+    });
+    expect(normalized).toEqual(attachment());
+    expect(normalized).not.toHaveProperty('download_url');
+    expect(normalized).not.toHaveProperty('preview_url');
   });
 
   it('builds user search query parameters consistently', () => {
@@ -234,9 +204,9 @@ describe('DM shared view model projections', () => {
     expect(dmUserDisplayName(user({ display_name: null, full_name: '' }))).toBe(
       'user@example.test',
     );
-    expect(dmConversationDisplayName(group, { currentUserId: 'u1', labels })).toBe(
-      'Alice, Bob, Cara',
-    );
+    expect(
+      dmConversationDisplayName(group, { currentUserId: 'u1', labels }),
+    ).toBe('Alice, Bob, Cara');
     expect(
       dmConversationDisplayName(
         { ...group, display_name: 'Server Group Name' },
@@ -257,12 +227,14 @@ describe('DM shared view model projections', () => {
     expect(dmMessagePreviewText(message({ body: '' }), labels)).toBe(
       'No messages yet.',
     );
-    expect(dmConversationPreviewText(group, { currentUserId: 'u1', labels })).toBe(
-      'Alice: 2 attachments',
-    );
+    expect(
+      dmConversationPreviewText(group, { currentUserId: 'u1', labels }),
+    ).toBe('Alice: 2 attachments');
     expect(dmUnreadBadge(0)).toBeNull();
     expect(dmUnreadBadge(10)).toBe('9+');
-    expect(totalDmUnreadCount([conversation({ unread_count: 2 }), group])).toBe(14);
+    expect(totalDmUnreadCount([conversation({ unread_count: 2 }), group])).toBe(
+      14,
+    );
 
     expect(
       buildDmConversationListItemProjection({
@@ -356,8 +328,12 @@ describe('DM shared view model projections', () => {
         uploadingAttachmentCount: 0,
       }),
     ).toBe(true);
-    expect(shouldSubmitDmComposerKey({ key: 'Enter', shiftKey: false })).toBe(true);
-    expect(shouldSubmitDmComposerKey({ key: 'Enter', shiftKey: true })).toBe(false);
+    expect(shouldSubmitDmComposerKey({ key: 'Enter', shiftKey: false })).toBe(
+      true,
+    );
+    expect(shouldSubmitDmComposerKey({ key: 'Enter', shiftKey: true })).toBe(
+      false,
+    );
     expect(
       readyDmPendingAttachmentIds([
         { status: 'uploading', attachment: null },
@@ -1006,8 +982,6 @@ function attachment(
     content_type: 'text/plain',
     size_bytes: 12,
     is_image: false,
-    download_url: '/api/v1/dm/attachments/a1/download',
-    preview_url: null,
     created_at: '2026-05-20T00:00:00.000Z',
     ...overrides,
   };

@@ -42,14 +42,13 @@ _FIXED_ZIP_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
 def _file(**overrides) -> FileManagerFile:
     values = {
         "id": "file-1",
-        "workspace_id": "workspace-1",
         "folder_id": "folder-1",
         "owner_id": "user-1",
         "filename": "quarterly-plan.pptx",
         "content_type": "application/octet-stream",
         "size_bytes": 100,
-        "storage_key": "files/workspace-1/file-1/quarterly-plan.pptx",
-        "visibility": "workspace",
+        "storage_key": "files/file-1/quarterly-plan.pptx",
+        "visibility": "company",
     }
     values.update(overrides)
     return FileManagerFile(**values)
@@ -245,7 +244,7 @@ def test_pptx_artifact_skips_ocr_when_structured_text_is_sufficient(
     assert artifact.metadata["ocr_policy_version"] == FILES_OCR_POLICY_VERSION
     assert structured_text.strip() in artifact.text
     assert "owner:user-1" in projection.visibility_refs
-    assert "workspace:workspace-1" in projection.visibility_refs
+    assert "company_public" in projection.visibility_refs
     assert projection.metadata["content_modality"] == "text"
     assert any(chunk.metadata["locator_label"] == "Slide 7" for chunk in projection.chunks)
     assert not any(chunk.metadata["locator_kind"] == "document_ocr" for chunk in projection.chunks)
@@ -670,29 +669,29 @@ def test_file_reader_closes_storage_response_and_enforces_declared_limit(
         read_file_content(_file(size_bytes=MAX_FILES_RAG_SOURCE_BYTES + 1))
 
 
-def test_file_keyword_acl_covers_owner_workspace_member_and_admin() -> None:
+def test_file_keyword_acl_covers_owner_and_company_for_member_and_admin() -> None:
     adapter = FileManagerSourceAccessAdapter()
 
-    def policy(role: str | None):
+    def policy(*, is_platform_admin: bool):
         return SimpleNamespace(
             user=SimpleNamespace(id="user-1"),
-            workspace_role=role,
+            is_platform_admin=is_platform_admin,
             _keyword_acl_clause=lambda field, value: (field, value),
             _keyword_entity_branch=lambda entity_type, clauses: (entity_type, clauses),
         )
 
-    member_branch = adapter.keyword_acl_branches(policy("member"))[0]
+    member_branch = adapter.keyword_acl_branches(policy(is_platform_admin=False))[0]
     assert member_branch == (
         "file",
-        [("owner_user_id", "user-1"), ("visibility", "workspace")],
+        [("owner_user_id", "user-1"), ("visibility", "company")],
     )
 
-    admin_branch = adapter.keyword_acl_branches(policy("admin"))[0]
+    admin_branch = adapter.keyword_acl_branches(policy(is_platform_admin=True))[0]
     assert admin_branch == (
         "file",
         [
             ("owner_user_id", "user-1"),
-            ("visibility", ["private", "workspace"]),
+            ("visibility", "company"),
         ],
     )
 
@@ -708,7 +707,6 @@ def test_file_keyword_projection_uses_same_resource_identity_as_rag() -> None:
     )
 
     document = build_file_search_document(
-        workspace=SimpleNamespace(id="workspace-1", key="engineering"),
         file=file,
     )
 
@@ -717,12 +715,11 @@ def test_file_keyword_projection_uses_same_resource_identity_as_rag() -> None:
     assert document["metadata"]["resource_type"] == "file_manager_file"
     assert document["metadata"]["resource_id"] == file.id
     assert document["metadata"]["source_kind"] == "files"
-    assert document["visibility"] == "workspace"
-    assert document["deep_link"].startswith("/w/engineering/files?")
+    assert document["visibility"] == "company"
+    assert document["deep_link"].startswith("/apps/files?")
     assert "비상 정지 압력" in document["body"]
     ensure_search_document_identity(
         document,
-        workspace_id="workspace-1",
         allowed_entity_types=("file",),
         expected_entity_id=file.id,
         context="file projection test",
@@ -777,7 +774,6 @@ def test_external_source_typed_metadata_is_searchable_without_private_source_fie
     )
 
     keyword = build_file_search_document(
-        workspace=SimpleNamespace(id="workspace-1", key="engineering"),
         file=file,
     )
     vector = build_file_rag_projection(file=file, artifact=artifact)
@@ -852,8 +848,7 @@ def test_file_retrieval_hook_obeys_named_activation_gate(
     )
     envelope = rag_sync._FileProjectionEnvelope(
         retrieval_partition_id="a3b6638a-7547-45f8-81f2-973bfa6080d6",
-        scope_kind=RagScopeKind.WORKSPACE,
-        workspace_id="workspace-1",
+        scope_kind=RagScopeKind.COMPANY,
     )
     projection_event = ProjectionEventRef(
         event_sequence=1,
@@ -865,7 +860,6 @@ def test_file_retrieval_hook_obeys_named_activation_gate(
         desired_state="deleted",
         content_checksum=None,
         visibility_checksum=None,
-        diagnostic_workspace_id="workspace-1",
     )
     monkeypatch.setattr(
         rag_sync,
@@ -894,7 +888,6 @@ def test_file_retrieval_hook_obeys_named_activation_gate(
             "change_kind": rag_sync.RetrievalProjectionChangeKind.CONTENT,
             "desired_state": rag_sync.RetrievalProjectionDesiredState.ACTIVE,
             "content_checksum": file.extraction_content_checksum,
-            "diagnostic_workspace_id": file.workspace_id,
         }
     ]
 
@@ -940,7 +933,6 @@ def test_file_keyword_projection_is_enqueued_when_extraction_is_prepared(
         desired_state="active",
         content_checksum="a" * 64,
         visibility_checksum=None,
-        diagnostic_workspace_id="workspace-1",
     )
     file = _file(extraction_content_checksum="a" * 64)
     rag_sync.mark_file_projection_prepared(
@@ -985,7 +977,6 @@ def test_file_extraction_checksum_change_advances_projection_before_backend_writ
         desired_state="active",
         content_checksum=None,
         visibility_checksum=None,
-        diagnostic_workspace_id=file.workspace_id,
     )
 
     rag_sync.mark_file_projection_prepared(
@@ -1030,7 +1021,6 @@ def test_company_corpus_projection_uses_company_candidate_scope() -> None:
     file.corpus = FileManagerCorpus(
         id="corpus-1",
         name="Company corpus",
-        managed_workspace_id="workspace-1",
         access_scope_kind="company",
         retrieval_partition_id="a3b6638a-7547-45f8-81f2-973bfa6080d6",
         created_by_id="user-1",
@@ -1055,9 +1045,9 @@ def test_company_corpus_projection_uses_company_candidate_scope() -> None:
     projection = build_file_rag_projection(file=file, artifact=artifact)
 
     assert projection.scope_kind == RagScopeKind.COMPANY
-    assert projection.workspace_id is None
+    assert not hasattr(projection, "workspace_id")
     assert projection.visibility_refs == ["company_public"]
-    assert projection.metadata["managed_workspace_id"] == "workspace-1"
+    assert "managed_workspace_id" not in projection.metadata
 
 
 def test_vector_provider_failure_does_not_overwrite_ready_extraction_status(

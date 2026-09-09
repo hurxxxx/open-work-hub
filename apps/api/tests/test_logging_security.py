@@ -3,11 +3,14 @@ from __future__ import annotations
 import logging
 
 import httpx
+import httpx2
+import pytest
 
 from open_work_hub_api.core.logging_security import install_sensitive_http_logging_guard
 
 
-def test_http_client_request_urls_are_not_logged(caplog) -> None:
+@pytest.mark.parametrize("http_client", [httpx, httpx2])
+def test_http_client_request_urls_are_not_logged(caplog, http_client) -> None:
     api_key = "secret-kipris-key"
     query = "초전도체 검색어"
     applicant = "민감 출원인명"
@@ -18,9 +21,9 @@ def test_http_client_request_urls_are_not_logged(caplog) -> None:
 
     install_sensitive_http_logging_guard()
     with caplog.at_level(logging.DEBUG):
-        with httpx.Client(
-            transport=httpx.MockTransport(
-                lambda request: httpx.Response(200, request=request, text="<response />")
+        with http_client.Client(
+            transport=http_client.MockTransport(
+                lambda request: http_client.Response(200, request=request, text="<response />")
             )
         ) as client:
             response = client.get(full_url)

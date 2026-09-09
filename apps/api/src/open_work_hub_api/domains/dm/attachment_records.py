@@ -3,16 +3,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import BinaryIO
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.dm import (
     attachment_links,
     attachment_persistence,
     attachment_policy,
     conversation_queries,
+    participants,
 )
 from open_work_hub_api.domains.dm.models import DmConversation, DmMessageAttachment
 
@@ -49,7 +52,32 @@ class DmAttachmentAccessGate:
         attachment = self.db.get(DmMessageAttachment, attachment_id)
         if attachment is None:
             raise localized_http_exception(status_code=404, code="dm.attachment_not_found")
-        self.require_conversation(attachment.conversation_id)
+        if (
+            self.db.scalar(
+                select(User.id).where(
+                    User.id == self.current_user.id,
+                    User.status == "active",
+                    User.login_blocked.is_(False),
+                    User.must_change_password.is_(False),
+                )
+            )
+            is None
+        ):
+            raise localized_http_exception(status_code=403, code="auth.user_inactive")
+        conversation = self.require_conversation(attachment.conversation_id)
+        participant = participants.active_participant(conversation, self.current_user.id)
+        if attachment.message_id is None:
+            visible = attachment.uploader_id == self.current_user.id
+        else:
+            message = attachment.message
+            visible = bool(
+                message is not None
+                and message.conversation_id == conversation.id
+                and participant is not None
+                and message.created_at >= participant.joined_at
+            )
+        if not visible:
+            raise localized_http_exception(status_code=404, code="dm.attachment_not_found")
         return attachment
 
 
@@ -178,13 +206,14 @@ def attachment_download_url(
     *,
     current_user: User,
     attachment_id: str,
+    issuer: ContentGrantIssuer,
 ) -> str:
     attachment = require_attachment_access(
         db,
         current_user=current_user,
         attachment_id=attachment_id,
     )
-    return attachment_links.build_dm_attachment_download_url(attachment)
+    return attachment_links.build_dm_attachment_download_url(attachment, issuer=issuer)
 
 
 def attachment_preview_url(
@@ -192,13 +221,14 @@ def attachment_preview_url(
     *,
     current_user: User,
     attachment_id: str,
+    issuer: ContentGrantIssuer,
 ) -> str:
     attachment = require_attachment_access(
         db,
         current_user=current_user,
         attachment_id=attachment_id,
     )
-    url = attachment_links.build_dm_attachment_preview_url(attachment)
+    url = attachment_links.build_dm_attachment_preview_url(attachment, issuer=issuer)
     if url is None:
         raise localized_http_exception(status_code=415, code="dm.attachment_preview_unsupported")
     return url
@@ -210,4 +240,6 @@ def require_attachment_access(
     current_user: User,
     attachment_id: str,
 ) -> DmMessageAttachment:
-    return DmAttachmentAccessGate(db=db, current_user=current_user).require_attachment(attachment_id)
+    return DmAttachmentAccessGate(db=db, current_user=current_user).require_attachment(
+        attachment_id
+    )

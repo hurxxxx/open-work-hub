@@ -1,31 +1,31 @@
-import {
-  DM_MAX_ATTACHMENT_BYTES,
-  dmRoutes,
-  isDmAttachmentUploadFileAllowed,
-  normalizeDmAddParticipantsRequest,
-  normalizeDmAttachmentUrlResponse,
-  normalizeDmCreateConversationRequest,
-  normalizeDmConversation,
-  normalizeDmConversationListResponse,
-  normalizeDmMessage,
-  normalizeDmMessageAttachment,
-  normalizeDmMessageListResponse,
-  normalizeDmSendMessageRequest,
-  normalizeDmUpdateConversationRequest,
-  normalizeDmUserListResponse,
-} from '@open-work-hub/contracts/dm';
 import type {
   DmAddParticipantsRequest,
   DmAttachmentUrlResponse,
   DmConversation,
   DmConversationListResponse,
+  DmCreateConversationRequest,
   DmMessage,
   DmMessageAttachment,
   DmMessageListResponse,
   DmSendMessageRequest,
   DmUpdateConversationRequest,
   DmUser,
-  DmCreateConversationRequest,
+} from '@open-work-hub/contracts/dm';
+import {
+  DM_MAX_ATTACHMENT_BYTES,
+  dmRoutes,
+  isDmAttachmentUploadFileAllowed,
+  normalizeDmAddParticipantsRequest,
+  normalizeDmAttachmentUrlResponse,
+  normalizeDmConversation,
+  normalizeDmConversationListResponse,
+  normalizeDmCreateConversationRequest,
+  normalizeDmMessage,
+  normalizeDmMessageAttachment,
+  normalizeDmMessageListResponse,
+  normalizeDmSendMessageRequest,
+  normalizeDmUpdateConversationRequest,
+  normalizeDmUserListResponse,
 } from '@open-work-hub/contracts/dm';
 
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
@@ -48,29 +48,23 @@ export type DmThreadListResponse = DmConversationListResponse;
 type SearchDmUsersOptions = {
   includeCurrent?: boolean;
   limit?: number;
-  workspaceKey?: string;
 };
 
 function dmUsersPath({
   includeCurrent,
   limit,
   q,
-  workspaceKey,
 }: {
   includeCurrent: boolean;
   limit: number;
   q: string;
-  workspaceKey?: string;
 }): string {
   let path = dmRoutes.users({ q, limit });
   if (includeCurrent) {
     const separator = path.includes('?') ? '&' : '?';
     path = `${path}${separator}include_current=true`;
   }
-  if (workspaceKey) {
-    const separator = path.includes('?') ? '&' : '?';
-    path = `${path}${separator}workspace_key=${encodeURIComponent(workspaceKey)}`;
-  }
+
   return path;
 }
 
@@ -79,8 +73,8 @@ export function searchDmUsers(
   query: string,
   options: SearchDmUsersOptions = {},
 ): Promise<DmUser[]> {
-  const { includeCurrent = false, limit = 30, workspaceKey } = options;
-  const path = dmUsersPath({ includeCurrent, limit, q: query, workspaceKey });
+  const { includeCurrent = false, limit = 30 } = options;
+  const path = dmUsersPath({ includeCurrent, limit, q: query });
   return fetchDmResponse(
     'dm:users',
     path,

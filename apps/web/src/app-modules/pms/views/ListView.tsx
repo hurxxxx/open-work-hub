@@ -1,40 +1,3 @@
-import {
-  Fragment,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import { createPortal } from 'react-dom';
-import {
-  Activity,
-  Plus,
-  ChevronDown,
-  ChevronRight,
-  User2,
-  CheckSquare,
-  CornerDownRight,
-  Eye,
-  GitBranch,
-  GripVertical,
-  Ellipsis,
-  Indent,
-  Outdent,
-  Trash2,
-  Flag,
-  CalendarDays,
-  Pencil,
-  Search,
-  X,
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  Check,
-  RotateCcw,
-} from 'lucide-react';
-import { Button } from '@open-work-hub/ui';
-import { useTranslation } from 'react-i18next';
 import { DateInput } from '@/src/components/date/DateInput';
 import {
   UserOptionAvatar,
@@ -45,6 +8,43 @@ import {
   userOptionDisplayName,
   type UserOptionLike,
 } from '@/src/platform/users/user-option-picker-model';
+import { Button } from '@open-work-hub/ui';
+import {
+  Activity,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  CalendarDays,
+  Check,
+  CheckSquare,
+  ChevronDown,
+  ChevronRight,
+  CornerDownRight,
+  Ellipsis,
+  Eye,
+  Flag,
+  GitBranch,
+  GripVertical,
+  Indent,
+  Outdent,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+  User2,
+  X,
+} from 'lucide-react';
+import {
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import type {
   PmsStatusCategory,
   PmsTask,
@@ -55,17 +55,9 @@ import type {
   PmsTaskSortField,
 } from '../api/pms-api';
 import { DEFAULT_PMS_TASK_SORT } from '../api/pms-api';
-import {
-  getStatusSlugs,
-  getStatusTone,
-  getStatusLabel,
-  getDefaultTaskStatus,
-  PRIORITY_COLOR,
-  formatDate,
-} from './pms-constants';
 import { StatusIconButton, StatusIconGlyph } from './StatusIcon';
-import { TaskCard } from './TaskCard';
 import { TaskAssigneeStack } from './TaskAssigneeStack';
+import { TaskCard } from './TaskCard';
 import {
   buildClearAssigneesPatch,
   buildDatePatch,
@@ -73,9 +65,18 @@ import {
   canDropTaskInList,
   dropZoneFromPointer,
   selectedAssigneeIds,
-  type TaskDropZone,
   type TaskDateField,
+  type TaskDropZone,
 } from './list-view-editing-model';
+import { buildAssigneeTaskGroups } from './list-view-grouping-model';
+import {
+  formatDate,
+  getDefaultTaskStatus,
+  getStatusLabel,
+  getStatusSlugs,
+  getStatusTone,
+  PRIORITY_COLOR,
+} from './pms-constants';
 import {
   buildTaskHierarchy,
   getTaskBoardPositionUpdates,
@@ -84,7 +85,6 @@ import {
   sortTasksByHierarchyUsingInputOrder,
   type TaskBoardPositionUpdate,
 } from './pms-task-hierarchy';
-import { buildAssigneeTaskGroups } from './list-view-grouping-model';
 
 const PRIORITY_OPTIONS = ['low', 'medium', 'high', 'critical'] as const;
 const EMPTY_MEMBERS: PmsTaskListMember[] = [];

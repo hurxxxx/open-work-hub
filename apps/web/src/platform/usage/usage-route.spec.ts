@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { normalizeUsageRoutePath, resolveUsageEventAppId } from './usage-route';
 
 describe('normalizeUsageRoutePath', () => {
-  it('groups workspace routes without preserving workspace slugs or ids', () => {
+  it('groups app routes without preserving resource IDs', () => {
     expect(
       normalizeUsageRoutePath(
-        '/w/product-dev/docs/items/550e8400-e29b-41d4-a716-446655440000',
+        '/apps/docs/documents/items/550e8400-e29b-41d4-a716-446655440000',
       ),
-    ).toBe('/w/:workspace/docs/items/:id');
+    ).toBe('/apps/docs/documents/items/:id');
   });
 
   it('keeps stable admin routes readable', () => {

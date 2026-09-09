@@ -8,18 +8,21 @@ def messages(schema: dict) -> list[str]:
 
 
 def test_openapi_contract_rules_accept_valid_minimal_schema() -> None:
-    assert messages(
-        {
-            "paths": {
-                "/healthz": {
-                    "get": {
-                        "operationId": "system_healthz_get",
+    assert (
+        messages(
+            {
+                "paths": {
+                    "/healthz": {
+                        "get": {
+                            "operationId": "system_healthz_get",
+                        }
                     }
-                }
-            },
-            "components": {"schemas": {"ErrorResponse": {}}},
-        }
-    ) == []
+                },
+                "components": {"schemas": {"ErrorResponse": {}}},
+            }
+        )
+        == []
+    )
 
 
 def test_openapi_contract_rules_report_operation_id_shape_problems() -> None:
@@ -28,13 +31,13 @@ def test_openapi_contract_rules_report_operation_id_shape_problems() -> None:
             "paths": {
                 "/missing": {"get": {}},
                 "/camel": {"post": {"operationId": "CamelCase"}},
-                "/derived": {"patch": {"operationId": "post_api_v1_workspace_slug_patch"}},
+                "/derived": {"patch": {"operationId": "post_api_v1_resource_id_patch"}},
             }
         }
     ) == [
         "GET /missing is missing operationId.",
         "POST /camel has non-snake operationId 'CamelCase'.",
-        "PATCH /derived has path-derived operationId 'post_api_v1_workspace_slug_patch'.",
+        "PATCH /derived has path-derived operationId 'post_api_v1_resource_id_patch'.",
     ]
 
 
@@ -55,7 +58,7 @@ def test_openapi_contract_rules_report_path_derived_component_names() -> None:
             "paths": {},
             "components": {
                 "schemas": {
-                    "ApiV1WorkspaceSlugResponse": {},
+                    "ApiV1ResourceIdResponse": {},
                     "Pms__Task": {},
                     "CleanResponse": {},
                 }

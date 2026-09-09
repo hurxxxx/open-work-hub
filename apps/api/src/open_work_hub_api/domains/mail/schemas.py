@@ -5,7 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 MailProtocol = Literal["imap", "pop3"]
 MailSecurity = Literal["ssl", "starttls", "none"]
 

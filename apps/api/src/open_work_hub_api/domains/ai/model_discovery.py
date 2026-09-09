@@ -6,7 +6,6 @@ from typing import Any
 
 from open_work_hub_api.core.llm_provider_registry import llm_provider_descriptor
 
-
 MAX_DISCOVERED_MODELS = 500
 MAX_MODEL_KEY_LENGTH = 160
 MAX_DISPLAY_NAME_LENGTH = 160

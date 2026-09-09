@@ -1,19 +1,12 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
-    WorkspaceNavRegistration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-VIDEO_CHAT_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="video-chat",
-    title="화상채팅",
-    route_base="/video-chat",
-    icon_key="video",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
+VIDEO_CHAT_APP = app_registration(
+    "video-chat",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="video-chat-room",
             title="화상채팅",
             category="Meetings",

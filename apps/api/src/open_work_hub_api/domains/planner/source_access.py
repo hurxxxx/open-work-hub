@@ -26,6 +26,7 @@ def has_accessible_planner_event(policy) -> bool:
 
 
 class PlannerEventSourceAccessAdapter:
+    app_id = "planner"
     adapter_id = PLANNER_RETRIEVAL_PARTITION_ADAPTER_ID
     partition_adapter_id = PLANNER_RETRIEVAL_PARTITION_ADAPTER_ID
     source_namespace = "planner"

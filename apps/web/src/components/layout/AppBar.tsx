@@ -1,22 +1,22 @@
-import { useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
+import { useEffect } from 'react';
 
+import {
+  translateAppLaunchContext,
+  translateAppLaunchLabel,
+} from '@/src/app/shell/app-launch-destination';
 import { AppBarDesktopRail } from './AppBarDesktopRail';
 import { AppBarMobileHeader } from './AppBarMobileHeader';
-import {
-  buildAppLink,
-  type AppBarAppLinkResolver,
-  type AppBarProps,
-} from './app-bar-model';
+import { type AppBarAppLinkResolver, type AppBarProps } from './app-bar-model';
 import { useAppBarController } from './useAppBarController';
-import { EMPTY_LAUNCHER_GLOBAL_PATHS } from '@/src/app/shell/navigation-types';
+import { useNotificationPanelFocus } from './useNotificationPanelFocus';
 
 export function AppBar(props: AppBarProps) {
   const {
     activeAppId,
     canOpenMobileAppMenu,
+    currentCompanyLabel,
     currentUser,
-    launcherGlobalPaths = EMPTY_LAUNCHER_GLOBAL_PATHS,
     onDesktopMenuOpenChange,
     onDesktopRailMouseEnter,
     onDesktopRailMouseLeave,
@@ -24,58 +24,51 @@ export function AppBar(props: AppBarProps) {
     onOpenHelp,
     onOpenMobileAppMenu,
     onOpenMobileNavigation,
-    shellWorkspaceSlug,
-    workspaceAppBarCategories,
+    resolveAppDestination,
+    appBarCategories,
   } = props;
   const NotificationPanel = props.notificationPanel ?? null;
   const notificationsEnabled =
     props.notificationsEnabled ?? Boolean(NotificationPanel);
   const controller = useAppBarController({ ...props, notificationsEnabled });
-  const resolveAppLink: AppBarAppLinkResolver = (appId) =>
-    buildAppLink(appId, currentUser, shellWorkspaceSlug, launcherGlobalPaths);
   const {
     activeAppTitle,
-    canCreateWorkspace,
-    canManageCurrentWorkspace,
-    canOpenWorkspaceSearch,
-    currentWorkspace,
-    currentWorkspaceName,
-    defaultWorkspaceOptions,
+    canOpenSearch,
     draftItems,
     fixedItems,
     handleCountChange,
     handleNavigateToIssue,
-    handleSetDefaultWorkspace,
-    handleWorkspaceSelect,
     moreMenuRef,
-    normalizedDefaultWorkspaceId,
     onCloseEditor,
     onCloseLauncherMenus,
-    onCreateWorkspace,
-    onManageCurrentWorkspace,
     onMovePinnedApp,
     onOpenEditor,
-    onOpenWorkspaceSearch,
+    onOpenSearch,
     onResetDraft,
     onSaveLayout,
-    onSearchQueryChange,
     onToggleCategoryMenu,
     onToggleFavorites,
     onToggleNotifications,
     onTogglePinnedApp,
-    onToggleWorkspaceSwitcher,
-    otherWorkspaces,
     pinnedEligibleAppIds,
     pinnedItems,
-    pinnedWorkspace,
     state,
     t,
-    workspaceSwitcherRef,
   } = controller;
+  const resolveAppLink: AppBarAppLinkResolver = (appId) =>
+    resolveAppDestination(appId).href;
+  const resolveAppContextLabel = (appId: string) =>
+    translateAppLaunchContext(resolveAppDestination(appId), t);
+  const resolveAppLabel = (appId: string, title: string) =>
+    translateAppLaunchLabel(title, resolveAppDestination(appId), t);
   const desktopMenuOpen =
     state.favoritesOpen ||
     Boolean(state.categoryMenuId) ||
     state.appBarEditorOpen;
+  const notificationPanelFocus = useNotificationPanelFocus(
+    state.notifOpen,
+    onToggleNotifications,
+  );
 
   useEffect(() => {
     onDesktopMenuOpenChange?.(desktopMenuOpen);
@@ -86,9 +79,8 @@ export function AppBar(props: AppBarProps) {
       <AppBarMobileHeader
         activeAppTitle={activeAppTitle}
         canOpenMobileAppMenu={canOpenMobileAppMenu}
-        canOpenWorkspaceSearch={canOpenWorkspaceSearch}
+        canOpenSearch={canOpenSearch}
         currentUser={currentUser}
-        currentWorkspaceName={currentWorkspaceName}
         labels={{
           accountTitle: t('auth:settings.mySettings'),
           mobileMenuTitle: t('shell:mobileAppMenu.title', {
@@ -96,14 +88,16 @@ export function AppBar(props: AppBarProps) {
           }),
           mobileNavigationOpen: t('shell:mobileNavigation.open'),
           notificationsTitle: t('shell:notifications.title'),
+          primaryNavigation: t('shell:appBar.primaryNavigation'),
           searchOpen: t('shell:search.open'),
           searchTitle: t('shell:search.title'),
         }}
         onOpenAccount={onOpenAccount}
         onOpenMobileAppMenu={onOpenMobileAppMenu}
         onOpenMobileNavigation={onOpenMobileNavigation}
-        onOpenWorkspaceSearch={onOpenWorkspaceSearch}
-        onToggleNotifications={onToggleNotifications}
+        onOpenSearch={onOpenSearch}
+        onToggleNotifications={notificationPanelFocus.onToggle}
+        notificationPanelOpen={state.notifOpen}
         notificationsEnabled={notificationsEnabled}
         unreadCount={state.unreadCount}
       />
@@ -114,68 +108,50 @@ export function AppBar(props: AppBarProps) {
         appBarLayoutError={state.appBarLayoutError}
         appBarLayoutSaving={state.appBarLayoutSaving}
         appBarItems={props.appBarItems}
-        canCreateWorkspace={canCreateWorkspace}
-        canManageCurrentWorkspace={canManageCurrentWorkspace}
-        canOpenWorkspaceSearch={canOpenWorkspaceSearch}
+        canOpenSearch={canOpenSearch}
         currentUser={currentUser}
         currentPathname={props.currentPathname}
-        currentWorkspace={currentWorkspace}
-        currentWorkspaceName={currentWorkspaceName}
-        defaultWorkspaceOptions={defaultWorkspaceOptions}
-        defaultWorkspaceSaving={state.defaultWorkspaceSaving}
+        currentCompanyLabel={currentCompanyLabel}
         draftItems={draftItems}
         draftPinnedAppIds={state.draftPinnedAppIds}
         fixedItems={fixedItems}
         categoryMenuId={state.categoryMenuId}
         favoritesOpen={state.favoritesOpen}
         moreMenuRef={moreMenuRef}
-        normalizedDefaultWorkspaceId={normalizedDefaultWorkspaceId}
         onCloseEditor={onCloseEditor}
         onCloseLauncherMenus={onCloseLauncherMenus}
-        onCreateWorkspace={onCreateWorkspace}
         onMouseEnter={onDesktopRailMouseEnter}
         onMouseLeave={onDesktopRailMouseLeave}
-        onDefaultWorkspaceChange={(workspaceId) => {
-          void handleSetDefaultWorkspace(workspaceId);
-        }}
-        onManageCurrentWorkspace={onManageCurrentWorkspace}
         onMovePinnedApp={onMovePinnedApp}
         onOpenAccount={onOpenAccount}
         onOpenEditor={onOpenEditor}
         onOpenHelp={onOpenHelp}
-        onOpenWorkspaceSearch={onOpenWorkspaceSearch}
+        onOpenSearch={onOpenSearch}
         onResetDraft={onResetDraft}
         onSaveLayout={onSaveLayout}
-        onSearchQueryChange={onSearchQueryChange}
         onToggleCategoryMenu={onToggleCategoryMenu}
         onToggleFavorites={onToggleFavorites}
-        onSelectWorkspace={handleWorkspaceSelect}
-        onToggleNotifications={onToggleNotifications}
+        onToggleNotifications={notificationPanelFocus.onToggle}
+        notificationPanelOpen={state.notifOpen}
         onTogglePinnedApp={onTogglePinnedApp}
         notificationsEnabled={notificationsEnabled}
-        onToggleWorkspaceSwitcher={onToggleWorkspaceSwitcher}
-        otherWorkspaces={otherWorkspaces}
         pinnedEligibleAppIds={pinnedEligibleAppIds}
         pinnedItems={pinnedItems}
-        pinnedWorkspace={pinnedWorkspace}
         resolveAppLink={resolveAppLink}
+        resolveAppContextLabel={resolveAppContextLabel}
+        resolveAppLabel={resolveAppLabel}
         t={t}
         unreadCount={state.unreadCount}
-        workspaceAppBarCategories={workspaceAppBarCategories}
-        workspacePreferenceError={state.workspacePreferenceError}
-        workspaceQuery={state.workspaceQuery}
-        workspaceSwitcherOpen={state.workspaceSwitcherOpen}
-        workspaceSwitcherRef={workspaceSwitcherRef}
+        appBarCategories={appBarCategories}
       />
 
       <AnimatePresence>
         {notificationsEnabled && NotificationPanel && state.notifOpen ? (
           <NotificationPanel
-            onClose={onToggleNotifications}
+            onClose={notificationPanelFocus.onClose}
             onCountChange={handleCountChange}
             onNavigateToIssue={handleNavigateToIssue}
             refreshKey={state.notificationRefreshSeq}
-            workspaceSlug={shellWorkspaceSlug}
           />
         ) : null}
       </AnimatePresence>

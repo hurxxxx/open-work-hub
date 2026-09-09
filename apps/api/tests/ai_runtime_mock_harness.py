@@ -26,7 +26,6 @@ class MockExternalGraphRun:
     inspection_status_code: int
     inspection_json: dict[str, Any]
     pool_client: MockGraphAsyncPoolClient
-    workspace_slug: str
 
 
 def run_mock_external_graph_stream(
@@ -40,7 +39,6 @@ def run_mock_external_graph_stream(
     search_execution_enabled: bool = True,
 ) -> MockExternalGraphRun:
     auth = _seeded_dev_login(client, "administrator")
-    workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
     _enable_mock_external_graph_runtime(
         monkeypatch,
@@ -59,7 +57,7 @@ def run_mock_external_graph_stream(
 
     status_code, events = _stream_post(
         client,
-        _workspace_ai_path(workspace_slug, "/chat/stream"),
+        _ai_path("/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
@@ -77,7 +75,7 @@ def run_mock_external_graph_stream(
     agent_run_id = done_meta.get("agent_run_id")
     if isinstance(agent_run_id, str) and agent_run_id:
         inspection = client.get(
-            _workspace_ai_path(workspace_slug, f"/runtime/runs/{agent_run_id}"),
+            _ai_path(f"/runtime/runs/{agent_run_id}"),
             headers=_auth_headers(auth["token"]),
         )
         inspection_status_code = inspection.status_code
@@ -94,7 +92,6 @@ def run_mock_external_graph_stream(
         inspection_status_code=inspection_status_code,
         inspection_json=inspection_json,
         pool_client=pool_client,
-        workspace_slug=workspace_slug,
     )
 
 
@@ -209,8 +206,8 @@ def _first_message_content(messages: Any) -> str:
     return content if isinstance(content, str) else ""
 
 
-def _workspace_ai_path(slug: str, suffix: str) -> str:
-    return f"/api/v1/workspaces/{slug}/chatbot{suffix}"
+def _ai_path(suffix: str) -> str:
+    return f"/api/v1/chatbot{suffix}"
 
 
 def _seeded_dev_login(client: TestClient, account_key: str) -> dict[str, Any]:

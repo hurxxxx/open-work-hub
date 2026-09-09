@@ -1,7 +1,5 @@
 export const DOC_PAGE_QUERY_PARAM = 'page';
 export const DOCS_CREATE_QUERY_PARAM = 'create';
-export const DOCS_LEGACY_DOC_TYPE_QUERY_PARAM = 'doc_type';
-export const DOCS_LEGACY_COLLECTION_QUERY_PARAM = 'collection_id';
 export const DOCS_SPACE_QUERY_PARAM = 'space_id';
 
 type DocsPageTreeItem = {
@@ -21,7 +19,6 @@ export function getDocsFilterQueryString(
 ): string {
   const next = new URLSearchParams(searchParams);
   next.delete(DOC_PAGE_QUERY_PARAM);
-  next.delete(DOCS_LEGACY_COLLECTION_QUERY_PARAM);
   return next.toString();
 }
 
@@ -52,21 +49,6 @@ export function withDocPageSearchParam(
   return next;
 }
 
-export function removeLegacyDocsSearchParams(
-  searchParams: URLSearchParams,
-): URLSearchParams | null {
-  if (
-    !searchParams.has(DOCS_LEGACY_DOC_TYPE_QUERY_PARAM) &&
-    !searchParams.has(DOCS_LEGACY_COLLECTION_QUERY_PARAM)
-  ) {
-    return null;
-  }
-  const next = new URLSearchParams(searchParams);
-  next.delete(DOCS_LEGACY_DOC_TYPE_QUERY_PARAM);
-  next.delete(DOCS_LEGACY_COLLECTION_QUERY_PARAM);
-  return next;
-}
-
 export function consumeDocsCreateSearchParam(searchParams: URLSearchParams): {
   shouldOpen: boolean;
   searchParams: URLSearchParams | null;
@@ -85,7 +67,6 @@ export function withDocsSpaceFilterSearchParam(
 ): URLSearchParams {
   const next = new URLSearchParams(searchParams);
   next.delete(DOC_PAGE_QUERY_PARAM);
-  next.delete(DOCS_LEGACY_COLLECTION_QUERY_PARAM);
   if (spaceId) {
     next.set(DOCS_SPACE_QUERY_PARAM, spaceId);
   } else {
@@ -99,8 +80,6 @@ export function resetDocsFilterSearchParams(
 ): URLSearchParams {
   const next = new URLSearchParams(searchParams);
   next.delete(DOC_PAGE_QUERY_PARAM);
-  next.delete(DOCS_LEGACY_COLLECTION_QUERY_PARAM);
-  next.delete(DOCS_LEGACY_DOC_TYPE_QUERY_PARAM);
   next.delete('source_app');
   next.delete('source_kind');
   next.delete(DOCS_SPACE_QUERY_PARAM);

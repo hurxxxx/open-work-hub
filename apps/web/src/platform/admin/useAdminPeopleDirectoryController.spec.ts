@@ -1,12 +1,9 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
-import type {
-  AdminUsersResponse,
-  OrganizationUnitItem,
-  WorkspaceItem,
-} from './admin-api';
+import type { AdminUsersResponse, OrganizationUnitItem } from './admin-api';
 import { ADMIN_PEOPLE_DEFAULT_PAGE_SIZE } from './admin-shared';
 import {
   useAdminPeopleDirectoryController,
@@ -14,7 +11,7 @@ import {
 } from './useAdminPeopleDirectoryController';
 
 function user(): AuthUser {
-  return {
+  return createAuthUser({
     id: 'user-1',
     login_id: 'ada',
     email: 'ada@example.test',
@@ -27,23 +24,12 @@ function user(): AuthUser {
     time_zone: 'Asia/Seoul',
     date_format: 'korean',
     system_roles: [],
-    workspaces: [],
-    workspace_roles: [],
+    group_ids: [],
+    managed_organization_unit_ids: [],
     must_change_password: false,
     last_login_at: null,
     created_at: '2026-05-30T00:00:00Z',
-  } as AuthUser;
-}
-
-function workspace(): WorkspaceItem {
-  return {
-    id: 'workspace-1',
-    key: 'hq',
-    name: 'HQ',
-    description: '',
-    active: true,
-    member_count: 1,
-  } as WorkspaceItem;
+  });
 }
 
 function organizationUnit(): OrganizationUnitItem {
@@ -77,7 +63,6 @@ function client(
   return {
     listUsers: vi.fn().mockResolvedValue(usersResponse()),
     listOrganizationUnits: vi.fn().mockResolvedValue([organizationUnit()]),
-    listWorkspaces: vi.fn().mockResolvedValue([workspace()]),
     ...overrides,
   };
 }
@@ -89,7 +74,6 @@ function renderController(testClient = client()) {
       debounceMs: 0,
       messages: {
         organizationListLoadFailed: 'organizations failed',
-        workspaceListLoadFailed: 'workspaces failed',
         userListLoadFailed: 'users failed',
       },
       client: testClient,
@@ -99,14 +83,11 @@ function renderController(testClient = client()) {
 }
 
 describe('useAdminPeopleDirectoryController', () => {
-  it('loads users, organization units, and workspaces on mount', async () => {
+  it('loads users and organization units on mount', async () => {
     const testClient = client();
     const { result } = renderController(testClient);
 
     await waitFor(() => expect(result.current.state.users).toHaveLength(1));
-    await waitFor(() =>
-      expect(result.current.state.workspaces).toHaveLength(1),
-    );
     await waitFor(() =>
       expect(result.current.state.organizationUnits).toHaveLength(1),
     );
@@ -116,7 +97,6 @@ describe('useAdminPeopleDirectoryController', () => {
       page_size: ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
       q: '',
     });
-    expect(testClient.listWorkspaces).toHaveBeenCalledWith('token-1');
     expect(testClient.listOrganizationUnits).toHaveBeenCalledWith('token-1');
   });
 
@@ -223,16 +203,13 @@ describe('useAdminPeopleDirectoryController', () => {
     const testClient = client({
       listUsers: vi.fn().mockRejectedValue('no users'),
       listOrganizationUnits: vi.fn().mockRejectedValue('no organizations'),
-      listWorkspaces: vi.fn().mockRejectedValue('no workspaces'),
     });
     const { result } = renderController(testClient);
 
     await waitFor(() => expect(result.current.state.error).not.toBeNull());
-    expect([
-      'users failed',
-      'workspaces failed',
-      'organizations failed',
-    ]).toContain(result.current.state.error);
+    expect(['users failed', 'organizations failed']).toContain(
+      result.current.state.error,
+    );
     expect(result.current.state.isLoadingUsers).toBe(false);
   });
 });

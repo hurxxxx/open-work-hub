@@ -5,7 +5,6 @@ from typing import Any
 
 from open_work_hub_api.domains.conversations.scope_registry import ConversationExperience
 
-
 WEB_SEARCH_SCOPE_REF = "web_search"
 
 
@@ -20,7 +19,7 @@ DEFAULT_APP_CONVERSATION_SCOPES: tuple[AppConversationScopeDefinition, ...] = (
     AppConversationScopeDefinition(
         WEB_SEARCH_SCOPE_REF,
         "web-search",
-        "Persist web search assistant conversations for this workspace.",
+        "Persist web search assistant conversations for this user.",
     ),
 )
 
@@ -35,7 +34,6 @@ class AppConversationScopeAdapter:
         self,
         *,
         db: Any,
-        workspace: Any,
         principal: Any,
         user: Any,
         scope_resource_id: str,
@@ -47,7 +45,6 @@ class AppConversationScopeAdapter:
         self,
         *,
         db: Any,
-        workspace: Any,
         principal: Any,
         user: Any,
         scope_resource_id: str,

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   getPmsViewPreferences,
   updatePmsViewPreferences,
@@ -10,10 +10,8 @@ const DEFAULT_GROUP_BY: PmsTaskListGroupBy = 'status';
 
 export function usePmsTaskListGroupPreference({
   enabled,
-  workspaceSlug,
 }: {
   enabled: boolean;
-  workspaceSlug?: string | null;
 }): {
   groupBy: PmsTaskListGroupBy;
   setGroupBy: (groupBy: PmsTaskListGroupBy) => void;
@@ -39,7 +37,7 @@ export function usePmsTaskListGroupPreference({
 
     const loadVersion = loadVersionRef.current;
     let cancelled = false;
-    void getPmsViewPreferences(token, workspaceSlug).then(
+    void getPmsViewPreferences(token).then(
       (preference) => {
         if (
           cancelled ||
@@ -58,7 +56,7 @@ export function usePmsTaskListGroupPreference({
     return () => {
       cancelled = true;
     };
-  }, [enabled, token, workspaceSlug]);
+  }, [enabled, token]);
 
   const setGroupBy = useCallback(
     (nextGroupBy: PmsTaskListGroupBy) => {
@@ -70,11 +68,7 @@ export function usePmsTaskListGroupPreference({
       if (!enabled || !token) return;
 
       const save = saveQueueRef.current.then(() =>
-        updatePmsViewPreferences(
-          token,
-          { task_list_group_by: nextGroupBy },
-          workspaceSlug,
-        ),
+        updatePmsViewPreferences(token, { task_list_group_by: nextGroupBy }),
       );
       saveQueueRef.current = save.then(
         () => undefined,
@@ -97,7 +91,7 @@ export function usePmsTaskListGroupPreference({
         },
       );
     },
-    [enabled, token, workspaceSlug],
+    [enabled, token],
   );
 
   return { groupBy, setGroupBy };

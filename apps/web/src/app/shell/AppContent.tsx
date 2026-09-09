@@ -1,26 +1,5 @@
-import {
-  type ComponentType,
-  type ElementType,
-  type ReactNode,
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
-import {
-  Link,
-  Navigate,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-} from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { Check } from 'lucide-react';
 import { DetailDrawer } from '@open-work-hub/ui';
+import { Check, LayoutGrid, X } from 'lucide-react';
 import {
   AnimatePresence,
   LazyMotion,
@@ -28,34 +7,33 @@ import {
   m,
   useReducedMotion,
 } from 'motion/react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ComponentType,
+  type ElementType,
+  type ReactNode,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 
 import { AppBar } from '@/src/components/layout/AppBar';
+import type {
+  AppBarNotificationPanelComponent,
+  AppBarNotificationUnreadCountLoader,
+} from '@/src/components/layout/app-bar-model';
 import {
-  restoreSubSidebarPinned,
-  resolveSubSidebarPreviewOpenAfterPinnedChange,
-  serializeSubSidebarPinned,
   SUB_SIDEBAR_PINNED_STORAGE_KEY,
+  resolveSubSidebarPreviewOpenAfterPinnedChange,
+  restoreSubSidebarPinned,
+  serializeSubSidebarPinned,
 } from '@/src/components/layout/sub-sidebar-frame-model';
-import {
-  AuthProvider,
-  LoginRoute,
-  RequireAuth,
-  useAuth,
-} from '@/src/platform/auth/auth-provider';
-import {
-  hasAdminConsoleAccess,
-  type AuthUser,
-} from '@/src/platform/auth/auth-api';
-import {
-  ReleaseNoteBody,
-  formatReleaseNoteDate,
-} from '@/src/platform/auth/ReleaseNotesSettingsSection';
-import type { SettingsSection } from '@/src/platform/auth/settings-page-model';
-import {
-  dismissReleaseNote,
-  getCurrentReleaseNote,
-  type ReleaseNoteItem,
-} from '@/src/platform/release-notes/release-notes-api';
+import { cn } from '@/src/lib/utils';
 import {
   getDefaultAdminPath as getPlatformDefaultAdminPath,
   hasAnyAdminReadPermission as hasAnyPlatformAdminReadPermission,
@@ -63,61 +41,78 @@ import {
   type AdminSectionAccessResolver,
   type DefaultAdminPathResolver,
 } from '@/src/platform/admin/admin-permissions';
-import { NotFoundView, ProfilePage } from '@/src/platform/auth/settings-pages';
+import { trackMatomoPageView } from '@/src/platform/analytics/matomo';
 import {
-  clearStoredWorkspaceSelection,
-  getWorkspaceAppIdFromPath,
-  getWorkspaceSlugFromPath,
-  persistLastWorkspaceAppId,
-  persistLastWorkspaceSlug,
-  resolveWorkspaceSwitchPath,
-  type WorkspaceAppId,
-} from '@/src/platform/workspaces/workspace-utils';
+  AppBootstrapProvider,
+  type AppBootstrapContextValue,
+} from '@/src/platform/apps/app-bootstrap-context';
+import {
+  getAppIdFromPath,
+  type ShellAppId,
+} from '@/src/platform/apps/app-links';
 import {
   useAppsBootstrap,
-  useWorkspaceBootstrap,
-  type WorkspaceBootstrapApp,
-  type WorkspaceBootstrapAppBarCategory,
-  type WorkspaceBootstrapNavItem,
-  type WorkspaceBootstrapResponse,
-} from '@/src/platform/workspaces/workspaces-api';
+  type AppsBootstrapResponse,
+  type BootstrapApp,
+  type BootstrapAppBarCategory,
+  type BootstrapNavItem,
+} from '@/src/platform/apps/apps-api';
 import {
-  WorkspaceBootstrapProvider,
-  type WorkspaceBootstrapContextValue,
-} from '@/src/platform/workspaces/workspace-bootstrap-context';
-import { projectMobileNavigationItems } from './mobile-navigation-model';
-import { projectShellAppsBootstrap } from './apps-bootstrap-model';
+  ReleaseNoteBody,
+  formatReleaseNoteDate,
+} from '@/src/platform/auth/ReleaseNotesSettingsSection';
+import {
+  hasAdminConsoleAccess,
+  type AuthUser,
+} from '@/src/platform/auth/auth-api';
+import {
+  AuthProvider,
+  LoginRoute,
+  RequireAuth,
+  useAuth,
+} from '@/src/platform/auth/auth-provider';
+import type { SettingsSection } from '@/src/platform/auth/settings-page-model';
+import { NotFoundView, ProfilePage } from '@/src/platform/auth/settings-pages';
 import { BackgroundWorkProvider } from '@/src/platform/background-work/background-work-provider';
 import {
-  filterBackgroundWorkSourcesForWorkspace,
+  filterBackgroundWorkSourcesForApps,
   type BackgroundWorkSource,
 } from '@/src/platform/background-work/background-work-session';
 import { syncLocale } from '@/src/platform/i18n';
+import {
+  dismissReleaseNote,
+  getCurrentReleaseNote,
+  type ReleaseNoteItem,
+} from '@/src/platform/release-notes/release-notes-api';
 import { syncDateFormatPreference } from '@/src/platform/time/time-utils';
 import { recordUsageEvent } from '@/src/platform/usage/usage-api';
 import {
   normalizeUsageRoutePath,
   resolveUsageEventAppId,
 } from '@/src/platform/usage/usage-route';
-import { trackMatomoPageView } from '@/src/platform/analytics/matomo';
-import { cn } from '@/src/lib/utils';
-import { HomeRootRedirect, WorkspaceRootRedirect } from './redirects';
-import {
-  WorkspaceRouteElements,
-  type ShellWorkspaceRouteDefinition,
-} from './workspace-route-registry';
-import {
-  StaticRouteElements,
-  type ShellAdminSectionRouteDefinition,
-  type ShellStaticRouteDefinition,
-} from './static-route-elements';
-import {
-  ToolViewWrapper,
-  type ToolViewWrapperProps,
-} from './tool-view-wrapper';
+import { AccessRefreshBoundary } from './AccessRefreshBoundary';
+import { AppLauncherView } from './AppLauncherView';
 import { AppSubSidebar } from './AppSubSidebar';
 import { HelpCenterModal } from './HelpCenterPage';
+import { createAccessProjectionKey } from './access-projection-key';
+import {
+  EMPTY_FEATURE_GUIDE_TOOL_IDS,
+  type FeatureGuideToolIds,
+} from './ai-feature-guides';
+import {
+  resolveAppLaunchDestination,
+  translateAppLaunchContext,
+  translateAppLaunchLabel,
+  type AppLaunchDestinationResolver,
+} from './app-launch-destination';
+import {
+  AppRouteElements,
+  type ShellAppRouteDefinition,
+} from './app-route-registry';
+import { projectShellAppsBootstrap } from './apps-bootstrap-model';
 import { resolveShellDocumentTitle } from './document-title-model';
+import { LazyRouteErrorBoundary } from './lazy-route';
+import { projectMobileNavigationItems } from './mobile-navigation-model';
 import {
   applyMobileAppMenuOpenChange,
   applyMobileNavOpenChange,
@@ -126,33 +121,27 @@ import {
   resolveActiveMobileShellMenuState,
 } from './mobile-shell-menu-model';
 import {
-  buildShellWorkspaceSelectionKey,
-  resolveInitialShellWorkspaceSlug,
-  resolveShellChromeState,
-  type ShellStateResolver,
-  type ShellWorkspaceSelectionState,
-} from './shell-chrome-model';
-import {
-  getInitials,
-  getSystemDarkModeSnapshot,
-  resolveMobileAppLink,
-  resolveThemePreference,
-  subscribeSystemDarkMode,
-} from './shell-ui-model';
-import { resolveShellDisplayAppId } from './shell-display-app-model';
-import { LazyRouteErrorBoundary } from './lazy-route';
-import {
   EMPTY_LAUNCHER_GLOBAL_PATHS,
   type AppBarItem,
   type LauncherGlobalPaths,
   type NavItem,
 } from './navigation-types';
+import {
+  resolveShellChromeState,
+  type ShellStateResolver,
+} from './shell-chrome-model';
+import { resolveShellDisplayAppId } from './shell-display-app-model';
+import {
+  getSystemDarkModeSnapshot,
+  resolveThemePreference,
+  subscribeSystemDarkMode,
+} from './shell-ui-model';
 import type { AppSidebarConfig } from './sidebar-types';
-import { EMPTY_FEATURE_GUIDE_TOOL_IDS } from './ai-feature-guides';
-import type {
-  AppBarNotificationPanelComponent,
-  AppBarNotificationUnreadCountLoader,
-} from '@/src/components/layout/app-bar-model';
+import {
+  StaticRouteElements,
+  type ShellAdminSectionRouteDefinition,
+  type ShellStaticRouteDefinition,
+} from './static-route-elements';
 
 export type ShellProviderComponent = ComponentType<{ children: ReactNode }>;
 export type ShellRealtimeProviderComponent = ComponentType<{
@@ -172,9 +161,8 @@ function NoopShellRealtimeProvider({
   return children;
 }
 
-export interface WorkspaceAppScope {
-  appIds: readonly WorkspaceAppId[];
-  defaultWorkspaceAppId?: WorkspaceAppId;
+export interface AppScope {
+  appIds: readonly ShellAppId[];
 }
 
 export interface AppContentRuntimeConfig {
@@ -186,12 +174,10 @@ export interface AppContentRuntimeConfig {
   appBarItems?: readonly AppBarItem[];
   appBarPinnedByDefaultAppIds?: readonly string[];
   backgroundWorkSources?: readonly BackgroundWorkSource[];
-  featureGuideToolIds?: ToolViewWrapperProps['featureGuideToolIds'];
+  featureGuideToolIds?: FeatureGuideToolIds;
   getDefaultAdminPath?: DefaultAdminPathResolver;
   getAppModuleManifest?: (appId: string) => unknown | null;
   getAppSidebarConfig?: (appId: string) => AppSidebarConfig | null;
-  getNavItem?: ToolViewWrapperProps['getNavItem'];
-  getToolViewRoute?: ToolViewWrapperProps['getToolViewRoute'];
   hasAdminSectionAccess?: AdminSectionAccessResolver;
   hasAnyAdminReadPermission?: (systemRoles: readonly string[]) => boolean;
   helpRoutes?: readonly ShellStaticRouteDefinition[];
@@ -207,13 +193,13 @@ export interface AppContentRuntimeConfig {
   realtimeProvider?: ShellRealtimeProviderComponent | null;
   resolveShellStateForPath?: ShellStateResolver;
   shellProviders?: readonly ShellProviderComponent[];
-  workspaceSettingsRoute?: ShellStaticRouteDefinition | null;
-  workspaceRoutes?: readonly ShellWorkspaceRouteDefinition[];
-  workspaceAiToolAppIds?: readonly string[];
+
+  appRoutes?: readonly ShellAppRouteDefinition[];
+  aiToolAppIds?: readonly string[];
 }
 
 export interface AppContentProps extends AppContentRuntimeConfig {
-  workspaceAppScope?: WorkspaceAppScope;
+  appScope?: AppScope;
 }
 
 function isScopedNavItemVisible({
@@ -221,26 +207,25 @@ function isScopedNavItemVisible({
   item,
 }: {
   appIds: ReadonlySet<string>;
-  item: WorkspaceBootstrapNavItem;
+  item: BootstrapNavItem;
 }): boolean {
   return appIds.has(item.app_id);
 }
 
-function scopeWorkspaceBootstrapData(
-  data: WorkspaceBootstrapResponse | null,
-  scope: WorkspaceAppScope | undefined,
-): WorkspaceBootstrapResponse | null {
+function scopeBootstrapData(
+  data: AppsBootstrapResponse | null,
+  scope: AppScope | undefined,
+): AppsBootstrapResponse | null {
   if (!data || !scope) {
     return data;
   }
 
   const appIds = new Set<string>(scope.appIds);
-  const visibleAppIds = appIds;
   const nav = data.nav.filter((item) =>
     isScopedNavItemVisible({ appIds, item }),
   );
   const apps = data.apps
-    .filter((app) => visibleAppIds.has(app.app_id))
+    .filter((app) => appIds.has(app.app_id))
     .map((app) => ({
       ...app,
       nav_items: app.nav_items.filter((item) =>
@@ -250,7 +235,7 @@ function scopeWorkspaceBootstrapData(
   const app_bar_categories = (data.app_bar_categories ?? [])
     .map((category) => ({
       ...category,
-      items: category.items.filter((item) => visibleAppIds.has(item.app_id)),
+      items: category.items.filter((item) => appIds.has(item.app_id)),
     }))
     .filter((category) => category.items.length > 0);
 
@@ -258,13 +243,8 @@ function scopeWorkspaceBootstrapData(
     ...data,
     app_bar_categories,
     apps,
-    chatbot_app_ids: data.chatbot_app_ids?.filter((appId) =>
-      visibleAppIds.has(appId),
-    ),
+    chatbot_app_ids: data.chatbot_app_ids?.filter((appId) => appIds.has(appId)),
     nav,
-    platform_visible_app_ids: data.platform_visible_app_ids?.filter((appId) =>
-      visibleAppIds.has(appId),
-    ),
   };
 }
 
@@ -272,35 +252,30 @@ function MobileNavigationDrawer({
   activeAppId,
   appBarFixedAppIds,
   appBarItems,
-  launcherGlobalPaths,
   currentPathname,
   currentUser,
   getDefaultAdminPath,
   hasAnyAdminReadPermission,
   appBarCategories,
   onOpenChange,
-  onShellWorkspaceChange,
   open,
-  shellWorkspaceSlug,
-  workspaceApps,
+  resolveAppDestination,
+  apps,
 }: {
   activeAppId: string;
   appBarFixedAppIds: readonly string[];
   appBarItems: readonly AppBarItem[];
-  launcherGlobalPaths: LauncherGlobalPaths;
   currentPathname: string;
   currentUser: AuthUser;
   getDefaultAdminPath: DefaultAdminPathResolver;
   hasAnyAdminReadPermission: (systemRoles: readonly string[]) => boolean;
-  appBarCategories: readonly WorkspaceBootstrapAppBarCategory[];
+  appBarCategories: readonly BootstrapAppBarCategory[];
   onOpenChange: (open: boolean) => void;
-  onShellWorkspaceChange: (workspaceSlug: string | null) => void;
   open: boolean;
-  shellWorkspaceSlug: string | null;
-  workspaceApps: WorkspaceBootstrapApp[];
+  resolveAppDestination: AppLaunchDestinationResolver;
+  apps: BootstrapApp[];
 }) {
-  const navigate = useNavigate();
-  const { t, i18n } = useTranslation(['common', 'shell']);
+  const { t } = useTranslation(['common', 'shell']);
   const close = () => onOpenChange(false);
   const appBarItemById = useMemo(
     () => new Map(appBarItems.map((item) => [item.id, item])),
@@ -310,43 +285,21 @@ function MobileNavigationDrawer({
     appBarCategories,
     fixedAppIds: appBarFixedAppIds,
     appBarItems,
-    workspaceApps,
+    apps,
   }).map((item) => ({
     ...item,
+    destination: resolveAppDestination(item.linkAppId),
     title:
       item.type === 'app'
         ? t(`shell:apps.${item.id}`, { defaultValue: item.title })
         : item.title,
   }));
   const navigationActiveAppId =
-    getWorkspaceAppIdFromPath(currentPathname) ?? activeAppId;
-  const currentWorkspace =
-    currentUser.workspaces.find(
-      (workspace) => workspace.slug === shellWorkspaceSlug,
-    ) ?? null;
-  const otherWorkspaces = currentUser.workspaces
-    .filter((workspace) => workspace.slug !== currentWorkspace?.slug)
-    .sort((left, right) => left.name.localeCompare(right.name, i18n.language));
+    getAppIdFromPath(currentPathname) ?? activeAppId;
   const settingsItem = appBarItemById.get('settings');
   const canShowSettings =
     hasAdminConsoleAccess(currentUser) ||
     hasAnyAdminReadPermission(currentUser.system_roles);
-
-  const handleWorkspaceSelect = (nextWorkspaceSlug: string) => {
-    if (nextWorkspaceSlug !== shellWorkspaceSlug) {
-      persistLastWorkspaceSlug(nextWorkspaceSlug);
-      onShellWorkspaceChange(nextWorkspaceSlug);
-      navigate(
-        resolveWorkspaceSwitchPath(
-          currentUser,
-          currentPathname,
-          nextWorkspaceSlug,
-          workspaceApps.flatMap((app) => (app.enabled ? [app.app_id] : [])),
-        ),
-      );
-    }
-    close();
-  };
 
   return (
     <DetailDrawer
@@ -367,80 +320,51 @@ function MobileNavigationDrawer({
       >
         <section className="border-b border-app-border px-3 py-4">
           <div className="app-text-overline px-2 text-app-ink/50">
-            {t('common:labels.workspace')}
-          </div>
-          <div className="mt-2 space-y-1">
-            {currentWorkspace ? (
-              <button
-                className="flex w-full items-center gap-3 rounded-xl bg-app-surface px-3 py-2 text-left text-app-ink"
-                onClick={() => handleWorkspaceSelect(currentWorkspace.slug)}
-                type="button"
-              >
-                <span className="app-text-body-sm flex size-9 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-bg font-semibold">
-                  {getInitials(currentWorkspace.name, 'WS')}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="app-text-body-sm block truncate font-semibold">
-                    {currentWorkspace.name}
-                  </span>
-                  <span className="app-text-caption block truncate text-app-ink/50">
-                    {currentWorkspace.slug}
-                  </span>
-                </span>
-                <Check size={15} className="text-app-accent" />
-              </button>
-            ) : null}
-
-            {otherWorkspaces.map((workspace) => (
-              <button
-                key={workspace.id}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
-                onClick={() => handleWorkspaceSelect(workspace.slug)}
-                type="button"
-              >
-                <span className="app-text-body-sm flex size-9 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-bg font-semibold">
-                  {getInitials(workspace.name, 'WS')}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="app-text-body-sm block truncate">
-                    {workspace.name}
-                  </span>
-                  <span className="app-text-caption block truncate text-app-ink/50">
-                    {workspace.slug}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="border-b border-app-border px-3 py-4">
-          <div className="app-text-overline px-2 text-app-ink/50">
             {t('common:labels.apps')}
           </div>
           <div className="mt-2 space-y-1">
+            <Link
+              className={cn(
+                'flex items-center gap-3 rounded-xl px-3 py-2 text-app-ink transition-colors hover:bg-app-surface-hover',
+                currentPathname === '/' && 'bg-app-surface text-app-accent',
+              )}
+              to="/"
+            >
+              <LayoutGrid size={18} className="shrink-0" />
+              <span className="app-text-body-sm min-w-0 flex-1 truncate">
+                {t('shell:launcher.title')}
+              </span>
+              {currentPathname === '/' ? (
+                <Check size={15} className="shrink-0" />
+              ) : null}
+            </Link>
             {visibleItems.map((item) => (
               <Link
-                key={item.id}
-                to={resolveMobileAppLink(
-                  item.linkAppId,
-                  currentUser,
-                  shellWorkspaceSlug,
-                  launcherGlobalPaths,
+                aria-label={translateAppLaunchLabel(
+                  item.title,
+                  item.destination,
+                  t,
                 )}
+                key={item.id}
+                to={item.destination.href}
                 className={cn(
                   'flex items-center gap-3 rounded-xl px-3 py-2 text-app-ink transition-colors hover:bg-app-surface-hover',
                   item.activeAppIds.includes(
-                    navigationActiveAppId as WorkspaceAppId,
+                    navigationActiveAppId as ShellAppId,
                   ) && 'bg-app-surface text-app-accent',
                 )}
               >
                 <item.icon size={18} className="shrink-0" />
-                <span className="app-text-body-sm min-w-0 flex-1 truncate">
-                  {item.title}
+                <span className="min-w-0 flex-1">
+                  <span className="app-text-body-sm block truncate">
+                    {item.title}
+                  </span>
+                  <span className="app-text-micro block truncate text-app-ink/50">
+                    {translateAppLaunchContext(item.destination, t)}
+                  </span>
                 </span>
                 {item.activeAppIds.includes(
-                  navigationActiveAppId as WorkspaceAppId,
+                  navigationActiveAppId as ShellAppId,
                 ) ? (
                   <Check size={15} className="shrink-0" />
                 ) : null}
@@ -477,41 +401,41 @@ function MobileAppMenuDrawer({
   activeDisplayAppId,
   activeNavItemId,
   appBarItems,
-  currentWorkspaceSlug,
-  enabledWorkspaceAppIds,
+  enabledShellAppIds,
   getAppModuleManifest,
   getAppSidebarConfig,
   hasAdminSectionAccess,
+  headerSlot,
   launcherGlobalPaths,
   navItems,
   onOpenChange,
   open,
-  workspaceApps,
-  workspaceNavItems,
+  apps,
+  appNavItems,
 }: {
   activeAppId: string;
   activeDisplayAppId: string;
   activeNavItemId: string;
   appBarItems: readonly AppBarItem[];
-  currentWorkspaceSlug: string | null;
-  enabledWorkspaceAppIds: readonly string[];
+
+  enabledShellAppIds: readonly string[];
   getAppModuleManifest: (appId: string) => unknown | null;
   getAppSidebarConfig: (appId: string) => AppSidebarConfig | null;
   hasAdminSectionAccess: AdminSectionAccessResolver;
+  headerSlot?: ReactNode;
   launcherGlobalPaths: LauncherGlobalPaths;
   navItems: readonly NavItem[];
   onOpenChange: (open: boolean) => void;
   open: boolean;
-  workspaceApps: WorkspaceBootstrapApp[];
-  workspaceNavItems: WorkspaceBootstrapNavItem[];
+  apps: BootstrapApp[];
+  appNavItems: BootstrapNavItem[];
 }) {
   const close = () => onOpenChange(false);
   const { t } = useTranslation('shell');
   const activeAppTitle =
     activeDisplayAppId === 'settings'
       ? t('apps.settings')
-      : (workspaceApps.find((item) => item.app_id === activeDisplayAppId)
-          ?.title ??
+      : (apps.find((item) => item.app_id === activeDisplayAppId)?.title ??
         t(`apps.${activeDisplayAppId}`, {
           defaultValue:
             appBarItems.find((item) => item.id === activeDisplayAppId)?.title ??
@@ -534,17 +458,17 @@ function MobileAppMenuDrawer({
           activeAppId={activeAppId}
           activeNavItemId={activeNavItemId}
           appBarItems={appBarItems}
-          currentWorkspaceSlug={currentWorkspaceSlug}
-          enabledWorkspaceAppIds={enabledWorkspaceAppIds}
+          enabledShellAppIds={enabledShellAppIds}
           getAppModuleManifest={getAppModuleManifest}
           getAppSidebarConfig={getAppSidebarConfig}
           hasAdminSectionAccess={hasAdminSectionAccess}
+          headerSlot={headerSlot}
           launcherGlobalPaths={launcherGlobalPaths}
           navItems={navItems}
           onNavigate={close}
           variant="mobile"
-          workspaceApps={workspaceApps}
-          workspaceNavItems={workspaceNavItems}
+          apps={apps}
+          appNavItems={appNavItems}
         />
       </div>
     </DetailDrawer>
@@ -643,8 +567,6 @@ function AuthenticatedShell({
   getDefaultAdminPath,
   getAppModuleManifest,
   getAppSidebarConfig,
-  getNavItem,
-  getToolViewRoute,
   hasAdminSectionAccess,
   hasAnyAdminReadPermission,
   helpRoutes,
@@ -659,10 +581,9 @@ function AuthenticatedShell({
   realtimeEnabled,
   realtimeProvider: ShellRealtimeProvider,
   resolveShellStateForPath,
-  workspaceSettingsRoute,
-  workspaceRoutes,
-  workspaceAppScope,
-  workspaceAiToolAppIds,
+  appRoutes,
+  appScope,
+  aiToolAppIds,
 }: {
   adminLandingRoute: ShellStaticRouteDefinition | undefined;
   adminRedirectRoutes: readonly ShellStaticRouteDefinition[] | undefined;
@@ -672,12 +593,10 @@ function AuthenticatedShell({
   appBarItems: readonly AppBarItem[];
   appBarPinnedByDefaultAppIds: readonly string[];
   backgroundWorkSources: readonly BackgroundWorkSource[];
-  featureGuideToolIds: NonNullable<ToolViewWrapperProps['featureGuideToolIds']>;
+  featureGuideToolIds: FeatureGuideToolIds;
   getDefaultAdminPath: DefaultAdminPathResolver;
   getAppModuleManifest: (appId: string) => unknown | null;
   getAppSidebarConfig: (appId: string) => AppSidebarConfig | null;
-  getNavItem: ToolViewWrapperProps['getNavItem'];
-  getToolViewRoute: ToolViewWrapperProps['getToolViewRoute'];
   hasAdminSectionAccess: AdminSectionAccessResolver;
   hasAnyAdminReadPermission: (systemRoles: readonly string[]) => boolean;
   helpRoutes: readonly ShellStaticRouteDefinition[] | undefined;
@@ -695,10 +614,10 @@ function AuthenticatedShell({
   realtimeEnabled: boolean;
   realtimeProvider: ShellRealtimeProviderComponent;
   resolveShellStateForPath: ShellStateResolver | undefined;
-  workspaceSettingsRoute: ShellStaticRouteDefinition | null | undefined;
-  workspaceRoutes: readonly ShellWorkspaceRouteDefinition[] | undefined;
-  workspaceAppScope: WorkspaceAppScope | undefined;
-  workspaceAiToolAppIds: readonly string[];
+
+  appRoutes: readonly ShellAppRouteDefinition[] | undefined;
+  appScope: AppScope | undefined;
+  aiToolAppIds: readonly string[];
 }) {
   const auth = useAuth();
   const { pathname: locationPathname, search: locationSearch } = useLocation();
@@ -721,44 +640,6 @@ function AuthenticatedShell({
   const [releaseNoteDismissing, setReleaseNoteDismissing] = useState(false);
   const currentUser = auth.user;
   const currentUserId = currentUser?.id ?? null;
-  const routeWorkspaceSlug = getWorkspaceSlugFromPath(locationPathname);
-  const shellWorkspaceSelectionKey = buildShellWorkspaceSelectionKey(
-    currentUser,
-    routeWorkspaceSlug,
-  );
-  const initialShellWorkspaceSlug = resolveInitialShellWorkspaceSlug(
-    currentUser,
-    routeWorkspaceSlug,
-  );
-  const [shellWorkspaceSelection, setShellWorkspaceSelection] =
-    useState<ShellWorkspaceSelectionState>({
-      key: shellWorkspaceSelectionKey,
-      slug: initialShellWorkspaceSlug,
-    });
-  useEffect(() => {
-    setShellWorkspaceSelection((current) => {
-      if (current.key === shellWorkspaceSelectionKey) {
-        return current;
-      }
-      return {
-        key: shellWorkspaceSelectionKey,
-        slug: initialShellWorkspaceSlug,
-      };
-    });
-  }, [initialShellWorkspaceSlug, shellWorkspaceSelectionKey]);
-  const shellWorkspaceSlug =
-    shellWorkspaceSelection.key === shellWorkspaceSelectionKey
-      ? shellWorkspaceSelection.slug
-      : initialShellWorkspaceSlug;
-  const setShellWorkspaceSlug = useCallback(
-    (workspaceSlug: string | null) => {
-      setShellWorkspaceSelection({
-        key: shellWorkspaceSelectionKey,
-        slug: workspaceSlug,
-      });
-    },
-    [shellWorkspaceSelectionKey],
-  );
   const openProfile = useCallback((section: SettingsSection = 'profile') => {
     setProfileInitialTab(section);
     setProfileOpen(true);
@@ -806,110 +687,78 @@ function AuthenticatedShell({
     activeMobileShellMenu;
   const themePreference = currentUser?.theme_preference ?? 'system';
   const resolvedTheme = resolveThemePreference(themePreference, systemDarkMode);
-  const bootstrapShellChromeState = useMemo(
-    () =>
-      resolveShellChromeState({
-        appGlobalRoutes,
-        enabledWorkspaceAppIds: null,
-        pathname: locationPathname,
-        resolveShellStateForPath,
-        search: locationSearch,
-        shellWorkspaceSlug,
-        user: currentUser,
-        workspaceRoutes,
-      }),
-    [
-      appGlobalRoutes,
-      currentUser,
-      locationPathname,
-      locationSearch,
-      resolveShellStateForPath,
-      shellWorkspaceSlug,
-      workspaceRoutes,
-    ],
+  const appsBootstrap = useAppsBootstrap(auth.token, currentUserId);
+  const scopedBootstrapData = useMemo(
+    () => scopeBootstrapData(appsBootstrap.data, appScope),
+    [appsBootstrap.data, appScope],
   );
-  const bootstrapWorkspaceSlug =
-    bootstrapShellChromeState.bootstrapWorkspaceSlug;
-  const appsBootstrap = useAppsBootstrap(auth.token);
-  const workspaceBootstrap = useWorkspaceBootstrap(
-    auth.token,
-    bootstrapWorkspaceSlug,
-  );
-  const scopedWorkspaceBootstrapData = useMemo(
-    () =>
-      scopeWorkspaceBootstrapData(workspaceBootstrap.data, workspaceAppScope),
-    [workspaceAppScope, workspaceBootstrap.data],
-  );
-  const scopedWorkspaceBootstrap = useMemo<WorkspaceBootstrapContextValue>(
+  const scopedBootstrap = useMemo<AppBootstrapContextValue>(
     () => ({
-      data: scopedWorkspaceBootstrapData,
-      error: workspaceBootstrap.error,
-      loading: workspaceBootstrap.loading,
-      reload: workspaceBootstrap.reload,
+      data: scopedBootstrapData,
+      error: appsBootstrap.error,
+      loading: appsBootstrap.loading,
+      reload: appsBootstrap.reload,
     }),
     [
-      scopedWorkspaceBootstrapData,
-      workspaceBootstrap.error,
-      workspaceBootstrap.loading,
-      workspaceBootstrap.reload,
+      scopedBootstrapData,
+      appsBootstrap.error,
+      appsBootstrap.loading,
+      appsBootstrap.reload,
     ],
   );
-  const enabledWorkspaceAppIds = useMemo(() => {
-    if (!scopedWorkspaceBootstrapData) {
-      return null;
-    }
-    return scopedWorkspaceBootstrapData.apps.flatMap((app) =>
-      app.enabled ? [app.app_id] : [],
-    );
-  }, [scopedWorkspaceBootstrapData]);
+  const enabledShellAppIds = useMemo(
+    () =>
+      scopedBootstrapData?.apps
+        .filter((app) => app.enabled)
+        .map((app) => app.app_id) ?? null,
+    [scopedBootstrapData],
+  );
+  const launchAppById = useMemo(
+    () =>
+      new Map((appsBootstrap.data?.apps ?? []).map((app) => [app.app_id, app])),
+    [appsBootstrap.data?.apps],
+  );
+  const resolveAppDestination = useCallback<AppLaunchDestinationResolver>(
+    (appId) =>
+      resolveAppLaunchDestination({
+        app: launchAppById.get(appId) ?? null,
+        appId,
+        launcherGlobalPaths,
+      }),
+    [launchAppById, launcherGlobalPaths],
+  );
   const shellAppsBootstrap = useMemo(
     () =>
       projectShellAppsBootstrap({
         globalBootstrap: appsBootstrap.data,
         personalToolsScope: t('appBar.personalToolsScope'),
         personalToolsTitle: t('appBar.personalTools'),
-        workspaceApps: scopedWorkspaceBootstrapData?.apps ?? [],
-        workspaceCategories:
-          scopedWorkspaceBootstrapData?.app_bar_categories ?? [],
       }),
-    [appsBootstrap.data, scopedWorkspaceBootstrapData, t],
+    [appsBootstrap.data, t],
   );
-  const enabledGlobalAppIds = useMemo(() => {
-    if (!appsBootstrap.data) {
-      return null;
-    }
-    return [
-      ...appsBootstrap.data.apps,
-      ...appsBootstrap.data.personal_tools,
-    ].flatMap((app) => (app.enabled ? [app.app_id] : []));
-  }, [appsBootstrap.data]);
-  const launcherGlobalAppIds = useMemo(
-    () => Array.from(launcherGlobalPaths.keys()),
-    [launcherGlobalPaths],
-  );
+  const enabledRouteAppIds = enabledShellAppIds;
   const enabledBackgroundWorkSources = useMemo(() => {
-    const bootstrap = scopedWorkspaceBootstrapData;
+    const bootstrap = scopedBootstrapData;
     if (!bootstrap) {
       return [];
     }
-    return filterBackgroundWorkSourcesForWorkspace(backgroundWorkSources, {
+    return filterBackgroundWorkSourcesForApps(backgroundWorkSources, {
       enabledAppIds: [
         ...bootstrap.apps.filter((app) => app.enabled).map((app) => app.app_id),
       ],
       enabledNavItemIds: bootstrap.nav.map((item) => item.id),
     });
-  }, [backgroundWorkSources, scopedWorkspaceBootstrapData]);
+  }, [backgroundWorkSources, scopedBootstrapData]);
   const shellChromeState = useMemo(
     () =>
       resolveShellChromeState({
         appGlobalRoutes,
-        enabledWorkspaceAppIds: shellAppsBootstrap.enabledAppIds,
+        enabledShellAppIds: enabledRouteAppIds,
         pathname: locationPathname,
         resolveShellStateForPath,
         search: locationSearch,
-        shellWorkspaceSlug,
         user: currentUser,
-        workspaceRoutes,
+        appRoutes,
       }),
     [
       appGlobalRoutes,
@@ -917,9 +766,8 @@ function AuthenticatedShell({
       locationPathname,
       locationSearch,
       resolveShellStateForPath,
-      shellWorkspaceSlug,
-      shellAppsBootstrap.enabledAppIds,
-      workspaceRoutes,
+      enabledRouteAppIds,
+      appRoutes,
     ],
   );
   const {
@@ -927,7 +775,6 @@ function AuthenticatedShell({
     activeNavItemId,
     canOpenMobileAppMenu,
     mainClassName,
-    routeStorageSelection,
     showSubSidebar,
   } = shellChromeState;
   const activeDisplayAppId = resolveShellDisplayAppId({
@@ -935,7 +782,7 @@ function AuthenticatedShell({
     pathname: locationPathname,
   });
   const canRenderDesktopSubSidebar =
-    showSubSidebar && activeAppId !== 'home' && activeAppId !== 'profile';
+    showSubSidebar && activeAppId !== 'profile';
   const subSidebarCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -995,21 +842,11 @@ function AuthenticatedShell({
     },
     [clearSubSidebarCloseTimer],
   );
-  const documentTitleWorkspace =
-    scopedWorkspaceBootstrap.data?.workspace ??
-    (shellChromeState.bootstrapWorkspaceSlug
-      ? (currentUser?.workspaces.find(
-          (workspace) => workspace.slug === bootstrapWorkspaceSlug,
-        ) ?? null)
-      : null);
   const documentTitle = resolveShellDocumentTitle({
     activeAppId,
     appBarItems,
-    pathname: locationPathname,
-    routeWorkspaceSlug,
     t,
-    workspace: documentTitleWorkspace,
-    workspaceApps: scopedWorkspaceBootstrap.data?.apps ?? [],
+    apps: scopedBootstrap.data?.apps ?? [],
   });
   const usageRoutePath = useMemo(
     () => normalizeUsageRoutePath(locationPathname),
@@ -1020,9 +857,9 @@ function AuthenticatedShell({
       resolveUsageEventAppId({
         activeAppId,
         activeNavItemId,
-        navItems: scopedWorkspaceBootstrap.data?.nav ?? null,
+        navItems: scopedBootstrap.data?.nav ?? null,
       }),
-    [activeAppId, activeNavItemId, scopedWorkspaceBootstrap.data?.nav],
+    [activeAppId, activeNavItemId, scopedBootstrap.data?.nav],
   );
 
   useEffect(() => {
@@ -1109,24 +946,17 @@ function AuthenticatedShell({
   }, [canRenderDesktopSubSidebar, clearSubSidebarCloseTimer]);
 
   useEffect(() => {
-    if (currentUser?.workspaces.length === 0) {
-      clearStoredWorkspaceSelection();
-    }
-  }, [currentUser?.workspaces.length]);
-
-  useEffect(() => {
     if (!auth.token || !currentUserId) {
       return;
     }
-    if (activeAppId === 'home' || activeAppId === 'profile') {
+    if (
+      activeAppId === 'home' ||
+      activeAppId === 'launcher' ||
+      activeAppId === 'profile'
+    ) {
       return;
     }
-    if (
-      routeWorkspaceSlug &&
-      activeNavItemId &&
-      !scopedWorkspaceBootstrap.data &&
-      !scopedWorkspaceBootstrap.error
-    ) {
+    if (activeNavItemId && !scopedBootstrap.data && !scopedBootstrap.error) {
       return;
     }
     const eventKey = `${currentUserId}:${usageEventAppId}:${activeNavItemId}:${usageRoutePath}`;
@@ -1142,9 +972,7 @@ function AuthenticatedShell({
       event_type: 'app.open',
       route_path: usageRoutePath,
       source,
-      metadata: {
-        has_workspace_route: Boolean(routeWorkspaceSlug),
-      },
+      metadata: {},
       dedupe_minutes: 30,
     }).catch(() => undefined);
   }, [
@@ -1152,9 +980,8 @@ function AuthenticatedShell({
     activeNavItemId,
     auth.token,
     currentUserId,
-    routeWorkspaceSlug,
-    scopedWorkspaceBootstrap.data,
-    scopedWorkspaceBootstrap.error,
+    scopedBootstrap.data,
+    scopedBootstrap.error,
     usageEventAppId,
     usageRoutePath,
   ]);
@@ -1215,305 +1042,259 @@ function AuthenticatedShell({
     openProfile('releaseNotes');
   }, [auth.token, currentReleaseNote, openProfile]);
 
-  useEffect(() => {
-    if (!routeStorageSelection) {
-      return;
-    }
-
-    persistLastWorkspaceSlug(routeStorageSelection.workspaceSlug);
-    persistLastWorkspaceAppId(routeStorageSelection.appId);
-  }, [routeStorageSelection]);
-
   if (!currentUser) {
     return <Navigate replace to="/login" />;
   }
 
   return (
     <ShellRealtimeProvider token={realtimeEnabled ? auth.token : null}>
-      <WorkspaceBootstrapProvider
-        value={{
-          ...scopedWorkspaceBootstrap,
-          aiToolAppIds: workspaceAiToolAppIds,
-          globalApps: appsBootstrap.data,
-          reloadGlobalApps: appsBootstrap.reload,
-        }}
+      <AccessRefreshBoundary
+        accessProjectionKey={createAccessProjectionKey(
+          currentUser,
+          appsBootstrap.data,
+        )}
+        refreshApps={appsBootstrap.refresh}
+        refreshUser={auth.refreshAccessUser}
       >
-        <div className="flex h-screen flex-col overflow-hidden bg-app-surface-sidebar text-app-ink transition-colors lg:flex-row">
-          <AppBar
-            activeAppId={activeDisplayAppId}
-            appBarFixedAppIds={appBarFixedAppIds}
-            appBarItems={appBarItems}
-            appBarPinnedByDefaultAppIds={appBarPinnedByDefaultAppIds}
-            canOpenMobileAppMenu={canOpenMobileAppMenu}
-            currentUser={currentUser}
-            currentPathname={locationPathname}
-            launcherGlobalPaths={launcherGlobalPaths}
-            notificationIssueAppId={notificationIssueAppId}
-            onDesktopMenuOpenChange={setDesktopAppBarMenuOpen}
-            onDesktopRailMouseEnter={openSubSidebarPreview}
-            onDesktopRailMouseLeave={scheduleSubSidebarPreviewClose}
-            onOpenHelp={() => setHelpOpen(true)}
-            onOpenMobileAppMenu={() => setMobileAppMenuOpen(true)}
-            onOpenMobileNavigation={() => setMobileNavOpen(true)}
-            onShellWorkspaceChange={setShellWorkspaceSlug}
-            shellWorkspaceSlug={shellWorkspaceSlug}
-            workspaceApps={shellAppsBootstrap.apps}
-            workspaceAppBarCategories={shellAppsBootstrap.appBarCategories}
-            canOpenWorkspaceSearch={Boolean(
-              scopedWorkspaceBootstrapData?.keyword_search?.entity_types.length,
-            )}
-            notificationPanel={notificationPanel}
-            notificationRealtimeEventTypes={notificationRealtimeEventTypes}
-            notificationUnreadCountLoader={notificationUnreadCountLoader}
-            notificationsEnabled={Boolean(notificationPanel)}
-            onOpenAccount={() => openProfile('profile')}
-          />
+        <AppBootstrapProvider
+          value={{
+            ...scopedBootstrap,
+            aiToolAppIds: aiToolAppIds,
+          }}
+        >
+          <div className="flex h-screen flex-col overflow-hidden bg-app-surface-sidebar text-app-ink transition-colors lg:flex-row">
+            <AppBar
+              activeAppId={activeDisplayAppId}
+              appBarFixedAppIds={appBarFixedAppIds}
+              appBarItems={appBarItems}
+              appBarPinnedByDefaultAppIds={appBarPinnedByDefaultAppIds}
+              canOpenMobileAppMenu={canOpenMobileAppMenu}
+              currentUser={currentUser}
+              currentPathname={locationPathname}
+              currentCompanyLabel={null}
+              launcherGlobalPaths={launcherGlobalPaths}
+              notificationIssueAppId={notificationIssueAppId}
+              onDesktopMenuOpenChange={setDesktopAppBarMenuOpen}
+              onDesktopRailMouseEnter={openSubSidebarPreview}
+              onDesktopRailMouseLeave={scheduleSubSidebarPreviewClose}
+              onOpenHelp={() => setHelpOpen(true)}
+              onOpenMobileAppMenu={() => setMobileAppMenuOpen(true)}
+              onOpenMobileNavigation={() => setMobileNavOpen(true)}
+              resolveAppDestination={resolveAppDestination}
+              apps={shellAppsBootstrap.apps}
+              appBarCategories={shellAppsBootstrap.appBarCategories}
+              canOpenSearch={Boolean(
+                scopedBootstrapData?.keyword_search?.entity_types?.length,
+              )}
+              notificationPanel={notificationPanel}
+              notificationRealtimeEventTypes={notificationRealtimeEventTypes}
+              notificationUnreadCountLoader={notificationUnreadCountLoader}
+              notificationsEnabled={Boolean(notificationPanel)}
+              onOpenAccount={() => openProfile('profile')}
+            />
 
-          <div className="relative flex flex-1 overflow-hidden">
-            <LazyMotion features={domAnimation}>
-              <AnimatePresence initial={false}>
-                {desktopSubSidebarOpen ? (
-                  <m.div
-                    animate={{ opacity: 1, x: 0 }}
-                    className={cn(
-                      subSidebarPinned
-                        ? 'hidden h-full shrink-0 lg:flex'
-                        : 'absolute inset-y-0 left-0 z-30 hidden lg:flex',
-                    )}
-                    exit={
-                      subSidebarPinned ? undefined : { opacity: 0, x: '-100%' }
-                    }
-                    initial={
-                      subSidebarPinned ? false : { opacity: 0, x: '-100%' }
-                    }
-                    transition={
-                      prefersReducedMotion
-                        ? { duration: 0 }
-                        : {
-                            duration: 0.22,
-                            ease: [0.22, 1, 0.36, 1],
-                          }
-                    }
-                    onBlurCapture={(event) => {
-                      const nextTarget = event.relatedTarget;
-                      if (
-                        nextTarget instanceof Node &&
-                        event.currentTarget.contains(nextTarget)
-                      ) {
-                        return;
+            <div className="relative flex flex-1 overflow-hidden">
+              <LazyMotion features={domAnimation}>
+                <AnimatePresence initial={false}>
+                  {desktopSubSidebarOpen ? (
+                    <m.div
+                      animate={{ opacity: 1, x: 0 }}
+                      className={cn(
+                        subSidebarPinned
+                          ? 'hidden h-full shrink-0 lg:flex'
+                          : 'absolute inset-y-0 left-0 z-30 hidden lg:flex',
+                      )}
+                      exit={
+                        subSidebarPinned
+                          ? undefined
+                          : { opacity: 0, x: '-100%' }
                       }
-                      scheduleSubSidebarPreviewClose();
-                    }}
-                    onFocusCapture={openSubSidebarPreview}
-                    onMouseEnter={openSubSidebarPreview}
-                    onMouseLeave={scheduleSubSidebarPreviewClose}
-                  >
-                    <AppSubSidebar
-                      activeAppId={activeAppId}
-                      activeNavItemId={activeNavItemId}
-                      appBarItems={appBarItems}
-                      currentWorkspaceSlug={
-                        shellChromeState.bootstrapWorkspaceSlug
+                      initial={
+                        subSidebarPinned ? false : { opacity: 0, x: '-100%' }
                       }
-                      enabledWorkspaceAppIds={enabledWorkspaceAppIds ?? []}
-                      getAppModuleManifest={getAppModuleManifest}
-                      getAppSidebarConfig={getAppSidebarConfig}
-                      hasAdminSectionAccess={hasAdminSectionAccess}
-                      launcherGlobalPaths={launcherGlobalPaths}
-                      navItems={navItems}
-                      onPinnedChange={handleSubSidebarPinnedChange}
-                      overlay={!subSidebarPinned}
-                      pinned={subSidebarPinned}
-                      variant="desktop"
-                      workspaceApps={scopedWorkspaceBootstrap.data?.apps ?? []}
-                      workspaceNavItems={
-                        scopedWorkspaceBootstrap.data?.nav ?? []
+                      transition={
+                        prefersReducedMotion
+                          ? { duration: 0 }
+                          : {
+                              duration: 0.22,
+                              ease: [0.22, 1, 0.36, 1],
+                            }
+                      }
+                      onBlurCapture={(event) => {
+                        const nextTarget = event.relatedTarget;
+                        if (
+                          nextTarget instanceof Node &&
+                          event.currentTarget.contains(nextTarget)
+                        ) {
+                          return;
+                        }
+                        scheduleSubSidebarPreviewClose();
+                      }}
+                      onFocusCapture={openSubSidebarPreview}
+                      onMouseEnter={openSubSidebarPreview}
+                      onMouseLeave={scheduleSubSidebarPreviewClose}
+                    >
+                      <AppSubSidebar
+                        activeAppId={activeAppId}
+                        activeNavItemId={activeNavItemId}
+                        appBarItems={appBarItems}
+                        enabledShellAppIds={enabledShellAppIds ?? []}
+                        getAppModuleManifest={getAppModuleManifest}
+                        getAppSidebarConfig={getAppSidebarConfig}
+                        hasAdminSectionAccess={hasAdminSectionAccess}
+                        launcherGlobalPaths={launcherGlobalPaths}
+                        navItems={navItems}
+                        onPinnedChange={handleSubSidebarPinnedChange}
+                        overlay={!subSidebarPinned}
+                        pinned={subSidebarPinned}
+                        variant="desktop"
+                        apps={scopedBootstrap.data?.apps ?? []}
+                        appNavItems={scopedBootstrap.data?.nav ?? []}
+                      />
+                    </m.div>
+                  ) : null}
+                </AnimatePresence>
+              </LazyMotion>
+
+              <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-app-bg transition-colors">
+                <main className={mainClassName}>
+                  <Routes>
+                    <Route
+                      path="/"
+                      element={
+                        <AppLauncherView
+                          data={appsBootstrap.data}
+                          error={appsBootstrap.error}
+                          loading={appsBootstrap.loading}
+                        />
                       }
                     />
-                  </m.div>
-                ) : null}
-              </AnimatePresence>
-            </LazyMotion>
-
-            <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-app-bg transition-colors">
-              <main className={mainClassName}>
-                <Routes>
-                  <Route
-                    path="/"
-                    element={
-                      <HomeRootRedirect
-                        defaultWorkspaceAppId={
-                          workspaceAppScope?.defaultWorkspaceAppId
-                        }
-                      />
-                    }
-                  />
-                  <Route
-                    path="/w/:workspaceSlug"
-                    element={
-                      <WorkspaceRootRedirect
-                        defaultWorkspaceAppId={
-                          workspaceAppScope?.defaultWorkspaceAppId
-                        }
-                      />
-                    }
-                  />
-                  {WorkspaceRouteElements({
-                    bootstrapAppIds: enabledWorkspaceAppIds,
-                    bootstrapError: workspaceBootstrap.error,
-                    bootstrapLoading: workspaceBootstrap.loading,
-                    workspaceRoutes,
-                  })}
-                  {StaticRouteElements({
-                    adminLandingRoute,
-                    adminRedirectRoutes,
-                    adminSectionRoutes,
-                    appGlobalRoutes,
-                    bootstrapError:
-                      appsBootstrap.error ?? workspaceBootstrap.error,
-                    bootstrapLoading:
-                      appsBootstrap.loading || workspaceBootstrap.loading,
-                    featureGuideToolIds,
-                    getDefaultAdminPath,
-                    hasAdminSectionAccess,
-                    helpRoutes,
-                    launcherGlobalAppIds,
-                    launcherGlobalBootstrapError: appsBootstrap.error,
-                    launcherGlobalBootstrapLoading: appsBootstrap.loading,
-                    launcherGlobalVisibleAppIds: enabledGlobalAppIds,
-                    visibleAppIds:
-                      appsBootstrap.data || scopedWorkspaceBootstrapData
-                        ? shellAppsBootstrap.enabledAppIds
+                    {AppRouteElements({
+                      bootstrapAppIds: enabledShellAppIds,
+                      bootstrapError: appsBootstrap.error,
+                      bootstrapLoading: appsBootstrap.loading,
+                      appRoutes,
+                    })}
+                    {StaticRouteElements({
+                      adminLandingRoute,
+                      adminRedirectRoutes,
+                      adminSectionRoutes,
+                      appGlobalRoutes,
+                      bootstrapError: appsBootstrap.error,
+                      bootstrapLoading: appsBootstrap.loading,
+                      enabledAppIds: appsBootstrap.data
+                        ? appsBootstrap.data.apps
+                            .filter((app) => app.enabled)
+                            .map((app) => app.app_id)
                         : null,
-                    workspaceSettingsRoute,
-                  })}
-                  <Route
-                    path="/tool/:toolId"
-                    element={
-                      <ToolViewWrapper
-                        featureGuideToolIds={featureGuideToolIds}
-                        getNavItem={getNavItem}
-                        getToolViewRoute={getToolViewRoute}
-                      />
+                      featureGuideToolIds,
+                      getDefaultAdminPath,
+                      hasAdminSectionAccess,
+                      helpRoutes,
+                    })}
+                    <Route path="*" element={<NotFoundView />} />
+                  </Routes>
+                </main>
+              </div>
+
+              {personalWidgetsEnabled && PersonalWidgetHost ? (
+                <LazyRouteErrorBoundary
+                  resetKey={`${locationPathname}${locationSearch}`}
+                >
+                  <Suspense
+                    fallback={
+                      <div className="h-full w-10 shrink-0 border-l border-app-border bg-app-bg" />
                     }
-                  />
-                  <Route
-                    path="/tool/:toolId/:docId"
-                    element={
-                      <ToolViewWrapper
-                        featureGuideToolIds={featureGuideToolIds}
-                        getNavItem={getNavItem}
-                        getToolViewRoute={getToolViewRoute}
-                      />
-                    }
-                  />
-                  <Route path="*" element={<NotFoundView />} />
-                </Routes>
-              </main>
+                  >
+                    <PersonalWidgetHost key={currentUserId} />
+                  </Suspense>
+                </LazyRouteErrorBoundary>
+              ) : null}
             </div>
 
-            {personalWidgetsEnabled && PersonalWidgetHost ? (
-              <LazyRouteErrorBoundary
-                resetKey={`${locationPathname}${locationSearch}`}
-              >
-                <Suspense
-                  fallback={
-                    <div className="h-full w-10 shrink-0 border-l border-app-border bg-app-bg" />
-                  }
-                >
-                  <PersonalWidgetHost />
-                </Suspense>
-              </LazyRouteErrorBoundary>
-            ) : null}
-          </div>
-
-          <MobileNavigationDrawer
-            activeAppId={activeAppId}
-            appBarFixedAppIds={appBarFixedAppIds}
-            appBarCategories={shellAppsBootstrap.appBarCategories}
-            appBarItems={appBarItems}
-            currentPathname={locationPathname}
-            currentUser={currentUser}
-            launcherGlobalPaths={launcherGlobalPaths}
-            getDefaultAdminPath={getDefaultAdminPath}
-            hasAnyAdminReadPermission={hasAnyAdminReadPermission}
-            onOpenChange={setMobileNavOpen}
-            onShellWorkspaceChange={setShellWorkspaceSlug}
-            open={mobileNavOpen}
-            shellWorkspaceSlug={shellWorkspaceSlug}
-            workspaceApps={shellAppsBootstrap.apps}
-          />
-
-          {canOpenMobileAppMenu ? (
-            <MobileAppMenuDrawer
+            <MobileNavigationDrawer
               activeAppId={activeAppId}
-              activeDisplayAppId={activeDisplayAppId}
-              activeNavItemId={activeNavItemId}
+              appBarFixedAppIds={appBarFixedAppIds}
+              appBarCategories={shellAppsBootstrap.appBarCategories}
               appBarItems={appBarItems}
-              currentWorkspaceSlug={shellChromeState.bootstrapWorkspaceSlug}
-              enabledWorkspaceAppIds={enabledWorkspaceAppIds ?? []}
-              getAppModuleManifest={getAppModuleManifest}
-              getAppSidebarConfig={getAppSidebarConfig}
-              hasAdminSectionAccess={hasAdminSectionAccess}
-              launcherGlobalPaths={launcherGlobalPaths}
-              navItems={navItems}
-              onOpenChange={setMobileAppMenuOpen}
-              open={mobileAppMenuOpen}
-              workspaceApps={scopedWorkspaceBootstrap.data?.apps ?? []}
-              workspaceNavItems={scopedWorkspaceBootstrap.data?.nav ?? []}
+              currentPathname={locationPathname}
+              currentUser={currentUser}
+              getDefaultAdminPath={getDefaultAdminPath}
+              hasAnyAdminReadPermission={hasAnyAdminReadPermission}
+              onOpenChange={setMobileNavOpen}
+              open={mobileNavOpen}
+              resolveAppDestination={resolveAppDestination}
+              apps={shellAppsBootstrap.apps}
             />
-          ) : null}
 
-          {profileOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center">
-              <button
-                type="button"
-                aria-label={t('common:actions.close')}
-                className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
-                onClick={() => setProfileOpen(false)}
+            {canOpenMobileAppMenu ? (
+              <MobileAppMenuDrawer
+                activeAppId={activeAppId}
+                activeDisplayAppId={activeDisplayAppId}
+                activeNavItemId={activeNavItemId}
+                appBarItems={appBarItems}
+                enabledShellAppIds={enabledShellAppIds ?? []}
+                getAppModuleManifest={getAppModuleManifest}
+                getAppSidebarConfig={getAppSidebarConfig}
+                hasAdminSectionAccess={hasAdminSectionAccess}
+                launcherGlobalPaths={launcherGlobalPaths}
+                navItems={navItems}
+                onOpenChange={setMobileAppMenuOpen}
+                open={mobileAppMenuOpen}
+                apps={scopedBootstrap.data?.apps ?? []}
+                appNavItems={scopedBootstrap.data?.nav ?? []}
               />
-              <div className="relative z-10 h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-app-border bg-app-bg shadow-2xl sm:h-[85vh] sm:max-w-4xl sm:rounded-2xl">
+            ) : null}
+
+            {profileOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center">
                 <button
                   type="button"
+                  aria-label={t('common:actions.close')}
+                  className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
                   onClick={() => setProfileOpen(false)}
-                  className="absolute top-4 right-4 z-20 flex size-8 items-center justify-center rounded-lg text-app-ink/50 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-                >
-                  x
-                </button>
-                <div className="h-full overflow-y-auto">
-                  <ProfilePage initialTab={profileInitialTab} />
+                />
+                <div className="relative z-10 h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-app-border bg-app-bg shadow-2xl sm:h-[85vh] sm:max-w-4xl sm:rounded-2xl">
+                  <button
+                    type="button"
+                    aria-label={t('common:actions.close')}
+                    onClick={() => setProfileOpen(false)}
+                    className="absolute top-4 right-4 z-20 flex size-8 items-center justify-center rounded-lg text-app-ink/50 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
+                  >
+                    <X aria-hidden size={16} />
+                  </button>
+                  <div className="h-full overflow-y-auto">
+                    <ProfilePage initialTab={profileInitialTab} />
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          {currentReleaseNote ? (
-            <ReleaseNoteAnnouncementModal
-              dismissing={releaseNoteDismissing}
-              error={releaseNoteDismissError}
-              item={currentReleaseNote}
-              locale={i18n.language}
-              onClose={() => {
-                setCurrentReleaseNote(null);
-                setReleaseNoteDismissError(null);
-              }}
-              onDismiss={() => {
-                void dismissCurrentReleaseNote();
-              }}
-              onOpenHistory={openReleaseNotesHistory}
-            />
-          ) : null}
-          {helpOpen ? (
-            <HelpCenterModal
-              closeLabel={t('common:actions.close')}
-              onClose={() => setHelpOpen(false)}
-            />
-          ) : null}
-          <BackgroundWorkProvider
-            sources={enabledBackgroundWorkSources}
-            workspaceSlug={shellChromeState.bootstrapWorkspaceSlug}
-          />
-        </div>
-      </WorkspaceBootstrapProvider>
+            )}
+            {currentReleaseNote ? (
+              <ReleaseNoteAnnouncementModal
+                dismissing={releaseNoteDismissing}
+                error={releaseNoteDismissError}
+                item={currentReleaseNote}
+                locale={i18n.language}
+                onClose={() => {
+                  setCurrentReleaseNote(null);
+                  setReleaseNoteDismissError(null);
+                }}
+                onDismiss={() => {
+                  void dismissCurrentReleaseNote();
+                }}
+                onOpenHistory={openReleaseNotesHistory}
+              />
+            ) : null}
+            {helpOpen ? (
+              <HelpCenterModal
+                closeLabel={t('common:actions.close')}
+                onClose={() => setHelpOpen(false)}
+              />
+            ) : null}
+            <BackgroundWorkProvider sources={enabledBackgroundWorkSources} />
+          </div>
+        </AppBootstrapProvider>
+      </AccessRefreshBoundary>
     </ShellRealtimeProvider>
   );
 }
@@ -1544,8 +1325,6 @@ export function AppContent({
   getDefaultAdminPath = getPlatformDefaultAdminPath,
   getAppModuleManifest = getNoopAppModuleManifest,
   getAppSidebarConfig = getNoopAppSidebarConfig,
-  getNavItem,
-  getToolViewRoute,
   hasAdminSectionAccess = hasConfiguredAdminSectionAccess,
   hasAnyAdminReadPermission = hasAnyPlatformAdminReadPermission,
   helpRoutes,
@@ -1561,10 +1340,9 @@ export function AppContent({
   realtimeProvider = NoopShellRealtimeProvider,
   resolveShellStateForPath,
   shellProviders = [],
-  workspaceSettingsRoute,
-  workspaceRoutes,
-  workspaceAppScope,
-  workspaceAiToolAppIds = [],
+  appRoutes,
+  appScope,
+  aiToolAppIds = [],
 }: AppContentProps) {
   return (
     <AuthProvider>
@@ -1588,8 +1366,6 @@ export function AppContent({
                   getDefaultAdminPath={getDefaultAdminPath}
                   getAppModuleManifest={getAppModuleManifest}
                   getAppSidebarConfig={getAppSidebarConfig}
-                  getNavItem={getNavItem}
-                  getToolViewRoute={getToolViewRoute}
                   hasAdminSectionAccess={hasAdminSectionAccess}
                   hasAnyAdminReadPermission={hasAnyAdminReadPermission}
                   helpRoutes={helpRoutes}
@@ -1608,10 +1384,9 @@ export function AppContent({
                     realtimeProvider ?? NoopShellRealtimeProvider
                   }
                   resolveShellStateForPath={resolveShellStateForPath}
-                  workspaceSettingsRoute={workspaceSettingsRoute}
-                  workspaceRoutes={workspaceRoutes}
-                  workspaceAppScope={workspaceAppScope}
-                  workspaceAiToolAppIds={workspaceAiToolAppIds}
+                  appRoutes={appRoutes}
+                  appScope={appScope}
+                  aiToolAppIds={aiToolAppIds}
                 />
               </ShellProviderStack>
             </RequireAuth>

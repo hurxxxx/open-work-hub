@@ -18,7 +18,6 @@ def to_query_hit(hit: RagVectorSearchHit) -> RagQueryHit:
         source_kind=projection.source_kind,
         resource_type=projection.resource_type,
         resource_id=projection.resource_id,
-        workspace_id=projection.workspace_id,
         title=projection.title,
         summary=hit.summary or projection.summary,
         excerpt=hit.text,
@@ -113,8 +112,7 @@ def safe_result_text(value: str, *, max_chars: int) -> str:
 
 
 _ACL_SUMMARY_LABELS = {
-    "workspace": "workspace",
-    "workspace_public": "workspace public",
+    "company": "company",
     "owner": "owner",
     "target": "target access",
     "share_user": "direct share",

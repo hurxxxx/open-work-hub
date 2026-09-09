@@ -1,5 +1,5 @@
-import { useCallback, useState, type SetStateAction } from 'react';
 import type { TFunction } from 'i18next';
+import { useCallback, useState, type SetStateAction } from 'react';
 
 import { formatByteSize } from '@/src/platform/format/byte-size';
 
@@ -44,7 +44,9 @@ export function useTaskDetailAttachments({
       setSaveError(null);
       try {
         const uploadedAttachments = await Promise.all(
-          Array.from(files).map((file) => uploadAttachment(token, taskId, file)),
+          Array.from(files).map((file) =>
+            uploadAttachment(token, taskId, file),
+          ),
         );
         setAttachments((prev) => [...prev, ...uploadedAttachments]);
         await notifyTaskDetailUpdated(onUpdate);

@@ -56,8 +56,6 @@ class SearchSort(BaseModel):
 
 class KeywordSearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-    workspace_id: str | None = None
     query: str = Field(default="", max_length=2000)
     entity_types: list[SearchToken] = Field(default_factory=list, max_length=50)
     people: SearchPeopleFilter = Field(default_factory=SearchPeopleFilter)
@@ -112,7 +110,6 @@ class SearchHit(BaseModel):
 
     entity_type: str
     entity_id: str
-    workspace_id: str
     title: str
     summary: str
     snippet: SearchSnippet

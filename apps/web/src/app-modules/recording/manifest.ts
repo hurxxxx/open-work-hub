@@ -1,3 +1,4 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import {
   AlertTriangle,
   Archive,
@@ -17,7 +18,6 @@ export const recordingManifest: AppModuleManifest = {
     owner: 'recording-platform',
     permissions: [],
     apiDomain: 'recording',
-    workspaceApiPrefixes: ['/api/v1/recording'],
     aiCapabilities: [],
     writeAuditActions: [],
     appLocalTests: ['apps/api/tests/test_recording_targets.py'],
@@ -88,5 +88,8 @@ export const recordingManifest: AppModuleManifest = {
       pathSuffix: '?view=archived',
     },
   ],
-  workspaceRoutePaths: ['/w/:workspaceSlug/recording', '/w/:workspaceSlug/recording/:recordingId'],
+  appRoutePaths: [
+    getAppRoutePattern('recording.root'),
+    getAppRoutePattern('recording.detail'),
+  ],
 };

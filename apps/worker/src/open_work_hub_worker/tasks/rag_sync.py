@@ -1,29 +1,30 @@
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
-import logging
-import time
 
 from celery.signals import worker_process_init
-from opentelemetry.trace import SpanKind
-from sqlalchemy import and_, func, or_, select, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
-
-from open_work_hub_worker.celery_app import celery_app
-from open_work_hub_worker.runtime import db_session as _db_session
 from open_work_hub_api.core.telemetry import start_as_current_span
-from open_work_hub_api.domains.auth.workspace_app_gate import is_platform_app_enabled
-from open_work_hub_api.domains.auth.workspace_apps import get_workspace_app_catalog_item
+from open_work_hub_api.domains.auth.app_availability import (
+    is_company_app_enabled,
+)
 from open_work_hub_api.domains.rag.contracts import (
     RagJobStatus,
     RagScopeKind,
     RagSyncLane,
     RagSyncOperation,
 )
-from open_work_hub_api.domains.rag.default_source_adapters import ensure_rag_source_adapters_registered
+from open_work_hub_api.domains.rag.default_source_adapters import (
+    ensure_rag_source_adapters_registered,
+)
+from open_work_hub_api.domains.rag.job_publication import (
+    RagJobPublication,
+    resolve_publication_target,
+)
+from open_work_hub_api.domains.rag.job_state import merge_recompute_cursor
 from open_work_hub_api.domains.rag.metrics import (
     record_sync_job_lag,
     record_sync_job_result,
@@ -31,16 +32,6 @@ from open_work_hub_api.domains.rag.metrics import (
 )
 from open_work_hub_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
 from open_work_hub_api.domains.rag.outbox import enqueue_rag_sync_job
-from open_work_hub_api.domains.rag.job_publication import (
-    RagJobPublication,
-    resolve_publication_target,
-)
-from open_work_hub_api.domains.rag.job_state import merge_recompute_cursor
-from open_work_hub_api.domains.rag.source_adapter_registry import (
-    get_rag_resource_adapter,
-    get_rag_visibility_scope_adapter,
-    rag_resource_adapters,
-)
 from open_work_hub_api.domains.rag.providers import (
     RagProviderConfigurationError,
     RagProviderError,
@@ -55,6 +46,11 @@ from open_work_hub_api.domains.rag.runtime import (
     resolve_default_collection_name,
 )
 from open_work_hub_api.domains.rag.service import RagService
+from open_work_hub_api.domains.rag.source_adapter_registry import (
+    get_rag_resource_adapter,
+    get_rag_visibility_scope_adapter,
+    rag_resource_adapters,
+)
 from open_work_hub_api.domains.rag.telemetry import rag_span_attributes
 from open_work_hub_api.domains.retrieval.models import (
     RetrievalProjectionEvent,
@@ -68,8 +64,14 @@ from open_work_hub_api.domains.retrieval.runtime_binding import (
 from open_work_hub_api.domains.source_access.resource_types import (
     FILE_MANAGER_FILE_RESOURCE_TYPE,
 )
-from open_work_hub_worker.settings import get_settings
+from opentelemetry.trace import SpanKind
+from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
+from open_work_hub_worker.celery_app import celery_app
+from open_work_hub_worker.runtime import db_session as _db_session
+from open_work_hub_worker.settings import get_settings
 
 logger = logging.getLogger(__name__)
 OUTBOX_REPUBLISH_BATCH_SIZE = 100
@@ -84,7 +86,7 @@ class RagProjectionSuperseded(RuntimeError):
     pass
 
 
-class RagPlatformAppDisabled(RuntimeError):
+class RagAppDisabled(RuntimeError):
     def __init__(self, app_id: str) -> None:
         super().__init__(app_id)
         self.app_id = app_id
@@ -200,10 +202,10 @@ def _run_sync_job(
             logger.warning("RAG sync job not found: %s", job_id)
             record_sync_job_result(status="missing", job_kind=job_kind)
             return "missing"
-        if claim_outcome == "platform-disabled":
-            logger.info("Pausing RAG sync while its platform app is disabled: %s", job_id)
-            record_sync_job_result(status="platform_disabled", job_kind=job_kind)
-            return "platform-disabled"
+        if claim_outcome == "app-disabled":
+            logger.info("Pausing RAG sync while its owning app is disabled: %s", job_id)
+            record_sync_job_result(status="app_disabled", job_kind=job_kind)
+            return "app-disabled"
         if claim_outcome != "claimed" or job is None:
             logger.info("Ignoring RAG sync job already claimed or closed: %s", job_id)
             record_sync_job_result(status="ignored", job_kind=job_kind)
@@ -251,7 +253,6 @@ def _execute_sync_job(
 ) -> str:
     record_sync_job_lag(
         lag_ms=_job_lag_ms(job.created_at),
-        workspace_id=job.workspace_id,
         resource_type=job.resource_type,
         resource_id=job.resource_id,
         operation=job.operation,
@@ -264,7 +265,6 @@ def _execute_sync_job(
         kind=SpanKind.CONSUMER,
         parent_trace_context=job.trace_context,
         attributes=rag_span_attributes(
-            workspace_id=job.workspace_id,
             resource_type=job.resource_type,
             resource_id=job.resource_id,
             operation=job.operation,
@@ -275,7 +275,6 @@ def _execute_sync_job(
         if not rag_enabled:
             logger.info("Skipping RAG sync because RAG is disabled: %s", job.id)
             record_sync_job_result(
-                workspace_id=job.workspace_id,
                 resource_type=job.resource_type,
                 resource_id=job.resource_id,
                 operation=job.operation,
@@ -285,12 +284,21 @@ def _execute_sync_job(
             )
             _mark_sync_job(session, job, status=RagJobStatus.CANCELLED.value)
             return "disabled"
+        disabled_app_id = _disabled_app_id_for_job(session, job)
+        if disabled_app_id is not None:
+            job.attempts = max(job.attempts - 1, 0)
+            _mark_sync_job(
+                session,
+                job,
+                status=RagJobStatus.PENDING.value,
+                last_error=f"app_disabled:{disabled_app_id}",
+            )
+            return "app-disabled"
         try:
             stale_reason = _initial_projection_fence_stale_reason(session, job)
             if stale_reason is not None:
                 record_sync_job_result(
                     status="superseded",
-                    workspace_id=job.workspace_id,
                     resource_type=job.resource_type,
                     resource_id=job.resource_id,
                     operation=job.operation,
@@ -308,7 +316,6 @@ def _execute_sync_job(
             if superseding is not None:
                 record_sync_job_result(
                     status="superseded",
-                    workspace_id=job.workspace_id,
                     resource_type=job.resource_type,
                     resource_id=job.resource_id,
                     operation=job.operation,
@@ -324,28 +331,26 @@ def _execute_sync_job(
                 return "superseded"
             try:
                 result = _process_sync_job(session, job)
-            except RagPlatformAppDisabled as error:
+            except RagAppDisabled as error:
                 job.attempts = max(job.attempts - 1, 0)
                 _mark_sync_job(
                     session,
                     job,
                     status=RagJobStatus.PENDING.value,
-                    last_error=f"platform_app_disabled:{error.app_id}",
+                    last_error=f"app_disabled:{error.app_id}",
                 )
                 record_sync_job_result(
-                    status="platform_disabled",
-                    workspace_id=job.workspace_id,
+                    status="app_disabled",
                     resource_type=job.resource_type,
                     resource_id=job.resource_id,
                     operation=job.operation,
                     job_lane=job.lane,
                     job_kind=job_kind,
                 )
-                return "platform-disabled"
+                return "app-disabled"
             except RagProjectionSuperseded as error:
                 record_sync_job_result(
                     status="superseded",
-                    workspace_id=job.workspace_id,
                     resource_type=job.resource_type,
                     resource_id=job.resource_id,
                     operation=job.operation,
@@ -365,7 +370,6 @@ def _execute_sync_job(
                     enqueue_rag_sync_job(
                         session,
                         scope_kind=superseding.scope_kind,
-                        workspace_id=superseding.workspace_id,
                         resource_type=superseding.resource_type,
                         resource_id=superseding.resource_id,
                         operation=RagSyncOperation(superseding.operation),
@@ -380,7 +384,6 @@ def _execute_sync_job(
                     )
                 record_sync_job_result(
                     status="superseded",
-                    workspace_id=job.workspace_id,
                     resource_type=job.resource_type,
                     resource_id=job.resource_id,
                     operation=job.operation,
@@ -396,7 +399,6 @@ def _execute_sync_job(
                 return "superseded"
             record_sync_job_result(
                 status=result,
-                workspace_id=job.workspace_id,
                 resource_type=job.resource_type,
                 resource_id=job.resource_id,
                 operation=job.operation,
@@ -442,6 +444,13 @@ def recompute_visibility(self, job_id: str) -> str:
             logger.warning("RAG visibility recompute job not found: %s", job_id)
             record_sync_job_result(status="missing", job_kind="visibility_recompute")
             return "missing"
+        if claim_outcome == "app-disabled":
+            logger.info(
+                "Pausing RAG visibility recompute while its owning app is disabled: %s",
+                job_id,
+            )
+            record_sync_job_result(status="app_disabled", job_kind="visibility_recompute")
+            return "app-disabled"
         if claim_outcome != "claimed" or job is None:
             logger.info("Ignoring RAG visibility job already claimed or closed: %s", job_id)
             record_sync_job_result(status="ignored", job_kind="visibility_recompute")
@@ -465,7 +474,6 @@ def _execute_visibility_job(
 ) -> str:
     record_sync_job_lag(
         lag_ms=_job_lag_ms(job.created_at),
-        workspace_id=job.workspace_id,
         scope_type=job.scope_type,
         scope_id=job.scope_id,
         job_kind="visibility_recompute",
@@ -476,7 +484,6 @@ def _execute_visibility_job(
         kind=SpanKind.CONSUMER,
         parent_trace_context=job.trace_context,
         attributes=rag_span_attributes(
-            workspace_id=job.workspace_id,
             scope_type=job.scope_type,
             scope_id=job.scope_id,
             job_id=job.id,
@@ -486,18 +493,26 @@ def _execute_visibility_job(
             logger.info("Skipping RAG visibility recompute because RAG is disabled: %s", job.id)
             record_sync_job_result(
                 status="disabled",
-                workspace_id=job.workspace_id,
                 scope_type=job.scope_type,
                 scope_id=job.scope_id,
                 job_kind="visibility_recompute",
             )
             _mark_visibility_job(session, job, status=RagJobStatus.CANCELLED.value)
             return "disabled"
+        disabled_app_id = _disabled_app_id_for_visibility_job(session, job)
+        if disabled_app_id is not None:
+            job.attempts = max(job.attempts - 1, 0)
+            _mark_visibility_job(
+                session,
+                job,
+                status=RagJobStatus.PENDING.value,
+                last_error=f"app_disabled:{disabled_app_id}",
+            )
+            return "app-disabled"
         try:
             result, last_error = _process_visibility_job(session, job)
             record_sync_job_result(
                 status=result,
-                workspace_id=job.workspace_id,
                 scope_type=job.scope_type,
                 scope_id=job.scope_id,
                 job_kind="visibility_recompute",
@@ -519,9 +534,9 @@ def _execute_visibility_job(
 
 
 def _process_sync_job(session: Session, job: RagSyncJob) -> str:
-    disabled_app_id = _disabled_platform_app_id_for_job(session, job)
+    disabled_app_id = _disabled_app_id_for_job(session, job)
     if disabled_app_id is not None:
-        raise RagPlatformAppDisabled(disabled_app_id)
+        raise RagAppDisabled(disabled_app_id)
     runtime = _rag_runtime_for_job(session, job)
     collection = runtime.collection
     service = runtime.service
@@ -534,7 +549,6 @@ def _process_sync_job(session: Session, job: RagSyncJob) -> str:
         _lock_projection_head_for_vector_mutation(session, job)
         service.delete_projection(
             scope_kind=RagScopeKind(job.scope_kind),
-            workspace_id=job.workspace_id,
             resource_type=job.resource_type,
             resource_id=job.resource_id,
             collection=collection,
@@ -553,7 +567,6 @@ def _process_sync_job(session: Session, job: RagSyncJob) -> str:
         _lock_projection_head_for_vector_mutation(session, job)
         service.delete_projection(
             scope_kind=RagScopeKind(job.scope_kind),
-            workspace_id=job.workspace_id,
             resource_type=job.resource_type,
             resource_id=job.resource_id,
             collection=collection,
@@ -583,6 +596,9 @@ def _process_sync_job(session: Session, job: RagSyncJob) -> str:
     elif adapter.on_projection_prepared is not None:
         adapter.on_projection_prepared(session, job.resource_id)
         session.commit()
+    disabled_app_id = _disabled_app_id_for_job(session, job)
+    if disabled_app_id is not None:
+        raise RagAppDisabled(disabled_app_id)
     sync_with_fence = getattr(service, "sync_projection_with_fence", None)
     if callable(sync_with_fence):
         sync_result = sync_with_fence(
@@ -651,7 +667,6 @@ def _ensure_projection_matches_job(projection, job: RagSyncJob) -> None:
         field_name
         for field_name, expected in (
             ("scope_kind", job.scope_kind),
-            ("workspace_id", job.workspace_id),
             ("resource_type", job.resource_type),
             ("resource_id", job.resource_id),
         )
@@ -704,30 +719,25 @@ def _resource_adapter_for_job(job: RagSyncJob):
     return get_rag_resource_adapter(job.resource_type)
 
 
-def _sync_job_platform_app_enabled(session: Session, job: RagSyncJob) -> bool:
-    return _disabled_platform_app_id_for_job(session, job) is None
+def _sync_job_app_enabled(session: Session, job: RagSyncJob) -> bool:
+    return _disabled_app_id_for_job(session, job) is None
 
 
-def _disabled_platform_app_id_for_job(session: Session, job: RagSyncJob) -> str | None:
+def _disabled_app_id_for_job(session: Session, job: RagSyncJob) -> str | None:
     adapter = _resource_adapter_for_job(job)
     app_id = getattr(adapter, "app_id", None)
-    catalog_item = get_workspace_app_catalog_item(app_id) if app_id else None
-    if catalog_item is None or catalog_item.availability_scope != "platform":
+    if not app_id:
         return None
-    return None if is_platform_app_enabled(session, app_id) else app_id
+    enabled = is_company_app_enabled(session, app_id)
+    return None if enabled else app_id
 
 
-def _disabled_platform_rag_resource_types(session: Session) -> tuple[str, ...]:
+def _disabled_company_rag_resource_types(session: Session) -> tuple[str, ...]:
     ensure_rag_source_adapters_registered()
     disabled: list[str] = []
     for adapter in rag_resource_adapters():
         app_id = adapter.app_id
-        catalog_item = get_workspace_app_catalog_item(app_id) if app_id else None
-        if (
-            catalog_item is not None
-            and catalog_item.availability_scope == "platform"
-            and not is_platform_app_enabled(session, app_id)
-        ):
+        if app_id and not is_company_app_enabled(session, app_id):
             disabled.append(adapter.resource_type)
     return tuple(disabled)
 
@@ -753,7 +763,6 @@ def _process_visibility_job(
         return "noop", None
     _enqueue_resource_sync_jobs(
         session,
-        workspace_id=job.workspace_id,
         resource_type=adapter.resource_type,
         resource_ids=resource_ids,
         operation=RagSyncOperation(adapter.operation),
@@ -774,10 +783,31 @@ def _visibility_scope_adapter_for_job(job: RagVisibilityRecomputeJob):
     return get_rag_visibility_scope_adapter(job.scope_type)
 
 
+def _disabled_app_id_for_visibility_job(
+    session: Session,
+    job: RagVisibilityRecomputeJob,
+) -> str | None:
+    visibility_adapter = _visibility_scope_adapter_for_job(job)
+    if visibility_adapter is None:
+        return None
+    ensure_rag_source_adapters_registered()
+    resource_adapter = get_rag_resource_adapter(visibility_adapter.resource_type)
+    app_id = getattr(resource_adapter, "app_id", None)
+    if not app_id:
+        return None
+    return (
+        None
+        if is_company_app_enabled(
+            session,
+            app_id,
+        )
+        else app_id
+    )
+
+
 def _enqueue_resource_sync_jobs(
     session: Session,
     *,
-    workspace_id: str,
     resource_type: str,
     resource_ids: list[str],
     operation: RagSyncOperation,
@@ -786,7 +816,6 @@ def _enqueue_resource_sync_jobs(
     for resource_id in resource_ids:
         enqueue_rag_sync_job(
             session,
-            workspace_id=workspace_id,
             resource_type=resource_type,
             resource_id=resource_id,
             operation=operation,
@@ -813,7 +842,6 @@ def _mark_sync_job(
     _record_sync_queue_depth_snapshot(
         session,
         scope_kind=job.scope_kind,
-        workspace_id=job.workspace_id,
         lane=job.lane,
     )
 
@@ -831,7 +859,6 @@ def _latest_superseding_sync_job(
     if job.projection_version is None:
         query = query.where(
             RagSyncJob.scope_kind == job.scope_kind,
-            RagSyncJob.workspace_id == job.workspace_id,
             RagSyncJob.created_at > job.created_at,
         ).order_by(RagSyncJob.created_at.desc(), RagSyncJob.id.desc())
     else:
@@ -867,8 +894,11 @@ def _lock_projection_head_for_vector_mutation(
     session: Session,
     job: RagSyncJob,
 ) -> None:
-    """Linearize a fenced Qdrant mutation against newer source events."""
+    """Recheck company execution policy and serialize against newer source events."""
 
+    disabled_app_id = _disabled_app_id_for_job(session, job)
+    if disabled_app_id is not None:
+        raise RagAppDisabled(disabled_app_id)
     projection_event = _projection_event_ref_for_job(session, job)
     if projection_event is None:
         return
@@ -960,7 +990,6 @@ def _projection_event_ref_for_job(
         desired_state=event.desired_state,
         content_checksum=event.content_checksum,
         visibility_checksum=event.visibility_checksum,
-        diagnostic_workspace_id=event.diagnostic_workspace_id,
     )
 
 
@@ -987,9 +1016,9 @@ def _claim_sync_job(
     if (
         existing is not None
         and existing.status == RagJobStatus.PENDING.value
-        and not _sync_job_platform_app_enabled(session, existing)
+        and not _sync_job_app_enabled(session, existing)
     ):
-        return existing, "platform-disabled"
+        return existing, "app-disabled"
 
     settings = get_settings()
     now = datetime.now(UTC).replace(tzinfo=None)
@@ -1016,7 +1045,6 @@ def _claim_sync_job(
             _record_sync_queue_depth_snapshot(
                 session,
                 scope_kind=job.scope_kind,
-                workspace_id=job.workspace_id,
                 lane=job.lane,
             )
         return job, "claimed"
@@ -1043,13 +1071,23 @@ def _mark_visibility_job(
     job.next_retry_at = next_retry_at
     session.add(job)
     session.commit()
-    _record_visibility_queue_depth_snapshot(session, workspace_id=job.workspace_id)
+    _record_visibility_queue_depth_snapshot(
+        session,
+    )
 
 
 def _claim_visibility_job(
     session: Session,
     job_id: str,
 ) -> tuple[RagVisibilityRecomputeJob | None, str]:
+    existing = session.get(RagVisibilityRecomputeJob, job_id)
+    if (
+        existing is not None
+        and existing.status == RagJobStatus.PENDING.value
+        and _disabled_app_id_for_visibility_job(session, existing) is not None
+    ):
+        return existing, "app-disabled"
+
     settings = get_settings()
     now = datetime.now(UTC).replace(tzinfo=None)
     lease_cutoff = now - timedelta(seconds=settings.rag_job_processing_lease_seconds)
@@ -1072,7 +1110,9 @@ def _claim_visibility_job(
     if claimed.rowcount == 1:
         job = session.get(RagVisibilityRecomputeJob, job_id)
         if job is not None:
-            _record_visibility_queue_depth_snapshot(session, workspace_id=job.workspace_id)
+            _record_visibility_queue_depth_snapshot(
+                session,
+            )
         return job, "claimed"
 
     existing = session.get(RagVisibilityRecomputeJob, job_id)
@@ -1093,7 +1133,7 @@ def _claim_next_sync_job(
     settings = get_settings()
     now = datetime.now(UTC).replace(tzinfo=None)
     lease_cutoff = now - timedelta(seconds=settings.rag_job_processing_lease_seconds)
-    disabled_resource_types = _disabled_platform_rag_resource_types(session)
+    disabled_resource_types = _disabled_company_rag_resource_types(session)
     query = select(RagSyncJob.id).where(
         RagSyncJob.lane == lane,
         _sync_claimable_clause(now=now, lease_cutoff=lease_cutoff),
@@ -1153,7 +1193,7 @@ def _due_pending_rag_publications(
     now = datetime.now(UTC).replace(tzinfo=None)
     lease_cutoff = now - timedelta(seconds=get_settings().rag_job_processing_lease_seconds)
 
-    disabled_resource_types = _disabled_platform_rag_resource_types(session)
+    disabled_resource_types = _disabled_company_rag_resource_types(session)
     sync_query = select(RagSyncJob).where(
         _sync_claimable_clause(now=now, lease_cutoff=lease_cutoff),
     )
@@ -1238,12 +1278,10 @@ def _handle_sync_job_failure(
         _record_sync_queue_depth_snapshot(
             session,
             scope_kind=job.scope_kind,
-            workspace_id=job.workspace_id,
             lane=job.lane,
         )
         record_sync_job_result(
             status="operator_gate_paused",
-            workspace_id=job.workspace_id,
             resource_type=job.resource_type,
             resource_id=job.resource_id,
             operation=job.operation,
@@ -1262,7 +1300,6 @@ def _handle_sync_job_failure(
             )
         record_sync_job_result(
             status="non_retryable_error",
-            workspace_id=job.workspace_id,
             resource_type=job.resource_type,
             resource_id=job.resource_id,
             operation=job.operation,
@@ -1289,7 +1326,6 @@ def _handle_sync_job_failure(
             )
         record_sync_job_result(
             status="dead_letter",
-            workspace_id=job.workspace_id,
             resource_type=job.resource_type,
             resource_id=job.resource_id,
             operation=job.operation,
@@ -1313,7 +1349,6 @@ def _handle_sync_job_failure(
     next_retry_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=countdown)
     record_sync_job_result(
         status="retry_scheduled",
-        workspace_id=job.workspace_id,
         resource_type=job.resource_type,
         resource_id=job.resource_id,
         operation=job.operation,
@@ -1333,7 +1368,6 @@ def _handle_sync_job_failure(
         merged_job = enqueue_rag_sync_job(
             session,
             scope_kind=job.scope_kind,
-            workspace_id=job.workspace_id,
             resource_type=job.resource_type,
             resource_id=job.resource_id,
             operation=RagSyncOperation(job.operation),
@@ -1353,7 +1387,6 @@ def _handle_sync_job_failure(
             _record_sync_queue_depth_snapshot(
                 session,
                 scope_kind=current_job.scope_kind,
-                workspace_id=current_job.workspace_id,
                 lane=current_job.lane,
             )
         logger.warning(
@@ -1392,7 +1425,6 @@ def _handle_visibility_job_failure(
     if job.attempts >= settings.rag_job_max_attempts:
         record_sync_job_result(
             status="dead_letter",
-            workspace_id=job.workspace_id,
             scope_type=job.scope_type,
             scope_id=job.scope_id,
             job_kind="visibility_recompute",
@@ -1417,14 +1449,12 @@ def _handle_visibility_job_failure(
     )
     next_retry_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=countdown)
     job_id = job.id
-    workspace_id = job.workspace_id
     scope_type = job.scope_type
     scope_id = job.scope_id
     trace_context = job.trace_context
     cursor = job.cursor
     record_sync_job_result(
         status="retry_scheduled",
-        workspace_id=workspace_id,
         scope_type=scope_type,
         scope_id=scope_id,
         job_kind="visibility_recompute",
@@ -1441,7 +1471,6 @@ def _handle_visibility_job_failure(
         session.rollback()
         merged_job = _select_pending_visibility_job(
             session,
-            workspace_id=workspace_id,
             scope_type=scope_type,
             scope_id=scope_id,
         )
@@ -1457,7 +1486,9 @@ def _handle_visibility_job_failure(
             current_job.next_retry_at = None
             session.add(current_job)
         session.commit()
-        _record_visibility_queue_depth_snapshot(session, workspace_id=workspace_id)
+        _record_visibility_queue_depth_snapshot(
+            session,
+        )
         logger.warning(
             "Merged retry for RAG visibility job %s into pending job %s after failure: %s",
             job_id,
@@ -1477,14 +1508,12 @@ def _handle_visibility_job_failure(
 def _select_pending_visibility_job(
     session: Session,
     *,
-    workspace_id: str,
     scope_type: str,
     scope_id: str,
 ) -> RagVisibilityRecomputeJob | None:
     return session.scalar(
         select(RagVisibilityRecomputeJob)
         .where(
-            RagVisibilityRecomputeJob.workspace_id == workspace_id,
             RagVisibilityRecomputeJob.scope_type == scope_type,
             RagVisibilityRecomputeJob.scope_id == scope_id,
             RagVisibilityRecomputeJob.status == RagJobStatus.PENDING.value,
@@ -1497,7 +1526,6 @@ def _record_sync_queue_depth_snapshot(
     session: Session,
     *,
     scope_kind: str,
-    workspace_id: str | None,
     lane: str,
 ) -> None:
     pending_count = session.scalar(
@@ -1505,14 +1533,12 @@ def _record_sync_queue_depth_snapshot(
         .select_from(RagSyncJob)
         .where(
             RagSyncJob.scope_kind == scope_kind,
-            RagSyncJob.workspace_id == workspace_id,
             RagSyncJob.lane == lane,
             RagSyncJob.status == RagJobStatus.PENDING.value,
         )
     )
     record_sync_queue_depth(
         depth=int(pending_count or 0),
-        workspace_id=workspace_id,
         job_lane=lane,
         job_kind="resource_sync" if lane == RagSyncLane.REALTIME.value else "backfill_sync",
     )
@@ -1520,20 +1546,16 @@ def _record_sync_queue_depth_snapshot(
 
 def _record_visibility_queue_depth_snapshot(
     session: Session,
-    *,
-    workspace_id: str,
 ) -> None:
     pending_count = session.scalar(
         select(func.count())
         .select_from(RagVisibilityRecomputeJob)
         .where(
-            RagVisibilityRecomputeJob.workspace_id == workspace_id,
             RagVisibilityRecomputeJob.status == RagJobStatus.PENDING.value,
         )
     )
     record_sync_queue_depth(
         depth=int(pending_count or 0),
-        workspace_id=workspace_id,
         job_lane="visibility_recompute",
         job_kind="visibility_recompute",
     )

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-import math
 from typing import Any
 
 from open_work_hub_api.domains.rag.contracts import (
@@ -12,7 +12,6 @@ from open_work_hub_api.domains.rag.contracts import (
 )
 from open_work_hub_api.domains.rag.providers.base import RerankClient
 from open_work_hub_api.domains.retrieval.contracts import RetrievalHit
-
 
 RRF_K = 60
 MIN_CANDIDATE_K = 80
@@ -353,11 +352,11 @@ def _retrieval_metadata(hit: RetrievalHit) -> dict[str, Any]:
 
 
 def _to_rag_hit(hit: RetrievalHit, *, index: int) -> RagVectorSearchHit:
-    scope_value = str(hit.metadata.get("scope_kind") or RagScopeKind.WORKSPACE.value)
+    scope_value = str(hit.metadata.get("scope_kind") or RagScopeKind.COMPANY.value)
     try:
         scope_kind = RagScopeKind(scope_value)
     except ValueError:
-        scope_kind = RagScopeKind.WORKSPACE
+        scope_kind = RagScopeKind.COMPANY
     return RagVectorSearchHit(
         chunk_id=f"retrieval:{index}",
         text=hit.excerpt or hit.summary or hit.title or hit.resource_id,
@@ -367,7 +366,6 @@ def _to_rag_hit(hit: RetrievalHit, *, index: int) -> RagVectorSearchHit:
         metadata=dict(hit.metadata),
         projection=RagProjection(
             scope_kind=scope_kind,
-            workspace_id=hit.workspace_id,
             resource_type=hit.resource_type,
             resource_id=hit.resource_id,
             source_kind=hit.source_kind or hit.source,

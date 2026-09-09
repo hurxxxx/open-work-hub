@@ -1,6 +1,6 @@
 /**
  * Wire-level types for
- * ``POST /api/v1/workspaces/{workspace_slug}/chatbot/chat/stream`` SSE frames.
+ * ``POST /api/v1/chatbot/chat/stream`` SSE frames.
  * Mirrors ``apps/api/src/open_work_hub_api/domains/ai/events.py``.
  *
  * Unknown ``type`` values must be ignored by consumers so new server-side

@@ -25,7 +25,6 @@ from open_work_hub_api.domains.integrations.platform_api_keys import (
     revoke_platform_api_key,
 )
 
-
 router = APIRouter(prefix="/admin/platform-api-keys", tags=["admin-platform-api-keys"])
 _OPENAPI_METHODS = ("get", "post", "put", "patch", "delete", "options", "head")
 

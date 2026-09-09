@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
@@ -52,6 +53,9 @@ class PlannerEventOut(BaseModel):
     end_has_time: bool
     start: str
     end: str
+    calendar_start: str
+    calendar_end: str
+    calendar_all_day: bool
     created_at: datetime
     updated_at: datetime
 

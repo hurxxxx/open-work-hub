@@ -1,7 +1,3 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import type * as React from 'react';
-import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
-import { useTranslation } from 'react-i18next';
 import {
   DndContext,
   KeyboardSensor,
@@ -18,29 +14,33 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import {
-  ArrowUpDown,
   Archive,
+  ArrowUpDown,
   ChevronDown,
   ChevronRight,
-  Layout,
   FolderOpen,
+  Layout,
   MoreHorizontal,
   Plus,
 } from 'lucide-react';
+import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
+import type * as React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
+import type { DocsHubItem } from '@/src/app-modules/docs/public-api';
 import { cn } from '@/src/lib/utils';
+import type { PmsTaskList } from '../api/pms-api';
+import { taskListRoleAllows } from '../api/pms-permissions';
 import {
   resolveFlatDropZone,
   type FlatDropZone,
 } from '../api/pms-sidebar-reorder';
-import { taskListRoleAllows } from '../api/pms-permissions';
-import type { DocsHubItem } from '@/src/app-modules/docs/public-api';
-import type { PmsTaskList } from '../api/pms-api';
-import { sortSpaceDocs, type FolderWithLists } from './space-tree-model';
 import { FolderAddPopover } from './FolderAddPopover';
 import { FolderContextMenu } from './FolderContextMenu';
 import { SortableDocLink } from './SortableDocLink';
 import { SortableListLink } from './SortableListLink';
+import { sortSpaceDocs, type FolderWithLists } from './space-tree-model';
 import { SpaceAddPopover } from './SpaceAddPopover';
 import { SpaceContextMenu } from './SpaceContextMenu';
 
@@ -84,7 +84,7 @@ type SpaceItemProps = {
     zone: FlatDropZone,
   ) => Promise<void>;
   activeNavItemId: string;
-  currentWorkspaceSlug: string | null;
+
   canCreateSpaceContent: boolean;
   canManageSpace: boolean;
   canManageCollections: boolean;
@@ -249,7 +249,6 @@ function useSpaceItemContent({
   onReorderList,
   onReorderDoc,
   activeNavItemId,
-  currentWorkspaceSlug,
   canCreateSpaceContent,
   canManageSpace,
   canManageCollections,
@@ -462,14 +461,7 @@ function useSpaceItemContent({
 
         {canCreateSpaceContent || canManageSpace ? (
           <>
-            <div
-              className={cn(
-                'items-center gap-0.5 pr-1 shrink-0',
-                addPopoverOpen || spaceMenuOpen
-                  ? 'flex'
-                  : 'hidden group-hover:flex',
-              )}
-            >
+            <div className="flex items-center gap-0.5 pr-1 shrink-0">
               {canCreateSpaceContent ? (
                 <button
                   type="button"
@@ -537,7 +529,7 @@ function useSpaceItemContent({
               onClose={() => setAddPopoverOpen(false)}
               onCreateList={onAddList}
               onCreateFolder={onAddFolder}
-              onOpenDocs={onOpenDocs}
+              onOpenDocs={canManageCollections ? onOpenDocs : undefined}
             />
           </>
         ) : null}
@@ -683,7 +675,11 @@ function useSpaceItemContent({
                                   onCreateList={() =>
                                     onAddListToFolder(folder.id)
                                   }
-                                  onCreateDoc={onOpenDocs}
+                                  onCreateDoc={
+                                    canManageCollections
+                                      ? onOpenDocs
+                                      : undefined
+                                  }
                                 />
                                 <FolderContextMenu
                                   open={isFolderMenuOpen}
@@ -722,7 +718,6 @@ function useSpaceItemContent({
                                       key={list.id}
                                       list={list}
                                       activeNavItemId={activeNavItemId}
-                                      workspaceSlug={currentWorkspaceSlug}
                                       canDrag={false}
                                       dropZone={
                                         dropIndicator &&
@@ -773,7 +768,6 @@ function useSpaceItemContent({
                         key={`list-${list.id}`}
                         list={list}
                         activeNavItemId={activeNavItemId}
-                        workspaceSlug={currentWorkspaceSlug}
                         canDrag={false}
                         dropZone={
                           dropIndicator && dropIndicator.overId === list.id
@@ -813,7 +807,6 @@ function useSpaceItemContent({
                         doc={doc}
                         spaceId={spaceId}
                         activeNavItemId={activeNavItemId}
-                        workspaceSlug={currentWorkspaceSlug}
                         dropZone={
                           dropIndicator && dropIndicator.overId === doc.id
                             ? dropIndicator.zone
@@ -883,7 +876,6 @@ function useSpaceItemContent({
                                 key={`archived-list-${list.id}`}
                                 list={list}
                                 activeNavItemId={activeNavItemId}
-                                workspaceSlug={currentWorkspaceSlug}
                                 canDrag={false}
                                 dropZone={null}
                                 menu={{

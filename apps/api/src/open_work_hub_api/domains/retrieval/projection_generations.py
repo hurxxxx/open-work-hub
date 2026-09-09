@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
-import re
 from typing import Any
 
 from sqlalchemy import func, select, text
@@ -16,7 +16,6 @@ from open_work_hub_api.domains.retrieval.models import (
     RetrievalProjectionGenerationState,
     RetrievalProjectionValidationState,
 )
-
 
 _GENERATION_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 

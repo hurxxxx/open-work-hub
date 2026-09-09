@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-
 TASK_STATUS_LABELS = {
     "todo": "Todo",
     "in_progress": "In Progress",

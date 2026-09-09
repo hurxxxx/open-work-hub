@@ -1,57 +1,64 @@
-# 조직 디렉터리 계약
+# 조직·사용자·그룹 디렉터리 계약
 
-조직 디렉터리는 현재 회사 배포 전체에서 공유하는 조직 계층과 사용자 프로필 메타데이터를
-소유한다. 회사 tenant와 workspace의 범위는 [ADR 0007](../../../adr/0007-company-tenant-workspace-scope.md)을
-따르며, 조직 단위는 workspace나 별도 tenant가 아니다.
+[ADR 0012](../../../adr/0012-company-app-access-without-workspaces.md)에 따라 한 배포는 한 회사다. 플랫폼은 조직과
+사용자, 재사용 가능한 그룹을 관리하며 업무 공간과 자원별 역할은 해당 앱이 소유한다.
 
-## 현재 모델
+## 조직과 사용자
 
-- `organization_units`는 `name`, 고유 `slug`, 자유 형식 `unit_type`, 선택적인 `parent_id`,
-  `active`와 생성·수정 시각을 저장한다.
-- `users.primary_organization_unit_id`는 사용자의 주 소속 하나만 가리킨다.
-- `users.employee_code`와 `users.job_title`은 회사 디렉터리 프로필 메타데이터다.
-- 계층은 임의 깊이를 허용하지만 자기 자신 또는 자손을 부모로 지정하는 순환은 거부한다.
-- 비활성 조직 단위는 과거 사용자 소속과 계층을 보존하지만 새 사용자에게 배정할 수 없다.
+- `organization_units`: 이름, 고유 slug, 자유 형식 unit_type, parent_id, active와 head_user_id.
+- 한 조직에 부서장 한 명을 지정하며 한 사람이 여러 조직의 부서장을 맡을 수 있다.
+- 부서장 지정은 디렉터리 메타데이터다. 그룹 가입이나 관리자 권한을 자동 부여하지 않는다.
+- `users.primary_organization_unit_id`는 정확한 주 소속 하나다. 사번과 직책도 사용자 메타데이터다.
+- 조직 계층의 순환을 거부한다. 조직 비활성화는 사용자 소속과 기존 배정 기록을 보존한다.
+- 조직 생성·변경은 행 잠금 이전에 계층 전용 PostgreSQL 트랜잭션 잠금을 획득한다.
+  잠금 후 최신 부모 관계를 읽어 서로 다른 하위 트리의 동시 이동도 순환을 만들 수 없게 한다.
+  향후 인사 연동도 같은 변경 경계를 사용해야 한다.
 
-주 소속, 사번, 직책은 현재 권한 증거가 아니다. 조직 단위는 system role, workspace membership,
-resource ACL, app entitlement를 부여하거나 대체하지 않는다. 조직 기반 RBAC가 필요하면 별도 정책,
-서버 실행 게이트, migration과 ADR을 먼저 추가한다.
+## 두 종류의 그룹
 
-## 관리 API와 UI
+| 종류         | 구성원 계산                                        | 관리 주체             | 인사 이동의 영향 |
+| ------------ | -------------------------------------------------- | --------------------- | ---------------- |
+| organization | 현재 주 소속이 해당 조직과 정확히 같은 활성 사용자 | 조직·사용자 원본 정보 | 즉시 반영        |
+| manual       | 관리자가 명시적으로 배정한 사용자                  | `/admin/groups`       | 기존 배정 유지   |
 
-| 기능                        | API                                           | 권한                 |
-| --------------------------- | --------------------------------------------- | -------------------- |
-| 조직 목록                   | `GET /api/v1/admin/organization-units`        | `organization.read`  |
-| 조직 생성                   | `POST /api/v1/admin/organization-units`       | `organization.write` |
-| 조직 수정·비활성화          | `PATCH /api/v1/admin/organization-units/{id}` | `organization.write` |
-| 사용자 메타데이터 생성·수정 | 기존 `/api/v1/admin/users`                    | 기존 `user.write`    |
-| 사용자 조직 필터            | `GET /api/v1/admin/users`의 조직 query        | 기존 `user.read`     |
+조직마다 안정된 조직 그룹 하나를 생성한다. 하위 조직과 부서장은 자동 포함하지 않는다.
+수동 그룹은 중첩하지 않는다. 두 종류 모두 동일한 그룹 식별자로 앱 사용 대상과 앱별 자원
+공유에 사용한다. 수동 그룹 관리자는 플랫폼 관리자이며 그룹 자체의 별도 관리자 역할은 없다.
 
-관리 UI의 `/admin/organization`은 삭제 대신 비활성화를 제공한다. `/admin/people`은 주 소속,
-사번과 직책을 편집하고 정확한 조직, 하위 조직 포함, 미소속 사용자 필터를 제공한다. 검색은 이름,
-로그인 ID, 이메일과 함께 사번, 직책, 조직 이름을 포함한다.
+계정 비활성·차단, 그룹 비활성, 조직 그룹의 원본 조직 비활성은 현재 권한을 제거한다.
+기존 비활성 구성원·앱 배정은 보존 및 제거할 수 있지만 새 비활성 주체 배정은 거부한다.
+조직 이동이나 활성 상태 변경 후 권한 계산은 PostgreSQL의 현재 값을 사용한다.
 
-## 외부 projection
+## API와 화면
 
-외부 시스템은 조직 관리 API가 아니라 범위 제한 플랫폼 API를 사용한다.
-`organization:read` scope의
-`GET /api/v1/integrations/directory/organization-units`가 현재 상태를 페이지 단위로 반환한다.
-자격 증명과 동기화 의미는 [Integrations](../integrations/README.md)가 소유한다.
+- `/admin/people`: 계정·주 소속·직책·사번 및 시스템 역할 관리.
+- `/admin/organization`: 계층·부서장·활성 상태 관리.
+- `/admin/groups`: 전체 그룹 검색, 수동 그룹 생성·활성 상태·구성원 편집. 조직 그룹은 파생 정보로 표시.
+- 관리자 API: `/api/v1/admin/users`, `/organization-units`, `/groups` 아래 CRUD와 그룹 members API.
+- 일반 앱 선택기: `/api/v1/directory/people`, `/groups`, `/organization-units`. 현재 활성 디렉터리만
+  반환하며 검색·페이지 처리와 제한된 ids 조회를 지원한다. 관리자 계정 상세나 보안 정보를 노출하지 않는다.
+- `managed_organization_unit_ids`와 `is_department_head`는 표현용 projection이며 권한 증거가 아니다.
 
-## 변경 규칙
+변경 감사와 principal invalidation을 같은 변경 흐름에 포함한다. UI 선택 결과는 서버 검증을
+대체하지 않는다. 디렉터리 검색 가능 여부와 특정 업무 콘텐츠 접근 권한은 서로 독립적이다.
+조직 생성은 새 활성 부서장의 표현 정보만 갱신한다. 조직 이름·slug·유형·활성 변경은 정확한
+주 소속 사용자에게, 부서장·활성 변경은 이전/새 활성 부서장에게만 갱신을 보낸다. 부모 변경과
+변경 없는 저장은 전 직원 권한 갱신을 만들지 않는다. 실제 권한 변경이나 재연결 시 기존 보호
+화면을 폐기하는 경계는 유지하며, 무관한 조직 편집이 다른 사용자의 작성 내용을 초기화하지 않는다.
 
-- 계층과 사용자 소속의 authoritative source는 PostgreSQL이다.
-- 조직 삭제 API를 추가하기 전에 사용자 참조, 자손 처리, 외부 동기화 tombstone과 감사 보존
-  정책을 결정한다.
-- `unit_type`을 권한 분기나 고정 enum으로 사용하지 않는다. 제품 정책이 생기면 migration과 API
-  호환 계약을 함께 설계한다.
-- 사용자 응답의 `primary_organization_unit`은 편의를 위한 projection이며 canonical reference는
-  `users.primary_organization_unit_id`다.
-- API schema 변경 후 OpenAPI TypeScript를 다시 생성하고 한/영 관리자 UI 문구를 함께 갱신한다.
+## 외부 인사 연동
+
+실제 HR 수집 커넥터는 이번 재설계 범위에 포함하지 않는다. 조직·사용자 관리 서비스가 원본
+갱신 경계다. 향후 HR 연동은 이 경계를 통해 조직과 주 소속을 갱신해야 하며 수동 그룹을
+덮어쓰지 않는다. 범위 제한 API 키와 외부 디렉터리 조회는
+[Integrations](../integrations/README.md)가 소유한다.
 
 ## 검증
 
-- API 통합 계약: `apps/api/tests/test_organization_integrations.py`
-- 계층 UI projection: `apps/web/src/platform/admin/admin-organization-section.spec.ts`
-- 사용자 필터 controller: `apps/web/src/platform/admin/useAdminPeopleDirectoryController.spec.ts`
-- Schema migration: `a7c4e9f2b6d1_add_organization_and_platform_integrations.py`
+- `apps/api/tests/test_company_groups.py`: 정확한 조직 구성, 인사 이동, 수동 그룹 보존, 부서장 메타데이터.
+- `apps/api/tests/test_company_content_boundaries.py`: 그룹 자원 공유, 회사 소유·공개 분리, PMS 그룹 역할.
+- `company_20260908_initial_schema.py`: 기존 데이터·마이그레이션 호환 없이 새 회사 스키마 생성.
+
+임시 비밀번호 계정은 로그인·본인 확인·비밀번호 변경·로그아웃만 사용할 수 있다. 앱 입장과 일반 API,
+WebSocket, 예약 작업은 비밀번호 변경 완료를 서버에서 확인한다. 관리자 비밀번호 초기화는 기존
+세션을 즉시 폐기하며, 새 임시 비밀번호를 사용하는 계정에도 같은 제한을 적용한다.

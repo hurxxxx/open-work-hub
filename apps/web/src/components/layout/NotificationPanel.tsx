@@ -1,27 +1,44 @@
-import { useEffect, useCallback, useReducer } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { LazyMotion, domAnimation, m } from 'motion/react';
-import { X, Check, CheckCheck, Loader2 } from 'lucide-react';
-import { Button } from '@open-work-hub/ui/primitives/button';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import {
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type NotificationItem,
+} from '@/src/platform/notifications/notifications-api';
 import { FLOATING_DM_OPEN_EVENT } from '@/src/platform/personal-widgets/floating-panel-events';
 import {
   formatRelativeTime,
   normalizeTimeZone,
 } from '@/src/platform/time/time-utils';
+import { Button } from '@open-work-hub/ui/primitives/button';
+import { Check, CheckCheck, Loader2, X } from 'lucide-react';
+import { LazyMotion, domAnimation, m } from 'motion/react';
 import {
-  listNotifications,
-  markNotificationRead,
-  markAllNotificationsRead,
-  type WorkspaceNotification,
-} from '@/src/platform/notifications/notifications-api';
+  useCallback,
+  useLayoutEffect,
+  useId,
+  useReducer,
+  useRef,
+  type KeyboardEvent,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import {
   INITIAL_NOTIFICATION_PANEL_STATE,
   countUnreadNotifications,
   notificationPanelReducer,
   resolveNotificationAction,
 } from './notification-panel-model';
+import { NOTIFICATION_PANEL_ID } from './useNotificationPanelFocus';
+
+const PANEL_FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  'a[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
 function timeAgo(dateStr: string, timeZone: string, locale: string): string {
   return formatRelativeTime(dateStr, { locale, timeZone });
@@ -32,52 +49,58 @@ export function NotificationPanel({
   onNavigateToIssue,
   onCountChange,
   refreshKey = 0,
-  workspaceSlug,
 }: {
   onClose: () => void;
   onNavigateToIssue?: (taskId: string) => void;
   onCountChange?: (count: number) => void;
   refreshKey?: number;
-  workspaceSlug: string | null;
 }) {
   const { token, user } = useAuth();
   const { t, i18n } = useTranslation('shell');
   const navigate = useNavigate();
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const timeZone = normalizeTimeZone(user?.time_zone);
   const [{ loading, notifications }, dispatch] = useReducer(
     notificationPanelReducer,
     INITIAL_NOTIFICATION_PANEL_STATE,
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    let current = true;
     if (!token) {
       dispatch({ type: 'signed-out' });
       return;
     }
     dispatch({ type: 'loading' });
-    listNotifications(token, 1, workspaceSlug).then((response) =>
-      dispatch({
-        type: 'loaded',
-        notifications: response.items,
-      }),
-    );
-  }, [refreshKey, token, workspaceSlug]);
+    void listNotifications(token, 1)
+      .then((response) => {
+        if (current)
+          dispatch({ type: 'loaded', notifications: response.items });
+      })
+      .catch(() => {
+        if (current) dispatch({ type: 'loaded', notifications: [] });
+      });
+    return () => {
+      current = false;
+    };
+  }, [refreshKey, token]);
 
   const handleRead = useCallback(
-    async (n: WorkspaceNotification) => {
+    async (n: NotificationItem) => {
       if (!token || n.is_read) return;
-      await markNotificationRead(token, n.id, workspaceSlug);
+      await markNotificationRead(token, n.id);
       dispatch({
         type: 'mark-read',
         notificationId: n.id,
       });
       onCountChange?.(-1);
     },
-    [token, onCountChange, workspaceSlug],
+    [token, onCountChange],
   );
 
   const handleClick = useCallback(
-    (n: WorkspaceNotification) => {
+    (n: NotificationItem) => {
       void handleRead(n);
       const action = resolveNotificationAction(n);
       if (action.kind === 'dm') {
@@ -100,11 +123,47 @@ export function NotificationPanel({
 
   const handleReadAll = useCallback(async () => {
     if (!token) return;
-    await markAllNotificationsRead(token, workspaceSlug);
+    await markAllNotificationsRead(token);
     const unreadCount = countUnreadNotifications(notifications);
     dispatch({ type: 'mark-all-read' });
     onCountChange?.(-unreadCount);
-  }, [token, notifications, onCountChange, workspaceSlug]);
+  }, [token, notifications, onCountChange]);
+
+  const handlePanelKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !panelRef.current) return;
+
+      const focusable = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(
+          PANEL_FOCUSABLE_SELECTOR,
+        ),
+      );
+      if (focusable.length === 0) {
+        event.preventDefault();
+        panelRef.current.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (
+        event.shiftKey &&
+        (document.activeElement === first ||
+          document.activeElement === panelRef.current)
+      ) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    },
+    [onClose],
+  );
 
   return (
     <LazyMotion features={domAnimation}>
@@ -118,13 +177,20 @@ export function NotificationPanel({
         tabIndex={-1}
       />
       <m.div
+        ref={panelRef}
+        id={NOTIFICATION_PANEL_ID}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={handlePanelKeyDown}
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8 }}
         className="fixed left-3 right-3 top-16 z-50 flex max-h-[min(480px,calc(100vh-5rem))] flex-col overflow-hidden rounded-xl border border-app-border bg-app-bg shadow-2xl lg:bottom-16 lg:left-20 lg:right-auto lg:top-auto lg:w-80"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-app-border shrink-0">
-          <h3 className="app-text-title-md text-app-ink">
+          <h3 id={titleId} className="app-text-title-md text-app-ink">
             {t('notifications.title')}
           </h3>
           <div className="flex items-center gap-1">
@@ -132,11 +198,17 @@ export function NotificationPanel({
               variant="ghost"
               size="icon"
               onClick={handleReadAll}
+              aria-label={t('notifications.markAllAsRead')}
               title={t('notifications.markAllAsRead')}
             >
               <CheckCheck size={14} />
             </Button>
-            <Button variant="ghost" size="icon" onClick={onClose}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label={t('notifications.closePanel')}
+            >
               <X size={14} />
             </Button>
           </div>

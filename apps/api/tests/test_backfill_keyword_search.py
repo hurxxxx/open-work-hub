@@ -20,9 +20,6 @@ class _Session:
     def __exit__(self, *_args: object) -> None:
         return None
 
-    def scalars(self, _query: object) -> list[SimpleNamespace]:
-        return [SimpleNamespace(id="workspace-valid", key="valid")]
-
 
 def _quality_corpus_bytes() -> bytes:
     return json.dumps(
@@ -32,7 +29,6 @@ def _quality_corpus_bytes() -> bytes:
             "cases": [
                 {
                     "query_id": f"query-{index}",
-                    "workspace_id": "workspace-valid",
                     "user_id": "user-valid",
                     "query": f"heater query {index}",
                     "relevant_resource_ids": ["file-valid"],
@@ -70,52 +66,46 @@ def _passing_quality_artifact(*, corpus_sha256: str) -> RetrievalQualityGateArti
     )
 
 
-def test_backfill_rejects_missing_workspace_keys_before_reindex(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    refreshed: list[str] = []
-
+@pytest.mark.parametrize(
+    "obsolete_option", ["--workspace-key", "--all-active", "--rollback-legacy-v1"]
+)
+def test_company_backfill_rejects_removed_container_and_rollback_options(
+    monkeypatch, obsolete_option
+):
     monkeypatch.setattr(
         backfill_keyword_search,
         "get_session_factory",
-        lambda: lambda: _Session(),
+        lambda: pytest.fail("removed flags must not enter data plane"),
+    )
+    monkeypatch.setattr("sys.argv", ["backfill_keyword_search", obsolete_option])
+    with pytest.raises(SystemExit) as error:
+        backfill_keyword_search.main()
+    assert error.value.code == 2
+
+
+def test_versioned_backfill_covers_the_company_without_container_selectors(monkeypatch):
+    client = object()
+    calls = []
+    monkeypatch.setattr(backfill_keyword_search, "get_session_factory", lambda: _Session)
+    monkeypatch.setattr(
+        backfill_keyword_search,
+        "_versioned_client",
+        lambda generation: (
+            client if generation == "release_20260721" else pytest.fail("unexpected generation")
+        ),
     )
     monkeypatch.setattr(
         backfill_keyword_search,
-        "refresh_workspace_keyword_index",
-        lambda _db, *, workspace: refreshed.append(workspace.key),
+        "refresh_keyword_index",
+        lambda db, **kwargs: (
+            calls.append(kwargs) or SimpleNamespace(total=3, entity_counts={"doc": 3})
+        ),
     )
     monkeypatch.setattr(
-        "sys.argv",
-        [
-            "backfill_keyword_search",
-            "--workspace-key",
-            "valid",
-            "--workspace-key",
-            "missing",
-        ],
+        "sys.argv", ["backfill_keyword_search", "--index-generation", "release_20260721"]
     )
-
-    with pytest.raises(SystemExit, match="No matching active workspaces: missing"):
-        backfill_keyword_search.main()
-
-    assert refreshed == []
-
-
-def test_versioned_backfill_requires_all_active(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "backfill_keyword_search",
-            "--workspace-key",
-            "valid",
-            "--index-generation",
-            "release_20260721",
-        ],
-    )
-
-    with pytest.raises(SystemExit, match="requires --all-active"):
-        backfill_keyword_search.main()
+    backfill_keyword_search.main()
+    assert calls == [{"client": client}]
 
 
 def test_versioned_backfill_and_activation_must_be_separate(
@@ -125,10 +115,10 @@ def test_versioned_backfill_and_activation_must_be_separate(
         "sys.argv",
         [
             "backfill_keyword_search",
-            "--all-active",
             "--index-generation",
             "release_20260721",
-            "--activate",
+            "--activate-existing-generation",
+            "release_20260721",
             "--confirm-writes-quiesced",
             "--quality-report",
             "quality.json",
@@ -146,12 +136,7 @@ def test_activate_existing_generation_requires_quality_and_validates_source_coun
 ) -> None:
     activated: list[tuple[bool, int | None, str | None, str | None, str | None]] = []
     staged_client = SimpleNamespace(
-        activate_versioned_index=lambda *,
-        writes_quiesced,
-        expected_document_count=None,
-        expected_index_uuid=None,
-        expected_config_sha256=None,
-        expected_content_sha256=None: (
+        activate_versioned_index=lambda *, writes_quiesced, expected_document_count=None, expected_index_uuid=None, expected_config_sha256=None, expected_content_sha256=None: (
             activated.append(
                 (
                     writes_quiesced,
@@ -166,9 +151,11 @@ def test_activate_existing_generation_requires_quality_and_validates_source_coun
     monkeypatch.setattr(
         backfill_keyword_search,
         "_versioned_client",
-        lambda generation: staged_client
-        if generation == "release_20260720"
-        else pytest.fail("unexpected generation"),
+        lambda generation: (
+            staged_client
+            if generation == "release_20260720"
+            else pytest.fail("unexpected generation")
+        ),
     )
     monkeypatch.setattr(backfill_keyword_search, "_current_source_document_count", lambda: 7)
     monkeypatch.setattr(
@@ -216,7 +203,7 @@ def test_activation_rejects_missing_writer_quiesce_confirmation(
         ],
     )
 
-    with pytest.raises(SystemExit, match="confirm-writes-quiesced"):
+    with pytest.raises(SystemExit, match="stopped writers"):
         backfill_keyword_search.main()
 
 
@@ -261,57 +248,14 @@ def test_activation_rejects_missing_quality_corpus(
         backfill_keyword_search.main()
 
 
-def test_legacy_v1_rollback_rejects_missing_writer_quiesce_confirmation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_current_source_count_covers_every_registered_company_projection(monkeypatch):
+    monkeypatch.setattr(backfill_keyword_search, "get_session_factory", lambda: _Session)
     monkeypatch.setattr(
         backfill_keyword_search,
-        "build_keyword_search_client",
-        lambda _settings: pytest.fail("must fail before creating an index client"),
+        "all_search_documents",
+        lambda db: [{"entity_id": "a"}, {"entity_id": "b"}],
     )
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "backfill_keyword_search",
-            "--rollback-legacy-v1",
-        ],
-    )
-
-    with pytest.raises(SystemExit, match="confirm-writes-quiesced"):
-        backfill_keyword_search.main()
-
-
-def test_legacy_v1_rollback_uses_source_count(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[bool, int]] = []
-    client = backfill_keyword_search.OpenSearchKeywordClient(
-        base_url="http://opensearch",
-        index_prefix="test",
-    )
-    monkeypatch.setattr(
-        client,
-        "rollback_to_legacy_index",
-        lambda *, writes_quiesced, expected_document_count: calls.append(
-            (writes_quiesced, expected_document_count)
-        ),
-    )
-    monkeypatch.setattr(
-        backfill_keyword_search,
-        "build_keyword_search_client",
-        lambda _settings: client,
-    )
-    monkeypatch.setattr(backfill_keyword_search, "_current_source_document_count", lambda: 11)
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "backfill_keyword_search",
-            "--rollback-legacy-v1",
-            "--confirm-writes-quiesced",
-        ],
-    )
-
-    backfill_keyword_search.main()
-
-    assert calls == [(True, 11)]
+    assert backfill_keyword_search._current_source_document_count() == 2
 
 
 def test_quality_report_rejects_actual_corpus_hash_mismatch(tmp_path) -> None:
@@ -354,16 +298,16 @@ def test_legacy_v2_activation_rejects_files_v3_quality_artifact(tmp_path) -> Non
             "qdrant_content_sha256": "e" * 64,
             "embedding_model_identity": "example/embedding-model",
             "embedding_config_sha256": "f" * 64,
-                "reranker_model_identity": "disabled",
-                "reranker_config_sha256": "1" * 64,
-                "source_files_event_watermark": 0,
-                "source_resource_count": 1,
-                "source_identity_sha256": "2" * 64,
-                "source_artifact_sha256": "3" * 64,
-                "source_acl_envelope_sha256": "4" * 64,
-                "judgment_acl_sha256": "5" * 64,
-            }
-        )
+            "reranker_model_identity": "disabled",
+            "reranker_config_sha256": "1" * 64,
+            "source_files_event_watermark": 0,
+            "source_resource_count": 1,
+            "source_identity_sha256": "2" * 64,
+            "source_artifact_sha256": "3" * 64,
+            "source_acl_envelope_sha256": "4" * 64,
+            "judgment_acl_sha256": "5" * 64,
+        }
+    )
     report_path = tmp_path / "report.json"
     report_path.write_text(artifact.model_dump_json(), encoding="utf-8")
 

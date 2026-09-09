@@ -1,8 +1,3 @@
-import type { AiChatMessage } from '../api/chatbot-api';
-import type {
-  ConversationDetail,
-  ConversationTurn as ApiConversationTurn,
-} from '../api/conversations-api';
 import type {
   ArtifactBuffer,
   ChatStreamStatus,
@@ -10,6 +5,11 @@ import type {
   PendingApproval,
   ToolCallBuffer,
 } from '../api/agent-events';
+import type { AiChatMessage } from '../api/chatbot-api';
+import type {
+  ConversationTurn as ApiConversationTurn,
+  ConversationDetail,
+} from '../api/conversations-api';
 import type { ChatTurn } from './chat/chat-turn';
 
 export type TerminalChatStreamStatus = Extract<

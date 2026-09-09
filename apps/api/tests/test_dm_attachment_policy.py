@@ -45,14 +45,20 @@ def test_attachment_size_policy_checks_payload_and_request_sizes() -> None:
     assert is_dm_attachment_size_allowed(DM_MAX_ATTACHMENT_SIZE) is True
     assert is_dm_attachment_size_allowed(0) is False
     assert is_dm_attachment_size_allowed(DM_MAX_ATTACHMENT_SIZE + 1) is False
-    assert is_dm_attachment_request_size_allowed(
-        DM_MAX_ATTACHMENT_SIZE + 1024,
-        overhead_bytes=1024,
-    ) is True
-    assert is_dm_attachment_request_size_allowed(
-        DM_MAX_ATTACHMENT_SIZE + 1025,
-        overhead_bytes=1024,
-    ) is False
+    assert (
+        is_dm_attachment_request_size_allowed(
+            DM_MAX_ATTACHMENT_SIZE + 1024,
+            overhead_bytes=1024,
+        )
+        is True
+    )
+    assert (
+        is_dm_attachment_request_size_allowed(
+            DM_MAX_ATTACHMENT_SIZE + 1025,
+            overhead_bytes=1024,
+        )
+        is False
+    )
 
 
 def test_attachment_size_decisions_expose_policy_limits() -> None:
@@ -77,7 +83,10 @@ def test_safe_attachment_filename_strips_paths_and_unsafe_characters() -> None:
 def test_normalize_attachment_content_type_removes_parameters_and_rejects_invalid_values() -> None:
     assert normalize_attachment_content_type("Image/PNG; charset=binary") == "image/png"
     assert normalize_attachment_content_type("text/plain") == "text/plain"
-    assert normalize_attachment_content_type("image/png\r\nx-evil: yes") == DEFAULT_ATTACHMENT_CONTENT_TYPE
+    assert (
+        normalize_attachment_content_type("image/png\r\nx-evil: yes")
+        == DEFAULT_ATTACHMENT_CONTENT_TYPE
+    )
 
 
 def test_sniff_attachment_content_type_recognizes_previewable_images() -> None:
@@ -127,11 +136,14 @@ def test_attachment_policy_model_can_be_constructed_with_explicit_limits() -> No
     assert policy.decide_payload_size(10).allowed is True
     assert policy.decide_payload_size(11).allowed is False
     assert policy.decide_request_size(11, overhead_bytes=1).allowed is True
-    assert policy.prepare_upload_decision(
-        filename=None,
-        content_type="application/octet-stream",
-        sniff_bytes=b"\x89PNG\r\n\x1a\nrest",
-    ).content_type == "image/png"
+    assert (
+        policy.prepare_upload_decision(
+            filename=None,
+            content_type="application/octet-stream",
+            sniff_bytes=b"\x89PNG\r\n\x1a\nrest",
+        ).content_type
+        == "image/png"
+    )
 
 
 def test_prepare_attachment_upload_downgrades_untrusted_image_headers() -> None:

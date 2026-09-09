@@ -14,11 +14,14 @@ from sqlalchemy.orm import Session, selectinload
 from open_work_hub_worker.celery_app import celery_app
 from open_work_hub_worker.runtime import (
     db_session as _db_session,
+)
+from open_work_hub_worker.runtime import (
     ensure_api_src_on_path as _ensure_api_src_on_path,
+)
+from open_work_hub_worker.runtime import (
     minio_client as _minio_client,
 )
 from open_work_hub_worker.settings import get_settings
-
 
 _ensure_api_src_on_path()
 
@@ -33,15 +36,16 @@ from open_work_hub_api.domains.ai.gateway import (  # noqa: E402
     LlmWorkloadContext,
     execute_llm,
 )
-from open_work_hub_api.domains.auth.security import new_id  # noqa: E402
-from open_work_hub_api.domains.docs.models import NativeDoc, NativeDocPage, NativeDocTarget  # noqa: E402
-from open_work_hub_api.domains.docs.rag_sync import enqueue_native_doc_rag_sync  # noqa: E402
-from open_work_hub_api.domains.meeting.models import Meeting  # noqa: E402
-from open_work_hub_api.domains.rag.contracts import RagSyncOperation  # noqa: E402
-from open_work_hub_api.domains.recording.models import Recording  # noqa: E402
-
+from open_work_hub_api.domains.auth.app_gate import (  # noqa: E402
+    can_use_app,
+)
+from open_work_hub_api.domains.recording.models import Recording, RecordingResult  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+
+class SupersededRecordingGeneration(Exception):
+    """Terminal no-op for a task that no longer owns the recording attempt."""
 
 
 def _utcnow() -> datetime:
@@ -51,8 +55,9 @@ def _utcnow() -> datetime:
 def _load_active_recording(session: Session, recording_id: str) -> Recording | None:
     recording = session.scalar(
         select(Recording)
-        .options(selectinload(Recording.targets))
+        .options(selectinload(Recording.targets), selectinload(Recording.result))
         .where(Recording.id == recording_id)
+        .execution_options(populate_existing=True)
     )
     if recording is None:
         return None
@@ -63,43 +68,109 @@ def _load_active_recording(session: Session, recording_id: str) -> Recording | N
     return recording
 
 
+def _lock_current_recording_attempt(
+    session: Session,
+    recording_id: str,
+    expected_attempt_id: str,
+) -> Recording:
+    if not expected_attempt_id:
+        raise SupersededRecordingGeneration()
+    recording = session.scalar(
+        select(Recording)
+        .options(selectinload(Recording.targets), selectinload(Recording.result))
+        .where(
+            Recording.id == recording_id,
+            Recording.celery_task_id == expected_attempt_id,
+            Recording.trashed_at.is_(None),
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if recording is None:
+        raise SupersededRecordingGeneration()
+    return recording
+
+
 def _heartbeat(
     session: Session,
     recording: Recording,
     pct: int,
     *,
+    expected_attempt_id: str,
     transcript_status: str | None = None,
-    raw_doc_status: str | None = None,
-    minutes_status: str | None = None,
+    summary_status: str | None = None,
 ) -> None:
+    recording = _lock_current_recording_attempt(
+        session,
+        recording.id,
+        expected_attempt_id,
+    )
     recording.progress_pct = max(0, min(100, pct))
     if transcript_status is not None:
         recording.transcript_status = transcript_status
-    if raw_doc_status is not None:
-        recording.raw_transcript_doc_status = raw_doc_status
-    if minutes_status is not None:
-        recording.minutes_doc_status = minutes_status
+    if summary_status is not None:
+        recording.summary_status = summary_status
     recording.updated_at = _utcnow()
     session.add(recording)
     session.commit()
 
 
-def _mark_failed(session: Session, recording_id: str, reason: str, *, stage: str) -> None:
+def _ensure_current_attempt(recording: Recording, expected_attempt_id: str) -> None:
+    if not expected_attempt_id or recording.celery_task_id != expected_attempt_id:
+        raise SupersededRecordingGeneration()
+
+
+def _mark_failed(
+    session: Session,
+    recording_id: str,
+    reason: str,
+    *,
+    stage: str,
+    expected_attempt_id: str,
+) -> bool:
     session.rollback()
-    recording = session.get(Recording, recording_id)
-    if recording is None:
-        return
+    try:
+        recording = _lock_current_recording_attempt(
+            session,
+            recording_id,
+            expected_attempt_id,
+        )
+    except SupersededRecordingGeneration:
+        return False
     if stage == "transcript":
         recording.transcript_status = "failed"
-    elif stage == "raw_doc":
-        recording.raw_transcript_doc_status = "failed"
     else:
-        recording.minutes_doc_status = "failed"
+        recording.summary_status = "failed"
     recording.failure_reason = reason[:5000]
     recording.celery_task_id = None
     recording.updated_at = _utcnow()
     session.add(recording)
     session.commit()
+    return True
+
+
+def _ensure_recording_execution_allowed(
+    session: Session,
+    recording: Recording,
+    *,
+    stage: str,
+    expected_attempt_id: str,
+) -> None:
+    _ensure_current_attempt(recording, expected_attempt_id)
+    if can_use_app(
+        session,
+        app_id="recording",
+        user_id=recording.owner_id,
+    ):
+        return
+    _mark_failed(
+        session,
+        recording.id,
+        "Recording app execution disabled or requester membership revoked.",
+        stage=stage,
+        expected_attempt_id=expected_attempt_id,
+    )
+    raise Ignore()
 
 
 def _download_recording_to_tmp(recording: Recording) -> str:
@@ -119,170 +190,7 @@ def _recording_title(recording: Recording) -> str:
     return recording.title.strip() or f"Recording {recording.started_at:%Y-%m-%d %H:%M:%S}"
 
 
-def _primary_doc_target(recording: Recording) -> tuple[str, str, str, int] | None:
-    if not recording.targets:
-        return None
-    primary = next((target for target in recording.targets if target.is_primary), None)
-    target = primary or sorted(recording.targets, key=lambda item: item.created_at)[0]
-    return (
-        target.target_app,
-        target.target_type,
-        target.target_id,
-        target.sort_order,
-    )
-
-
-def _primary_meeting_id(recording: Recording) -> str | None:
-    primary = next(
-        (
-            target
-            for target in recording.targets
-            if target.is_primary
-            and target.target_app == "meeting"
-            and target.target_type == "meeting"
-        ),
-        None,
-    )
-    if primary is not None:
-        return primary.target_id
-    for target in recording.targets:
-        if target.target_app == "meeting" and target.target_type == "meeting":
-            return target.target_id
-    return None
-
-
-def _paragraph(text: str) -> dict:
-    return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
-
-
-def _heading(text: str, level: int = 2) -> dict:
-    return {
-        "type": "heading",
-        "props": {"level": level},
-        "content": [{"type": "text", "text": text}],
-    }
-
-
-def _blocks_from_text(title: str, text: str) -> list[dict]:
-    blocks: list[dict] = [_heading(title, level=1)]
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    if not lines:
-        return [*blocks, _paragraph("내용이 없습니다.")]
-    for line in lines:
-        blocks.append(_paragraph(line))
-    return blocks
-
-
-def _raw_transcript_blocks(recording: Recording) -> list[dict]:
-    transcript = (recording.transcript_text or "").strip()
-    blocks = [
-        _heading("전사 원문", level=1),
-        _paragraph(f"녹음: {_recording_title(recording)}"),
-        _paragraph(f"녹음 시작: {recording.started_at:%Y-%m-%d %H:%M:%S} UTC"),
-    ]
-    if transcript:
-        blocks.extend(_blocks_from_text("원문", transcript)[1:])
-    else:
-        blocks.append(_paragraph("전사 원문이 없습니다."))
-    return blocks
-
-
-def _minutes_blocks(recording: Recording, minutes_text: str, verifier_note: str) -> list[dict]:
-    blocks = [
-        _heading("녹음 정리", level=1),
-        _paragraph(f"녹음: {_recording_title(recording)}"),
-        _paragraph(f"녹음 시작: {recording.started_at:%Y-%m-%d %H:%M:%S} UTC"),
-    ]
-    blocks.extend(_blocks_from_text("요약 및 후속 조치", minutes_text)[1:])
-    if recording.raw_transcript_doc_id:
-        blocks.append(_heading("전사 원문"))
-        blocks.append(_paragraph(f"전사 원문 문서: {recording.raw_transcript_doc_id}"))
-    if verifier_note:
-        blocks.append(_heading("검증 메모"))
-        blocks.append(_paragraph(verifier_note))
-    return blocks
-
-
-def _create_recording_doc(
-    session: Session,
-    *,
-    recording: Recording,
-    title: str,
-    first_page_title: str,
-    content_blocks: list[dict],
-    source_kind: str,
-) -> NativeDoc:
-    doc = NativeDoc(
-        id=new_id(),
-        workspace_id=recording.workspace_id,
-        owner_id=recording.owner_id,
-        title=title,
-        source_app="recording",
-        source_kind=source_kind,
-        source_ref=recording.id,
-        generation_kind="system_ai",
-    )
-    session.add(doc)
-    session.add(
-        NativeDocPage(
-            id=new_id(),
-            doc_id=doc.id,
-            parent_id=None,
-            title=first_page_title,
-            content_blocks=content_blocks,
-            sort_order=0,
-            created_by_id=recording.owner_id,
-        )
-    )
-    primary_target = _primary_doc_target(recording)
-    if primary_target is not None:
-        target_app, target_type, target_id, sort_order = primary_target
-        session.add(
-            NativeDocTarget(
-                id=new_id(),
-                doc_id=doc.id,
-                target_app=target_app,
-                target_type=target_type,
-                target_id=target_id,
-                is_primary=True,
-                sort_order=sort_order,
-            )
-        )
-    enqueue_native_doc_rag_sync(
-        session,
-        doc=doc,
-        operation=RagSyncOperation.UPSERT,
-    )
-    session.flush()
-    return doc
-
-
-def _attach_minutes_doc_to_meeting(
-    session: Session, *, recording: Recording, doc: NativeDoc
-) -> None:
-    meeting_id = _primary_meeting_id(recording)
-    if meeting_id is None:
-        return
-    meeting = session.scalar(
-        select(Meeting).where(
-            Meeting.id == meeting_id,
-            Meeting.workspace_id == recording.workspace_id,
-        )
-    )
-    if meeting is None:
-        return
-    from open_work_hub_api.domains.meeting import service as meeting_service
-
-    meeting_service._attach_doc_link(
-        session,
-        meeting=meeting,
-        doc=doc,
-        added_by_id=recording.owner_id,
-    )
-
-
-def _analysis_messages(recording: Recording) -> list[dict[str, str]]:
-    transcript = (recording.transcript_text or "").strip()
+def _analysis_messages(recording: Recording, transcript: str) -> list[dict[str, str]]:
     return [
         {
             "role": "system",
@@ -326,14 +234,13 @@ def _complete_local_agent(
     session: Session,
     *,
     source: str,
-    workspace_id: str,
+    actor_user_id: str,
     messages: list[dict[str, str]],
     max_tokens: int,
 ) -> str:
     context = LlmTaskContext(
         source=source,
-        actor_user_id=None,
-        workspace_id=workspace_id,
+        actor_user_id=actor_user_id,
         task_kind="meeting_summary",
         app_id="recording",
     )
@@ -363,21 +270,49 @@ def _complete_local_agent(
     task_time_limit=3600,
     task_soft_time_limit=3300,
 )
-def transcribe_recording(self, recording_id: str) -> str:
+def transcribe_recording(
+    self,
+    recording_id: str,
+    attempt_id: str,
+) -> dict[str, str]:
     session = _db_session()
     tmp_path: str | None = None
     try:
         recording = _load_active_recording(session, recording_id)
         if recording is None:
             raise Ignore()
-        if recording.transcript_text and recording.transcript_status == "done":
-            _heartbeat(session, recording, max(recording.progress_pct, 60))
-            return recording.id
+        _ensure_current_attempt(recording, attempt_id)
+        _ensure_recording_execution_allowed(
+            session, recording, stage="transcript", expected_attempt_id=attempt_id
+        )
+        if (
+            recording.result is not None
+            and recording.result.transcript_text
+            and recording.transcript_status == "done"
+        ):
+            _heartbeat(
+                session,
+                recording,
+                max(recording.progress_pct, 60),
+                expected_attempt_id=attempt_id,
+            )
+            return {"recording_id": recording.id, "attempt_id": attempt_id}
+
+        _ensure_recording_execution_allowed(
+            session,
+            recording,
+            stage="transcript",
+            expected_attempt_id=attempt_id,
+        )
 
         if recording.transcribe_started_at is None:
             recording.transcribe_started_at = _utcnow()
         _heartbeat(
-            session, recording, max(recording.progress_pct, 10), transcript_status="transcribing"
+            session,
+            recording,
+            max(recording.progress_pct, 10),
+            expected_attempt_id=attempt_id,
+            transcript_status="transcribing",
         )
 
         health = check_asr_health(deep=True)
@@ -392,38 +327,97 @@ def transcribe_recording(self, recording_id: str) -> str:
             if pct <= last_pct["value"]:
                 return
             last_pct["value"] = pct
-            rec = session.get(Recording, recording_id)
-            if rec is None or rec.trashed_at is not None:
+            rec = _load_active_recording(session, recording_id)
+            if rec is None:
                 raise Ignore()
-            _heartbeat(session, rec, pct, transcript_status="transcribing")
+            _ensure_recording_execution_allowed(
+                session,
+                rec,
+                stage="transcript",
+                expected_attempt_id=attempt_id,
+            )
+            _heartbeat(
+                session,
+                rec,
+                pct,
+                expected_attempt_id=attempt_id,
+                transcript_status="transcribing",
+            )
 
+        recording = _load_active_recording(session, recording_id)
+        if recording is None:
+            raise Ignore()
+        _ensure_recording_execution_allowed(
+            session,
+            recording,
+            stage="transcript",
+            expected_attempt_id=attempt_id,
+        )
         result = get_asr_backend().transcribe(Path(tmp_path), on_progress=on_progress)
         text = result.text.strip()
         if not text:
             raise PermanentError("ASR backend returned an empty transcript.")
 
-        recording = session.get(Recording, recording_id)
-        if recording is None or recording.trashed_at is not None:
-            raise Ignore()
-        recording.transcript_text = text
+        recording = _lock_current_recording_attempt(
+            session,
+            recording_id,
+            attempt_id,
+        )
+        _ensure_recording_execution_allowed(
+            session,
+            recording,
+            stage="transcript",
+            expected_attempt_id=attempt_id,
+        )
+        result_row = session.get(RecordingResult, recording.id)
+        if result_row is None:
+            result_row = RecordingResult(
+                recording_id=recording.id,
+                transcript_text=text,
+                version=1,
+            )
+        elif result_row.transcript_text != text:
+            result_row.transcript_text = text
+            result_row.summary_text = None
+            result_row.verifier_note = None
+            result_row.generated_at = None
+            result_row.version += 1
+        result_row.updated_at = _utcnow()
+        session.add(result_row)
         if recording.duration_sec is None and result.duration_sec:
             recording.duration_sec = int(result.duration_sec)
         recording.transcript_status = "done"
+        recording.summary_status = "pending"
         recording.transcribe_completed_at = _utcnow()
         recording.progress_pct = max(recording.progress_pct, 60)
         recording.failure_reason = None
         recording.updated_at = _utcnow()
         session.add(recording)
         session.commit()
-        return recording.id
+        return {"recording_id": recording.id, "attempt_id": attempt_id}
+    except SupersededRecordingGeneration:
+        session.rollback()
+        raise Ignore()
     except Ignore:
         raise
     except PermanentError as exc:
-        _mark_failed(session, recording_id, str(exc), stage="transcript")
+        _mark_failed(
+            session,
+            recording_id,
+            str(exc),
+            stage="transcript",
+            expected_attempt_id=attempt_id,
+        )
         raise Ignore()
     except TransientError as exc:
         if self.request.retries >= self.max_retries:
-            _mark_failed(session, recording_id, str(exc), stage="transcript")
+            _mark_failed(
+                session,
+                recording_id,
+                str(exc),
+                stage="transcript",
+                expected_attempt_id=attempt_id,
+            )
             raise Ignore()
         raise self.retry(exc=exc, countdown=min(600, 2 ** (self.request.retries + 1)))
     finally:
@@ -433,92 +427,118 @@ def transcribe_recording(self, recording_id: str) -> str:
 
 
 @celery_app.task(
-    name="recording.create_raw_transcript_doc",
-    bind=True,
-    acks_late=True,
-    max_retries=3,
-    task_time_limit=300,
-)
-def create_raw_transcript_doc(self, recording_id: str) -> str:
-    session = _db_session()
-    try:
-        recording = _load_active_recording(session, recording_id)
-        if recording is None:
-            raise Ignore()
-        if recording.raw_transcript_doc_id and recording.raw_transcript_doc_status == "done":
-            _heartbeat(session, recording, max(recording.progress_pct, 70))
-            return recording.id
-        if not recording.transcript_text:
-            raise PermanentError("Transcript is missing.")
-
-        _heartbeat(session, recording, max(recording.progress_pct, 65), raw_doc_status="creating")
-        doc = _create_recording_doc(
-            session,
-            recording=recording,
-            title=f"전사 원문: {_recording_title(recording)}",
-            first_page_title="전사 원문",
-            content_blocks=_raw_transcript_blocks(recording),
-            source_kind="raw_transcript",
-        )
-        recording.raw_transcript_doc_id = doc.id
-        recording.raw_transcript_doc_status = "done"
-        recording.progress_pct = max(recording.progress_pct, 72)
-        recording.failure_reason = None
-        recording.updated_at = _utcnow()
-        session.add(recording)
-        session.commit()
-        return recording.id
-    except Ignore:
-        raise
-    except PermanentError as exc:
-        _mark_failed(session, recording_id, str(exc), stage="raw_doc")
-        raise Ignore()
-    except Exception as exc:
-        if self.request.retries >= self.max_retries:
-            _mark_failed(session, recording_id, str(exc), stage="raw_doc")
-            raise Ignore()
-        raise self.retry(exc=exc, countdown=min(600, 2 ** (self.request.retries + 1)))
-    finally:
-        session.close()
-
-
-@celery_app.task(
     name="recording.analyze_transcript",
     bind=True,
     acks_late=True,
     max_retries=3,
     task_time_limit=900,
 )
-def analyze_transcript(self, recording_id: str) -> dict[str, Any]:
+def analyze_transcript(self, payload: dict[str, Any]) -> dict[str, Any]:
+    recording_id = str(payload.get("recording_id") or "")
+    attempt_id = str(payload.get("attempt_id") or "")
     session = _db_session()
     try:
         recording = _load_active_recording(session, recording_id)
         if recording is None:
             raise Ignore()
-        if not recording.transcript_text:
+        _ensure_current_attempt(recording, attempt_id)
+        _ensure_recording_execution_allowed(
+            session, recording, stage="summary", expected_attempt_id=attempt_id
+        )
+        result_row = recording.result
+        if result_row is None or not result_row.transcript_text:
             raise PermanentError("Transcript is missing.")
+        if result_row.summary_text and recording.summary_status in {"verifying", "done"}:
+            return {
+                "recording_id": recording.id,
+                "attempt_id": attempt_id,
+                "result_version": result_row.version,
+                "summary": result_row.summary_text,
+                "agent_flow": ["domain.meeting", "meeting.transcript_summarizer"],
+            }
 
-        _heartbeat(session, recording, max(recording.progress_pct, 78), minutes_status="creating")
+        _ensure_recording_execution_allowed(
+            session,
+            recording,
+            stage="summary",
+            expected_attempt_id=attempt_id,
+        )
+
+        _heartbeat(
+            session,
+            recording,
+            max(recording.progress_pct, 72),
+            expected_attempt_id=attempt_id,
+            summary_status="analyzing",
+        )
+        _ensure_recording_execution_allowed(
+            session,
+            recording,
+            stage="summary",
+            expected_attempt_id=attempt_id,
+        )
+        result_version = result_row.version
         summary = _complete_local_agent(
             session,
+            actor_user_id=recording.owner_id,
             source="worker.recording.agent.domain_meeting",
-            workspace_id=recording.workspace_id,
-            messages=_analysis_messages(recording),
+            messages=_analysis_messages(recording, result_row.transcript_text),
             max_tokens=6000,
         )
+        recording = _lock_current_recording_attempt(
+            session,
+            recording_id,
+            attempt_id,
+        )
+        if recording is None or recording.result is None:
+            raise Ignore()
+        _ensure_recording_execution_allowed(
+            session,
+            recording,
+            stage="summary",
+            expected_attempt_id=attempt_id,
+        )
+        if recording.result.version != result_version:
+            raise SupersededRecordingGeneration()
+        recording.result.summary_text = summary
+        recording.result.verifier_note = None
+        recording.result.updated_at = _utcnow()
+        recording.summary_status = "verifying"
+        recording.progress_pct = max(recording.progress_pct, 84)
+        recording.updated_at = _utcnow()
+        session.add(recording.result)
+        session.add(recording)
+        session.commit()
         return {
             "recording_id": recording.id,
+            "attempt_id": attempt_id,
+            "result_version": result_version,
             "summary": summary,
             "agent_flow": ["domain.meeting", "meeting.transcript_summarizer"],
         }
+    except SupersededRecordingGeneration:
+        session.rollback()
+        raise Ignore()
     except Ignore:
         raise
     except PermanentError as exc:
-        _mark_failed(session, recording_id, str(exc), stage="minutes")
+        _mark_failed(
+            session,
+            recording_id,
+            str(exc),
+            stage="summary",
+            expected_attempt_id=attempt_id,
+        )
         raise Ignore()
     except TransientError as exc:
         if self.request.retries >= self.max_retries:
-            _mark_failed(session, recording_id, str(exc), stage="minutes")
+            _mark_failed(
+                session,
+                recording_id,
+                str(exc),
+                stage="summary",
+                expected_attempt_id=attempt_id,
+            )
             raise Ignore()
         raise self.retry(exc=exc, countdown=min(600, 2 ** (self.request.retries + 1)))
     finally:
@@ -534,25 +554,76 @@ def analyze_transcript(self, recording_id: str) -> dict[str, Any]:
 )
 def verify_transcript_summary(self, payload: dict[str, Any]) -> dict[str, Any]:
     recording_id = str(payload.get("recording_id") or "")
+    attempt_id = str(payload.get("attempt_id") or "")
     session = _db_session()
     try:
         recording = _load_active_recording(session, recording_id)
         if recording is None:
             raise Ignore()
-        transcript = (recording.transcript_text or "").strip()
+        _ensure_current_attempt(recording, attempt_id)
+        _ensure_recording_execution_allowed(
+            session, recording, stage="summary", expected_attempt_id=attempt_id
+        )
+        result_row = recording.result
+        transcript = (result_row.transcript_text if result_row is not None else "").strip()
         summary = str(payload.get("summary") or "").strip()
+        result_version = int(payload.get("result_version") or 0)
         if not transcript or not summary:
             raise PermanentError("Transcript summary verification input is missing.")
+        if result_row is None or result_row.version != result_version:
+            raise SupersededRecordingGeneration()
+
+        if (
+            result_row is not None
+            and result_row.verifier_note
+            and recording.summary_status == "done"
+        ):
+            return {
+                **payload,
+                "verifier_note": result_row.verifier_note,
+            }
+
+        _ensure_recording_execution_allowed(
+            session,
+            recording,
+            stage="summary",
+            expected_attempt_id=attempt_id,
+        )
 
         verifier_note = _complete_local_agent(
             session,
+            actor_user_id=recording.owner_id,
             source="worker.recording.agent.verifier_grounding",
-            workspace_id=recording.workspace_id,
             messages=_verification_messages(transcript, summary),
             max_tokens=2500,
         )
+        recording = _lock_current_recording_attempt(
+            session,
+            recording_id,
+            attempt_id,
+        )
+        if recording is None or recording.result is None:
+            raise Ignore()
+        _ensure_recording_execution_allowed(
+            session,
+            recording,
+            stage="summary",
+            expected_attempt_id=attempt_id,
+        )
+        if recording.result.version != result_version:
+            raise SupersededRecordingGeneration()
+        recording.result.verifier_note = verifier_note
+        recording.result.updated_at = _utcnow()
+        recording.summary_status = "verifying"
+        recording.progress_pct = max(recording.progress_pct, 94)
+        recording.updated_at = _utcnow()
+        session.add(recording.result)
+        session.add(recording)
+        session.commit()
         return {
             "recording_id": recording.id,
+            "attempt_id": attempt_id,
+            "result_version": result_version,
             "summary": summary,
             "verifier_note": verifier_note,
             "agent_flow": [
@@ -560,14 +631,29 @@ def verify_transcript_summary(self, payload: dict[str, Any]) -> dict[str, Any]:
                 "verifier.grounding",
             ],
         }
+    except SupersededRecordingGeneration:
+        session.rollback()
+        raise Ignore()
     except Ignore:
         raise
     except PermanentError as exc:
-        _mark_failed(session, recording_id, str(exc), stage="minutes")
+        _mark_failed(
+            session,
+            recording_id,
+            str(exc),
+            stage="summary",
+            expected_attempt_id=attempt_id,
+        )
         raise Ignore()
     except TransientError as exc:
         if self.request.retries >= self.max_retries:
-            _mark_failed(session, recording_id, str(exc), stage="minutes")
+            _mark_failed(
+                session,
+                recording_id,
+                str(exc),
+                stage="summary",
+                expected_attempt_id=attempt_id,
+            )
             raise Ignore()
         raise self.retry(exc=exc, countdown=min(600, 2 ** (self.request.retries + 1)))
     finally:
@@ -575,54 +661,85 @@ def verify_transcript_summary(self, payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @celery_app.task(
-    name="recording.create_minutes_doc",
+    name="recording.persist_result",
     bind=True,
     acks_late=True,
     max_retries=3,
     task_time_limit=300,
 )
-def create_minutes_doc(self, payload: dict[str, Any]) -> str:
+def persist_recording_result(self, payload: dict[str, Any]) -> str:
     recording_id = str(payload.get("recording_id") or "")
+    attempt_id = str(payload.get("attempt_id") or "")
+    summary = str(payload.get("summary") or "").strip()
+    result_version = int(payload.get("result_version") or 0)
     session = _db_session()
     try:
         recording = _load_active_recording(session, recording_id)
         if recording is None:
             raise Ignore()
-        if recording.minutes_doc_id and recording.minutes_doc_status == "done":
-            _heartbeat(session, recording, 100)
+        if (
+            recording.summary_status == "done"
+            and recording.result is not None
+            and recording.result.version == result_version
+            and recording.result.summary_text == summary
+        ):
             return recording.id
-        summary = str(payload.get("summary") or "").strip()
-        if not summary:
-            raise PermanentError("Minutes summary is missing.")
-        verifier_note = str(payload.get("verifier_note") or "").strip()
-
-        doc = _create_recording_doc(
+        recording = _lock_current_recording_attempt(
             session,
-            recording=recording,
-            title=f"녹음 정리: {_recording_title(recording)}",
-            first_page_title="녹음 정리",
-            content_blocks=_minutes_blocks(recording, summary, verifier_note),
-            source_kind="minutes",
+            recording_id,
+            attempt_id,
         )
-        _attach_minutes_doc_to_meeting(session, recording=recording, doc=doc)
-        recording.minutes_doc_id = doc.id
-        recording.minutes_doc_status = "done"
+        _ensure_recording_execution_allowed(
+            session,
+            recording,
+            stage="summary",
+            expected_attempt_id=attempt_id,
+        )
+        if not summary:
+            raise PermanentError("Recording summary is missing.")
+        verifier_note = str(payload.get("verifier_note") or "").strip()
+        if recording.result is None:
+            raise PermanentError("Recording transcript result is missing.")
+        if recording.result.version != result_version:
+            raise SupersededRecordingGeneration()
+        if recording.result.summary_text != summary:
+            raise SupersededRecordingGeneration()
+        recording.result.verifier_note = verifier_note
+        recording.result.generated_at = _utcnow()
+        recording.result.updated_at = _utcnow()
+        recording.summary_status = "done"
         recording.meeting_insight_status = "none"
         recording.progress_pct = 100
         recording.failure_reason = None
         recording.celery_task_id = None
         recording.updated_at = _utcnow()
+        session.add(recording.result)
         session.add(recording)
         session.commit()
         return recording.id
+    except SupersededRecordingGeneration:
+        session.rollback()
+        raise Ignore()
     except Ignore:
         raise
     except PermanentError as exc:
-        _mark_failed(session, recording_id, str(exc), stage="minutes")
+        _mark_failed(
+            session,
+            recording_id,
+            str(exc),
+            stage="summary",
+            expected_attempt_id=attempt_id,
+        )
         raise Ignore()
     except Exception as exc:
         if self.request.retries >= self.max_retries:
-            _mark_failed(session, recording_id, str(exc), stage="minutes")
+            _mark_failed(
+                session,
+                recording_id,
+                str(exc),
+                stage="summary",
+                expected_attempt_id=attempt_id,
+            )
             raise Ignore()
         raise self.retry(exc=exc, countdown=min(600, 2 ** (self.request.retries + 1)))
     finally:

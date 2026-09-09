@@ -21,7 +21,6 @@ from open_work_hub_api.domains.ai.runtime.routing_metadata import (
 from open_work_hub_api.domains.ai.tool_call_event_projection import iter_tool_call_events
 from open_work_hub_api.domains.ai.tool_runtime import ToolCallExecution
 
-
 SYNC_FINISH_REASONS = {"stop", "length", "cancelled", "error"}
 EMPTY_LENGTH_RESPONSE_MESSAGE = (
     "응답이 토큰 한도에 도달해 중간에서 잘렸습니다. 질문 범위를 줄이거나 이어서 요청하세요."
@@ -285,9 +284,7 @@ def assistant_buffer_from_sync_response(
         buffer.content = response.content or ""
         return buffer
 
-    parser = ArtifactStreamParser(
-        server_owned_artifact_types=server_owned_artifact_types
-    )
+    parser = ArtifactStreamParser(server_owned_artifact_types=server_owned_artifact_types)
     encoder = EnvelopeEncoder()
     for event in emit_content_through_parser(
         response.content or "",

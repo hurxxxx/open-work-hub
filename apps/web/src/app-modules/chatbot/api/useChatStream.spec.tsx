@@ -20,9 +20,7 @@ describe('useChatStream', () => {
   });
 
   it('keeps an active stream alive while the chat route is unmounted', async () => {
-    let capturedSignal: AbortSignal | null = null;
-    vi.mocked(streamAiChat).mockImplementation(async ({ signal }) => {
-      capturedSignal = signal;
+    vi.mocked(streamAiChat).mockImplementation(async () => {
       return new Response(
         new ReadableStream<Uint8Array>({
           start() {
@@ -32,9 +30,7 @@ describe('useChatStream', () => {
       );
     });
 
-    const rendered = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'user-1:docs'),
-    );
+    const rendered = renderHook(() => useChatStream('token-1', 'user-1:docs'));
     let sendPromise: Promise<void> | null = null;
 
     act(() => {
@@ -47,14 +43,13 @@ describe('useChatStream', () => {
       expect(rendered.result.current.state.streamOpened).toBe(true);
     });
 
-    expect(capturedSignal?.aborted).toBe(false);
+    const { signal: capturedSignal } = vi.mocked(streamAiChat).mock.calls[0][0];
+    expect(capturedSignal.aborted).toBe(false);
 
     rendered.unmount();
-    expect(capturedSignal?.aborted).toBe(false);
+    expect(capturedSignal.aborted).toBe(false);
 
-    const resumed = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'user-1:docs'),
-    );
+    const resumed = renderHook(() => useChatStream('token-1', 'user-1:docs'));
     expect(resumed.result.current.state.status).toBe('streaming');
     expect(resumed.result.current.state.streamOpened).toBe(true);
     expect(resumed.result.current.state.pendingUserContent).toBe('hi');
@@ -62,7 +57,7 @@ describe('useChatStream', () => {
     act(() => {
       resumed.result.current.abort();
     });
-    expect(capturedSignal?.aborted).toBe(true);
+    expect(capturedSignal.aborted).toBe(true);
     expect(resumed.result.current.state.status).toBe('cancelled');
     await act(async () => {
       await expect(sendPromise).resolves.toBeUndefined();
@@ -82,10 +77,10 @@ describe('useChatStream', () => {
     });
 
     const firstRequest = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'user-1:docs-isolated'),
+      useChatStream('token-1', 'user-1:docs-isolated'),
     );
     const generalChat = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'user-1:chatbot'),
+      useChatStream('token-1', 'user-1:chatbot'),
     );
 
     act(() => {
@@ -118,7 +113,7 @@ describe('useChatStream', () => {
     );
 
     const rendered = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'eof-without-terminal'),
+      useChatStream('token-1', 'eof-without-terminal'),
     );
 
     await act(async () => {
@@ -137,7 +132,7 @@ describe('useChatStream', () => {
     );
 
     const rendered = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'durable-no-sync-fallback', {
+      useChatStream('token-1', 'durable-no-sync-fallback', {
         disableSyncFallback: true,
       }),
     );
@@ -168,7 +163,7 @@ describe('useChatStream', () => {
     );
 
     const rendered = renderHook(() =>
-      useChatStream('token-1', 'workspace-1', 'resume-eof-without-terminal'),
+      useChatStream('token-1', 'resume-eof-without-terminal'),
     );
 
     await act(async () => {

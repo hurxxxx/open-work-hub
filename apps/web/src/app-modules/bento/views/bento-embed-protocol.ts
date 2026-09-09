@@ -1,5 +1,5 @@
 const BENTO_CHANNEL = 'open-work-hub:bento';
-const BENTO_PROTOCOL_VERSION = 1;
+const BENTO_PROTOCOL_VERSION = 2;
 const BENTO_DEV_DEFAULT_PORT = '18084';
 
 interface BentoBrowserEnv {
@@ -146,12 +146,13 @@ export function parseBentoBridgeMessage(
   };
 }
 
-export function buildBentoLoadMessage(documentJson: string) {
+export function buildBentoLoadMessage(documentJson: string, readOnly = true) {
   return {
     channel: BENTO_CHANNEL,
     version: BENTO_PROTOCOL_VERSION,
     type: 'load-document' as const,
     documentJson,
+    readOnly,
   };
 }
 

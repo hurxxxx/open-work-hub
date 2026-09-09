@@ -23,6 +23,7 @@ export interface ResolveMediaUrlInput {
 
 export interface MediaUrlResolutionSession {
   resolveFileUrl(input: ResolveMediaUrlInput): Promise<string>;
+  dispose(): void;
 }
 
 interface CacheEntry {
@@ -65,6 +66,15 @@ export function createMediaUrlResolutionSession({
   const cache = new Map<string, CacheEntry>();
   const pendingByToken = new Map<string, PendingTokenBatch>();
   let scheduled = false;
+  let disposed = false;
+
+  function cacheKey(token: string, url: string): string {
+    return `${token}\u0000${url}`;
+  }
+
+  function revokeCachedUrl(url: string): void {
+    if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+  }
 
   async function flushPending() {
     scheduled = false;
@@ -77,12 +87,24 @@ export function createMediaUrlResolutionSession({
       const urls = Array.from(batch.keys());
       try {
         const resolved = await resolveMediaUrls(token, urls);
+        if (disposed) {
+          Object.values(resolved).forEach(revokeCachedUrl);
+          for (const [mediaUrl, resolvers] of batch) {
+            resolvers.forEach((resolve) => resolve(mediaUrl));
+          }
+          continue;
+        }
         const resolvedAt = now();
         for (const [mediaUrl, resolvers] of batch) {
           const resolvedUrl = resolved[mediaUrl];
           const renderUrl = resolvedUrl ?? mediaUrl;
           if (resolvedUrl) {
-            cache.set(mediaUrl, {
+            const key = cacheKey(token, mediaUrl);
+            const previous = cache.get(key);
+            if (previous && previous.url !== renderUrl) {
+              revokeCachedUrl(previous.url);
+            }
+            cache.set(key, {
               url: renderUrl,
               expiresAt: resolvedAt + cacheTtlMs,
             });
@@ -98,13 +120,30 @@ export function createMediaUrlResolutionSession({
   }
 
   return {
+    dispose() {
+      disposed = true;
+      for (const entry of cache.values()) revokeCachedUrl(entry.url);
+      cache.clear();
+      for (const batch of pendingByToken.values()) {
+        for (const [url, resolvers] of batch) {
+          resolvers.forEach((resolve) => resolve(url));
+        }
+      }
+      pendingByToken.clear();
+    },
     resolveFileUrl({ token, url }) {
+      if (disposed) return Promise.resolve(url);
       if (!url.startsWith('media:')) return Promise.resolve(url);
       if (!token) return Promise.resolve(url);
 
-      const cached = cache.get(url);
+      const key = cacheKey(token, url);
+      const cached = cache.get(key);
       if (cached && cached.expiresAt > now()) {
         return Promise.resolve(cached.url);
+      }
+      if (cached) {
+        revokeCachedUrl(cached.url);
+        cache.delete(key);
       }
 
       return new Promise<string>((resolve) => {

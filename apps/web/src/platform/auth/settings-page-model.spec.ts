@@ -14,7 +14,6 @@ function state(overrides: Partial<ProfilePageState> = {}): ProfilePageState {
     activeSection: 'appearance',
     currentPassword: '',
     dateFormat: 'korean',
-    defaultWorkspaceId: 'workspace-a',
     displayName: 'Member',
     error: 'previous error',
     fullName: 'Open Work Hub Member',
@@ -22,6 +21,7 @@ function state(overrides: Partial<ProfilePageState> = {}): ProfilePageState {
     locale: 'ko-KR',
     message: 'previous message',
     newPassword: '',
+    newPasswordConfirm: '',
     sessions: [],
     submitting: false,
     themePreference: 'system',
@@ -118,30 +118,6 @@ describe('settings page model', () => {
     });
   });
 
-  it('trims default workspace saves and sends null for blank values', () => {
-    expect(
-      prepareProfilePreferenceSave(state(), {
-        type: 'defaultWorkspace',
-        value: ' workspace-b ',
-      }),
-    ).toEqual({
-      optimisticPatch: {
-        defaultWorkspaceId: 'workspace-b',
-        error: null,
-        message: null,
-      },
-      payload: { default_workspace_id: 'workspace-b' },
-      rollbackPatch: { defaultWorkspaceId: 'workspace-a' },
-    });
-
-    expect(
-      prepareProfilePreferenceSave(state(), {
-        type: 'defaultWorkspace',
-        value: '   ',
-      })?.payload,
-    ).toEqual({ default_workspace_id: null });
-  });
-
   it('plans full profile detail saves with trimmed identity fields', () => {
     const plan = prepareProfileDetailsSave(
       state({
@@ -176,6 +152,7 @@ describe('settings page model', () => {
       state({
         currentPassword: 'old-password',
         newPassword: 'new-password',
+        newPasswordConfirm: 'new-password',
       }),
     );
 
@@ -183,11 +160,13 @@ describe('settings page model', () => {
     expect(plan.payload).toEqual({
       current_password: 'old-password',
       new_password: 'new-password',
+      new_password_confirm: 'new-password',
     });
     expect(plan.successPatch('Changed')).toEqual({
       currentPassword: '',
       message: 'Changed',
       newPassword: '',
+      newPasswordConfirm: '',
     });
     expect(plan.failurePatch('Bad password', 'Fallback')).toEqual({
       error: 'Bad password',

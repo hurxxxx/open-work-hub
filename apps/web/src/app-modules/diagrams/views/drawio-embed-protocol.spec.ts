@@ -4,6 +4,7 @@ import {
   buildDrawioEmbedConfig,
   buildDrawioExportMessage,
   buildDrawioLoadMessage,
+  drawioConfigForAccess,
   isDrawioMessageOriginAllowed,
   parseDrawioEmbedMessage,
 } from './drawio-embed-protocol';
@@ -20,7 +21,7 @@ describe('draw.io embed protocol', () => {
         VITE_OPEN_WORK_HUB_DRAWIO_PORT: '18082',
         VITE_OPEN_WORK_HUB_DRAWIO_URL: '/drawio/',
       },
-      location: testLocation('http://100.87.48.58:4200/w/lab/diagrams'),
+      location: testLocation('http://100.87.48.58:4200/apps/diagrams'),
     });
 
     expect(config.origin).toBe('http://100.87.48.58:18082');
@@ -35,7 +36,7 @@ describe('draw.io embed protocol', () => {
         DEV: false,
         VITE_OPEN_WORK_HUB_DRAWIO_URL: 'https://drawio.open-work-hub.example/',
       },
-      location: testLocation('https://open-work-hub.example/w/lab/diagrams'),
+      location: testLocation('https://open-work-hub.example/apps/diagrams'),
     });
 
     expect(config.origin).toBe('https://drawio.open-work-hub.example');
@@ -49,7 +50,7 @@ describe('draw.io embed protocol', () => {
         VITE_OPEN_WORK_HUB_DRAWIO_PORT: '18082',
         VITE_OPEN_WORK_HUB_DRAWIO_URL: '',
       },
-      location: testLocation('http://100.87.48.58:4200/w/lab/diagrams'),
+      location: testLocation('http://100.87.48.58:4200/apps/diagrams'),
     });
 
     expect(config.origin).toBe('http://100.87.48.58:18082');
@@ -63,7 +64,7 @@ describe('draw.io embed protocol', () => {
         VITE_OPEN_WORK_HUB_DRAWIO_PORT: '18082',
         VITE_OPEN_WORK_HUB_DRAWIO_URL: '',
       },
-      location: testLocation('https://dev.open-work-hub.example/w/lab/diagrams'),
+      location: testLocation('https://dev.open-work-hub.example/apps/diagrams'),
     });
 
     expect(config.origin).toBe('https://dev.open-work-hub.example');
@@ -74,7 +75,7 @@ describe('draw.io embed protocol', () => {
   it('falls back to the legacy same-origin path when no absolute production URL is configured', () => {
     const config = buildDrawioEmbedConfig({
       env: { DEV: false, VITE_OPEN_WORK_HUB_DRAWIO_URL: '/drawio/' },
-      location: testLocation('https://open-work-hub.example/w/lab/diagrams'),
+      location: testLocation('https://open-work-hub.example/apps/diagrams'),
     });
 
     expect(config.origin).toBe('https://open-work-hub.example');
@@ -121,7 +122,9 @@ describe('draw.io embed protocol', () => {
   });
 
   it('builds load and export actions', () => {
-    expect(JSON.parse(buildDrawioLoadMessage('<mxfile />'))).toMatchObject({
+    expect(
+      JSON.parse(buildDrawioLoadMessage('<mxfile />', false)),
+    ).toMatchObject({
       action: 'load',
       autosave: 1,
       xml: '<mxfile />',
@@ -132,4 +135,19 @@ describe('draw.io embed protocol', () => {
       xml: '<mxfile />',
     });
   });
+});
+
+it('boots the official readonly viewer without save/exit UI or autosave', () => {
+  const config = {
+    src: 'https://drawio.example/?embed=1&saveAndExit=1&edit=evil',
+    origin: 'https://drawio.example',
+  };
+  const url = new URL(drawioConfigForAccess(config, true).src);
+  expect(url.searchParams.get('chrome')).toBe('0');
+  expect(url.searchParams.get('lightbox')).toBe('1');
+  expect(url.searchParams.get('saveAndExit')).toBe('0');
+  expect(url.searchParams.get('noExitBtn')).toBe('1');
+  expect(url.searchParams.has('edit')).toBe(false);
+  expect(JSON.parse(buildDrawioLoadMessage('<mxfile/>')).autosave).toBe(0);
+  expect(drawioConfigForAccess(config, false)).toEqual(config);
 });

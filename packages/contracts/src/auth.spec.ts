@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { AUTH_API_PREFIX, authRoutes } from './auth';
+import {
+  AUTH_ACCESS_CHANGE_REASONS,
+  AUTH_API_PREFIX,
+  AUTH_REALTIME_EVENT_TYPES,
+  authRoutes,
+  isAuthAccessChangedRealtimeEvent,
+} from './auth';
 
 describe('auth route contract', () => {
   it('exports every auth path used by web and desktop clients', () => {
@@ -13,9 +19,7 @@ describe('auth route contract', () => {
     );
     expect(authRoutes.developmentAccountLogin()).toBe('/api/v1/auth/dev-login');
     expect(authRoutes.setup()).toBe('/api/v1/auth/setup');
-    expect(authRoutes.impersonateUser('user 1')).toBe(
-      '/api/v1/auth/impersonations/user%201',
-    );
+    expect(authRoutes).not.toHaveProperty('impersonateUser');
     expect(authRoutes.currentUser()).toBe('/api/v1/auth/me');
     expect(authRoutes.logout()).toBe('/api/v1/auth/logout');
     expect(authRoutes.desktopSessionLinks()).toBe(
@@ -30,5 +34,40 @@ describe('auth route contract', () => {
     expect(authRoutes.revokeSession('session 1')).toBe(
       '/api/v1/auth/sessions/session%201/revoke',
     );
+  });
+
+  it('owns every access invalidation reason', () => {
+    const membershipEvent = {
+      type: AUTH_REALTIME_EVENT_TYPES.accessChanged,
+      data: {
+        reason: AUTH_ACCESS_CHANGE_REASONS.principalAccess,
+      },
+    };
+
+    expect(AUTH_REALTIME_EVENT_TYPES).toEqual({
+      accessChanged: 'auth.access.changed',
+    });
+    expect(AUTH_ACCESS_CHANGE_REASONS).toEqual({
+      appAvailability: 'app_availability',
+      principalAccess: 'principal',
+    });
+    expect(isAuthAccessChangedRealtimeEvent(membershipEvent)).toBe(true);
+    expect(
+      isAuthAccessChangedRealtimeEvent({
+        type: AUTH_REALTIME_EVENT_TYPES.accessChanged,
+        data: { reason: AUTH_ACCESS_CHANGE_REASONS.appAvailability },
+      }),
+    ).toBe(true);
+    expect(
+      isAuthAccessChangedRealtimeEvent({
+        ...membershipEvent,
+        data: { reason: 'system_role' },
+      }),
+    ).toBe(false);
+    expect(
+      isAuthAccessChangedRealtimeEvent({
+        type: AUTH_REALTIME_EVENT_TYPES.accessChanged,
+      }),
+    ).toBe(false);
   });
 });

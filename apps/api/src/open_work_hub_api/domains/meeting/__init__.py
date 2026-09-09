@@ -1,4 +1,5 @@
 """Meeting domain — meetings, attendees, task/doc links, recordings."""
+
 from __future__ import annotations
 
 

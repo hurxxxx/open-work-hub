@@ -1,11 +1,37 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { DocsGroupSharing } from './DocsGroupSharing';
+import { DocsPublicationControls } from './DocsPublicationControls';
+import { useAppAdmission } from '@/src/platform/apps/app-bootstrap-context';
 import {
-  Link,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import {
+  REALTIME_TOPIC_EVENT_TYPES,
+  createDocsPagesRealtimeSubscriptionMessage,
+} from '@open-work-hub/contracts/realtime';
+import {
+  Dialog,
+  DropdownMenu,
+  blockContentToMarkdown,
+  markdownToBlockContent,
+  useConfirm,
+  usePrompt,
+  type BlockContent,
+} from '@open-work-hub/ui';
 import {
   Copy,
   ExternalLink,
@@ -29,77 +55,59 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
-  DropdownMenu,
-  blockContentToMarkdown,
-  markdownToBlockContent,
-  type BlockContent,
-  useConfirm,
-  usePrompt,
-} from '@open-work-hub/ui';
-import {
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragOverEvent,
-  type DragStartEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import {
-  REALTIME_TOPIC_EVENT_TYPES,
-  createDocsPagesRealtimeSubscriptionMessage,
-} from '@open-work-hub/contracts/realtime';
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 
-import { useMediaUpload } from '@/src/platform/media/use-media-upload';
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
-import { normalizeTimeZone } from '@/src/platform/time/time-utils';
+import {
+  TaskPickerModal,
+  listSpaces,
+  type PmsTask,
+} from '@/src/app-modules/pms/public-api';
 import { cn } from '@/src/lib/utils';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import {
   useRealtime,
   useRealtimeEvent,
   useRealtimeSubscription,
   type RealtimeEvent,
 } from '@/src/platform/realtime/realtime-provider';
+import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
+  attachDocPmsTask,
   createDocPage,
   createNativeDoc,
-  attachDocPmsTask,
-  deleteDocPage,
-  deleteDocsItem,
   deleteDocLinkShare,
+  deleteDocPage,
   deleteDocUserShare,
-  deleteDocTarget,
+  deleteDocsItem,
   detachDocPmsTask,
   duplicateDocsItem,
-  getDocsItem,
   getDocSharing,
+  DocsApiError,
+  getDocsItem,
   listDocPages,
   listDocPmsTasks,
-  mediaResourceTypeForDocsPage,
   listShareableUsers,
+  mediaResourceTypeForDocsPage,
   recordDocView,
   resolveDocsContentFormat,
   resolveDocsHubContentFormat,
   resolveSharedLink,
   toggleDocFavorite,
-  updateDocTarget,
   updateDocPage,
   updateDocsItem,
   upsertDocLinkShare,
   upsertDocUserShare,
   type DocsHubItem,
-  type DocsPagesEventPayload,
   type DocsPageItem,
+  type DocsPagesEventPayload,
   type NativeDocSharingResponse,
   type RelatedPmsTaskItem,
   type ShareableUserItem,
@@ -113,25 +121,22 @@ import {
   type DropZone,
 } from '../api/docs-page-reorder';
 import {
+  DOCS_SPACE_QUERY_PARAM,
   appendDocPageQuery,
   consumeDocsCreateSearchParam,
   getDocPageIdFromSearchParams,
   getDocsFilterQueryString,
   getExpandedDocPageNodeIds,
-  removeLegacyDocsSearchParams,
   resetDocsFilterSearchParams,
-  DOCS_SPACE_QUERY_PARAM,
   withDocPageSearchParam,
   withDocsSpaceFilterSearchParam,
 } from '../api/docs-url-state';
-import { DocsBlockContentSurface } from './DocsBlockContentSurface';
 import { DocsBlockMarkdownActions } from './docs-content-renderers';
-import { DocsFullscreenReadModal } from './DocsFullscreenReadModal';
 import { DocsHtmlPageContentSurface } from './docs-html-renderers';
 import { downloadMarkdownFile } from './docs-markdown-file';
+import { DocsBlockContentSurface } from './DocsBlockContentSurface';
+import { DocsFullscreenReadModal } from './DocsFullscreenReadModal';
 import {
-  CATEGORY_LABEL_KEYS,
-  CATEGORY_MAP,
   DOC_CONTENT_FORMAT_OPTIONS,
   DocsContentFormatBadge,
   DocsPageTreeNode,
@@ -146,7 +151,6 @@ import {
   isDocsViewCategory,
   removeDocsPageSubtree,
   resolveDefaultDocsCreateLocation,
-  resolveDocsCreateLocationValue,
   resolveDocsCreatePrimaryTarget,
   resolveDocsPageAuthorName,
   resolveDocsPageSelection,
@@ -159,18 +163,9 @@ import {
   type DocsViewCategory,
   type LocationOption,
 } from './DocsViewParts';
-import { useDocsPageContentSaveController } from './useDocsPageContentSaveController';
 import { useDocsHubController } from './useDocsHubController';
+import { useDocsPageContentSaveController } from './useDocsPageContentSaveController';
 import { useDocsViewState } from './useDocsViewState';
-import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
-import {
-  listSpaces,
-  TaskPickerModal,
-  type PmsTask,
-} from '@/src/app-modules/pms/public-api';
 
 type DocsVisibleTreeNode = ReturnType<typeof flattenVisibleTree>[number];
 type NativeDocShareUser = NativeDocSharingResponse['users'][number];
@@ -263,7 +258,6 @@ const renderDocsEditor = (props: any) => {
     toggleExpand,
     token,
     visibleTree,
-    workspaceSlug,
   } = props;
   if (editorLoading) {
     return (
@@ -429,6 +423,7 @@ const renderDocsEditor = (props: any) => {
           </div>
           <button
             type="button"
+            aria-label={t('common:actions.close')}
             onClick={handleBack}
             className="p-1.5 rounded text-app-ink/55 transition-colors hover:bg-app-surface-hover hover:text-app-danger"
           >
@@ -544,7 +539,7 @@ const renderDocsEditor = (props: any) => {
               <span className="app-text-overline text-app-ink/55">
                 {t('docs.relatedPms.title')}
               </span>
-              {selectedDoc.can_edit && workspaceSlug ? (
+              {selectedDoc.can_edit ? (
                 <button
                   type="button"
                   onClick={() => setTaskPickerOpen(true)}
@@ -723,7 +718,6 @@ const renderDocsEditor = (props: any) => {
                         page={activePage}
                         canEdit={selectedDoc.can_edit && activePage.can_edit}
                         token={token}
-                        workspaceSlug={workspaceSlug}
                         shareToken={shareToken}
                         contentEditorVersion={
                           contentEditorVersions[activePage.id] ?? 0
@@ -767,10 +761,10 @@ const renderDocsEditor = (props: any) => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const renderDocsShell = (props: any) => {
   const {
+    token,
     activeCategoryLabel,
     activeSpaceFilterId,
     availableSpaces,
-    changingLocation,
     confirmDialog,
     copyDirectLink,
     copyShareLink,
@@ -781,8 +775,8 @@ const renderDocsShell = (props: any) => {
     docs,
     editorView,
     handleAttachPmsTask,
-    handleChangeLocation,
     handleChangeUserAccess,
+    handlePublicationUpdated,
     handleCreateDoc,
     handleCreatePage,
     handleDeleteDoc,
@@ -816,7 +810,6 @@ const renderDocsShell = (props: any) => {
     relatedPmsTasks,
     resetDocsFilters,
     resolveFileUrl,
-    resolveLocationValueFromTarget,
     searchOpen,
     searchQuery,
     selectDocPage,
@@ -853,7 +846,6 @@ const renderDocsShell = (props: any) => {
     timeZone,
     total,
     updateDocsSpaceFilterParam,
-    workspaceSlug,
   } = props;
   return (
     <div className="h-full w-full flex flex-col min-w-0 bg-app-bg overflow-hidden relative">
@@ -870,7 +862,7 @@ const renderDocsShell = (props: any) => {
         />
       ) : null}
 
-      {selectedDoc && workspaceSlug ? (
+      {selectedDoc ? (
         <TaskPickerModal
           isOpen={taskPickerOpen}
           onClose={() => setTaskPickerOpen(false)}
@@ -878,7 +870,6 @@ const renderDocsShell = (props: any) => {
           excludeTaskIds={relatedPmsTasks.map(
             (task: RelatedPmsTaskItem) => task.task_id,
           )}
-          workspaceSlug={workspaceSlug}
         />
       ) : null}
 
@@ -1072,32 +1063,25 @@ const renderDocsShell = (props: any) => {
       ) : null}
 
       {showShareModal && selectedDoc ? (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center">
-          <button
-            type="button"
-            aria-label={t('common:actions.cancel')}
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setShowShareModal(false)}
-          />
-          <div className="relative w-full max-w-2xl rounded-lg border border-app-border bg-app-surface-sidebar p-6 space-y-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="app-text-title-md text-app-ink">
-                  {t('docs.share.title')}
-                </h2>
-                <p className="app-text-caption text-app-ink/55">
-                  {selectedDoc.title}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowShareModal(false)}
-                className="rounded p-1.5 text-app-ink/55 hover:bg-app-surface-hover"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
+        <Dialog
+          open={showShareModal}
+          onOpenChange={setShowShareModal}
+          title={t('docs.share.title')}
+          description={selectedDoc.title}
+          closeLabel={t('common:actions.close')}
+          maxWidth="max-w-2xl"
+          dismissOnInteractOutside={false}
+        >
+          <div className="space-y-5">
+            {token ? (
+              <DocsGroupSharing
+                key={selectedDoc.id}
+                token={token}
+                resourceId={selectedDoc.id}
+                canManage={selectedDoc.can_share}
+                ownershipKind={selectedDoc.ownership_kind}
+              />
+            ) : null}
             {shareLoading ? (
               <div className="py-10 flex items-center justify-center">
                 <Loader2 size={24} className="animate-spin text-app-accent" />
@@ -1237,30 +1221,12 @@ const renderDocsShell = (props: any) => {
                   ) : null}
                 </div>
 
-                {/* 2. Who can access — target visibility */}
-                <div className="rounded-lg border border-app-border bg-app-bg p-4 space-y-3">
-                  <div>
-                    <div className="app-text-control text-app-ink">
-                      {t('docs.share.whoCanAccess')}
-                    </div>
-                    <div className="app-text-caption text-app-ink/55">
-                      {t('docs.share.visibilityDescription')}
-                    </div>
-                  </div>
-                  <LocationPicker
-                    value={resolveLocationValueFromTarget(
-                      selectedDoc.primary_target,
-                    )}
-                    onChange={(value) => void handleChangeLocation(value)}
-                    options={locationOptions}
-                    busy={changingLocation || !selectedDoc.can_manage}
-                  />
-                  {!selectedDoc.can_manage ? (
-                    <div className="app-text-micro text-app-ink/55">
-                      {t('docs.share.manageOnlyNotice')}
-                    </div>
-                  ) : null}
-                </div>
+                <DocsPublicationControls
+                  token={token}
+                  doc={selectedDoc}
+                  spaces={availableSpaces}
+                  onUpdated={handlePublicationUpdated}
+                />
 
                 {/* 3. Copy link — always visible direct doc URL */}
                 <div className="flex items-center gap-2 rounded-lg border border-app-border bg-app-bg px-3 py-2">
@@ -1378,7 +1344,7 @@ const renderDocsShell = (props: any) => {
               </>
             )}
           </div>
-        </div>
+        </Dialog>
       ) : null}
 
       {isListView ? (
@@ -1469,6 +1435,7 @@ const renderDocsShell = (props: any) => {
                 ) : (
                   <button
                     type="button"
+                    aria-label={t('docs.searchPlaceholder')}
                     onClick={() => setSearchOpen(true)}
                     className="p-1.5 rounded text-app-ink/55 hover:bg-app-surface-hover hover:text-app-ink"
                   >
@@ -1702,9 +1669,30 @@ const renderDocsShell = (props: any) => {
 };
 
 export const DocsView = () => {
+  const { token } = useAuth();
+  const { docId, shareToken } = useParams();
+  const [accessRevision, setAccessRevision] = useState(0);
+  const invalidateAccess = useCallback(() => {
+    setAccessRevision((revision) => revision + 1);
+  }, []);
+  // A new authority decision owns a fresh editor and request lifecycle. Late
+  // responses belong to the unmounted view and cannot restore revoked content.
+  return (
+    <DocsViewContent
+      key={JSON.stringify([token, docId, shareToken, accessRevision])}
+      invalidateAccess={invalidateAccess}
+    />
+  );
+};
+
+const DocsViewContent = ({
+  invalidateAccess,
+}: {
+  invalidateAccess: () => void;
+}) => {
   const { t, i18n } = useTranslation(['apps', 'common']);
   const locale = i18n.resolvedLanguage ?? i18n.language;
-  const { toolId, docId, shareToken, workspaceSlug } = useParams();
+  const { docId, shareToken } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedPageId = getDocPageIdFromSearchParams(searchParams);
@@ -1723,7 +1711,6 @@ export const DocsView = () => {
   const {
     activeDragId,
     availableSpaces,
-    changingLocation,
     contentEditorVersions,
     copiedDocId,
     creating,
@@ -1761,7 +1748,6 @@ export const DocsView = () => {
   const {
     setActiveDragId,
     setAvailableSpaces,
-    setChangingLocation,
     setContentEditorVersions,
     setCopiedDocId,
     setCreating,
@@ -1812,16 +1798,12 @@ export const DocsView = () => {
   );
   const docPagesPendingParentIdRef = useRef<string | null>(null);
 
-  const requestedCategory = toolId
-    ? CATEGORY_MAP[toolId]
-    : searchParams.get('view');
+  const requestedCategory = searchParams.get('view');
   const activeCategory: DocsViewCategory = isDocsViewCategory(requestedCategory)
     ? requestedCategory
     : 'all';
   const activeCategoryLabel = t(
-    (toolId && CATEGORY_LABEL_KEYS[toolId]) ||
-      VIEW_LABEL_KEYS[activeCategory] ||
-      'docs.category.all',
+    VIEW_LABEL_KEYS[activeCategory] || 'docs.category.all',
   );
   const activeSourceApp = searchParams.get('source_app') ?? undefined;
   const activeSourceKind = searchParams.get('source_kind') ?? undefined;
@@ -1834,6 +1816,9 @@ export const DocsView = () => {
   const activeItemId =
     docId ?? (shareToken ? loadedSharedDocIdRef.current : null);
   const activeDocId = activeItemId ?? null;
+  const loadedDocumentId = selectedDoc?.id ?? null;
+  const loadedDocumentIdRef = useRef(loadedDocumentId);
+  loadedDocumentIdRef.current = loadedDocumentId;
   const selectedPageId = resolveDocsPageSelection(pages, requestedPageId);
   const selectedPageIdRef = useRef<string | null>(null);
   selectedPageIdRef.current = selectedPageId;
@@ -1881,7 +1866,6 @@ export const DocsView = () => {
   const isListView = !activeItemId && !shareToken;
   const docsHubController = useDocsHubController({
     token,
-    workspaceSlug,
     listEnabled: isListView,
     activeCategory,
     activeSourceApp,
@@ -1894,42 +1878,22 @@ export const DocsView = () => {
     docsHubController.actions;
   const relatedPmsTasks = relatedPmsTaskState.items;
   const relatedPmsTaskError = relatedPmsTaskState.error;
-  const hasDocsWorkspace = hasWorkspaceMembership(auth.user, workspaceSlug);
-  const currentWorkspace = useMemo(
-    () =>
-      auth.user?.workspaces.find(
-        (workspace) => workspace.slug === workspaceSlug,
-      ) ??
-      auth.user?.workspaces[0] ??
-      null,
-    [auth.user, workspaceSlug],
-  );
-  const docsRoot = workspaceSlug
-    ? buildWorkspaceAppPath(workspaceSlug, 'docs')
-    : resolveDefaultWorkspaceAppPath(auth.user, 'docs');
-  const docPathFor = useCallback(
-    (itemId: string, pageId?: string | null) => {
-      const path = workspaceSlug
-        ? buildWorkspaceAppPath(workspaceSlug, 'docs', `/${itemId}`)
-        : resolveDefaultWorkspaceAppPath(auth.user, 'docs', `/${itemId}`);
-      return appendDocPageQuery(path, pageId);
-    },
-    [auth.user, workspaceSlug],
-  );
+  const canAccessDocs = useAppAdmission('docs');
+  const docsRoot = buildAppHref({ routeId: 'docs.root' });
+  const docPathFor = useCallback((itemId: string, pageId?: string | null) => {
+    const path = buildAppHref({
+      routeId: 'docs.document',
+      pathParams: { docId: itemId },
+    });
+    return appendDocPageQuery(path, pageId);
+  }, []);
   const htmlRenderPathFor = useCallback(
     (itemId: string, pageId: string) =>
-      workspaceSlug
-        ? buildWorkspaceAppPath(
-            workspaceSlug,
-            'docs',
-            `/${itemId}/html/${pageId}`,
-          )
-        : resolveDefaultWorkspaceAppPath(
-            auth.user,
-            'docs',
-            `/${itemId}/html/${pageId}`,
-          ),
-    [auth.user, workspaceSlug],
+      buildAppHref({
+        routeId: 'docs.document-html',
+        pathParams: { docId: itemId, pageId },
+      }),
+    [],
   );
 
   const selectDocPage = useCallback(
@@ -1963,8 +1927,8 @@ export const DocsView = () => {
       setEditorLoading(true);
       try {
         const [item, pageResponse] = await Promise.all([
-          getDocsItem(token, itemId, currentShareToken, workspaceSlug),
-          listDocPages(token, itemId, currentShareToken, workspaceSlug),
+          getDocsItem(token, itemId, currentShareToken),
+          listDocPages(token, itemId, currentShareToken),
         ]);
         loadedSharedDocIdRef.current = currentShareToken ? item.id : null;
         setSelectedDoc(item);
@@ -1980,14 +1944,7 @@ export const DocsView = () => {
         setEditorLoading(false);
       }
     },
-    [
-      setEditorLoading,
-      setManualExpandedNodes,
-      setPages,
-      setSelectedDoc,
-      token,
-      workspaceSlug,
-    ],
+    [setEditorLoading, setManualExpandedNodes, setPages, setSelectedDoc, token],
   );
 
   const clearLoadedDoc = useCallback(() => {
@@ -2021,7 +1978,7 @@ export const DocsView = () => {
       if (!token) return;
       setRelatedPmsTaskState((current) => ({ ...current, error: null }));
       try {
-        const response = await listDocPmsTasks(token, itemId, workspaceSlug);
+        const response = await listDocPmsTasks(token, itemId);
         if (isCancelled()) return;
         setRelatedPmsTaskState({ error: null, items: response.items });
       } catch (error) {
@@ -2035,7 +1992,7 @@ export const DocsView = () => {
         });
       }
     },
-    [setRelatedPmsTaskState, t, token, workspaceSlug],
+    [setRelatedPmsTaskState, t, token],
   );
 
   const refreshDocPages = useCallback(
@@ -2050,7 +2007,6 @@ export const DocsView = () => {
           token,
           itemId,
           currentShareToken,
-          workspaceSlug,
         );
         const nextPages = pageResponse.items;
         const nextDocSummary = summarizeDocsPageCollection(nextPages);
@@ -2082,24 +2038,29 @@ export const DocsView = () => {
             new Set(current).add(expandedParentId),
           );
         }
-      } catch {
-        // The stream is advisory; keep the existing page tree if a refresh fails.
+      } catch (error) {
+        if (
+          error instanceof DocsApiError &&
+          [401, 403, 404].includes(error.status)
+        ) {
+          invalidateAccess();
+        }
       }
     },
     [
+      invalidateAccess,
       selectDocPage,
       setDocs,
       setManualExpandedNodes,
       setPages,
       setSelectedDoc,
       token,
-      workspaceSlug,
     ],
   );
 
   const scheduleDocPagesRefresh = useCallback(
     (expandedParentId?: string | null) => {
-      if (!activeDocId) {
+      if (!activeDocId || loadedDocumentIdRef.current !== activeDocId) {
         return;
       }
       if (expandedParentId) {
@@ -2119,10 +2080,9 @@ export const DocsView = () => {
   );
 
   useRealtimeSubscription(
-    activeDocId && token
+    activeDocId && loadedDocumentId === activeDocId && token
       ? createDocsPagesRealtimeSubscriptionMessage({
           key: activeDocId,
-          workspaceSlug: workspaceSlug ?? null,
           shareToken: shareToken ?? null,
         })
       : null,
@@ -2145,12 +2105,29 @@ export const DocsView = () => {
     ),
   );
 
+  useRealtimeEvent(
+    REALTIME_TOPIC_EVENT_TYPES.docsAccessChanged,
+    useCallback(
+      (event: RealtimeEvent) => {
+        const payload = event.data as { doc_id?: unknown } | undefined;
+        if (activeDocId && payload?.doc_id === activeDocId) invalidateAccess();
+      },
+      [activeDocId, invalidateAccess],
+    ),
+  );
+
   useEffect(() => {
-    if (!activeDocId || !token) {
+    if (!activeDocId || !token || loadedDocumentId !== activeDocId) {
       return;
     }
     scheduleDocPagesRefresh(null);
-  }, [activeDocId, reconnectSeq, scheduleDocPagesRefresh, token]);
+  }, [
+    activeDocId,
+    loadedDocumentId,
+    reconnectSeq,
+    scheduleDocPagesRefresh,
+    token,
+  ]);
 
   useEffect(
     () => () => {
@@ -2162,12 +2139,6 @@ export const DocsView = () => {
     },
     [activeDocId, setHtmlEditPageIds],
   );
-
-  useEffect(() => {
-    const next = removeLegacyDocsSearchParams(searchParams);
-    if (!next) return;
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!token) return;
@@ -2189,14 +2160,8 @@ export const DocsView = () => {
 
   useEffect(() => {
     if (!token || !activeDocId || !activePageId) return;
-    void recordDocView(
-      token,
-      activeDocId,
-      activePageId,
-      shareToken,
-      workspaceSlug,
-    );
-  }, [activeDocId, activePageId, shareToken, token, workspaceSlug]);
+    void recordDocView(token, activeDocId, activePageId, shareToken);
+  }, [activeDocId, activePageId, shareToken, token]);
 
   useEffect(() => {
     if (!token || !activeDocId || shareToken) {
@@ -2219,7 +2184,7 @@ export const DocsView = () => {
   useEffect(() => {
     if (!token || !isListView) return;
     let cancelled = false;
-    void listSpaces(token, workspaceSlug)
+    void listSpaces(token)
       .then((spaces) => {
         if (!cancelled) {
           setAvailableSpaces(Array.isArray(spaces) ? spaces : []);
@@ -2231,10 +2196,10 @@ export const DocsView = () => {
     return () => {
       cancelled = true;
     };
-  }, [isListView, setAvailableSpaces, token, workspaceSlug]);
+  }, [isListView, setAvailableSpaces, token]);
 
   const docNavigationPathFor = (itemId: string) => {
-    const basePath = toolId ? `/tool/${toolId}/${itemId}` : docPathFor(itemId);
+    const basePath = docPathFor(itemId);
     return activeFilterQuery ? `${basePath}?${activeFilterQuery}` : basePath;
   };
 
@@ -2243,12 +2208,11 @@ export const DocsView = () => {
   };
 
   const handleBack = () => {
-    if (shareToken && !hasDocsWorkspace) {
+    if (shareToken && !canAccessDocs) {
       navigate('/');
       return;
     }
-    const basePath = toolId ? `/tool/${toolId}` : docsRoot;
-    navigate(activeFilterQuery ? `${basePath}?${activeFilterQuery}` : basePath);
+    navigate(activeFilterQuery ? `${docsRoot}?${activeFilterQuery}` : docsRoot);
   };
 
   const openCreateModal = useCallback(
@@ -2259,7 +2223,7 @@ export const DocsView = () => {
       setNewDocContentFormat('block');
       setShowCreateModal(true);
       if (token) {
-        void listSpaces(token, workspaceSlug)
+        void listSpaces(token)
           .then((spaces) =>
             setAvailableSpaces(Array.isArray(spaces) ? spaces : []),
           )
@@ -2274,7 +2238,6 @@ export const DocsView = () => {
       setNewDocTitle,
       setShowCreateModal,
       token,
-      workspaceSlug,
     ],
   );
 
@@ -2316,12 +2279,10 @@ export const DocsView = () => {
   const locationOptions = useMemo<LocationOption[]>(
     () => [
       {
-        value: 'workspace',
+        value: 'company',
         icon: Globe,
-        title: currentWorkspace
-          ? t('docs.location.workspaceNamed', { name: currentWorkspace.name })
-          : t('docs.location.workspace'),
-        desc: t('docs.location.workspaceDesc'),
+        title: t('common:labels.company'),
+        desc: t('docs.location.companyDesc'),
       },
       ...availableSpaces.map((space) => ({
         value: `space:${space.id}`,
@@ -2336,39 +2297,42 @@ export const DocsView = () => {
         desc: t('docs.location.privateDesc'),
       },
     ],
-    [availableSpaces, currentWorkspace, t],
+    [availableSpaces, t],
   );
 
   const resolveTargetFromLocationValue = useCallback(
     (locationValue: string) => {
-      return resolveDocsCreatePrimaryTarget(
-        locationValue,
-        currentWorkspace?.id,
-      );
-    },
-    [currentWorkspace?.id],
-  );
-
-  const resolveLocationValueFromTarget = useCallback(
-    (target: { app: string; type: string; id: string } | null) => {
-      return resolveDocsCreateLocationValue(target);
+      return resolveDocsCreatePrimaryTarget(locationValue);
     },
     [],
   );
 
   const handleCreateDoc = async () => {
     if (!token || !newDocTitle.trim()) return;
+    if (
+      newDocLocation !== 'private' &&
+      !(await confirm({
+        title: t('shell:contentPublication.title'),
+        description: t('shell:contentPublication.confirm'),
+        confirmLabel: t('common:actions.confirm'),
+        cancelLabel: t('common:actions.cancel'),
+      }))
+    )
+      return;
     setCreating(true);
     try {
-      const item = await createNativeDoc(
-        token,
-        {
-          title: newDocTitle.trim(),
-          content_format: newDocContentFormat,
-          primary_target: resolveTargetFromLocationValue(newDocLocation),
-        },
-        workspaceSlug,
-      );
+      const item = await createNativeDoc(token, {
+        title: newDocTitle.trim(),
+        content_format: newDocContentFormat,
+        company_visible: newDocLocation === 'company',
+        company_admin_read_acknowledged: newDocLocation !== 'private',
+        primary_target: (() => {
+          const target = resolveTargetFromLocationValue(newDocLocation);
+          return target
+            ? { ...target, company_admin_read_acknowledged: true }
+            : null;
+        })(),
+      });
       setShowCreateModal(false);
       setNewDocTitle('');
       setNewDocContentFormat('block');
@@ -2385,7 +2349,7 @@ export const DocsView = () => {
     event.stopPropagation();
     if (!token) return;
     try {
-      const response = await toggleDocFavorite(token, item.id, workspaceSlug);
+      const response = await toggleDocFavorite(token, item.id);
       setDocs((current) =>
         current.map((doc) =>
           doc.id === item.id
@@ -2417,7 +2381,6 @@ export const DocsView = () => {
         item.id,
         { title: nextTitle.trim() },
         shareToken,
-        workspaceSlug,
       );
       setDocs((current) =>
         current.map((doc) => (doc.id === updated.id ? updated : doc)),
@@ -2445,7 +2408,7 @@ export const DocsView = () => {
     });
     if (!ok) return;
     try {
-      await deleteDocsItem(token, item.id, shareToken, workspaceSlug);
+      await deleteDocsItem(token, item.id, shareToken);
       if (selectedDoc?.id === item.id) {
         handleBack();
       } else {
@@ -2461,16 +2424,9 @@ export const DocsView = () => {
     setDocMenuOpen(false);
     if (!token) return;
     try {
-      const duplicate = await duplicateDocsItem(
-        token,
-        item.id,
-        shareToken,
-        workspaceSlug,
-      );
+      const duplicate = await duplicateDocsItem(token, item.id, shareToken);
       void fetchDocs();
-      const basePath = toolId
-        ? `/tool/${toolId}/${duplicate.id}`
-        : docPathFor(duplicate.id);
+      const basePath = docPathFor(duplicate.id);
       navigate(
         activeFilterQuery ? `${basePath}?${activeFilterQuery}` : basePath,
       );
@@ -2481,9 +2437,7 @@ export const DocsView = () => {
 
   const docUrlFor = (item: DocsHubItem): string => {
     const pageId = item.id === activeDocId ? activePageId : null;
-    const path = toolId
-      ? appendDocPageQuery(`/tool/${toolId}/${item.id}`, pageId)
-      : docPathFor(item.id, pageId);
+    const path = docPathFor(item.id, pageId);
     return `${window.location.origin}${path}`;
   };
 
@@ -2512,7 +2466,10 @@ export const DocsView = () => {
     if (shareToken) {
       await flushPendingContentTextSave();
       window.open(
-        `/docs/shared/${shareToken}/html/${page.id}`,
+        buildAppHref({
+          routeId: 'docs.shared-html',
+          pathParams: { shareToken, pageId: page.id },
+        }),
         '_blank',
         'noopener,noreferrer',
       );
@@ -2557,7 +2514,6 @@ export const DocsView = () => {
             : { content_text: null }),
         },
         shareToken,
-        workspaceSlug,
       );
       const nextPages = [...pages, page];
       const nextDocSummary = summarizeDocsPageCollection(nextPages);
@@ -2605,7 +2561,7 @@ export const DocsView = () => {
     });
     if (!ok) return;
     try {
-      await deleteDocPage(token, page.id, shareToken, workspaceSlug);
+      await deleteDocPage(token, page.id, shareToken);
       const {
         pages: nextPages,
         removedIds,
@@ -2650,7 +2606,6 @@ export const DocsView = () => {
   } = useDocsPageContentSaveController({
     token,
     shareToken,
-    workspaceSlug,
     savePage: updateDocPage,
     onSavedPage: (updated) => {
       setPages((current) => applyUpdatedDocsPage(current, updated));
@@ -2706,7 +2661,6 @@ export const DocsView = () => {
         page.id,
         { content_text: text },
         shareToken,
-        workspaceSlug,
       );
       setPages((current) => applyUpdatedDocsPage(current, updated));
     } catch {
@@ -2742,7 +2696,6 @@ export const DocsView = () => {
         page.id,
         { content_blocks: blocks },
         shareToken,
-        workspaceSlug,
       );
       setPages((current) => applyUpdatedDocsPage(current, updated));
       bumpContentEditorVersion(page.id);
@@ -2763,7 +2716,6 @@ export const DocsView = () => {
         pageId,
         { title: trimmed },
         shareToken,
-        workspaceSlug,
       );
       setPages((current) =>
         current.map((page) => (page.id === updated.id ? updated : page)),
@@ -2793,20 +2745,20 @@ export const DocsView = () => {
     async (itemId: string) => {
       if (!token) return;
       const [sharing, users] = await Promise.all([
-        getDocSharing(token, itemId, workspaceSlug),
-        listShareableUsers(token, undefined, workspaceSlug),
+        getDocSharing(token, itemId),
+        listShareableUsers(token, undefined),
       ]);
       setSharingState(sharing);
       setShareableUsers(users);
     },
-    [setShareableUsers, setSharingState, token, workspaceSlug],
+    [setShareableUsers, setSharingState, token],
   );
 
   const openShareModal = async () => {
     if (!selectedDoc?.can_share || !token) return;
     setShareLoading(true);
     setShowShareModal(true);
-    void listSpaces(token, workspaceSlug)
+    void listSpaces(token)
       .then((spaces) => setAvailableSpaces(Array.isArray(spaces) ? spaces : []))
       .catch(() => setAvailableSpaces([]));
     try {
@@ -2816,41 +2768,18 @@ export const DocsView = () => {
     }
   };
 
-  const handleChangeLocation = async (nextLocation: string) => {
-    if (!token || !selectedDoc || !selectedDoc.can_manage) return;
-    const current = resolveLocationValueFromTarget(selectedDoc.primary_target);
-    if (current === nextLocation) return;
-    setChangingLocation(true);
-    try {
-      const nextTarget = resolveTargetFromLocationValue(nextLocation);
-      const updated =
-        nextTarget === null
-          ? await deleteDocTarget(token, selectedDoc.id, workspaceSlug)
-          : await updateDocTarget(
-              token,
-              selectedDoc.id,
-              nextTarget,
-              workspaceSlug,
-            );
-      setSelectedDoc(updated);
-      setDocs((current) =>
-        current.map((doc) => (doc.id === updated.id ? updated : doc)),
-      );
-    } finally {
-      setChangingLocation(false);
-    }
+  const handlePublicationUpdated = (updated: DocsHubItem) => {
+    setSelectedDoc(updated);
+    setDocs((current) =>
+      current.map((doc) => (doc.id === updated.id ? updated : doc)),
+    );
   };
 
   const handleRemoveUserShare = async (userId: string) => {
     if (!token || !selectedDoc) return;
     setShareLoading(true);
     try {
-      const updated = await deleteDocUserShare(
-        token,
-        selectedDoc.id,
-        userId,
-        workspaceSlug,
-      );
+      const updated = await deleteDocUserShare(token, selectedDoc.id, userId);
       setSharingState(updated);
     } finally {
       setShareLoading(false);
@@ -2864,16 +2793,11 @@ export const DocsView = () => {
     if (!token || !selectedDoc) return;
     setShareLoading(true);
     try {
-      const updated = await upsertDocLinkShare(
-        token,
-        selectedDoc.id,
-        {
-          access_level: accessLevel,
-          active: true,
-          regenerate_token: regenerateToken,
-        },
-        workspaceSlug,
-      );
+      const updated = await upsertDocLinkShare(token, selectedDoc.id, {
+        access_level: accessLevel,
+        active: true,
+        regenerate_token: regenerateToken,
+      });
       setSharingState(updated);
     } finally {
       setShareLoading(false);
@@ -2884,11 +2808,7 @@ export const DocsView = () => {
     if (!token || !selectedDoc) return;
     setShareLoading(true);
     try {
-      const updated = await deleteDocLinkShare(
-        token,
-        selectedDoc.id,
-        workspaceSlug,
-      );
+      const updated = await deleteDocLinkShare(token, selectedDoc.id);
       setSharingState(updated);
     } finally {
       setShareLoading(false);
@@ -2898,7 +2818,13 @@ export const DocsView = () => {
   const copyShareLink = async () => {
     const tokenValue = sharingState?.link_share?.token;
     if (!tokenValue) return;
-    const path = appendDocPageQuery(`/docs/shared/${tokenValue}`, activePageId);
+    const path = appendDocPageQuery(
+      buildAppHref({
+        routeId: 'docs.shared',
+        pathParams: { shareToken: tokenValue },
+      }),
+      activePageId,
+    );
     const url = `${window.location.origin}${path}`;
     try {
       await navigator.clipboard.writeText(url);
@@ -2947,7 +2873,6 @@ export const DocsView = () => {
         selectedDoc.id,
         userId,
         shareAccessLevel,
-        workspaceSlug,
       );
       setSharingState(updated);
       setInviteQuery('');
@@ -2968,7 +2893,6 @@ export const DocsView = () => {
         selectedDoc.id,
         userId,
         level,
-        workspaceSlug,
       );
       setSharingState(updated);
     } finally {
@@ -2981,12 +2905,7 @@ export const DocsView = () => {
     setRelatedPmsTaskBusyId(task.id);
     setRelatedPmsTaskState((current) => ({ ...current, error: null }));
     try {
-      const response = await attachDocPmsTask(
-        token,
-        selectedDoc.id,
-        task.id,
-        workspaceSlug,
-      );
+      const response = await attachDocPmsTask(token, selectedDoc.id, task.id);
       setRelatedPmsTaskState({ error: null, items: response.items });
     } catch (error) {
       setRelatedPmsTaskState({
@@ -3007,12 +2926,7 @@ export const DocsView = () => {
     setRelatedPmsTaskBusyId(taskId);
     setRelatedPmsTaskState((current) => ({ ...current, error: null }));
     try {
-      const response = await detachDocPmsTask(
-        token,
-        selectedDoc.id,
-        taskId,
-        workspaceSlug,
-      );
+      const response = await detachDocPmsTask(token, selectedDoc.id, taskId);
       setRelatedPmsTaskState({ error: null, items: response.items });
     } catch (error) {
       setRelatedPmsTaskState({
@@ -3221,14 +3135,13 @@ export const DocsView = () => {
     toggleExpand,
     token,
     visibleTree,
-    workspaceSlug,
   });
 
   return renderDocsShell({
+    token,
     activeCategoryLabel,
     activeSpaceFilterId,
     availableSpaces,
-    changingLocation,
     confirmDialog,
     copyDirectLink,
     copyShareLink,
@@ -3239,8 +3152,8 @@ export const DocsView = () => {
     docs,
     editorView,
     handleAttachPmsTask,
-    handleChangeLocation,
     handleChangeUserAccess,
+    handlePublicationUpdated,
     handleCreateDoc,
     handleCreatePage,
     handleDeleteDoc,
@@ -3274,7 +3187,6 @@ export const DocsView = () => {
     relatedPmsTasks,
     resetDocsFilters,
     resolveFileUrl,
-    resolveLocationValueFromTarget,
     searchOpen,
     searchQuery,
     selectDocPage,
@@ -3311,6 +3223,5 @@ export const DocsView = () => {
     timeZone,
     total,
     updateDocsSpaceFilterParam,
-    workspaceSlug,
   });
 };

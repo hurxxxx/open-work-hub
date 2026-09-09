@@ -5,10 +5,10 @@ import type { AppModuleId } from './app/shell/navigation-types';
 import {
   getShellPathname,
   getShellSearchParams,
-  getWorkspaceAppRelativePath,
+  getAppRelativePath,
   resolveGlobalRouteAppId,
   resolveManifestNavItemId,
-  resolveWorkspaceRouteAppId,
+  resolveAppRouteAppId,
 } from './app-shell-navigation-model';
 import { APP_MODULE_MANIFESTS } from './app/shell/app-registry';
 
@@ -28,113 +28,90 @@ function resolveManifestNavItem(appId: AppModuleId, path: string): string {
 describe('app shell navigation model', () => {
   it('separates pathname and query parameters from shell paths', () => {
     expect(
-      getShellPathname('/w/delivery-hub/docs/doc-1?view=recent#page-2'),
-    ).toBe('/w/delivery-hub/docs/doc-1');
+      getShellPathname('/apps/docs/documents/doc-1?view=recent#page-2'),
+    ).toBe('/apps/docs/documents/doc-1');
     expect(getShellPathname('?view=recent')).toBe('/');
 
     const params = getShellSearchParams(
-      '/w/delivery-hub/docs/doc-1?view=recent&page=page-1#page-2',
+      '/apps/docs/documents/doc-1?view=recent&page=page-1#page-2',
     );
     expect(params.get('view')).toBe('recent');
     expect(params.get('page')).toBe('page-1');
   });
 
   it('resolves manifest query views to navigation item ids', () => {
+    expect(resolveManifestNavItem('docs', '/apps/docs?view=mine')).toBe(
+      'docs-my',
+    );
+    expect(resolveManifestNavItem('docs', '/apps/docs?view=shared')).toBe(
+      'docs-shared',
+    );
+    expect(resolveManifestNavItem('docs', '/apps/docs?view=private')).toBe(
+      'docs-private',
+    );
     expect(
-      resolveManifestNavItem('collaboration', '/w/delivery-hub/docs?view=mine'),
-    ).toBe('docs-my');
-    expect(
-      resolveManifestNavItem(
-        'collaboration',
-        '/w/delivery-hub/docs?view=shared',
-      ),
-    ).toBe('docs-shared');
-    expect(
-      resolveManifestNavItem(
-        'collaboration',
-        '/w/delivery-hub/docs?view=private',
-      ),
-    ).toBe('docs-private');
-    expect(
-      resolveManifestNavItem(
-        'collaboration',
-        '/w/delivery-hub/docs?view=meeting_notes',
-      ),
+      resolveManifestNavItem('docs', '/apps/docs?view=meeting_notes'),
     ).toBe('docs-notes');
     expect(
-      resolveManifestNavItem(
-        'collaboration',
-        '/w/delivery-hub/docs/doc-1?view=recent',
-      ),
+      resolveManifestNavItem('docs', '/apps/docs/documents/doc-1?view=recent'),
     ).toBe('docs-recent');
-    expect(
-      resolveManifestNavItem(
-        'collaboration',
-        '/w/delivery-hub/docs?view=archived',
-      ),
-    ).toBe('docs-archived');
-    expect(
-      resolveManifestNavItem(
-        'collaboration',
-        '/w/delivery-hub/docs?view=unknown',
-      ),
-    ).toBe('docs-all');
+    expect(resolveManifestNavItem('docs', '/apps/docs?view=archived')).toBe(
+      'docs-archived',
+    );
+    expect(resolveManifestNavItem('docs', '/apps/docs?view=unknown')).toBe(
+      'docs-all',
+    );
 
     expect(
-      resolveManifestNavItem('mail', '/mail?view=settings&unread=true'),
+      resolveManifestNavItem('mail', '/apps/mail?view=settings&unread=true'),
     ).toBe('mail-settings');
-    expect(resolveManifestNavItem('mail', '/mail?view=drafts')).toBe(
+    expect(resolveManifestNavItem('mail', '/apps/mail?view=drafts')).toBe(
       'mail-drafts',
     );
-    expect(resolveManifestNavItem('mail', '/mail?starred=true')).toBe(
+    expect(resolveManifestNavItem('mail', '/apps/mail?starred=true')).toBe(
       'mail-starred',
     );
-    expect(resolveManifestNavItem('mail', '/mail?unread=true')).toBe(
+    expect(resolveManifestNavItem('mail', '/apps/mail?unread=true')).toBe(
       'mail-unread',
     );
-    expect(resolveManifestNavItem('mail', '/mail')).toBe('mail-inbox');
+    expect(resolveManifestNavItem('mail', '/apps/mail')).toBe('mail-inbox');
 
-    expect(resolveManifestNavItem('planner', '/planner?view=timeline')).toBe(
-      'planner-timeline',
-    );
-    expect(resolveManifestNavItem('planner', '/planner')).toBe(
+    expect(
+      resolveManifestNavItem('planner', '/apps/planner?view=timeline'),
+    ).toBe('planner-timeline');
+    expect(resolveManifestNavItem('planner', '/apps/planner')).toBe(
       'planner-calendar',
     );
   });
 
-  it('resolves workspace app ids from manifest route paths', () => {
+  it('resolves app ids from manifest route paths', () => {
     expect(
-      resolveWorkspaceRouteAppId({
+      resolveAppRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/w/delivery-hub/docs/doc-1',
+        pathname: '/apps/docs/documents/doc-1',
       }),
-    ).toBe('collaboration');
+    ).toBe('docs');
     expect(
-      resolveWorkspaceRouteAppId({
+      resolveAppRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/w/delivery-hub/meeting/meeting-1',
+        pathname: '/apps/meeting/meetings/meeting-1',
       }),
-    ).toBe('collaboration');
+    ).toBe('meeting');
     expect(
-      resolveWorkspaceRouteAppId({
+      resolveAppRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/w/delivery-hub/not-registered/docs/doc-1',
-      }),
-    ).toBeNull();
-    expect(
-      resolveWorkspaceRouteAppId({
-        manifests: APP_MODULE_MANIFESTS,
-        pathname: '/w/delivery-hub/not-registered',
+        pathname: '/apps/not-registered/documents/doc-1',
       }),
     ).toBeNull();
     expect(
-      getWorkspaceAppRelativePath('/w/delivery-hub/pms/assigned', 'pms'),
-    ).toBe('/assigned');
+      resolveAppRouteAppId({
+        manifests: APP_MODULE_MANIFESTS,
+        pathname: '/apps/not-registered',
+      }),
+    ).toBeNull();
+    expect(getAppRelativePath('/apps/pms/assigned', 'pms')).toBe('/assigned');
     expect(
-      getWorkspaceAppRelativePath(
-        '/w/delivery-hub/not-registered/pms/assigned',
-        'not-registered',
-      ),
+      getAppRelativePath('/apps/not-registered/pms/assigned', 'not-registered'),
     ).toBe('/pms/assigned');
   });
 
@@ -142,31 +119,31 @@ describe('app shell navigation model', () => {
     expect(
       resolveGlobalRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/docs/shared/share-1',
+        pathname: '/apps/docs/shared/share-1',
       }),
-    ).toBe('collaboration');
+    ).toBe('docs');
     expect(
       resolveGlobalRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/docs/shared/share-1/html/page-1',
+        pathname: '/apps/docs/shared/share-1/html/page-1',
       }),
-    ).toBe('collaboration');
+    ).toBe('docs');
     expect(
       resolveGlobalRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/whiteboard/shared/share-1',
+        pathname: '/apps/whiteboard/shared/share-1',
       }),
-    ).toBe('collaboration');
+    ).toBe('whiteboard');
     expect(
       resolveGlobalRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/community',
+        pathname: '/apps/community',
       }),
     ).toBe('community');
     expect(
       resolveGlobalRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/community/posts/post-1',
+        pathname: '/apps/community/posts/post-1',
       }),
     ).toBe('community');
     expect(
@@ -178,7 +155,7 @@ describe('app shell navigation model', () => {
     expect(
       resolveGlobalRouteAppId({
         manifests: APP_MODULE_MANIFESTS,
-        pathname: '/docs/shared/share-1/extra',
+        pathname: '/apps/docs/shared/share-1/extra',
       }),
     ).toBeNull();
   });

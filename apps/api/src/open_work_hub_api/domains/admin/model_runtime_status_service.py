@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import json
 from typing import Any
 
 import httpx
@@ -16,12 +16,12 @@ from open_work_hub_api.domains.admin.model_runtime_status_schemas import (
     ModelRuntimeModelResponse,
     ModelRuntimeTargetResponse,
 )
+from open_work_hub_api.domains.ai.model_credentials import AiModelCredentialError, decrypt_api_key
+from open_work_hub_api.domains.ai.model_settings_models import AiModelProviderConfig
 from open_work_hub_api.domains.ai.model_settings_service import (
     AiModelSettingsError,
     get_ai_model_provider_default_model_key,
 )
-from open_work_hub_api.domains.ai.model_credentials import AiModelCredentialError, decrypt_api_key
-from open_work_hub_api.domains.ai.model_settings_models import AiModelProviderConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,9 +276,7 @@ async def collect_model_runtime_status(
 
     relevant_targets = [target for target in targets if target.role != "diagnostic"]
     online_count = sum(target.status == "online" for target in relevant_targets)
-    reachable_count = sum(
-        target.status in {"online", "degraded"} for target in relevant_targets
-    )
+    reachable_count = sum(target.status in {"online", "degraded"} for target in relevant_targets)
     overall_status = (
         "online"
         if relevant_targets and online_count == len(relevant_targets)
@@ -313,7 +311,7 @@ def _resolve_provider_runtime(
             api_key="",
             expected_model="",
         )
-    endpoint_url = ((row.endpoint_url or "").strip() if row is not None else "")
+    endpoint_url = (row.endpoint_url or "").strip() if row is not None else ""
     if not endpoint_url:
         endpoint_url = (
             settings.llm_local_base_url.strip()
@@ -370,7 +368,9 @@ def _diagnostic_targets(
         target_id = str(item.get("id", "")).strip().lower() if isinstance(item, dict) else ""
         display_name = str(item.get("display_name", "")).strip() if isinstance(item, dict) else ""
         endpoint_url = str(item.get("endpoint_url", "")).strip() if isinstance(item, dict) else ""
-        provider_id = str(item.get("provider_id", "local")).strip().lower() if isinstance(item, dict) else ""
+        provider_id = (
+            str(item.get("provider_id", "local")).strip().lower() if isinstance(item, dict) else ""
+        )
         role = str(item.get("role", "diagnostic")).strip().lower() if isinstance(item, dict) else ""
         provider_descriptor = llm_provider_descriptor(provider_id)
         valid_keys = {"id", "display_name", "endpoint_url", "provider_id", "role"}

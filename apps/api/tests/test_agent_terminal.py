@@ -97,7 +97,11 @@ def _initialize_git_repository(root: Path) -> None:
 
 def test_agent_terminal_catalog_is_admin_only_personal_tool() -> None:
     assert AGENT_TERMINAL_APP.app_id == "agent-terminal"
-    assert AGENT_TERMINAL_APP.availability_scope == "platform"
+    from open_work_hub_api.core.app_registry import compile_app_registry
+
+    assert (
+        compile_app_registry([AGENT_TERMINAL_APP]).catalog[0].execution_context_kind == "personal"
+    )
     assert AGENT_TERMINAL_APP.launcher_personal_tools is True
     assert AGENT_TERMINAL_APP.feature_flag == "agent_terminal_enabled"
     assert AGENT_TERMINAL_APP.required_system_roles == ("platform_admin",)
@@ -667,8 +671,8 @@ def test_admin_can_reconnect_to_owned_codex_session_without_transcript_audit(
     member_apps = client.get("/api/v1/apps/bootstrap", headers=member_headers)
     assert admin_apps.status_code == 200
     assert member_apps.status_code == 200
-    assert "agent-terminal" in {item["app_id"] for item in admin_apps.json()["personal_tools"]}
-    assert "agent-terminal" not in {item["app_id"] for item in member_apps.json()["personal_tools"]}
+    assert "agent-terminal" in admin_apps.json()["personal_tool_app_ids"]
+    assert "agent-terminal" not in member_apps.json()["personal_tool_app_ids"]
     assert client.get("/api/v1/agent-terminal/config", headers=member_headers).status_code == 403
 
     _initialize_git_repository(tmp_path)
@@ -778,6 +782,10 @@ def test_admin_can_reconnect_to_owned_codex_session_without_transcript_audit(
         replay_message = websocket.receive_json()
         assert replay_message["type"] == "replay"
         output = base64.b64decode(replay_message["data"])
+        while b"ready" not in output:
+            output_message = websocket.receive_json()
+            assert output_message["type"] == "output"
+            output += base64.b64decode(output_message["data"])
         assert b"ready" in output
         websocket.send_json(
             {

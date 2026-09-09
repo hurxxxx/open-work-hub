@@ -1,3 +1,4 @@
+import { maybeReloadForStaleAssetLoadError } from '@/src/platform/deployment/stale-asset-reload';
 import { Button } from '@open-work-hub/ui';
 import {
   Component,
@@ -8,7 +9,6 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
-import { maybeReloadForStaleAssetLoadError } from '@/src/platform/deployment/stale-asset-reload';
 import { LazyRouteFallback } from './lazy-route-fallback';
 
 interface LazyRouteErrorBoundaryProps {

@@ -24,7 +24,7 @@ import sys
 import tempfile
 import time
 from typing import Any, Protocol, Sequence
-from urllib.parse import quote, urljoin, urlparse
+from urllib.parse import parse_qs, quote, urljoin, urlparse
 
 import httpx
 
@@ -288,19 +288,20 @@ def write_safe_report(*, source: Path, output: Path, report: dict[str, object]) 
 
 
 class LiveFilesApi(Protocol):
+    def validate_acl_group(self, group_id: str) -> None: ...
+    def replace_acl_group_members(self, group_id: str, user_ids: Sequence[str]) -> None: ...
+    def assert_app_denied(self) -> None: ...
+
     def identity(self) -> dict[str, object]: ...
 
-    def preflight(self, workspace_slug: str) -> None: ...
+    def preflight(self) -> None: ...
 
-    def create_corpus(self, workspace_slug: str, name: str) -> dict[str, object]: ...
+    def create_corpus(self, name: str) -> dict[str, object]: ...
 
-    def upload(
-        self, workspace_slug: str, corpus_id: str, canary: LiveCanary
-    ) -> dict[str, object]: ...
+    def upload(self, corpus_id: str, canary: LiveCanary) -> dict[str, object]: ...
 
     def wait_ready(
         self,
-        workspace_slug: str,
         file_ids: Sequence[str],
         *,
         timeout_seconds: float,
@@ -309,7 +310,6 @@ class LiveFilesApi(Protocol):
 
     def search(
         self,
-        workspace_slug: str,
         *,
         query: str,
         strategy: str,
@@ -317,28 +317,17 @@ class LiveFilesApi(Protocol):
         page_size: int,
     ) -> dict[str, object]: ...
 
-    def fresh_download(self, workspace_slug: str, file_id: str) -> tuple[str, str, int]: ...
+    def fresh_download(self, file_id: str) -> tuple[str, str, int]: ...
 
     def assert_stale_download_denied(self, url: str) -> None: ...
 
-    def transition(
-        self,
-        workspace_slug: str,
-        corpus_id: str,
-        *,
-        expected_metadata_version: int,
-        access_scope_kind: str,
-        target_workspace_id: str | None,
-        request_id: str,
-    ) -> dict[str, object]: ...
-
-    def bulk_delete(self, workspace_slug: str, file_ids: Sequence[str]) -> None: ...
+    def bulk_delete(self, file_ids: Sequence[str]) -> None: ...
 
 
 class ProjectionInspector(Protocol):
     def content_probe(self, *, file_ids: Sequence[str]) -> tuple[str, str]: ...
 
-    def cleanup_target(self, *, corpus_id: str) -> tuple[str, tuple[str, ...]]: ...
+    def cleanup_target(self, *, corpus_id: str) -> tuple[str, ...]: ...
 
     def wait_projected(
         self,
@@ -413,18 +402,12 @@ class HttpFilesApi:
             timeout=timeout_seconds,
             follow_redirects=False,
         )
-        self._public_client = httpx.Client(
-            base_url=self._base_url,
-            timeout=timeout_seconds,
-            follow_redirects=False,
-        )
 
     def close(self) -> None:
         self._client.close()
-        self._public_client.close()
 
-    def _workspace_path(self, workspace_slug: str, suffix: str) -> str:
-        return f"/api/v1/workspaces/{quote(workspace_slug, safe='')}/files{suffix}"
+    def _files_path(self, suffix: str) -> str:
+        return f"/api/v1/files{suffix}"
 
     def _json_request(
         self,
@@ -457,19 +440,63 @@ class HttpFilesApi:
             raise LiveE2EContractError("invalid_identity_response")
         return payload
 
-    def preflight(self, workspace_slug: str) -> None:
+    def validate_acl_group(self, group_id: str) -> None:
+        policy = self._json_request(
+            "GET",
+            "/api/v1/admin/apps/files/access-policy",
+            expected_status=200,
+            error_code="acl_fixture_unavailable",
+        )
+        members = self._json_request(
+            "GET",
+            f"/api/v1/admin/groups/{quote(group_id, safe='')}/members",
+            expected_status=200,
+            error_code="acl_fixture_unavailable",
+        )
+        if (
+            not isinstance(policy, dict)
+            or policy.get("enabled") is not True
+            or policy.get("audience") != "selected"
+            or group_id not in policy.get("group_ids", [])
+            or not isinstance(members, dict)
+            or members.get("user_ids") != []
+        ):
+            raise LiveE2EContractError("dedicated_empty_admission_group_required")
+
+    def replace_acl_group_members(self, group_id: str, user_ids: Sequence[str]) -> None:
+        payload = self._json_request(
+            "PUT",
+            f"/api/v1/admin/groups/{quote(group_id, safe='')}/members",
+            expected_status=200,
+            error_code="acl_group_mutation_failed",
+            json={"user_ids": list(user_ids)},
+        )
+        if not isinstance(payload, dict) or set(payload.get("user_ids", [])) != set(user_ids):
+            raise LiveE2EContractError("acl_group_mutation_failed")
+
+    def assert_app_denied(self) -> None:
+        self._json_request(
+            "GET",
+            self._files_path(""),
+            expected_status=403,
+            error_code="app_grant_revocation_failed",
+        )
+
+    def preflight(self) -> None:
         browse = self._json_request(
             "GET",
-            self._workspace_path(workspace_slug, ""),
+            self._files_path(""),
             expected_status=200,
-            error_code="files_workspace_preflight_failed",
+            error_code="files_app_preflight_failed",
         )
         if not isinstance(browse, dict) or not isinstance(browse.get("files"), list):
-            raise LiveE2EContractError("files_workspace_preflight_failed")
-        query = _sha256_bytes(b"open-work-hub-files-live-preflight-v1\0" + secrets.token_bytes(16))[:16]
+            raise LiveE2EContractError("files_app_preflight_failed")
+        query = _sha256_bytes(b"open-work-hub-files-live-preflight-v1\0" + secrets.token_bytes(16))[
+            :16
+        ]
         search = self._json_request(
             "POST",
-            self._workspace_path(workspace_slug, "/search"),
+            self._files_path("/search"),
             expected_status=200,
             error_code="files_search_not_active",
             json={"query": query, "strategy": "hybrid", "page": 1, "page_size": 1},
@@ -477,10 +504,10 @@ class HttpFilesApi:
         if not isinstance(search, dict) or search.get("query") != query:
             raise LiveE2EContractError("files_search_not_active")
 
-    def create_corpus(self, workspace_slug: str, name: str) -> dict[str, object]:
+    def create_corpus(self, name: str) -> dict[str, object]:
         payload = self._json_request(
             "POST",
-            self._workspace_path(workspace_slug, "/corpora"),
+            self._files_path("/corpora"),
             expected_status=201,
             error_code="corpus_create_failed",
             json={"name": name},
@@ -489,17 +516,21 @@ class HttpFilesApi:
             raise LiveE2EContractError("invalid_corpus_response")
         return payload
 
-    def upload(self, workspace_slug: str, corpus_id: str, canary: LiveCanary) -> dict[str, object]:
+    def upload(self, corpus_id: str, canary: LiveCanary) -> dict[str, object]:
         harness = _load_readonly_harness()
         candidate = canary.candidate
         try:
             with harness._open_candidate(candidate) as stream:
                 payload = self._json_request(
                     "POST",
-                    self._workspace_path(workspace_slug, "/upload"),
+                    self._files_path("/upload"),
                     expected_status=201,
                     error_code="canary_upload_failed",
-                    data={"visibility": "workspace", "corpus_id": corpus_id},
+                    data={
+                        "visibility": "company",
+                        "company_admin_read_acknowledged": "true",
+                        "corpus_id": corpus_id,
+                    },
                     files={
                         "file": (
                             canary.upload_name,
@@ -533,7 +564,6 @@ class HttpFilesApi:
 
     def wait_ready(
         self,
-        workspace_slug: str,
         file_ids: Sequence[str],
         *,
         timeout_seconds: float,
@@ -544,7 +574,7 @@ class HttpFilesApi:
         while True:
             payload = self._json_request(
                 "GET",
-                self._workspace_path(workspace_slug, ""),
+                self._files_path(""),
                 expected_status=200,
                 error_code="projection_status_poll_failed",
             )
@@ -566,7 +596,6 @@ class HttpFilesApi:
 
     def search(
         self,
-        workspace_slug: str,
         *,
         query: str,
         strategy: str,
@@ -575,7 +604,7 @@ class HttpFilesApi:
     ) -> dict[str, object]:
         payload = self._json_request(
             "POST",
-            self._workspace_path(workspace_slug, "/search"),
+            self._files_path("/search"),
             expected_status=200,
             error_code="files_search_failed",
             json={
@@ -589,37 +618,53 @@ class HttpFilesApi:
             raise LiveE2EContractError("invalid_search_contract")
         return payload
 
-    def _validated_content_url(self, raw_url: object) -> str:
+    def _validated_content_url(self, raw_url: object) -> tuple[str, str]:
         if not isinstance(raw_url, str) or not raw_url:
             raise LiveE2EContractError("invalid_download_url")
         absolute = urljoin(f"{self._base_url}/", raw_url)
         parsed = urlparse(absolute)
+        try:
+            fragment = parse_qs(
+                parsed.fragment,
+                keep_blank_values=True,
+                strict_parsing=True,
+            )
+        except ValueError as error:
+            raise LiveE2EContractError("invalid_download_url") from error
         if (
             parsed.scheme != self._origin.scheme
             or parsed.hostname != self._origin.hostname
             or parsed.port != self._origin.port
-            or not parsed.path.startswith("/api/v1/files/content/")
+            or parsed.path != "/api/v1/content"
+            or parsed.query
+            or set(fragment) != {"grant"}
+            or len(fragment["grant"]) != 1
+            or not fragment["grant"][0]
             or parsed.username is not None
             or parsed.password is not None
-            or parsed.fragment
         ):
             raise LiveE2EContractError("invalid_download_url")
-        return absolute
+        return parsed._replace(fragment="").geturl(), fragment["grant"][0]
 
-    def fresh_download(self, workspace_slug: str, file_id: str) -> tuple[str, str, int]:
+    def fresh_download(self, file_id: str) -> tuple[str, str, int]:
         payload = self._json_request(
             "GET",
-            self._workspace_path(workspace_slug, f"/{quote(file_id, safe='')}/download"),
+            self._files_path(f"/{quote(file_id, safe='')}/download"),
             expected_status=200,
             error_code="download_url_request_failed",
         )
         if not isinstance(payload, dict):
             raise LiveE2EContractError("invalid_download_url")
-        url = self._validated_content_url(payload.get("url"))
+        raw_url = payload.get("url")
+        url, grant = self._validated_content_url(raw_url)
         digest = hashlib.sha256()
         byte_count = 0
         try:
-            with self._public_client.stream("GET", url) as response:
+            with self._client.stream(
+                "GET",
+                url,
+                headers={"X-Open-Work-Hub-Content-Grant": grant},
+            ) as response:
                 if response.status_code != 200:
                     raise LiveE2EContractError("fresh_download_failed")
                 if response.headers.get("cache-control") != "private, no-store":
@@ -633,12 +678,16 @@ class HttpFilesApi:
             raise
         except httpx.HTTPError as error:
             raise LiveE2EContractError("fresh_download_failed") from error
-        return url, digest.hexdigest(), byte_count
+        return str(raw_url), digest.hexdigest(), byte_count
 
     def assert_stale_download_denied(self, url: str) -> None:
-        validated = self._validated_content_url(url)
+        validated, grant = self._validated_content_url(url)
         try:
-            with self._public_client.stream("GET", validated) as response:
+            with self._client.stream(
+                "GET",
+                validated,
+                headers={"X-Open-Work-Hub-Content-Grant": grant},
+            ) as response:
                 if response.status_code not in {403, 404}:
                     raise LiveE2EContractError("stale_download_still_valid")
         except LiveE2EContractError:
@@ -646,40 +695,10 @@ class HttpFilesApi:
         except httpx.HTTPError as error:
             raise LiveE2EContractError("stale_download_check_failed") from error
 
-    def transition(
-        self,
-        workspace_slug: str,
-        corpus_id: str,
-        *,
-        expected_metadata_version: int,
-        access_scope_kind: str,
-        target_workspace_id: str | None,
-        request_id: str,
-    ) -> dict[str, object]:
-        payload = self._json_request(
-            "POST",
-            self._workspace_path(
-                workspace_slug,
-                f"/corpora/{quote(corpus_id, safe='')}/transition",
-            ),
-            expected_status=200,
-            error_code="corpus_transition_failed",
-            json={
-                "expected_metadata_version": expected_metadata_version,
-                "access_scope_kind": access_scope_kind,
-                "reason": "Development Files retrieval live E2E",
-                "target_workspace_id": target_workspace_id,
-                "request_id": request_id,
-            },
-        )
-        if not isinstance(payload, dict):
-            raise LiveE2EContractError("invalid_transition_response")
-        return payload
-
-    def bulk_delete(self, workspace_slug: str, file_ids: Sequence[str]) -> None:
+    def bulk_delete(self, file_ids: Sequence[str]) -> None:
         self._json_request(
             "POST",
-            self._workspace_path(workspace_slug, "/bulk-delete"),
+            self._files_path("/bulk-delete"),
             expected_status=204,
             error_code="canary_cleanup_failed",
             json={"file_ids": list(file_ids), "folder_ids": []},
@@ -757,7 +776,9 @@ class DevelopmentProjectionInspector:
         return names["opensearch"], names["qdrant"]
 
     def _opensearch_records(self, physical_name: str, file_ids: Sequence[str]) -> list[Any]:
-        from open_work_hub_api.domains.retrieval.projection_identity import canonical_search_document_id
+        from open_work_hub_api.domains.retrieval.projection_identity import (
+            canonical_search_document_id,
+        )
         from open_work_hub_api.domains.source_access.resource_types import (
             FILE_MANAGER_FILE_RESOURCE_TYPE,
         )
@@ -1058,32 +1079,23 @@ class DevelopmentProjectionInspector:
             [(str(resource_id), str(text or "")) for resource_id, text in rows]
         )
 
-    def cleanup_target(self, *, corpus_id: str) -> tuple[str, tuple[str, ...]]:
-        """Resolve committed children and their current manager after uncertain HTTP results."""
-
+    def cleanup_target(self, *, corpus_id: str) -> tuple[str, ...]:
         from sqlalchemy import select
-
-        from open_work_hub_api.domains.auth.models import Workspace
         from open_work_hub_api.domains.files.models import FileManagerCorpus, FileManagerFile
 
         with self._session_factory() as db:
             corpus = db.get(FileManagerCorpus, corpus_id)
-            if corpus is None:
+            if corpus is None or corpus.access_scope_kind != "company":
                 raise LiveE2EContractError("cleanup_target_unavailable")
-            workspace = db.get(Workspace, corpus.managed_workspace_id)
-            if workspace is None or not workspace.active:
-                raise LiveE2EContractError("cleanup_target_unavailable")
-            active_file_ids = tuple(
+            return tuple(
                 db.scalars(
                     select(FileManagerFile.id)
                     .where(
-                        FileManagerFile.corpus_id == corpus_id,
-                        FileManagerFile.deleted_at.is_(None),
+                        FileManagerFile.corpus_id == corpus_id, FileManagerFile.deleted_at.is_(None)
                     )
-                    .order_by(FileManagerFile.id.asc())
+                    .order_by(FileManagerFile.id)
                 ).all()
             )
-        return workspace.key, active_file_ids
 
     def wait_projected(
         self,
@@ -1202,69 +1214,26 @@ class DevelopmentProjectionInspector:
             time.sleep(min(poll_interval_seconds, max(0.0, deadline - time.monotonic())))
 
 
-def _workspace_claims(identity: dict[str, object]) -> dict[str, tuple[str, str]]:
-    raw = identity.get("workspaces")
-    if not isinstance(raw, list):
-        raise LiveE2EContractError("invalid_identity_response")
-    claims: dict[str, tuple[str, str]] = {}
-    for item in raw:
-        if not isinstance(item, dict):
-            raise LiveE2EContractError("invalid_identity_response")
-        workspace_id = item.get("id")
-        slug = item.get("slug")
-        role = item.get("role")
-        if not all(isinstance(value, str) and value for value in (workspace_id, slug, role)):
-            raise LiveE2EContractError("invalid_identity_response")
-        claims[slug] = (workspace_id, role)
-    return claims
-
-
 def _validate_identity_matrix(
-    *,
-    workspace_a: str,
-    workspace_b: str,
-    actor: dict[str, object],
-    observer_a: dict[str, object],
-    observer_b: dict[str, object],
-) -> tuple[str, str, tuple[str, str, str]]:
-    if not workspace_a or not workspace_b or workspace_a == workspace_b:
-        raise LiveE2EContractError("distinct_workspaces_required")
+    *, actor: dict[str, object], observer_a: dict[str, object], observer_b: dict[str, object]
+) -> tuple[str, str, str]:
     identities = (actor, observer_a, observer_b)
     user_ids = tuple(str(identity.get("id") or "") for identity in identities)
     if any(not user_id for user_id in user_ids) or len(set(user_ids)) != 3:
         raise LiveE2EContractError("distinct_dev_identities_required")
-    actor_claims = _workspace_claims(actor)
-    a_claims = _workspace_claims(observer_a)
-    b_claims = _workspace_claims(observer_b)
-    actor_roles = actor.get("system_roles")
-    platform_admin = isinstance(actor_roles, list) and "platform_admin" in actor_roles
-    if not platform_admin and any(
-        actor_claims.get(slug, ("", ""))[1] not in {"admin", "owner"}
-        for slug in (workspace_a, workspace_b)
+    if "platform_admin" not in actor.get("system_roles", []):
+        raise LiveE2EContractError("company_platform_admin_required")
+    if any(
+        "platform_admin" in identity.get("system_roles", [])
+        for identity in (observer_a, observer_b)
     ):
-        raise LiveE2EContractError("cross_workspace_admin_required")
-    a_roles = observer_a.get("system_roles")
-    b_roles = observer_b.get("system_roles")
-    if (
-        (isinstance(a_roles, list) and "platform_admin" in a_roles)
-        or (isinstance(b_roles, list) and "platform_admin" in b_roles)
-        or workspace_a not in a_claims
-        or workspace_b in a_claims
-        or workspace_b not in b_claims
-        or workspace_a in b_claims
-    ):
-        raise LiveE2EContractError("isolated_workspace_observers_required")
-    workspace_a_id = actor_claims.get(workspace_a, a_claims[workspace_a])[0]
-    workspace_b_id = actor_claims.get(workspace_b, b_claims[workspace_b])[0]
-    if workspace_a_id != a_claims[workspace_a][0] or workspace_b_id != b_claims[workspace_b][0]:
-        raise LiveE2EContractError("workspace_identity_mismatch")
-    return workspace_a_id, workspace_b_id, user_ids  # type: ignore[return-value]
+        raise LiveE2EContractError("non_admin_observers_required")
+    return user_ids
 
 
 def _validated_search_pages(
     *,
     api: LiveFilesApi,
-    workspace_slug: str,
     query: str,
     strategy: str,
     page_size: int,
@@ -1272,21 +1241,18 @@ def _validated_search_pages(
     required_highlight_file_id: str | None = None,
 ) -> tuple[set[str], dict[str, object]]:
     first = api.search(
-        workspace_slug,
         query=query,
         strategy=strategy,
         page=1,
         page_size=page_size,
     )
     second = api.search(
-        workspace_slug,
         query=query,
         strategy=strategy,
         page=2,
         page_size=page_size,
     )
     repeated = api.search(
-        workspace_slug,
         query=query,
         strategy=strategy,
         page=1,
@@ -1390,14 +1356,12 @@ def _validated_search_pages(
 def _assert_acl_visibility(
     *,
     api: LiveFilesApi,
-    workspace_slug: str,
     query: str,
     expected_file_ids: set[str],
     visible: bool,
 ) -> None:
     observed, _metrics = _validated_search_pages(
         api=api,
-        workspace_slug=workspace_slug,
         query=query,
         strategy="hybrid",
         page_size=50,
@@ -1410,11 +1374,11 @@ def _assert_acl_visibility(
         raise LiveE2EContractError("acl_matrix_failed")
 
 
-def _assert_transition_stable(
+def _assert_projections_stable(
     baseline: dict[str, object], current: dict[str, object], *, partition_id: str
 ) -> None:
     if current != baseline or current.get("retrieval_partition_id") != partition_id:
-        raise LiveE2EContractError("transition_reindexed_projection")
+        raise LiveE2EContractError("admission_reindexed_projection")
 
 
 def _recover_live_files(
@@ -1426,17 +1390,12 @@ def _recover_live_files(
     timeout_seconds: float,
     poll_interval_seconds: float,
 ) -> dict[str, object] | None:
-    """Delete server-committed canaries even when upload/transition responses were lost."""
-
-    workspace_slug, active_file_ids = inspector.cleanup_target(corpus_id=corpus_id)
+    active_file_ids = inspector.cleanup_target(corpus_id=corpus_id)
     all_file_ids = tuple(dict.fromkeys((*known_file_ids, *active_file_ids)))
     if active_file_ids:
         try:
-            actor_api.bulk_delete(workspace_slug, active_file_ids)
-        except Exception:  # noqa: BLE001 - verify committed state below.
-            # The delete may have committed before the response was lost. The
-            # backend/source proof below is authoritative and will still fail
-            # closed if the mutation did not happen.
+            actor_api.bulk_delete(active_file_ids)
+        except Exception:
             pass
     if not all_file_ids:
         return None
@@ -1452,64 +1411,53 @@ def run_live_e2e(
     *,
     source: Path,
     canaries: Sequence[LiveCanary],
-    workspace_a: str,
-    workspace_b: str,
+    acl_group_id: str,
     actor_api: LiveFilesApi,
-    workspace_a_observer_api: LiveFilesApi,
-    workspace_b_observer_api: LiveFilesApi,
+    observer_a_api: LiveFilesApi,
+    observer_b_api: LiveFilesApi,
     inspector: ProjectionInspector,
     timeout_seconds: float,
     poll_interval_seconds: float,
 ) -> dict[str, object]:
-    """Execute the bounded API flow and return only hashes, IDs, and metrics."""
-
-    if not canaries or timeout_seconds <= 0 or poll_interval_seconds <= 0:
+    """Use a dedicated empty Files-admission group; preserve all company policy settings."""
+    if not canaries or not acl_group_id or timeout_seconds <= 0 or poll_interval_seconds <= 0:
         raise LiveE2EContractError("invalid_live_limits")
-    workspace_a_id, workspace_b_id, user_ids = _validate_identity_matrix(
-        workspace_a=workspace_a,
-        workspace_b=workspace_b,
+    user_ids = _validate_identity_matrix(
         actor=actor_api.identity(),
-        observer_a=workspace_a_observer_api.identity(),
-        observer_b=workspace_b_observer_api.identity(),
+        observer_a=observer_a_api.identity(),
+        observer_b=observer_b_api.identity(),
     )
-    actor_api.preflight(workspace_a)
-    actor_api.preflight(workspace_b)
-    workspace_a_observer_api.preflight(workspace_a)
-    workspace_b_observer_api.preflight(workspace_b)
-
+    actor_api.preflight()
+    actor_api.validate_acl_group(acl_group_id)
+    observer_a_api.assert_app_denied()
+    observer_b_api.assert_app_denied()
     query = canaries[0].upload_name.split(".", 1)[0][:16]
     query_id = _sha256_bytes(b"open-work-hub-files-live-query-v1\0" + query.encode("ascii"))
-    corpus_name = f"rag-e2e-{_sha256_bytes(query.encode('ascii'))[:16]}"
-    corpus = actor_api.create_corpus(workspace_a, corpus_name)
+    corpus = actor_api.create_corpus(f"rag-e2e-{_sha256_bytes(query.encode('ascii'))[:16]}")
     corpus_id = str(corpus.get("id") or "")
     partition_id = str(corpus.get("retrieval_partition_id") or "")
-    metadata_version = int(corpus.get("metadata_version") or 0)
     if (
         not corpus_id
         or not partition_id
-        or metadata_version != 1
-        or corpus.get("access_scope_kind") != "workspace"
-        or corpus.get("managed_workspace_id") != workspace_a_id
+        or corpus.get("metadata_version") != 1
+        or corpus.get("access_scope_kind") != "company"
     ):
         raise LiveE2EContractError("invalid_corpus_response")
-
-    file_ids: list[str] = []
+    file_ids = []
     cleanup_complete = False
     try:
+        actor_api.replace_acl_group_members(acl_group_id, [user_ids[1]])
+        observer_a_api.preflight()
+        observer_b_api.assert_app_denied()
         for canary in canaries:
-            uploaded = actor_api.upload(workspace_a, corpus_id, canary)
+            uploaded = actor_api.upload(corpus_id, canary)
             file_id = str(uploaded.get("id") or "")
-            if not file_id or file_id in file_ids:
+            if not file_id or file_id in file_ids or uploaded.get("filename") != canary.upload_name:
                 raise LiveE2EContractError("invalid_upload_response")
             file_ids.append(file_id)
-            if uploaded.get("filename") != canary.upload_name:
-                raise LiveE2EContractError("invalid_upload_response")
         expected_file_ids = set(file_ids)
         statuses = actor_api.wait_ready(
-            workspace_a,
-            file_ids,
-            timeout_seconds=timeout_seconds,
-            poll_interval_seconds=poll_interval_seconds,
+            file_ids, timeout_seconds=timeout_seconds, poll_interval_seconds=poll_interval_seconds
         )
         if statuses != {file_id: "ready" for file_id in file_ids}:
             raise LiveE2EContractError("projection_not_ready")
@@ -1527,218 +1475,73 @@ def run_live_e2e(
         content_query_id = _sha256_bytes(
             b"open-work-hub-files-live-content-query-v1\0" + content_query.encode("utf-8")
         )
-
-        search_metrics: dict[str, object] = {}
-        for strategy in ("keyword", "semantic", "hybrid"):
-            observed, metrics = _validated_search_pages(
-                api=actor_api,
-                workspace_slug=workspace_a,
-                query=query,
-                strategy=strategy,
-                page_size=5,
-            )
-            if not (observed & expected_file_ids):
-                raise LiveE2EContractError("canary_search_miss")
-            search_metrics[strategy] = metrics
-        for strategy in ("keyword", "semantic", "hybrid"):
-            observed, metrics = _validated_search_pages(
-                api=actor_api,
-                workspace_slug=workspace_a,
-                query=content_query,
-                strategy=strategy,
-                page_size=5,
-                required_highlight_file_id=(
-                    content_target_file_id if strategy == "keyword" else None
-                ),
-            )
-            if content_target_file_id not in observed:
-                raise LiveE2EContractError("content_search_miss")
-            search_metrics[f"content_{strategy}"] = metrics
-
+        search_metrics = {}
+        for label, probe in (("", query), ("content_", content_query)):
+            for strategy in ("keyword", "semantic", "hybrid"):
+                observed, metrics = _validated_search_pages(
+                    api=actor_api,
+                    query=probe,
+                    strategy=strategy,
+                    page_size=5,
+                    required_highlight_file_id=content_target_file_id
+                    if label and strategy == "keyword"
+                    else None,
+                )
+                if not (observed & expected_file_ids) or (
+                    label and content_target_file_id not in observed
+                ):
+                    raise LiveE2EContractError(
+                        "content_search_miss" if label else "canary_search_miss"
+                    )
+                search_metrics[label + strategy] = metrics
         _assert_acl_visibility(
-            api=workspace_a_observer_api,
-            workspace_slug=workspace_a,
-            query=query,
-            expected_file_ids=expected_file_ids,
-            visible=True,
+            api=observer_a_api, query=query, expected_file_ids=expected_file_ids, visible=True
         )
-        _assert_acl_visibility(
-            api=workspace_b_observer_api,
-            workspace_slug=workspace_b,
-            query=query,
-            expected_file_ids=expected_file_ids,
-            visible=False,
-        )
-        _assert_acl_visibility(
-            api=workspace_a_observer_api,
-            workspace_slug=workspace_a,
-            query=content_query,
-            expected_file_ids={content_target_file_id},
-            visible=True,
-        )
-        _assert_acl_visibility(
-            api=workspace_b_observer_api,
-            workspace_slug=workspace_b,
-            query=content_query,
-            expected_file_ids={content_target_file_id},
-            visible=False,
-        )
-        stale_urls: list[str] = []
+        stale_urls = []
         for canary, file_id in zip(canaries, file_ids, strict=True):
-            download_url, initial_digest, initial_bytes = actor_api.fresh_download(
-                workspace_a, file_id
-            )
-            stale_urls.append(download_url)
-            if initial_digest != canary.content_sha256 or initial_bytes != canary.size_bytes:
+            url, digest, size = observer_a_api.fresh_download(file_id)
+            stale_urls.append(url)
+            if digest != canary.content_sha256 or size != canary.size_bytes:
                 raise LiveE2EContractError("download_content_mismatch")
-
-        transitions: list[tuple[str, str | None, str, str]] = [
-            ("company", None, workspace_a, workspace_a_id),
-            ("workspace", workspace_a_id, workspace_a, workspace_a_id),
-            ("workspace", workspace_b_id, workspace_a, workspace_b_id),
-        ]
-        for index, (scope, target_id, request_workspace, expected_managed_id) in enumerate(
-            transitions, start=1
-        ):
-            transitioned = actor_api.transition(
-                request_workspace,
-                corpus_id,
-                expected_metadata_version=metadata_version,
-                access_scope_kind=scope,
-                target_workspace_id=target_id,
-                request_id=f"live-e2e-{query_id[:16]}-{index}",
-            )
-            metadata_version += 1
-            if (
-                transitioned.get("retrieval_partition_id") != partition_id
-                or transitioned.get("metadata_version") != metadata_version
-                or transitioned.get("access_scope_kind") != scope
-                or transitioned.get("managed_workspace_id") != expected_managed_id
-            ):
-                raise LiveE2EContractError("invalid_transition_response")
-            for stale_url in stale_urls:
-                actor_api.assert_stale_download_denied(stale_url)
-            _assert_transition_stable(
-                baseline,
-                inspector.snapshot(corpus_id=corpus_id, file_ids=file_ids),
-                partition_id=partition_id,
-            )
-            ready_workspace = workspace_b if index == 3 else workspace_a
-            statuses = actor_api.wait_ready(
-                ready_workspace,
-                file_ids,
-                timeout_seconds=timeout_seconds,
-                poll_interval_seconds=poll_interval_seconds,
-            )
-            if statuses != {file_id: "ready" for file_id in file_ids}:
-                raise LiveE2EContractError("projection_not_ready_after_transition")
-            if index == 1:
-                _assert_acl_visibility(
-                    api=workspace_a_observer_api,
-                    workspace_slug=workspace_a,
-                    query=query,
-                    expected_file_ids=expected_file_ids,
-                    visible=True,
-                )
-                _assert_acl_visibility(
-                    api=workspace_b_observer_api,
-                    workspace_slug=workspace_b,
-                    query=content_query,
-                    expected_file_ids={content_target_file_id},
-                    visible=True,
-                )
-                _assert_acl_visibility(
-                    api=workspace_b_observer_api,
-                    workspace_slug=workspace_b,
-                    query=query,
-                    expected_file_ids=expected_file_ids,
-                    visible=True,
-                )
-                stale_urls = [
-                    actor_api.fresh_download(workspace_a, file_id)[0] for file_id in file_ids
-                ]
-            elif index == 2:
-                _assert_acl_visibility(
-                    api=workspace_b_observer_api,
-                    workspace_slug=workspace_b,
-                    query=query,
-                    expected_file_ids=expected_file_ids,
-                    visible=False,
-                )
-                _assert_acl_visibility(
-                    api=workspace_b_observer_api,
-                    workspace_slug=workspace_b,
-                    query=content_query,
-                    expected_file_ids={content_target_file_id},
-                    visible=False,
-                )
-                stale_urls = [
-                    actor_api.fresh_download(workspace_a, file_id)[0] for file_id in file_ids
-                ]
-            else:
-                _assert_acl_visibility(
-                    api=workspace_a_observer_api,
-                    workspace_slug=workspace_a,
-                    query=query,
-                    expected_file_ids=expected_file_ids,
-                    visible=False,
-                )
-                _assert_acl_visibility(
-                    api=workspace_b_observer_api,
-                    workspace_slug=workspace_b,
-                    query=query,
-                    expected_file_ids=expected_file_ids,
-                    visible=True,
-                )
-                _assert_acl_visibility(
-                    api=workspace_a_observer_api,
-                    workspace_slug=workspace_a,
-                    query=content_query,
-                    expected_file_ids={content_target_file_id},
-                    visible=False,
-                )
-                _assert_acl_visibility(
-                    api=workspace_b_observer_api,
-                    workspace_slug=workspace_b,
-                    query=content_query,
-                    expected_file_ids={content_target_file_id},
-                    visible=True,
-                )
-
-        final_urls: list[str] = []
+        actor_api.replace_acl_group_members(acl_group_id, [user_ids[1], user_ids[2]])
+        _assert_acl_visibility(
+            api=observer_b_api,
+            query=content_query,
+            expected_file_ids={content_target_file_id},
+            visible=True,
+        )
+        actor_api.replace_acl_group_members(acl_group_id, [user_ids[2]])
+        observer_a_api.assert_app_denied()
+        for url in stale_urls:
+            observer_a_api.assert_stale_download_denied(url)
+        _assert_projections_stable(
+            baseline,
+            inspector.snapshot(corpus_id=corpus_id, file_ids=file_ids),
+            partition_id=partition_id,
+        )
+        final_urls = []
         for canary, file_id in zip(canaries, file_ids, strict=True):
-            download_url, final_digest, final_bytes = workspace_b_observer_api.fresh_download(
-                workspace_b, file_id
-            )
-            final_urls.append(download_url)
-            if final_digest != canary.content_sha256 or final_bytes != canary.size_bytes:
-                raise LiveE2EContractError("download_content_mismatch_after_move")
-        actor_api.bulk_delete(workspace_b, file_ids)
+            url, digest, size = observer_b_api.fresh_download(file_id)
+            final_urls.append(url)
+            if digest != canary.content_sha256 or size != canary.size_bytes:
+                raise LiveE2EContractError("download_content_mismatch_after_revocation")
+        actor_api.bulk_delete(file_ids)
         cleanup = inspector.wait_removed(
             corpus_id=corpus_id,
             file_ids=file_ids,
             timeout_seconds=timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
         )
-        for final_url in final_urls:
-            actor_api.assert_stale_download_denied(final_url)
+        for url in final_urls:
+            observer_b_api.assert_stale_download_denied(url)
         _assert_acl_visibility(
-            api=workspace_a_observer_api,
-            workspace_slug=workspace_a,
-            query=query,
-            expected_file_ids=expected_file_ids,
-            visible=False,
+            api=observer_b_api, query=query, expected_file_ids=expected_file_ids, visible=False
         )
-        _assert_acl_visibility(
-            api=workspace_b_observer_api,
-            workspace_slug=workspace_b,
-            query=query,
-            expected_file_ids=expected_file_ids,
-            visible=False,
-        )
+        actor_api.replace_acl_group_members(acl_group_id, [])
+        observer_b_api.assert_app_denied()
         cleanup_complete = True
         return {
-            "schema_version": "open-work-hub.files-rag-live-e2e.v1",
+            "schema_version": "open-work-hub.files-rag-live-e2e.v2",
             "status": "passed",
             "source_root_id": _sha256_bytes(
                 b"open-work-hub-files-live-source-root-v1\0"
@@ -1760,10 +1563,10 @@ def run_live_e2e(
                 for canary, file_id in zip(canaries, file_ids, strict=True)
             ],
             "search": search_metrics,
-            "acl": {"workspace_company_workspace_and_a_to_b": True},
+            "acl": {"company_group_admission_and_revocation": True},
             "download": {"sha256_match": True, "byte_count_match": True},
-            "transitions": {
-                "count": 3,
+            "admission_changes": {
+                "count": 4,
                 "partition_unchanged": True,
                 "projection_unchanged": True,
                 "baseline": baseline,
@@ -1773,6 +1576,7 @@ def run_live_e2e(
         }
     finally:
         if not cleanup_complete:
+            cleanup_error = None
             try:
                 _recover_live_files(
                     actor_api=actor_api,
@@ -1782,8 +1586,14 @@ def run_live_e2e(
                     timeout_seconds=timeout_seconds,
                     poll_interval_seconds=poll_interval_seconds,
                 )
-            except Exception as error:  # noqa: BLE001 - emit only a stable cleanup alarm.
-                raise LiveE2EContractError("canary_cleanup_failed_after_error") from error
+            except Exception as error:
+                cleanup_error = error
+            try:
+                actor_api.replace_acl_group_members(acl_group_id, [])
+            except Exception as error:
+                cleanup_error = error
+            if cleanup_error is not None:
+                raise LiveE2EContractError("canary_cleanup_failed_after_error") from cleanup_error
 
 
 def assert_development_runtime(settings: object) -> None:
@@ -1856,11 +1666,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--report-out", type=Path, required=True)
     parser.add_argument("--api-base-url", default="http://127.0.0.1:8001")
-    parser.add_argument("--workspace-a")
-    parser.add_argument("--workspace-b")
+    parser.add_argument("--acl-group-id")
     parser.add_argument("--actor-token-env")
-    parser.add_argument("--workspace-a-observer-token-env")
-    parser.add_argument("--workspace-b-observer-token-env")
+    parser.add_argument("--observer-a-token-env")
+    parser.add_argument("--observer-b-token-env")
     parser.add_argument("--max-canaries", type=int, default=8)
     parser.add_argument("--max-total-mib", type=int, default=50)
     parser.add_argument("--workers", type=int, default=4)
@@ -1896,13 +1705,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise LiveE2EContractError("invalid_live_limits")
         token_environment_names = (
             args.actor_token_env,
-            args.workspace_a_observer_token_env,
-            args.workspace_b_observer_token_env,
+            args.observer_a_token_env,
+            args.observer_b_token_env,
         )
-        if (
-            not args.workspace_a
-            or not args.workspace_b
-            or any(not isinstance(name, str) or not name for name in token_environment_names)
+        if not args.acl_group_id or any(
+            not isinstance(name, str) or not name for name in token_environment_names
         ):
             raise LiveE2EContractError("live_scope_required")
         if len(set(token_environment_names)) != 3:
@@ -1929,11 +1736,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             report = run_live_e2e(
                 source=args.source,
                 canaries=canaries,
-                workspace_a=args.workspace_a,
-                workspace_b=args.workspace_b,
+                acl_group_id=args.acl_group_id,
                 actor_api=apis[0],
-                workspace_a_observer_api=apis[1],
-                workspace_b_observer_api=apis[2],
+                observer_a_api=apis[1],
+                observer_b_api=apis[2],
                 inspector=inspector,
                 timeout_seconds=args.timeout_seconds,
                 poll_interval_seconds=args.poll_interval_seconds,
@@ -1957,7 +1763,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     source=args.source,
                     output=args.report_out,
                     report={
-                        "schema_version": "open-work-hub.files-rag-live-e2e.v1",
+                        "schema_version": "open-work-hub.files-rag-live-e2e.v2",
                         "status": "failed",
                         "code": error.code,
                     },
@@ -1973,7 +1779,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     source=args.source,
                     output=args.report_out,
                     report={
-                        "schema_version": "open-work-hub.files-rag-live-e2e.v1",
+                        "schema_version": "open-work-hub.files-rag-live-e2e.v2",
                         "status": "failed",
                         "code": "unexpected_error",
                     },

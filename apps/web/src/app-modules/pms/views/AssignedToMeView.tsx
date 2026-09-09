@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import { AnimatePresence, LazyMotion, domAnimation } from 'motion/react';
-import { useParams, useSearchParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { AnimatePresence, LazyMotion, domAnimation } from 'motion/react';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import {
   getTaskDetail,
   listAllAssignedTasks,
@@ -18,6 +18,7 @@ import {
 } from './PmsCenteredStateBlock';
 import { TaskDetail } from './TaskDetail';
 import { TaskDetailModal } from './TaskDetailModal';
+import { buildPmsTaskContextLabel } from './pms-task-context';
 import {
   findPmsTaskById,
   getRequestedPmsTaskId,
@@ -26,9 +27,8 @@ import {
   resolveReloadedPmsTaskSelection,
   resolveRequestedPmsTaskTransition,
 } from './pms-task-selection-workflow';
-import { buildPmsTaskContextLabel } from './pms-task-context';
-import { usePmsTaskListGroupPreference } from './usePmsTaskListGroupPreference';
 import { usePmsTaskListChangeSubscription } from './usePmsTaskListChangeSubscription';
+import { usePmsTaskListGroupPreference } from './usePmsTaskListGroupPreference';
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -91,19 +91,14 @@ function assignedToMeReducer(
   }
 }
 
-export const AssignedToMeView = ({
-  workspaceSlug: workspaceSlugProp = null,
-}: {
-  workspaceSlug?: string | null;
-}) => {
+export const AssignedToMeView = (_context: Record<string, never>) => {
   const { t } = useTranslation('apps');
   const { token, user } = useAuth();
-  const { workspaceSlug: routeWorkspaceSlug } = useParams();
+
   const [searchParams, setSearchParams] = useSearchParams();
-  const workspaceSlug = workspaceSlugProp ?? routeWorkspaceSlug ?? null;
+
   const { groupBy, setGroupBy } = usePmsTaskListGroupPreference({
     enabled: true,
-    workspaceSlug,
   });
   const [state, dispatch] = useReducer(
     assignedToMeReducer,
@@ -122,8 +117,8 @@ export const AssignedToMeView = ({
     dispatch({ type: 'load-started' });
     try {
       const [taskListResponse, issueResponse] = await Promise.all([
-        listAllPmsTaskLists(token, undefined, workspaceSlug),
-        listAllAssignedTasks(token, workspaceSlug),
+        listAllPmsTaskLists(token, undefined),
+        listAllAssignedTasks(token),
       ]);
       if (loadGeneration !== loadGenerationRef.current) return;
       dispatch({
@@ -138,7 +133,7 @@ export const AssignedToMeView = ({
         error: getErrorMessage(error, t('pms.errors.assignedIssuesLoadFailed')),
       });
     }
-  }, [t, token, user, workspaceSlug]);
+  }, [t, token, user]);
 
   useEffect(() => {
     void reloadAssignedIssues();
@@ -162,7 +157,7 @@ export const AssignedToMeView = ({
     }
 
     let cancelled = false;
-    getTaskDetail(token, transition.detailRequest.taskId, workspaceSlug)
+    getTaskDetail(token, transition.detailRequest.taskId)
       .then((detail) => {
         if (!cancelled) {
           dispatch({ type: 'select-task', task: detail.task });
@@ -177,7 +172,7 @@ export const AssignedToMeView = ({
     return () => {
       cancelled = true;
     };
-  }, [state.tasks, requestedTaskId, token, workspaceSlug]);
+  }, [state.tasks, requestedTaskId, token]);
 
   const selectedTaskList = useMemo(
     () =>
@@ -230,9 +225,7 @@ export const AssignedToMeView = ({
     useCallback(
       (detail) => {
         const changedListId =
-          detail.type === 'updated'
-            ? detail.taskList.id
-            : detail.taskListId;
+          detail.type === 'updated' ? detail.taskList.id : detail.taskListId;
         const leftActiveCatalog =
           detail.type === 'deleted' || detail.taskList.archived;
         if (
@@ -284,9 +277,13 @@ export const AssignedToMeView = ({
               onClose={handleClose}
             >
               <TaskDetail
+                spaceId={selectedTaskList?.team_id ?? null}
+                canPublishDoc={taskListRoleAllows(
+                  selectedTaskList?.role,
+                  'admin',
+                )}
                 task={state.selectedTask}
                 spaceName={selectedTaskList?.team_name}
-                workspaceSlug={workspaceSlug}
                 canEdit={taskListRoleAllows(selectedTaskList?.role, 'member')}
                 onClose={handleClose}
                 onUpdate={reloadAssignedIssues}

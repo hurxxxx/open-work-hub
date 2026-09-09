@@ -1,9 +1,9 @@
-import { LogOut } from 'lucide-react';
 import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
+import { LogOut } from 'lucide-react';
 
-import { OpenWorkHubDesktopSettingsSection } from './OpenWorkHubDesktopSettingsSection';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 import { NotificationsSettingsSection } from './NotificationsSettingsSection';
+import { OpenWorkHubDesktopSettingsSection } from './OpenWorkHubDesktopSettingsSection';
 import { ProfileSettingsSection } from './ProfileSettingsSection';
 import { ReleaseNotesSettingsSection } from './ReleaseNotesSettingsSection';
 import { SecuritySettingsSection } from './SecuritySettingsSection';
@@ -30,7 +30,6 @@ export function ProfilePageContent({
     handleSectionChange,
     i18nLanguage,
     saveDateFormatPreference,
-    saveDefaultWorkspacePreference,
     saveLocalePreference,
     saveThemePreference,
     saveTimeZonePreference,
@@ -46,7 +45,7 @@ export function ProfilePageContent({
             {t('auth:settings.mySettings')}
           </h1>
           <button
-            className="app-text-control flex items-center gap-2 rounded-md px-3 py-1.5 text-app-danger transition-colors hover:bg-app-danger/10"
+            className="app-text-control flex items-center gap-2 rounded-md px-3 py-1.5 text-app-danger-text transition-colors hover:bg-app-danger/10"
             onClick={() => {
               void auth.logout();
             }}
@@ -91,9 +90,6 @@ export function ProfilePageContent({
                 onDateFormatChange={(value) => {
                   void saveDateFormatPreference(value);
                 }}
-                onDefaultWorkspaceChange={(value) => {
-                  void saveDefaultWorkspacePreference(value);
-                }}
                 onLocaleChange={(value) => {
                   void saveLocalePreference(value);
                 }}
@@ -105,7 +101,6 @@ export function ProfilePageContent({
                 }}
                 state={state}
                 t={t}
-                user={user}
               />
             ) : null}
             {state.activeSection === 'security' ? (

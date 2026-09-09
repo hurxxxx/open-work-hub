@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 /**
  * App identities are supplied by registered app/feature manifests. Keeping
@@ -8,7 +8,7 @@ import type { LucideIcon } from 'lucide-react';
  */
 export type AppModuleId = string;
 
-export type WorkspaceShellAppId = AppModuleId;
+export type ShellAppId = AppModuleId;
 
 export interface NavItem {
   id: string;
@@ -18,16 +18,14 @@ export interface NavItem {
   category: string;
   /** SubSidebar filtering target: which AppBar app owns this nav item. */
   appId: AppModuleId;
-  /** Workspace app target used when a sidebar item deep-links into another app. */
+  /** App target used when a sidebar item deep-links into another app. */
   linkAppId?: AppModuleId;
-  /** Suffix appended after the workspace app path, such as `?tab=recordings`. */
+  /** Suffix appended after the app path, such as `?tab=recordings`. */
   pathSuffix?: string;
-  /** Non-workspace-aware absolute path, mostly admin/settings pages. */
+  /** Absolute path, mostly admin/settings pages. */
   absolutePath?: string;
   /** Legacy or planned tools render as ready-but-disabled sidebar entries. */
   comingSoon?: boolean;
-  /** Tool invocations must carry an explicit workspace query context. */
-  workspaceScopedTool?: boolean;
 }
 
 export interface AppBarItem {
@@ -36,13 +34,15 @@ export interface AppBarItem {
   icon: LucideIcon;
 }
 
-export type ShellRouteChrome = 'standard' | 'fullSurface' | 'containedSurface';
+export type ShellRouteChrome =
+  | 'standard'
+  | 'fullSurface'
+  | 'containedSurface'
+  | 'shared';
 export type ShellRouteSubSidebar = 'auto' | 'hidden';
 
 export interface StaticRouteDefinition {
   appId?: AppModuleId;
-  /** Bootstrap app entitlement used to gate a route owned by a shell parent. */
-  bootstrapAppId?: AppModuleId;
   chrome?: ShellRouteChrome;
   element: ReactNode;
   path: string;
@@ -53,24 +53,11 @@ export interface AppModuleContract {
   owner: string;
   permissions: string[];
   apiDomain: string | null;
-  resourceScope?: 'workspace' | 'company' | 'hybrid' | 'personal';
-  workspaceApiPrefixes?: string[];
-  workspaceApiPublicPrefixes?: string[];
-  workspaceApiPublicQueryBypasses?: Array<{
-    pathPrefixes: string[];
-    queryParam: string;
-  }>;
-  /** This app contributes content to, and enables, workspace search. */
+
+  /** This app contributes content to, and enables, company search. */
   aiCapabilities: string[];
   writeAuditActions: string[];
   appLocalTests: string[];
-}
-
-export interface LauncherModuleSurface {
-  defaultPinOrder?: number;
-  fixed?: boolean;
-  /** Absolute launcher destination for apps that are not workspace-routed. */
-  globalPath?: `/${string}`;
 }
 
 export type LauncherGlobalPaths = ReadonlyMap<AppModuleId, `/${string}`>;
@@ -84,7 +71,6 @@ export interface FeatureGuideModuleSurface {
 
 export interface AppModuleSurfaces {
   featureGuides?: FeatureGuideModuleSurface;
-  launcher?: LauncherModuleSurface;
 }
 
 export interface AppModuleManifest {
@@ -94,14 +80,14 @@ export interface AppModuleManifest {
   navItems: NavItem[];
   surfaces?: AppModuleSurfaces;
   /**
-   * Workspace routes owned by this app module and mounted through the app route registry.
+   * App routes owned by this app module and mounted through the app route registry.
    */
-  workspaceRoutePaths: string[];
+  appRoutePaths: string[];
   /**
-   * Workspace routes declared by this manifest but mounted by a shell/static route adapter.
-   * Use this only for platform-owned routes such as workspace settings.
+   * App routes declared by this manifest but mounted by a shell/static route adapter.
+   * Use this only for platform-owned settings routes.
    */
-  staticWorkspaceRoutePaths?: string[];
+  staticAppRoutePaths?: string[];
   /**
    * Global routes owned by this app module and mounted through the app route registry.
    */

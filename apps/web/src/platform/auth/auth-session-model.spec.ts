@@ -1,3 +1,4 @@
+import { createAuthUser } from '../../../tests/fixtures/company';
 import { describe, expect, it } from 'vitest';
 
 import type {
@@ -12,7 +13,7 @@ import {
 } from './auth-session-model';
 
 function user(overrides: Partial<AuthUser> = {}): AuthUser {
-  return {
+  return createAuthUser({
     app_bar_layout: { pinned_app_ids: [] },
     date_format: 'korean',
     display_name: 'Open Work Hub Member',
@@ -25,12 +26,12 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     must_change_password: false,
     status: 'active',
     system_roles: [],
+    group_ids: [],
+    managed_organization_unit_ids: [],
     theme_preference: 'system',
     time_zone: 'Asia/Seoul',
-    workspaces: [],
-    workspace_roles: [],
     ...overrides,
-  };
+  });
 }
 
 function bootstrap(
@@ -180,10 +181,10 @@ describe('auth session model', () => {
     const accounts = [
       devAccount(),
       devAccount({
-        account_key: 'workspace-member',
-        category: 'Workspaces',
-        email: 'workspace-member@open-work-hub.local',
-        label: 'Workspace Member',
+        account_key: 'company-member',
+        category: 'Company',
+        email: 'company-member@open-work-hub.local',
+        label: 'Company Member',
       }),
     ];
 

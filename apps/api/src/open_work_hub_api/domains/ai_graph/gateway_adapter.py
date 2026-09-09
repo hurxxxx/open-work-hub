@@ -29,15 +29,13 @@ class AiGatewayGraphAdapter:
         workload = resolve_llm_workload(request.workload_id)
         if request.app_id.strip().lower() not in workload.app_ids:
             raise ValueError(
-                f"LLM workload {workload.workload_id} is not registered for app "
-                f"{request.app_id}"
+                f"LLM workload {workload.workload_id} is not registered for app {request.app_id}"
             )
 
     @staticmethod
     def _context(request: AiGraphLlmRequest) -> LlmWorkloadContext:
         return LlmWorkloadContext(
             source=request.source,
-            workspace_id=request.workspace_id,
             actor_user_id=request.actor_user_id,
             principal_kind=request.principal_kind,
             principal_id=request.principal_id,

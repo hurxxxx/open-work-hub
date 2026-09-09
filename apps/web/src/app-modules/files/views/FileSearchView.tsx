@@ -1,6 +1,4 @@
-import { type FormEvent } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { InlineNotice } from '@open-work-hub/ui';
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,16 +7,18 @@ import {
   Loader2,
   Search,
 } from 'lucide-react';
-import { InlineNotice } from '@open-work-hub/ui';
+import { type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import type { FileSearchHit, FileSearchStrategy } from '../api/files-api';
-import {
-  fileSearchSnippetSegments,
-  FILE_SEARCH_STRATEGIES,
-} from './file-search-view-model';
 import { formatFileSize } from './file-manager-view-model';
+import {
+  FILE_SEARCH_STRATEGIES,
+  fileSearchSnippetSegments,
+} from './file-search-view-model';
 import {
   useFileSearchController,
   type FileSearchController,
@@ -27,7 +27,7 @@ import {
 export function FileSearchView() {
   const { t } = useTranslation(['apps', 'common']);
   const { token, logout } = useAuth();
-  const { workspaceSlug } = useParams();
+
   const [searchParams, setSearchParams] = useSearchParams();
   const controller = useFileSearchController({
     logout,
@@ -37,12 +37,10 @@ export function FileSearchView() {
       loadFailed: t('files.search.errors.loadFailed'),
       queryRequired: t('files.search.errors.queryRequired'),
       sessionExpired: t('files.search.errors.sessionExpired'),
-      workspaceMissing: t('files.search.errors.workspaceMissing'),
     },
     searchParams,
     setSearchParams,
     token,
-    workspaceSlug,
   });
   return <FileSearchViewContent controller={controller} />;
 }
@@ -54,14 +52,8 @@ export function FileSearchViewContent({
 }) {
   const { t } = useTranslation(['apps', 'common']);
   const { actions, state } = controller;
-  const {
-    busyDownloadId,
-    error,
-    queryInput,
-    response,
-    searching,
-    strategy,
-  } = state;
+  const { busyDownloadId, error, queryInput, response, searching, strategy } =
+    state;
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -155,7 +147,11 @@ export function FileSearchViewContent({
       <main className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
           {error ? (
-            <InlineNotice className="app-text-body-sm" role="alert" tone="danger">
+            <InlineNotice
+              className="app-text-body-sm"
+              role="alert"
+              tone="danger"
+            >
               {error}
             </InlineNotice>
           ) : null}
@@ -301,7 +297,9 @@ function FileSearchResultRow({
         </div>
         <div className="flex items-center gap-2">
           <span className="rounded-md bg-app-bg px-2 py-1 app-text-caption tabular-nums text-app-ink/60">
-            {t('files.search.score', { score: formatFileSearchScore(hit.score) })}
+            {t('files.search.score', {
+              score: formatFileSearchScore(hit.score),
+            })}
           </span>
           <button
             aria-label={t('files.actions.download')}
@@ -311,11 +309,7 @@ function FileSearchResultRow({
             type="button"
           >
             {busy ? (
-              <Loader2
-                aria-hidden="true"
-                className="animate-spin"
-                size={14}
-              />
+              <Loader2 aria-hidden="true" className="animate-spin" size={14} />
             ) : (
               <Download aria-hidden="true" size={14} />
             )}

@@ -21,8 +21,10 @@ export interface AuditLogDisplayModel {
 const ACTION_LABEL_KEYS: Record<string, string> = {
   'admin.ai_runtime.retention.scrub':
     'admin.console.audit.actions.adminAiRuntimeRetentionScrub',
-  'admin.app_visibility.update':
-    'admin.console.audit.actions.adminAppVisibilityUpdate',
+  'admin.company_app_controls.update':
+    'admin.console.audit.actions.adminCompanyAppControlsUpdate',
+  'admin.hermes.research_source.update':
+    'admin.console.audit.actions.adminHermesResearchSourceUpdate',
   'admin.team.create': 'admin.console.audit.actions.adminTeamCreate',
   'admin.team.delete': 'admin.console.audit.actions.adminTeamDelete',
   'admin.team.members.replace':
@@ -55,19 +57,6 @@ const ACTION_LABEL_KEYS: Record<string, string> = {
   'admin.user.reset-password':
     'admin.console.audit.actions.adminUserResetPassword',
   'admin.user.update': 'admin.console.audit.actions.adminUserUpdate',
-  'admin.workspace.create': 'admin.console.audit.actions.adminWorkspaceCreate',
-  'admin.workspace.delete': 'admin.console.audit.actions.adminWorkspaceDelete',
-  'admin.workspace.update': 'admin.console.audit.actions.adminWorkspaceUpdate',
-  'admin.workspace.bindings.replace':
-    'admin.console.audit.actions.adminWorkspaceBindingsReplace',
-  'admin.workspace.member.add':
-    'admin.console.audit.actions.adminWorkspaceMemberAdd',
-  'admin.workspace.member.remove':
-    'admin.console.audit.actions.adminWorkspaceMemberRemove',
-  'admin.workspace.member.role.update':
-    'admin.console.audit.actions.adminWorkspaceMemberRoleUpdate',
-  'admin.workspace_app_visibility.update':
-    'admin.console.audit.actions.adminWorkspaceAppVisibilityUpdate',
   ai_meeting_insight_created:
     'admin.console.audit.actions.aiMeetingInsightCreated',
   ai_external_call: 'admin.console.audit.actions.aiExternalCall',
@@ -124,7 +113,6 @@ const PAYLOAD_KEY_ORDER = [
   'target_user_id',
   'user_id',
   'actor_user_id',
-  'workspace_id',
   'principal_id',
   'approval_id',
   'call_id',
@@ -173,7 +161,6 @@ const PAYLOAD_LABEL_KEYS: Record<string, string> = {
   tool_name: 'admin.console.audit.payloadLabels.tool',
   usage: 'admin.console.audit.payloadLabels.tokens',
   user_id: 'admin.console.audit.payloadLabels.user',
-  workspace_id: 'admin.console.audit.payloadLabels.workspace',
 };
 
 const REASON_PAYLOAD_KEYS = new Set([

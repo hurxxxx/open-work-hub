@@ -95,6 +95,10 @@ export function expectedGitlabPipelineConfig() {
       environment: { name: 'ci-validation', action: 'access' },
       variables: {
         GIT_DEPTH: '0',
+        NODE_OPTIONS: '--max-old-space-size=3072',
+        OPEN_WORK_HUB_API_PYTEST_WORKERS: '2',
+        VITEST_MAX_WORKERS: '1',
+        PLAYWRIGHT_WORKERS: '1',
         OPEN_WORK_HUB_API_COLLAB_REDIS_URL: 'redis://redis:6379/0',
         OPEN_WORK_HUB_API_REALTIME_REDIS_URL: 'redis://redis:6379/0',
         OPEN_WORK_HUB_API_TEST_RUN_ID: '$CI_JOB_ID',
@@ -135,14 +139,14 @@ export function expectedGitlabPipelineConfig() {
         'pnpm test:gitlab-pipeline',
         'pnpm test:mr-target-policy',
         'pnpm test:mr-contract-evidence',
-        'pnpm ci:all',
+        'node scripts/release-validation.mjs ci',
       ],
       after_script: [],
       artifacts: {
         when: 'always',
         expire_in: '14 days',
         access: 'maintainer',
-        paths: ['release-validation-context.md'],
+        paths: ['release-validation-context.md', 'test-results/'],
       },
     },
     codex_review: {

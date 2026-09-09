@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.principal import CallerPrincipal
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.conversations.default_scope_adapters import (
     ensure_conversation_scope_adapters_registered,
 )
-from open_work_hub_api.domains.auth.models import User, Workspace
 from open_work_hub_api.domains.conversations.models import Conversation
 from open_work_hub_api.domains.conversations.scope_registry import (
     ConversationScopeAdapter,
@@ -18,6 +18,8 @@ from open_work_hub_api.domains.conversations.scope_registry import (
     ConversationScopeTurnContext,
     get_conversation_scope_adapter,
     server_owned_artifact_types_for_scope,
+)
+from open_work_hub_api.domains.conversations.scope_registry import (
     supported_conversation_scope_refs as registered_conversation_scope_refs,
 )
 
@@ -25,7 +27,6 @@ from open_work_hub_api.domains.conversations.scope_registry import (
 def validate_requested_conversation_scope(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     scope_ref: str | None,
@@ -40,7 +41,6 @@ def validate_requested_conversation_scope(
     try:
         adapter.validate(
             db=db,
-            workspace=workspace,
             principal=principal,
             user=user,
             scope_resource_id=scope_resource_id,
@@ -48,7 +48,6 @@ def validate_requested_conversation_scope(
         _require_scope_system_prompt(
             adapter.system_prompt(
                 db=db,
-                workspace=workspace,
                 principal=principal,
                 user=user,
                 scope_resource_id=scope_resource_id,
@@ -80,7 +79,6 @@ def _raise_unsupported_scope(scope_ref: str) -> None:
 def conversation_scope_system_prompt(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     conversation: Conversation | None,
@@ -98,7 +96,6 @@ def conversation_scope_system_prompt(
     try:
         adapter.validate(
             db=db,
-            workspace=workspace,
             principal=principal,
             user=user,
             scope_resource_id=conversation.scope_resource_id,
@@ -106,7 +103,6 @@ def conversation_scope_system_prompt(
         return _require_scope_system_prompt(
             adapter.system_prompt(
                 db=db,
-                workspace=workspace,
                 principal=principal,
                 user=user,
                 scope_resource_id=conversation.scope_resource_id,
@@ -121,7 +117,6 @@ def conversation_scope_system_prompt(
 def conversation_scope_turn_system_prompt(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     conversation: Conversation | None,
@@ -129,7 +124,6 @@ def conversation_scope_turn_system_prompt(
 ) -> str | None:
     return conversation_scope_turn_context(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         conversation=conversation,
@@ -140,7 +134,6 @@ def conversation_scope_turn_system_prompt(
 def conversation_scope_turn_context(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     conversation: Conversation | None,
@@ -148,7 +141,6 @@ def conversation_scope_turn_context(
 ) -> ConversationScopeTurnContext:
     base_prompt = conversation_scope_system_prompt(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         conversation=conversation,
@@ -162,13 +154,10 @@ def conversation_scope_turn_context(
     adapter = get_conversation_scope_adapter(conversation.scope_ref)
     if adapter is None:
         _raise_unsupported_scope(conversation.scope_ref)
-    server_owned_artifact_types = server_owned_artifact_types_for_scope(
-        conversation.scope_ref
-    )
+    server_owned_artifact_types = server_owned_artifact_types_for_scope(conversation.scope_ref)
     extra_context = _adapter_turn_context(
         adapter,
         db=db,
-        workspace=workspace,
         principal=principal,
         user=user,
         conversation=conversation,
@@ -181,8 +170,7 @@ def conversation_scope_turn_context(
         artifacts=extra_context.artifacts,
         direct_response=extra_context.direct_response,
         server_owned_artifact_types=(
-            server_owned_artifact_types
-            | extra_context.server_owned_artifact_types
+            server_owned_artifact_types | extra_context.server_owned_artifact_types
         ),
         background_run_id=extra_context.background_run_id,
         background_artifact_id=extra_context.background_artifact_id,
@@ -194,7 +182,6 @@ def _adapter_turn_context(
     adapter: ConversationScopeAdapter,
     *,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     conversation: Conversation,
@@ -205,7 +192,6 @@ def _adapter_turn_context(
     if callable(turn_context):
         context = turn_context(
             db=db,
-            workspace=workspace,
             principal=principal,
             user=user,
             conversation=conversation,
@@ -217,7 +203,6 @@ def _adapter_turn_context(
         prompt=_adapter_turn_context_prompt(
             adapter,
             db=db,
-            workspace=workspace,
             principal=principal,
             user=user,
             scope_resource_id=scope_resource_id,
@@ -230,7 +215,6 @@ def _adapter_turn_context_prompt(
     adapter: ConversationScopeAdapter,
     *,
     db: Session,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     scope_resource_id: str,
@@ -241,7 +225,6 @@ def _adapter_turn_context_prompt(
         return None
     prompt = turn_context_prompt(
         db=db,
-        workspace=workspace,
         principal=principal,
         user=user,
         scope_resource_id=scope_resource_id,

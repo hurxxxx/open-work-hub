@@ -5,8 +5,8 @@ from typing import Any, Literal, Protocol
 from open_work_hub_api.domains.docs.models import (
     DocsCollection,
     NativeDoc,
-    NativeDocTarget,
     NativeDocPage,
+    NativeDocTarget,
 )
 
 SOURCE_NATIVE_DOC = "native_doc"
@@ -73,7 +73,7 @@ def serialize_collection_summary(
 def collection_visible_to_user(collection: DocsCollection | None, user: UserLike) -> bool:
     if collection is None:
         return False
-    return collection.scope == "workspace" or collection.owner_id == user.id
+    return collection.scope == "company" or collection.owner_id == user.id
 
 
 def serialize_native_share_summary(doc: NativeDoc) -> dict[str, Any]:
@@ -85,7 +85,10 @@ def serialize_native_share_summary(doc: NativeDoc) -> dict[str, Any]:
     return {
         "visibility": (
             "shared"
-            if user_share_count > 0
+            if doc.ownership_kind == "company"
+            or doc.company_visible
+            or user_share_count > 0
+            or doc.group_shares
             or active_link is not None
             or is_target_shared
             or is_meeting_note
@@ -126,6 +129,8 @@ def serialize_native_hub_item(
     sharing_summary = serialize_native_share_summary(doc)
     item = {
         "id": doc.id,
+        "ownership_kind": doc.ownership_kind,
+        "company_visible": doc.company_visible,
         "source_app": doc.source_app,
         "source_type": SOURCE_NATIVE_DOC,
         "source_id": doc.id,

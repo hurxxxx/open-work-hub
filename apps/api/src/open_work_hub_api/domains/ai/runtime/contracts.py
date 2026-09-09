@@ -4,7 +4,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-
 RuntimeProfile = Literal[
     "interactive_read",
     "grounded_report",
@@ -172,7 +171,6 @@ class AgentRunContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     run_id: str = Field(min_length=1)
-    workspace_id: str = Field(min_length=1)
     conversation_id: str = Field(min_length=1)
     requested_by_user_id: str = Field(min_length=1)
     status: RunStatus

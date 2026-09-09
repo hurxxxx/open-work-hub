@@ -15,7 +15,6 @@ from open_work_hub_api.domains.retrieval.ranking import (
     rerank_hits,
 )
 
-
 MAX_CANDIDATES = 100
 MAX_CANDIDATE_TEXT_CHARS = 8_000
 MAX_QUERY_CHARS = 2_000
@@ -411,7 +410,7 @@ def _ranked_hits(
             excerpt=prepared.text,
             score=float(score),
             methods=methods,
-            metadata={"scope_kind": "workspace"},
+            metadata={"scope_kind": "company"},
         )
         for prepared, score in ranked
     ]

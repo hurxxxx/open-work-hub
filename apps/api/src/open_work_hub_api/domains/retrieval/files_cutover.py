@@ -12,7 +12,6 @@ from open_work_hub_api.domains.retrieval.runtime_binding import (
     resolve_partitioned_files_query_runtime,
 )
 
-
 _SAFE_RUNTIME_FAILURE_REASONS = frozenset(
     {
         "alias_identity_mismatch",

@@ -7,7 +7,6 @@ from typing import Protocol
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.storage import get_minio_client
 
-
 DEFAULT_ATTACHMENT_CONTENT_TYPE = "application/octet-stream"
 
 

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from datetime import timedelta
-import logging
 from typing import Any
 
 from sqlalchemy import event, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
@@ -16,18 +17,18 @@ from open_work_hub_api.domains.ai.gateway import (
     execute_llm,
 )
 from open_work_hub_api.domains.auth.access import record_audit_log
-from open_work_hub_api.domains.auth.models import User, Workspace, utcnow_naive
+from open_work_hub_api.domains.auth.app_availability import is_company_app_enabled
+from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.auth.workspace_app_gate import is_platform_app_enabled
 from open_work_hub_api.domains.mail.clients import (
-    MailConnectionSettings,
     MailConnectionPolicyError,
+    MailConnectionSettings,
     MailProtocolClient,
     StdlibMailClient,
 )
 from open_work_hub_api.domains.mail.connection_profile import (
-    enforce_connection_profile,
     encrypt_connection_secrets,
+    enforce_connection_profile,
     incoming_identity,
     settings_from_account,
     settings_from_account_update,
@@ -35,6 +36,13 @@ from open_work_hub_api.domains.mail.connection_profile import (
     validate_connection_profile,
 )
 from open_work_hub_api.domains.mail.crypto import MailCredentialError
+from open_work_hub_api.domains.mail.message_projection import (
+    build_message_detail,
+    build_message_list_response,
+    mail_prompt_context,
+    message_text,
+    reply_subject,
+)
 from open_work_hub_api.domains.mail.models import (
     MailAccount,
     MailAttachment,
@@ -45,13 +53,6 @@ from open_work_hub_api.domains.mail.models import (
     MailSendAttempt,
     MailSyncJob,
     MailSyncState,
-)
-from open_work_hub_api.domains.mail.message_projection import (
-    build_message_detail,
-    build_message_list_response,
-    mail_prompt_context,
-    message_text,
-    reply_subject,
 )
 from open_work_hub_api.domains.mail.schemas import (
     MailAccountConnectionRequest,
@@ -71,21 +72,29 @@ from open_work_hub_api.domains.mail.sync_batch import (
     apply_sync_batch,
     cursor_for_mailbox_sync,
 )
+from open_work_hub_api.domains.mail.sync_jobs import (
+    MailSyncRetryScheduled,
+    clear_pending_mail_sync_job_publications,
+    mark_sync_job_failed,
+    pop_pending_mail_sync_job_publications,
+    publish_sync_job,
+    seconds_until,
+)
+from open_work_hub_api.domains.mail.sync_jobs import (
+    enqueue_sync_job as _enqueue_sync_job,
+)
+from open_work_hub_api.domains.mail.sync_jobs import (
+    publish_due_mail_sync_jobs as _publish_due_mail_sync_jobs,
+)
 from open_work_hub_api.domains.mail.sync_mailboxes import (
     ensure_inbox_mailbox,
     sync_targets_for_account,
 )
-from open_work_hub_api.domains.mail.sync_jobs import (
-    MailSyncRetryScheduled,
-    clear_pending_mail_sync_job_publications,
-    enqueue_sync_job as _enqueue_sync_job,
-    mark_sync_job_failed,
-    pop_pending_mail_sync_job_publications,
-    publish_due_mail_sync_jobs as _publish_due_mail_sync_jobs,
-    publish_sync_job,
-    seconds_until,
+from open_work_hub_api.domains.mail.sync_policy import (
+    MailSyncAccessRevoked,
+    cancel_mail_sync_job,
+    require_mail_sync_access,
 )
-
 
 logger = logging.getLogger(__name__)
 MAIL_APP_ID = "mail"
@@ -93,7 +102,7 @@ PERSONAL_MAIL_LLM_SCOPE = "personal"
 
 
 def mail_background_sync_enabled(db: Session) -> bool:
-    return is_platform_app_enabled(db, MAIL_APP_ID)
+    return is_company_app_enabled(db, MAIL_APP_ID)
 
 
 def _mail_client() -> MailProtocolClient:
@@ -143,6 +152,7 @@ def create_account(
 ) -> MailAccountOut:
     settings = settings_from_payload(payload)
     email_address = settings.email_address
+    _ensure_email_available(db, user_id=user.id, email_address=email_address)
     result = test_connection(payload, client=client)
     if not result.incoming_ok or not result.smtp_ok:
         raise localized_http_exception(
@@ -179,19 +189,13 @@ def create_account(
     row.last_sync_deleted_count = 0
     row.deleted_at = None
     row.updated_at = utcnow_naive()
-    db.add(row)
-    ensure_inbox_mailbox(db, account=row)
-    db.commit()
-    record_audit_log(
+    _save_account(
         db,
-        actor_user_id=user.id,
+        row=row,
         action="mail.account.create",
-        entity_kind="mail_account",
-        entity_id=row.id,
         summary=f"Connected mail account {row.email_address}",
         payload={"scope": "personal", "protocol": row.protocol},
     )
-    db.commit()
     db.refresh(row)
     return MailAccountOut.model_validate(row)
 
@@ -206,6 +210,9 @@ def update_account(
 ) -> MailAccountOut:
     row = _load_account(db, user=user, account_id=account_id, for_update=True)
     settings = settings_from_account_update(row, payload)
+    _ensure_email_available(
+        db, user_id=user.id, email_address=settings.email_address, exclude_account_id=row.id
+    )
     result = _test_connection_settings(settings, client=client)
     if not result.incoming_ok or not result.smtp_ok:
         raise localized_http_exception(
@@ -252,15 +259,10 @@ def update_account(
     row.status = "ready"
     row.last_error = None
     row.updated_at = utcnow_naive()
-    db.add(row)
-    ensure_inbox_mailbox(db, account=row)
-    db.commit()
-    record_audit_log(
+    _save_account(
         db,
-        actor_user_id=user.id,
+        row=row,
         action="mail.account.update",
-        entity_kind="mail_account",
-        entity_id=row.id,
         summary=f"Updated mail account {row.email_address}",
         payload={
             "scope": "personal",
@@ -268,9 +270,48 @@ def update_account(
             "incoming_identity_changed": incoming_identity_changed,
         },
     )
-    db.commit()
     db.refresh(row)
     return MailAccountOut.model_validate(row)
+
+
+def _ensure_email_available(
+    db: Session, *, user_id: str, email_address: str, exclude_account_id: str | None = None
+) -> None:
+    statement = select(MailAccount.id).where(
+        MailAccount.user_id == user_id, MailAccount.email_address == email_address
+    )
+    if exclude_account_id is not None:
+        statement = statement.where(MailAccount.id != exclude_account_id)
+    if db.scalar(statement) is not None:
+        raise localized_http_exception(status_code=409, code="mail.account_duplicate")
+
+
+def _save_account(
+    db: Session, *, row: MailAccount, action: str, summary: str, payload: dict[str, Any]
+) -> None:
+    """Commit the mailbox and audit together; the unique constraint closes concurrent races."""
+    try:
+        db.add(row)
+        db.flush()
+        ensure_inbox_mailbox(db, account=row)
+        record_audit_log(
+            db,
+            actor_user_id=row.user_id,
+            action=action,
+            entity_kind="mail_account",
+            entity_id=row.id,
+            summary=summary,
+            payload=payload,
+        )
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        constraint_name = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        if constraint_name == "uq_mail_accounts_user_email":
+            raise localized_http_exception(
+                status_code=409, code="mail.account_duplicate"
+            ) from error
+        raise
 
 
 def list_accounts(db: Session, *, user: User) -> list[MailAccountOut]:
@@ -310,6 +351,10 @@ def enqueue_account_sync(
     if not mail_background_sync_enabled(db):
         raise localized_http_exception(status_code=403, code="platform.app_disabled")
     row = _load_account(db, user=user, account_id=account_id, for_update=True)
+    try:
+        require_mail_sync_access(db, account_id=row.id)
+    except MailSyncAccessRevoked as exc:
+        raise localized_http_exception(status_code=403, code="app.access_required") from exc
     mailbox, state = ensure_inbox_mailbox(db, account=row)
     operation = "initial" if not state.cursor_json else "incremental"
     job = _enqueue_sync_job(db, account=row, mailbox=mailbox, operation=operation)
@@ -330,11 +375,10 @@ def sync_account(
     limit: int | None = None,
     operation: str | None = None,
 ) -> MailSyncResult:
-    if not mail_background_sync_enabled(db):
-        return MailSyncResult(new_count=0, updated_count=0, deleted_count=0)
+    require_mail_sync_access(db, account_id=account_id)
     row = db.get(MailAccount, account_id)
     if row is None or row.deleted_at is not None:
-        return MailSyncResult(new_count=0, updated_count=0, deleted_count=0)
+        raise MailSyncAccessRevoked("Mail sync target no longer exists.")
     mail_client = client or _mail_client()
     max_messages = limit or get_settings().mail_sync_max_messages
     row.status = "syncing"
@@ -344,6 +388,7 @@ def sync_account(
     db.commit()
     states: list[MailSyncState] = []
     try:
+        require_mail_sync_access(db, account_id=account_id)
         settings = settings_from_account(row)
         enforce_connection_profile(settings, incoming=True, smtp=False)
         targets = sync_targets_for_account(
@@ -368,12 +413,14 @@ def sync_account(
                 mailbox=mailbox,
                 cursor=dict(state.cursor_json or {}),
             )
+            require_mail_sync_access(db, account_id=account_id)
             batch = mail_client.sync_mailbox(
                 settings,
                 mailbox=mailbox.provider_mailbox_id,
                 cursor=sync_cursor,
                 initial_limit=max_messages,
             )
+            require_mail_sync_access(db, account_id=account_id)
             mailbox_result = apply_sync_batch(
                 db,
                 account=row,
@@ -404,6 +451,7 @@ def sync_account(
         row.last_sync_deleted_count = result.deleted_count
         row.updated_at = now
         db.add(row)
+        require_mail_sync_access(db, account_id=account_id)
         db.commit()
         return result
     except Exception as exc:
@@ -421,7 +469,8 @@ def sync_account(
             db.add(state)
         if row is not None or states:
             db.commit()
-        logger.warning("mail sync failed for account %s", account_id, exc_info=exc)
+        if not isinstance(exc, MailSyncAccessRevoked):
+            logger.warning("mail sync failed for account %s", account_id, exc_info=exc)
         raise
 
 
@@ -532,7 +581,6 @@ def summarize_message(
                 LlmTaskContext(
                     source="api.mail.summarize",
                     actor_user_id=user.id,
-                    workspace_id=PERSONAL_MAIL_LLM_SCOPE,
                     task_kind="mail_summarize",
                     app_id="mail",
                 )
@@ -579,7 +627,6 @@ def create_reply_draft(
                 LlmTaskContext(
                     source="api.mail.reply_draft",
                     actor_user_id=user.id,
-                    workspace_id=PERSONAL_MAIL_LLM_SCOPE,
                     task_kind="mail_reply_draft",
                     app_id="mail",
                 )
@@ -776,6 +823,12 @@ def process_mail_sync_job(
         db.add(job)
         db.commit()
         return "cancelled"
+    try:
+        require_mail_sync_access(db, account_id=account.id)
+    except MailSyncAccessRevoked as exc:
+        cancel_mail_sync_job(db, job=job, error=str(exc))
+        db.commit()
+        return "cancelled"
     job.status = "processing"
     job.attempts += 1
     job.last_error = None
@@ -794,6 +847,13 @@ def process_mail_sync_job(
             client=client,
             operation=job.operation,
         )
+    except MailSyncAccessRevoked as exc:
+        db.rollback()
+        job = db.get(MailSyncJob, job_id)
+        if job is not None:
+            cancel_mail_sync_job(db, job=job, error=str(exc))
+            db.commit()
+        return "cancelled"
     except Exception as exc:
         db.rollback()
         job = db.get(MailSyncJob, job_id)
@@ -948,6 +1008,8 @@ def _load_draft(
 
 
 def _public_error(exc: Exception) -> str:
+    if isinstance(exc, MailSyncAccessRevoked):
+        return str(exc)
     if isinstance(exc, MailConnectionPolicyError):
         return str(exc)
     if isinstance(exc, MailCredentialError):
@@ -959,12 +1021,11 @@ def _public_error(exc: Exception) -> str:
 
 def tool_list_messages(
     db: Session,
-    workspace: Workspace,
     principal,
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    del workspace, principal
+    del principal
     result = list_messages(
         db,
         user=user,
@@ -978,12 +1039,11 @@ def tool_list_messages(
 
 def tool_get_message(
     db: Session,
-    workspace: Workspace,
     principal,
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    del workspace, principal
+    del principal
     result = get_message(
         db,
         user=user,

@@ -1,67 +1,60 @@
-from open_work_hub_api.core.workspace_app_registry import (
-    WorkspaceAppRegistration,
-    WorkspaceNavRegistration,
+from open_work_hub_api.core.app_registry import (
+    AppNavRegistration,
+    app_registration,
 )
 
-
-RECORDING_WORKSPACE_APP = WorkspaceAppRegistration(
-    app_id="recording",
-    title="RECORDING",
-    route_base="/recording",
-    icon_key="mic",
-    enabled_by_default=True,
-    visible_by_default=True,
-    launcher_category=True,
+RECORDING_APP = app_registration(
+    "recording",
     nav_items=(
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="recording-quick",
             title="Quick Record",
             category="Recordings",
             icon_key="mic",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="recording-mine",
             title="My Recordings",
             category="Recordings",
             icon_key="list-music",
             path_suffix="?view=mine",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="recording-meeting",
             title="Meeting Recordings",
             category="Recording Categories",
             icon_key="users",
             path_suffix="?view=mine&category=meeting",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="recording-task",
             title="Task Recordings",
             category="Recording Categories",
             icon_key="check-circle-2",
             path_suffix="?view=mine&category=task",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="recording-unlinked",
             title="Unlinked",
             category="Recording Categories",
             icon_key="inbox",
             path_suffix="?view=mine&category=unlinked",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="recording-processing",
             title="Processing",
             category="Recording Status",
             icon_key="clock-3",
             path_suffix="?view=processing",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="recording-failed",
             title="Failed",
             category="Recording Status",
             icon_key="alert-triangle",
             path_suffix="?view=failed",
         ),
-        WorkspaceNavRegistration(
+        AppNavRegistration(
             id="recording-archived",
             title="Archived",
             category="Recording Status",

@@ -11,16 +11,24 @@ from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.domains.ai.events import EnvelopeEncoder
 from open_work_hub_api.domains.ai.tool_command_projection import (
     ToolChatCommandResult as ToolChatCommandResult,
+)
+from open_work_hub_api.domains.ai.tool_command_projection import (
     build_tool_chat_command_result,
-    build_tool_chat_response_payload as build_tool_chat_response_payload,
-    iter_tool_chat_command_events as iter_tool_chat_command_events,
     iter_tool_chat_command_sse_events,
+)
+from open_work_hub_api.domains.ai.tool_command_projection import (
+    build_tool_chat_response_payload as build_tool_chat_response_payload,
+)
+from open_work_hub_api.domains.ai.tool_command_projection import (
+    iter_tool_chat_command_events as iter_tool_chat_command_events,
+)
+from open_work_hub_api.domains.ai.tool_command_projection import (
     tool_done_meta as tool_done_meta,
 )
 from open_work_hub_api.domains.ai.tool_runtime import (
     execute_tool_call,
 )
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 
 
 class ToolCommandMessage(Protocol):
@@ -71,7 +79,6 @@ def parse_tool_chat_command(messages: list[ToolCommandMessage]) -> ToolChatComma
 def execute_tool_chat_command(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     command: ToolChatCommand,
@@ -80,7 +87,6 @@ def execute_tool_chat_command(
 ) -> ToolChatCommandResult:
     execution = execute_tool_call(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         tool_name=command.tool_name,
@@ -94,7 +100,6 @@ def execute_tool_chat_command(
 def execute_tool_chat_command_sse_events(
     db: Session,
     *,
-    workspace: Workspace,
     principal: CallerPrincipal,
     user: User,
     command: ToolChatCommand,
@@ -104,7 +109,6 @@ def execute_tool_chat_command_sse_events(
 ) -> Iterator[dict[str, str]]:
     result = execute_tool_chat_command(
         db,
-        workspace=workspace,
         principal=principal,
         user=user,
         command=command,

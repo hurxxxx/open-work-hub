@@ -1,10 +1,11 @@
+import {
+  getAppRouteChrome,
+  getAppRoutePattern,
+} from '@open-work-hub/contracts/app-routes';
 import { createElement, lazy } from 'react';
 
 import { lazyRoute } from '@/src/app/shell/lazy-route';
-import type {
-  ToolViewRouteDefinition,
-  WorkspaceRouteDefinition,
-} from '@/src/app/shell/route-types';
+import type { AppRouteDefinition } from '@/src/app/shell/route-types';
 
 const DiagramsView = lazy(() =>
   import('./views/DiagramsView').then((module) => ({
@@ -14,26 +15,17 @@ const DiagramsView = lazy(() =>
 
 export const diagramsToolElement = lazyRoute(createElement(DiagramsView));
 
-export const diagramsToolViewRoutes: ToolViewRouteDefinition[] = [
+export const diagramsAppRoutes: AppRouteDefinition[] = [
   {
     appId: 'diagrams',
-    element: diagramsToolElement,
-    id: 'diagrams.main',
-    match: ({ item }) => item?.appId === 'diagrams',
-    type: 'element',
-  },
-];
-
-export const diagramsWorkspaceRoutes: WorkspaceRouteDefinition[] = [
-  {
-    appId: 'diagrams',
-    path: '/w/:workspaceSlug/diagrams',
+    chrome: getAppRouteChrome('diagrams.root'),
+    path: getAppRoutePattern('diagrams.root'),
     element: diagramsToolElement,
   },
   {
     appId: 'diagrams',
-    chrome: 'fullSurface',
-    path: '/w/:workspaceSlug/diagrams/:diagramId',
+    chrome: getAppRouteChrome('diagrams.diagram'),
+    path: getAppRoutePattern('diagrams.diagram'),
     element: diagramsToolElement,
   },
 ];

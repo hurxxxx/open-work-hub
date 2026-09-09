@@ -4,13 +4,13 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     Integer,
-    JSON,
-    Boolean,
     String,
     Text,
     UniqueConstraint,
@@ -22,11 +22,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import utcnow_naive
 
-
 JSONB_COMPAT = JSONB(astext_type=Text()).with_variant(JSON(), "sqlite")
 ARTIFACT_TYPES = ("report", "analysis")
 ARTIFACT_STATUSES = ("pending", "building", "completed", "failed")
-ARTIFACT_VISIBILITIES = ("private", "workspace")
+ARTIFACT_VISIBILITIES = ("private", "company")
 ARTIFACT_EXACTNESS = ("exact", "estimated", "semantic", "mixed", "unknown")
 INDEX_GENERATION_STATUSES = ("staging", "active", "failed", "retired")
 INDEX_VALIDATION_STATUSES = ("pending", "passed", "failed")
@@ -62,8 +61,8 @@ class AiArtifact(Base):
             name="ck_ai_artifacts_not_self_superseding",
         ),
         CheckConstraint(
-            "owner_user_id IS NOT NULL OR visibility = 'workspace'",
-            name="ck_ai_artifacts_owner_or_workspace_visibility",
+            "owner_user_id IS NOT NULL OR visibility = 'company'",
+            name="ck_ai_artifacts_owner_or_visibility",
         ),
         CheckConstraint(
             "(status <> 'completed' AND completed_at IS NULL) OR "
@@ -73,14 +72,12 @@ class AiArtifact(Base):
             name="ck_ai_artifacts_completion",
         ),
         Index(
-            "ix_ai_artifacts_workspace_owner_created",
-            "workspace_id",
+            "ix_ai_artifacts_owner_created",
             "owner_user_id",
             "created_at",
         ),
         Index(
-            "ix_ai_artifacts_workspace_type_created",
-            "workspace_id",
+            "ix_ai_artifacts_type_created",
             "artifact_type",
             "created_at",
         ),
@@ -92,11 +89,6 @@ class AiArtifact(Base):
         String(32),
         nullable=False,
         unique=True,
-        index=True,
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
-        nullable=False,
         index=True,
     )
     owner_user_id: Mapped[str | None] = mapped_column(
@@ -362,7 +354,6 @@ class AiIndexGeneration(Base):
             name="ck_ai_index_generations_dimensions",
         ),
         UniqueConstraint(
-            "workspace_id",
             "app_id",
             "backend",
             "source_namespace",
@@ -370,8 +361,7 @@ class AiIndexGeneration(Base):
             name="uq_ai_index_generations_identity",
         ),
         Index(
-            "ix_ai_index_generations_workspace_app_status",
-            "workspace_id",
+            "ix_ai_index_generations_app_status",
             "app_id",
             "status",
         ),
@@ -382,7 +372,6 @@ class AiIndexGeneration(Base):
         ),
         Index(
             "uq_ai_index_generations_active_scope",
-            "workspace_id",
             "app_id",
             "backend",
             "source_namespace",
@@ -393,11 +382,6 @@ class AiIndexGeneration(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
-        nullable=False,
-        index=True,
-    )
     app_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     generation_key: Mapped[str] = mapped_column(String(256), nullable=False)
     status: Mapped[str] = mapped_column(

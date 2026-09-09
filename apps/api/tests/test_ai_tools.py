@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from test_pms_issues import _create_task_list
 from dev_accounts import dev_login
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,10 +11,7 @@ from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.registry import reset_ai_capability_registry
 from open_work_hub_api.domains.ai.tool_service import _extract_resource_ids
 from open_work_hub_api.core.db import get_engine
-from open_work_hub_api.domains.auth.models import (
-    AuditLog,
-    PlatformAppVisibility,
-)
+from open_work_hub_api.domains.auth.models import AuditLog, CompanyAppControl
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -24,18 +22,18 @@ def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _workspace_tool_path(workspace_slug: str, tool_name: str) -> str:
-    return f"/api/v1/workspaces/{workspace_slug}/chatbot/tools/{tool_name}/invoke"
+def _tool_path(tool_name: str) -> str:
+    return f"/api/v1/chatbot/tools/{tool_name}/invoke"
 
 
 def _disable_platform_app(app_id: str) -> None:
     with Session(get_engine()) as session:
-        visibility = session.scalar(
-            select(PlatformAppVisibility).where(PlatformAppVisibility.app_id == app_id)
+        control = session.scalar(
+            select(CompanyAppControl).where(CompanyAppControl.app_id == app_id)
         )
-        assert visibility is not None
-        visibility.visible = False
-        session.add(visibility)
+        assert control is not None
+        control.enabled = False
+        session.add(control)
         session.commit()
 
 
@@ -57,21 +55,14 @@ def _reset_settings_and_registry() -> None:
     reset_ai_capability_registry()
 
 
-def test_ai_tool_invoke_search_issues_returns_workspace_results(client: TestClient) -> None:
+def test_ai_tool_invoke_search_issues_returns_accessible_space_results(client: TestClient) -> None:
     session = _dev_login(client, "delivery-hub-admin")
     token = session["token"]
-    workspace_slug = "delivery-hub"
 
-    task_list_response = client.post(
-        "/api/v1/workspaces/delivery-hub/pms/lists",
-        headers=_auth_headers(token),
-        json={"key": "AITOOL", "name": "AI Tool Search List", "description": "tool source"},
-    )
-    assert task_list_response.status_code == 201, task_list_response.text
-    task_list = task_list_response.json()
+    task_list = _create_task_list(client, token)
 
     issue_response = client.post(
-        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/tasks",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks",
         headers=_auth_headers(token),
         json={"title": "AI tool issue", "description": "search target"},
     )
@@ -79,7 +70,7 @@ def test_ai_tool_invoke_search_issues_returns_workspace_results(client: TestClie
     issue = issue_response.json()
 
     response = client.post(
-        _workspace_tool_path(workspace_slug, "pms.search_tasks"),
+        _tool_path("pms.search_tasks"),
         headers=_auth_headers(token),
         json={"arguments": {"q": "AI tool issue", "limit": 10}},
     )
@@ -116,7 +107,7 @@ def test_ai_tool_invoke_rejects_unknown_tool(client: TestClient) -> None:
     token = session["token"]
 
     response = client.post(
-        _workspace_tool_path("delivery-hub", "unknown.tool"),
+        _tool_path("unknown.tool"),
         headers=_auth_headers(token),
         json={"arguments": {}},
     )
@@ -135,14 +126,14 @@ def test_ai_tool_invoke_blocks_hidden_tool_and_audits_blocked(client: TestClient
     _disable_platform_app("planner")
 
     response = client.post(
-        _workspace_tool_path("delivery-hub", "planner.list_events"),
+        _tool_path("planner.list_events"),
         headers=_auth_headers(token),
         json={"arguments": {}},
     )
 
     assert response.status_code == 403, response.text
     body = response.json()
-    assert body["code"] == "ai.tool_unavailable_in_workspace"
+    assert body["code"] == "ai.tool_unavailable_for_user"
     assert body["params"]["tool_name"] == "planner.list_events"
     audit_payload = _tool_audit_rows()[-1].payload
     assert audit_payload["tool_name"] == "planner.list_events"
@@ -159,16 +150,10 @@ def test_ai_tool_invoke_pms_write_tool_requires_approval_when_enabled(
         session = _dev_login(client, "delivery-hub-admin")
         token = session["token"]
 
-        task_list_response = client.post(
-            "/api/v1/workspaces/delivery-hub/pms/lists",
-            headers=_auth_headers(token),
-            json={"key": "AITOOLW", "name": "AI Tool Write List", "description": "write source"},
-        )
-        assert task_list_response.status_code == 201, task_list_response.text
-        task_list = task_list_response.json()
+        task_list = _create_task_list(client, token)
 
         response = client.post(
-            _workspace_tool_path("delivery-hub", "pms.create_task"),
+            _tool_path("pms.create_task"),
             headers=_auth_headers(token),
             json={"arguments": {"list_id": task_list["id"], "title": "AI gated issue"}},
         )
@@ -182,7 +167,7 @@ def test_ai_tool_invoke_pms_write_tool_requires_approval_when_enabled(
         assert audit_payload["status"] == "blocked"
 
         delete_response = client.post(
-            _workspace_tool_path("delivery-hub", "pms.delete_task"),
+            _tool_path("pms.delete_task"),
             headers=_auth_headers(token),
             json={"arguments": {"task_id": "issue-approval-target"}},
         )
@@ -206,7 +191,7 @@ def test_ai_tool_invoke_meeting_and_planner_write_tools_require_approval_when_en
         token = session["token"]
 
         meeting_response = client.post(
-            _workspace_tool_path("delivery-hub", "meeting.create_meeting"),
+            _tool_path("meeting.create_meeting"),
             headers=_auth_headers(token),
             json={
                 "arguments": {
@@ -219,7 +204,7 @@ def test_ai_tool_invoke_meeting_and_planner_write_tools_require_approval_when_en
         assert meeting_response.status_code == 409, meeting_response.text
 
         planner_response = client.post(
-            _workspace_tool_path("delivery-hub", "planner.create_event"),
+            _tool_path("planner.create_event"),
             headers=_auth_headers(token),
             json={
                 "arguments": {
@@ -233,7 +218,7 @@ def test_ai_tool_invoke_meeting_and_planner_write_tools_require_approval_when_en
         assert planner_response.status_code == 409, planner_response.text
 
         planner_update_response = client.post(
-            _workspace_tool_path("delivery-hub", "planner.update_event"),
+            _tool_path("planner.update_event"),
             headers=_auth_headers(token),
             json={
                 "arguments": {
@@ -245,7 +230,7 @@ def test_ai_tool_invoke_meeting_and_planner_write_tools_require_approval_when_en
         assert planner_update_response.status_code == 409, planner_update_response.text
 
         planner_delete_response = client.post(
-            _workspace_tool_path("delivery-hub", "planner.delete_event"),
+            _tool_path("planner.delete_event"),
             headers=_auth_headers(token),
             json={"arguments": {"event_id": "event-approval-target"}},
         )

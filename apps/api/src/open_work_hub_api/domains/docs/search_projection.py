@@ -2,28 +2,33 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from open_work_hub_api.domains.auth.models import Team, Workspace
-from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
+from open_work_hub_api.domains.docs.app_catalog import DOCS_APP
 from open_work_hub_api.domains.docs.content_text import extract_page_text
-from open_work_hub_api.domains.docs.models import DocMeetingAccess, NativeDoc, NativeDocPage
+from open_work_hub_api.domains.docs.models import (
+    DocMeetingAccess,
+    NativeDoc,
+    NativeDocGroupShare,
+    NativeDocPage,
+)
 from open_work_hub_api.domains.pms.models import TaskList
+from open_work_hub_api.domains.pms.space_models import Team
 from open_work_hub_api.domains.retrieval.partition_adapter_ids import (
     DOCS_RETRIEVAL_PARTITION_ADAPTER_ID,
+)
+from open_work_hub_api.domains.search.entity_adapter_registry import (
+    SearchEntityAdapter,
+    SearchIndexLifecycleHooks,
 )
 from open_work_hub_api.domains.search.index_document import (
     build_search_document,
     extract_blocks_text,
     search_person,
     trim_search_text,
-)
-from open_work_hub_api.domains.search.entity_adapter_registry import (
-    SearchEntityAdapter,
-    SearchIndexLifecycleHooks,
 )
 from open_work_hub_api.domains.search.schemas import SearchEntityType
 from open_work_hub_api.domains.source_access.resource_types import NATIVE_DOC_RESOURCE_TYPE
@@ -44,16 +49,11 @@ def load_docs_search_document(db: Session, source_id: str) -> dict[str, Any] | N
     )
     if doc is None:
         return None
-    workspace = db.scalar(
-        select(Workspace).where(Workspace.id == doc.workspace_id, Workspace.active.is_(True))
-    )
-    if workspace is None:
-        return None
-    return _doc_row(db, workspace=workspace, doc=doc)
+    return _doc_row(db, doc=doc)
 
 
-def load_workspace_docs_search_documents(
-    db: Session, *, workspace: Workspace
+def load_docs_search_documents(
+    db: Session,
 ) -> list[dict[str, Any]]:
     docs = db.scalars(
         select(NativeDoc)
@@ -65,9 +65,9 @@ def load_workspace_docs_search_documents(
             selectinload(NativeDoc.link_shares),
             selectinload(NativeDoc.meeting_access_grants),
         )
-        .where(NativeDoc.workspace_id == workspace.id, NativeDoc.trashed_at.is_(None))
+        .where(NativeDoc.trashed_at.is_(None))
     ).all()
-    return [_doc_row(db, workspace=workspace, doc=doc) for doc in docs]
+    return [_doc_row(db, doc=doc) for doc in docs]
 
 
 def load_docs_search_document_for_entity(
@@ -81,8 +81,10 @@ def load_docs_search_document_for_entity(
     return load_docs_search_document(db, entity_id)
 
 
-def _doc_row(db: Session, *, workspace: Workspace, doc: NativeDoc) -> dict[str, Any]:
-    task_list_team_ids = _task_list_team_lookup(db, workspace)
+def _doc_row(db: Session, *, doc: NativeDoc) -> dict[str, Any]:
+    task_list_team_ids = _task_list_team_lookup(
+        db,
+    )
     active_link_shares = [share for share in doc.link_shares if share.active]
     body_parts = []
     active_pages = sorted(
@@ -114,7 +116,6 @@ def _doc_row(db: Session, *, workspace: Workspace, doc: NativeDoc) -> dict[str, 
         for target in doc.targets
     ]
     row = build_search_document(
-        workspace_id=workspace.id,
         entity_type=SearchEntityType.DOC,
         entity_id=doc.id,
         title=doc.title,
@@ -125,19 +126,31 @@ def _doc_row(db: Session, *, workspace: Workspace, doc: NativeDoc) -> dict[str, 
         ),
         status=None,
         status_label=None,
-        visibility="shared" if doc.user_shares or active_link_shares else "private",
+        visibility="company"
+        if doc.company_visible
+        else "shared"
+        if doc.user_shares or active_link_shares
+        else "private",
         people=[search_person("owner", doc.owner_id, getattr(doc.owner, "full_name", None))],
         targets=targets,
         owner_user_id=doc.owner_id,
+        ownership_kind=doc.ownership_kind,
+        shared_group_ids=list(
+            db.scalars(
+                select(NativeDocGroupShare.group_id).where(NativeDocGroupShare.doc_id == doc.id)
+            )
+        ),
         team_ids=_target_team_ids(targets, task_list_team_ids),
         participant_user_ids=[],
         shared_user_ids=[share.user_id for share in doc.user_shares],
         granted_user_ids=_active_doc_grant_user_ids(doc.meeting_access_grants),
         date_markers={},
-        deep_link=_with_query_param(
-            f"/w/{workspace.key}/docs/{doc.id}",
-            "page",
-            doc_pages[0]["id"] if doc_pages else None,
+        deep_link=build_app_href(
+            InternalAppLocation(
+                route_id="docs.document",
+                path_params={"docId": doc.id},
+                query_params={"page": doc_pages[0]["id"] if doc_pages else None},
+            )
         ),
         metadata={"source_kind": doc.source_kind, "source_ref": doc.source_ref},
         source_updated_at=doc.updated_at,
@@ -150,24 +163,13 @@ def _doc_page_sort_key(page: NativeDocPage) -> tuple[int, datetime, str]:
     return (page.sort_order, page.created_at, page.id)
 
 
-def _with_query_param(url: str, key: str, value: str | None) -> str:
-    if not value:
-        return url
-    parts = urlsplit(url)
-    query = [
-        (item_key, item_value)
-        for item_key, item_value in parse_qsl(parts.query, keep_blank_values=True)
-        if item_key != key
-    ]
-    query.append((key, value))
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
-
-
-def _task_list_team_lookup(db: Session, workspace: Workspace) -> dict[str, str]:
+def _task_list_team_lookup(
+    db: Session,
+) -> dict[str, str]:
     rows = db.execute(
         select(TaskList.id, TaskList.team_id)
         .join(Team, TaskList.team_id == Team.id)
-        .where(Team.workspace_id == workspace.id, TaskList.team_id.is_not(None))
+        .where(TaskList.team_id.is_not(None))
     ).all()
     return {list_id: team_id for list_id, team_id in rows if team_id}
 
@@ -202,13 +204,13 @@ def _target_label(app: str, kind: str, item_id: str) -> str:
     return f"{app}:{kind}:{item_id}"
 
 
-DOCS_WORKSPACE_KEYWORD_SEARCH_ADAPTER = SearchEntityAdapter(
-    owner_app=DOCS_WORKSPACE_APP,
+DOCS_KEYWORD_SEARCH_ADAPTER = SearchEntityAdapter(
+    owner_app=DOCS_APP,
     entity_type=SearchEntityType.DOC.value,
     resource_type=NATIVE_DOC_RESOURCE_TYPE,
     label="문서",
     label_key="ai.search.entityDoc",
-    workspace_loader=load_workspace_docs_search_documents,
+    company_loader=load_docs_search_documents,
     document_loader=load_docs_search_document_for_entity,
     partition_adapter_id=DOCS_RETRIEVAL_PARTITION_ADAPTER_ID,
     index_hooks=SearchIndexLifecycleHooks(
@@ -224,8 +226,8 @@ DOCS_WORKSPACE_KEYWORD_SEARCH_ADAPTER = SearchEntityAdapter(
 
 
 __all__ = [
-    "DOCS_WORKSPACE_KEYWORD_SEARCH_ADAPTER",
+    "DOCS_KEYWORD_SEARCH_ADAPTER",
     "load_docs_search_document",
     "load_docs_search_document_for_entity",
-    "load_workspace_docs_search_documents",
+    "load_docs_search_documents",
 ]

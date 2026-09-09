@@ -1,3 +1,4 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import { History, PencilRuler, Star, Trash2, User } from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
@@ -8,14 +9,11 @@ export const whiteboardManifest: AppModuleManifest = {
     owner: 'whiteboard-platform',
     permissions: [],
     apiDomain: 'whiteboard',
-    workspaceApiPrefixes: ['/api/v1/whiteboard'],
-    workspaceApiPublicPrefixes: ['/api/v1/whiteboard/shared-links/'],
     aiCapabilities: [],
     writeAuditActions: [],
     appLocalTests: ['apps/api/tests/test_whiteboard_hub.py'],
   },
   defaultActiveNavItemId: 'whiteboard-all',
-  surfaces: { launcher: { defaultPinOrder: 2 } },
   navItems: [
     {
       id: 'whiteboard-all',
@@ -57,9 +55,9 @@ export const whiteboardManifest: AppModuleManifest = {
       pathSuffix: '?view=archived',
     },
   ],
-  workspaceRoutePaths: [
-    '/w/:workspaceSlug/whiteboard',
-    '/w/:workspaceSlug/whiteboard/:whiteboardId',
+  appRoutePaths: [
+    getAppRoutePattern('whiteboard.root'),
+    getAppRoutePattern('whiteboard.board'),
   ],
-  globalRoutePaths: ['/whiteboard/shared/:shareToken'],
+  globalRoutePaths: [getAppRoutePattern('whiteboard.shared')],
 };

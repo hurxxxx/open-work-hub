@@ -1,35 +1,31 @@
+import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import { Search } from 'lucide-react';
 
-import {
-  defineFeatureModule,
-  defineFeatureModuleRegistration,
-} from '@/src/app/shell/feature-module-registry';
-import { retrievalSearchElement } from './routes';
+import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
-export const retrievalSearchManifest = defineFeatureModule({
-  moduleKind: 'feature',
-  moduleId: 'retrieval-search',
+export const retrievalSearchManifest: AppModuleManifest = {
+  appBarItem: {
+    id: 'retrieval-search',
+    title: 'retrieval-search',
+    icon: Search,
+  },
   contract: {
     owner: 'ai-platform',
     permissions: [],
     apiDomain: 'retrieval',
-    resourceScope: 'hybrid',
-    workspaceApiPrefixes: ['/api/v1/retrieval'],
     aiCapabilities: ['retrieval.search', 'retrieval.list_sources'],
     writeAuditActions: [],
     appLocalTests: ['apps/api/tests/test_retrieval.py'],
   },
-});
-
-export const retrievalSearchModule = defineFeatureModuleRegistration({
-  manifest: retrievalSearchManifest,
-  shell: {
-    navItem: {
+  defaultActiveNavItemId: 'retrieval-search',
+  navItems: [
+    {
       id: 'retrieval-search',
       title: 'retrieval-search',
       icon: Search,
       category: 'Business AI',
+      appId: 'retrieval-search',
     },
-    tool: { element: retrievalSearchElement, subSidebar: 'hidden' },
-  },
-});
+  ],
+  appRoutePaths: [getAppRoutePattern('retrieval-search.root')],
+};

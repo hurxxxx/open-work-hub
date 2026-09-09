@@ -5,28 +5,28 @@ from typing import Any
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session, selectinload
 
-from open_work_hub_api.domains.auth.models import Workspace
-from open_work_hub_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
+from open_work_hub_api.domains.meeting.app_catalog import MEETING_APP
 from open_work_hub_api.domains.meeting.models import Meeting, MeetingAttendee, MeetingRecording
 from open_work_hub_api.domains.recording.models import Recording, RecordingTarget
 from open_work_hub_api.domains.retrieval.partition_adapter_ids import (
     MEETING_RETRIEVAL_PARTITION_ADAPTER_ID,
+)
+from open_work_hub_api.domains.search.entity_adapter_registry import (
+    SearchEntityAdapter,
+    SearchIndexLifecycleHooks,
 )
 from open_work_hub_api.domains.search.index_document import (
     build_search_document,
     search_person,
     trim_search_text,
 )
-from open_work_hub_api.domains.search.entity_adapter_registry import (
-    SearchEntityAdapter,
-    SearchIndexLifecycleHooks,
-)
 from open_work_hub_api.domains.search.schemas import SearchEntityType
 from open_work_hub_api.domains.source_access.resource_types import MEETING_RESOURCE_TYPE
 
 
-def load_workspace_meeting_search_documents(
-    db: Session, *, workspace: Workspace
+def load_meeting_search_documents(
+    db: Session,
 ) -> list[dict[str, Any]]:
     meetings = db.scalars(
         select(Meeting)
@@ -34,9 +34,9 @@ def load_workspace_meeting_search_documents(
             selectinload(Meeting.organizer),
             selectinload(Meeting.attendees).selectinload(MeetingAttendee.user),
         )
-        .where(Meeting.workspace_id == workspace.id)
+        .where()
     ).all()
-    return [_meeting_row(db, workspace=workspace, meeting=meeting) for meeting in meetings]
+    return [_meeting_row(db, meeting=meeting) for meeting in meetings]
 
 
 def load_meeting_search_document(db: Session, *, meeting_id: str) -> dict[str, Any] | None:
@@ -50,12 +50,7 @@ def load_meeting_search_document(db: Session, *, meeting_id: str) -> dict[str, A
     )
     if meeting is None:
         return None
-    workspace = db.scalar(
-        select(Workspace).where(Workspace.id == meeting.workspace_id, Workspace.active.is_(True))
-    )
-    if workspace is None:
-        return None
-    return _meeting_row(db, workspace=workspace, meeting=meeting)
+    return _meeting_row(db, meeting=meeting)
 
 
 def load_meeting_search_document_for_entity(
@@ -69,9 +64,14 @@ def load_meeting_search_document_for_entity(
     return load_meeting_search_document(db, meeting_id=entity_id)
 
 
-def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict[str, Any]:
+def _meeting_row(db: Session, *, meeting: Meeting) -> dict[str, Any]:
     recording = _latest_meeting_recording_for_search(db, meeting=meeting)
-    recording_summary = (getattr(recording, "summary_text", None) or "").strip()
+    recording_summary = (
+        recording.result.summary_text
+        if recording is not None and recording.result is not None
+        else ""
+    ) or ""
+    recording_summary = recording_summary.strip()
     attendees = [
         search_person("participant", attendee.user_id, getattr(attendee.user, "full_name", None))
         for attendee in meeting.attendees
@@ -81,12 +81,13 @@ def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict
         for part in [
             meeting.agenda,
             recording_summary,
-            recording.transcript_text if recording else "",
+            recording.result.transcript_text
+            if recording is not None and recording.result is not None
+            else "",
         ]
         if part
     )
     return build_search_document(
-        workspace_id=workspace.id,
         entity_type=SearchEntityType.MEETING,
         entity_id=meeting.id,
         title=meeting.title,
@@ -95,7 +96,7 @@ def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict
         keywords=" ".join([meeting.status, getattr(meeting.organizer, "full_name", "") or ""]),
         status=meeting.status,
         status_label=_labelize(meeting.status),
-        visibility="workspace",
+        visibility="company",
         people=[
             search_person(
                 "owner", meeting.organizer_id, getattr(meeting.organizer, "full_name", None)
@@ -112,7 +113,12 @@ def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict
             "event_start_at": meeting.start_at.isoformat(),
             "start_date": meeting.start_at.date().isoformat(),
         },
-        deep_link=f"/w/{workspace.key}/meeting/{meeting.id}",
+        deep_link=build_app_href(
+            InternalAppLocation(
+                route_id="meeting.detail",
+                path_params={"meetingId": meeting.id},
+            )
+        ),
         metadata={"attendee_count": len(meeting.attendees)},
         source_updated_at=meeting.updated_at,
     )
@@ -127,8 +133,8 @@ def _latest_meeting_recording_for_search(
         recording = db.scalar(
             select(Recording)
             .join(RecordingTarget)
+            .options(selectinload(Recording.result))
             .where(
-                Recording.workspace_id == meeting.workspace_id,
                 Recording.trashed_at.is_(None),
                 RecordingTarget.target_app == "meeting",
                 RecordingTarget.target_type == "meeting",
@@ -159,13 +165,13 @@ def _labelize(value: str) -> str:
     return value.replace("_", " ").title()
 
 
-MEETING_WORKSPACE_KEYWORD_SEARCH_ADAPTER = SearchEntityAdapter(
-    owner_app=MEETING_WORKSPACE_APP,
+MEETING_KEYWORD_SEARCH_ADAPTER = SearchEntityAdapter(
+    owner_app=MEETING_APP,
     entity_type=SearchEntityType.MEETING.value,
     resource_type=MEETING_RESOURCE_TYPE,
     label="회의",
     label_key="ai.search.entityMeeting",
-    workspace_loader=load_workspace_meeting_search_documents,
+    company_loader=load_meeting_search_documents,
     document_loader=load_meeting_search_document_for_entity,
     partition_adapter_id=MEETING_RETRIEVAL_PARTITION_ADAPTER_ID,
     index_hooks=SearchIndexLifecycleHooks(
@@ -181,8 +187,8 @@ MEETING_WORKSPACE_KEYWORD_SEARCH_ADAPTER = SearchEntityAdapter(
 
 
 __all__ = [
-    "MEETING_WORKSPACE_KEYWORD_SEARCH_ADAPTER",
+    "MEETING_KEYWORD_SEARCH_ADAPTER",
     "load_meeting_search_document",
     "load_meeting_search_document_for_entity",
-    "load_workspace_meeting_search_documents",
+    "load_meeting_search_documents",
 ]

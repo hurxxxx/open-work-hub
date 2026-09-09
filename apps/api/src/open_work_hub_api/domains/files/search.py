@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-import re
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.files.external_projection import (
     EXTERNAL_SOURCE_TARGET_APP,
     EXTERNAL_SOURCE_TARGET_TYPES,
@@ -29,14 +29,13 @@ from open_work_hub_api.domains.retrieval.contracts import (
     RetrievalStrategy,
 )
 from open_work_hub_api.domains.retrieval.ranking import MIN_NORMALIZED_RERANK_SCORE
-from open_work_hub_api.domains.search.backend_contracts import KeywordSearchClient
 from open_work_hub_api.domains.retrieval.runtime_binding import (
     PartitionedRetrievalRuntimeUnavailable,
     resolve_partitioned_files_query_runtime,
 )
+from open_work_hub_api.domains.search.backend_contracts import KeywordSearchClient
 from open_work_hub_api.domains.source_access import SourceAclPolicy
 from open_work_hub_api.domains.source_access.resource_types import FILE_MANAGER_FILE_RESOURCE_TYPE
-
 
 MAX_FILE_SEARCH_RANKED_RESULTS = 100
 FILE_SEARCH_SNIPPET_CONTEXT_WORDS = 50
@@ -195,7 +194,6 @@ def resolve_file_search_runtime(db: Session) -> FileSearchRuntime:
 def query_files(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     request: FileSearchRequest,
     runtime: FileSearchRuntime,
@@ -210,7 +208,6 @@ def query_files(
     retrieval_filters = _file_search_retrieval_filters(request)
     response = query_retrieval(
         db,
-        workspace=workspace,
         user=user,
         request=RetrievalQueryRequest(
             query=request.query,
@@ -246,7 +243,7 @@ def query_files(
         rerank_profile=rerank_profile,
     )
     file_ids = [hit.resource_id for hit in ranked_hits]
-    policy = SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
+    policy = SourceAclPolicy.for_user(db, user=user)
     allowed = policy.authorize_many_resources(
         (FILE_MANAGER_FILE_RESOURCE_TYPE, file_id) for file_id in file_ids
     )
@@ -263,7 +260,7 @@ def query_files(
     # window before page slicing so revoke/move changes can refill from later
     # authorized hits and has_more reflects the same authorization snapshot.
     db.expire_all()
-    window_policy = SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
+    window_policy = SourceAclPolicy.for_user(db, user=user)
     window_allowed = window_policy.authorize_many_resources(
         (FILE_MANAGER_FILE_RESOURCE_TYPE, file_id) for file_id in file_ids
     )
@@ -299,9 +296,8 @@ def query_files(
             break
 
         db.expire_all()
-        refreshed_window_policy = SourceAclPolicy.for_workspace(
+        refreshed_window_policy = SourceAclPolicy.for_user(
             db,
-            workspace=workspace,
             user=user,
         )
         refreshed_window_allowed = refreshed_window_policy.authorize_many_resources(

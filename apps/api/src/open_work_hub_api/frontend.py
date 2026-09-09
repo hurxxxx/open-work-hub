@@ -14,7 +14,6 @@ from open_work_hub_api.static_serving import (
     normalize_static_request_path,
 )
 
-
 RESERVED_FRONTEND_PATHS = frozenset(
     {
         "/api",

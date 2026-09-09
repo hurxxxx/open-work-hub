@@ -9,7 +9,6 @@ from open_work_hub_api.domains.rag.projection_builders import build_text_project
 from open_work_hub_api.domains.recording.models import Recording, RecordingTarget
 from open_work_hub_api.domains.source_access.resource_types import MEETING_RESOURCE_TYPE
 
-
 MEETING_SOURCE_KIND = "meeting"
 
 
@@ -44,13 +43,24 @@ def build_meeting_projection(
         for attendee in sorted(meeting.attendees, key=lambda item: item.created_at)
         if attendee.user is not None and attendee.user.full_name.strip()
     ]
-    transcript_excerpt = (latest_recording.transcript_text or "").strip()[:8000] if latest_recording else ""
-    recording_summary = (getattr(latest_recording, "summary_text", None) or "").strip()[:4000]
+    if isinstance(latest_recording, Recording):
+        transcript_excerpt = (
+            latest_recording.result.transcript_text.strip()[:8000]
+            if latest_recording.result is not None
+            else ""
+        )
+        recording_summary = (
+            (latest_recording.result.summary_text or "").strip()[:4000]
+            if latest_recording.result is not None
+            else ""
+        )
+    else:
+        transcript_excerpt = (
+            (latest_recording.transcript_text or "").strip()[:8000] if latest_recording else ""
+        )
+        recording_summary = (getattr(latest_recording, "summary_text", None) or "").strip()[:4000]
     linked_doc_id = (
-        getattr(latest_recording, "minutes_doc_id", None)
-        or getattr(latest_recording, "linked_doc_id", None)
-        if latest_recording is not None
-        else None
+        getattr(latest_recording, "linked_doc_id", None) if latest_recording is not None else None
     )
     text_sections = [
         meeting.title.strip(),
@@ -62,7 +72,6 @@ def build_meeting_projection(
     summary = recording_summary or (meeting.agenda or "").strip() or meeting.title.strip()
 
     return build_text_projection(
-        workspace_id=meeting.workspace_id,
         resource_type=MEETING_RESOURCE_TYPE,
         resource_id=meeting.id,
         source_kind=MEETING_SOURCE_KIND,
@@ -93,8 +102,8 @@ def _latest_meeting_recording_for_projection(
         recording = db.scalar(
             select(Recording)
             .join(RecordingTarget)
+            .options(selectinload(Recording.result))
             .where(
-                Recording.workspace_id == meeting.workspace_id,
                 Recording.trashed_at.is_(None),
                 RecordingTarget.target_app == "meeting",
                 RecordingTarget.target_type == "meeting",
@@ -123,7 +132,6 @@ def _canonical_recording_tables_available(db: Session) -> bool:
 
 def _build_visibility_refs(meeting: Meeting) -> list[str]:
     refs = {
-        f"workspace:{meeting.workspace_id}",
         f"meeting_organizer:{meeting.organizer_id}",
     }
     for attendee in meeting.attendees:

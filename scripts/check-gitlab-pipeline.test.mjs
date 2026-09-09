@@ -4,6 +4,10 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+// The release selector is part of the pipeline contract, including in ci:harness.
+import './release-validation.test.mjs';
+import './prepare-validation-runtime.test.mjs';
+
 import {
   CODEX_ENTRYPOINT,
   CONTRACT,
@@ -49,6 +53,16 @@ test('contract rejects extra or weakened jobs', () => {
       '  allow_failure: true\n  rules:\n',
     ),
     source.replace('$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "dev" && ', ''),
+    source.replace('node scripts/release-validation.mjs ci', 'pnpm ci:harness'),
+    source.replace('      - test-results/\n', ''),
+    source.replace("    OPEN_WORK_HUB_API_PYTEST_WORKERS: '2'\n", ''),
+    source.replace("    NODE_OPTIONS: '--max-old-space-size=3072'\n", ''),
+    source.replace("    VITEST_MAX_WORKERS: '1'", "    VITEST_MAX_WORKERS: '8'"),
+    source.replace("    PLAYWRIGHT_WORKERS: '1'", "    PLAYWRIGHT_WORKERS: '8'"),
+    source.replace(
+      'node scripts/release-validation.mjs ci',
+      'node scripts/release-validation.mjs ci --mode fast',
+    ),
   ];
 
   for (const mutated of mutations) {

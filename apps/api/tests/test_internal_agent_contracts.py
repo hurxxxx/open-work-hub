@@ -12,7 +12,7 @@ def _task(**overrides) -> LocalAgentTask:
         "agent_id": "domain.docs",
         "objective": "Summarize internal docs safely.",
         "allowed_tool_names": ["docs.search"],
-        "context_boundary": "workspace_current",
+        "context_boundary": "company_current",
         "expected_output": "redacted summary",
     }
     payload.update(overrides)
@@ -50,7 +50,7 @@ def test_local_agent_task_recursively_rejects_unsafe_tool_arguments() -> None:
             objective="Find internal evidence and return only a summary.",
             allowed_tool_names=["retrieval.search"],
             tool_arguments={"filters": {"clauses": [{"raw": "ORD-TEST-001"}]}},
-            context_boundary="workspace_current",
+            context_boundary="company_current",
             expected_output="redacted summary with gaps",
         )
 

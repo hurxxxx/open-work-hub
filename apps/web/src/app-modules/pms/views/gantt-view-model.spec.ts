@@ -30,9 +30,7 @@ function status(overrides: Partial<PmsTaskListStatus> = {}): PmsTaskListStatus {
   return {
     category: 'active',
     color: '#2563eb',
-    created_at: '',
     id: 'status-1',
-    list_id: 'list-1',
     name: 'In Progress',
     slug: 'in_progress',
     sort_order: 1,

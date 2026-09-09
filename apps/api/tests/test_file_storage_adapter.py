@@ -20,7 +20,9 @@ def test_put_file_object_writes_to_configured_bucket(monkeypatch) -> None:
             captured["content_type"] = content_type
 
     content = FakeContent()
-    monkeypatch.setattr(storage_adapter, "get_settings", lambda: SimpleNamespace(minio_bucket="bucket-1"))
+    monkeypatch.setattr(
+        storage_adapter, "get_settings", lambda: SimpleNamespace(minio_bucket="bucket-1")
+    )
     monkeypatch.setattr(storage_adapter, "get_minio_client", lambda: FakeClient())
 
     storage_adapter.put_file_object(
@@ -49,7 +51,9 @@ def test_open_file_object_reads_from_configured_bucket(monkeypatch) -> None:
             captured["key"] = key
             return storage_object
 
-    monkeypatch.setattr(storage_adapter, "get_settings", lambda: SimpleNamespace(minio_bucket="bucket-1"))
+    monkeypatch.setattr(
+        storage_adapter, "get_settings", lambda: SimpleNamespace(minio_bucket="bucket-1")
+    )
     monkeypatch.setattr(storage_adapter, "get_minio_client", lambda: FakeClient())
 
     assert storage_adapter.open_file_object("files/ws/file.txt") is storage_object
@@ -66,7 +70,9 @@ def test_remove_file_objects_returns_failures(monkeypatch) -> None:
                 raise RuntimeError("cannot remove")
             removed.append(key)
 
-    monkeypatch.setattr(storage_adapter, "get_settings", lambda: SimpleNamespace(minio_bucket="bucket-1"))
+    monkeypatch.setattr(
+        storage_adapter, "get_settings", lambda: SimpleNamespace(minio_bucket="bucket-1")
+    )
     monkeypatch.setattr(storage_adapter, "get_minio_client", lambda: FakeClient())
 
     failures = storage_adapter.remove_file_objects(["ok-key", "bad-key"])

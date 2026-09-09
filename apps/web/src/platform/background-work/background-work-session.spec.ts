@@ -4,7 +4,7 @@ import {
   addCancellingBackgroundWorkKey,
   backgroundWorkItemKey,
   buildBackgroundWorkSessionSnapshot,
-  filterBackgroundWorkSourcesForWorkspace,
+  filterBackgroundWorkSourcesForApps,
   mergeBackgroundWorkSourceListResults,
   removeCancellingBackgroundWorkKey,
   resolveBackgroundWorkCadence,
@@ -52,7 +52,7 @@ describe('background-work-session', () => {
     });
   });
 
-  it('filters background sources by enabled workspace app and nav gates', () => {
+  it('filters background sources by enabled app and nav gates', () => {
     const unownedSource = {
       id: 'unowned-job',
       list: async () => [],
@@ -75,7 +75,7 @@ describe('background-work-session', () => {
     ];
 
     expect(
-      filterBackgroundWorkSourcesForWorkspace(sources, {
+      filterBackgroundWorkSourcesForApps(sources, {
         enabledAppIds: ['reports'],
         enabledNavItemIds: ['report-export'],
       }).map((source) => source.id),

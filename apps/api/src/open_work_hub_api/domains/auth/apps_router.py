@@ -3,42 +3,35 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
-from open_work_hub_api.domains.auth.access import build_apps_bootstrap
-from open_work_hub_api.domains.auth.dependencies import require_current_user
-from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.auth.workspace_bootstrap_schemas import (
-    WorkspaceBootstrapAppBarCategoryResponse,
+from open_work_hub_api.domains.auth.bootstrap_schemas import (
+    BootstrapAppBarCategoryResponse,
+    BootstrapAppResponse,
+    BootstrapKeywordSearchResponse,
+    BootstrapNavItemResponse,
 )
-
-
-class AppsBootstrapAppResponse(BaseModel):
-    app_id: str
-    title: str
-    route_base: str
-    icon_key: str
-    availability_scope: Literal["platform"] = "platform"
-    enabled: bool
-    coming_soon: bool = False
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.launch_catalog import build_launch_catalog
+from open_work_hub_api.domains.auth.models import User
 
 
 class AppsBootstrapPrincipalResponse(BaseModel):
     kind: Literal["user"] = "user"
-    scope: Literal["personal"] = "personal"
-    workspace_id: None = None
     source: str
     user_id: str
     session_id: str | None = None
 
 
 class AppsBootstrapResponse(BaseModel):
-    apps: list[AppsBootstrapAppResponse] = Field(default_factory=list)
-    app_bar_categories: list[WorkspaceBootstrapAppBarCategoryResponse] = Field(default_factory=list)
-    personal_tools: list[AppsBootstrapAppResponse] = Field(default_factory=list)
-    platform_enabled_app_ids: list[str] = Field(default_factory=list)
+    apps: list[BootstrapAppResponse]
+    nav: list[BootstrapNavItemResponse]
+    app_bar_categories: list[BootstrapAppBarCategoryResponse]
+    personal_tool_app_ids: list[str]
+    chatbot_app_ids: list[str]
+    keyword_search: BootstrapKeywordSearchResponse
     principal: AppsBootstrapPrincipalResponse
 
 
@@ -54,7 +47,7 @@ def get_apps_bootstrap(
     auth_context = getattr(request.state, "auth_context", None)
     session = getattr(auth_context, "session", None)
     return AppsBootstrapResponse.model_validate(
-        build_apps_bootstrap(
+        build_launch_catalog(
             db,
             user=current_user,
             source="api.apps_bootstrap",

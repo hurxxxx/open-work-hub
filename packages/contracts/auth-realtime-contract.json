@@ -1,0 +1,9 @@
+{
+  "accessChanged": {
+    "eventType": "auth.access.changed",
+    "reasons": {
+      "appAvailability": "app_availability",
+      "principalAccess": "principal"
+    }
+  }
+}

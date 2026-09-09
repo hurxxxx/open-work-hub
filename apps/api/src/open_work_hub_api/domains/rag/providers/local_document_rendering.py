@@ -6,7 +6,6 @@ from pathlib import Path
 
 from open_work_hub_api.domains.rag.providers.base import RagProviderConfigurationError
 
-
 DOC_SUFFIX_BY_CONTENT_TYPE = {
     "application/pdf": ".pdf",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",

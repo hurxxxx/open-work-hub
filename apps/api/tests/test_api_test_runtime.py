@@ -45,9 +45,7 @@ def test_database_reset_drops_unknown_foreign_keys_and_preserves_extensions(
     engine = create_engine(postgres_dsn)
     try:
         with engine.begin() as connection:
-            connection.exec_driver_sql(
-                "CREATE TABLE test_harness_parent (id integer PRIMARY KEY)"
-            )
+            connection.exec_driver_sql("CREATE TABLE test_harness_parent (id integer PRIMARY KEY)")
             connection.exec_driver_sql(
                 """
                 CREATE TABLE test_harness_migration_only_child (
@@ -61,18 +59,17 @@ def test_database_reset_drops_unknown_foreign_keys_and_preserves_extensions(
 
         with engine.connect() as connection:
             assert sqlalchemy_inspect(connection).get_table_names() == []
-            assert connection.scalar(
-                text("SELECT extname FROM pg_extension WHERE extname = 'vector'")
-            ) == "vector"
+            assert (
+                connection.scalar(text("SELECT extname FROM pg_extension WHERE extname = 'vector'"))
+                == "vector"
+            )
     finally:
         conftest._reset_test_database(engine)
         engine.dispose()
 
 
 def test_database_reset_refuses_non_test_database() -> None:
-    engine = create_engine(
-        "postgresql+psycopg://test:test@127.0.0.1:5432/application"
-    )
+    engine = create_engine("postgresql+psycopg://test:test@127.0.0.1:5432/application")
     try:
         with pytest.raises(RuntimeError, match="Refusing to reset non-test database"):
             conftest._reset_test_database(engine)
@@ -93,8 +90,7 @@ def test_database_data_reset_preserves_schema_and_migration_revision(
                 "INSERT INTO alembic_version (version_num) VALUES ('test-head')"
             )
             connection.exec_driver_sql(
-                "CREATE TABLE test_harness_parent "
-                "(id serial PRIMARY KEY, value text NOT NULL)"
+                "CREATE TABLE test_harness_parent (id serial PRIMARY KEY, value text NOT NULL)"
             )
             connection.exec_driver_sql(
                 "CREATE TABLE test_harness_child "
@@ -103,9 +99,7 @@ def test_database_data_reset_preserves_schema_and_migration_revision(
             connection.exec_driver_sql(
                 "INSERT INTO test_harness_parent (value) VALUES ('before-reset')"
             )
-            connection.exec_driver_sql(
-                "INSERT INTO test_harness_child (parent_id) VALUES (1)"
-            )
+            connection.exec_driver_sql("INSERT INTO test_harness_child (parent_id) VALUES (1)")
 
         conftest._truncate_test_database(engine)
 
@@ -129,9 +123,7 @@ def test_database_data_reset_preserves_schema_and_migration_revision(
 
 
 def test_database_data_reset_refuses_non_test_database() -> None:
-    engine = create_engine(
-        "postgresql+psycopg://test:test@127.0.0.1:5432/application"
-    )
+    engine = create_engine("postgresql+psycopg://test:test@127.0.0.1:5432/application")
     try:
         with pytest.raises(RuntimeError, match="Refusing to truncate non-test database"):
             conftest._truncate_test_database(engine)
@@ -149,16 +141,13 @@ def test_application_database_reset_restores_migration_owned_seed(
             expected_rows = _application_seed_rows(
                 connection,
                 (
-                    "workspaces",
-                    "teams",
-                    "workspace_app_entitlements",
-                    "platform_app_visibility",
+                    "company_app_controls",
+                    "app_access_policies",
                 ),
             )
             assert all(rows != "[]" for rows in expected_rows.values())
-            connection.execute(text("DELETE FROM platform_app_visibility"))
-            connection.execute(text("DELETE FROM workspace_app_entitlements"))
-            connection.execute(text("UPDATE workspaces SET name = 'corrupted'"))
+            connection.execute(text("DELETE FROM app_access_policies"))
+            connection.execute(text("DELETE FROM company_app_controls"))
 
         conftest._restore_application_postgres_state(application_postgres_state)
 
@@ -173,7 +162,8 @@ def _application_seed_rows(connection, table_names) -> dict[str, str]:
     return {
         table_name: connection.scalar(
             text(
-                f"SELECT COALESCE(jsonb_agg(to_jsonb(row_data) ORDER BY id), "
+                f"SELECT COALESCE(jsonb_agg(to_jsonb(row_data) "
+                f"ORDER BY to_jsonb(row_data)::text), "
                 f"'[]'::jsonb)::text FROM {table_name} AS row_data"
             )
         )
@@ -376,3 +366,27 @@ def test_current_run_cleanup_attempts_every_backend(monkeypatch) -> None:
         infra.cleanup_current_run()
 
     assert calls == ["minio", "opensearch", "postgres"]
+
+
+def test_application_composition_restores_environment_before_external_discovery(
+    monkeypatch,
+) -> None:
+    from fastapi import FastAPI
+
+    original_endpoint = "http://127.0.0.1:59010"
+    monkeypatch.setenv("OPEN_WORK_HUB_MINIO_ENDPOINT", original_endpoint)
+
+    def build(patch, **_kwargs):
+        patch.setenv("OPEN_WORK_HUB_MINIO_ENDPOINT", "http://127.0.0.1:1")
+        return FastAPI()
+
+    monkeypatch.setattr(conftest, "_build_test_application", build)
+    monkeypatch.setattr(conftest, "_teardown_client_state", lambda: None)
+    lifecycle = conftest.application_test_app.__wrapped__(
+        SimpleNamespace(dsn="postgresql://unused")
+    )
+    try:
+        next(lifecycle)
+        assert infra_module.os.getenv("OPEN_WORK_HUB_MINIO_ENDPOINT") == original_endpoint
+    finally:
+        lifecycle.close()

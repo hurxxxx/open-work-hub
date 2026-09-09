@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import status
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
-    JSON,
     String,
     Text,
     delete,
@@ -33,7 +33,7 @@ from open_work_hub_api.domains.auth.models import utcnow_naive
 from open_work_hub_api.domains.auth.security import new_id
 
 if TYPE_CHECKING:
-    from open_work_hub_api.domains.auth.models import User, Workspace
+    from open_work_hub_api.domains.auth.models import User
     from open_work_hub_api.domains.conversations.models import Conversation
 
 
@@ -78,8 +78,7 @@ class AgentRunSnapshot(Base):
             "created_at",
         ),
         Index(
-            "ix_ai_agent_run_snapshots_workspace_status_created",
-            "workspace_id",
+            "ix_ai_agent_run_snapshots_status_created",
             "status",
             "created_at",
         ),
@@ -94,11 +93,6 @@ class AgentRunSnapshot(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     conversation_id: Mapped[str] = mapped_column(
         ForeignKey("conversations.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
         nullable=False,
         index=True,
     )
@@ -139,8 +133,7 @@ class ConversationRunLock(Base):
             unique=True,
         ),
         Index(
-            "ix_ai_conversation_run_locks_workspace_expires",
-            "workspace_id",
+            "ix_ai_conversation_run_locks_expires",
             "expires_at",
         ),
         Index(
@@ -152,11 +145,6 @@ class ConversationRunLock(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     conversation_id: Mapped[str] = mapped_column(
         ForeignKey("conversations.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
         nullable=False,
         index=True,
     )
@@ -189,7 +177,7 @@ class AiToolApproval(Base):
             "status IN ('pending','approved','rejected','cancelled','expired','executed','failed')",
             name="ck_ai_tool_approvals_status",
         ),
-        Index("ix_ai_tool_approvals_workspace_status", "workspace_id", "status"),
+        Index("ix_ai_tool_approvals_status", "status"),
         Index("ix_ai_tool_approvals_conversation_status", "conversation_id", "status"),
         Index("ix_ai_tool_approvals_agent_run_id", "agent_run_id"),
         Index(
@@ -207,11 +195,6 @@ class AiToolApproval(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(
-        ForeignKey("workspaces.id"),
-        nullable=False,
-        index=True,
-    )
     conversation_id: Mapped[str] = mapped_column(
         ForeignKey("conversations.id", ondelete="CASCADE"),
         nullable=False,
@@ -273,14 +256,7 @@ def _normalize_resolution_reason(reason: str | None) -> str | None:
     return normalized or None
 
 
-def _require_user_scope(
-    workspace: Workspace, user: User, row_workspace_id: str, row_user_id: str
-) -> None:
-    if row_workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="ai.approval_not_found",
-        )
+def _require_user_scope(user: User, row_user_id: str) -> None:
     if row_user_id != user.id:
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -304,7 +280,6 @@ def approval_to_payload(
 ) -> dict[str, Any]:
     return {
         "id": approval.id,
-        "workspace_id": approval.workspace_id,
         "conversation_id": approval.conversation_id,
         "agent_run_id": approval.agent_run_id,
         "tool_call_id": approval.tool_call_id,
@@ -345,20 +320,18 @@ def _load_approval_row(
 def get_approval(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     approval_id: str,
     for_update: bool = False,
 ) -> AiToolApproval:
     approval = _load_approval_row(db, approval_id=approval_id, for_update=for_update)
-    _require_user_scope(workspace, user, approval.workspace_id, approval.requested_by_user_id)
+    _require_user_scope(user, approval.requested_by_user_id)
     return approval
 
 
 def get_live_pending_approval(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     conversation_id: str,
 ) -> dict[str, Any] | None:
@@ -366,7 +339,6 @@ def get_live_pending_approval(
         select(AgentRunSnapshot)
         .where(
             AgentRunSnapshot.conversation_id == conversation_id,
-            AgentRunSnapshot.workspace_id == workspace.id,
             AgentRunSnapshot.requested_by_user_id == user.id,
             AgentRunSnapshot.status == "awaiting_approval",
         )
@@ -406,7 +378,6 @@ def get_live_pending_approval(
                 )
                 log_llm_tool_approval_resolved(
                     actor_user_id=user.id,
-                    workspace_id=workspace.id,
                     approval_id=locked_approval.id,
                     tool_name=locked_approval.tool_name,
                     decision=locked_approval.status,
@@ -430,7 +401,6 @@ def get_live_pending_approval(
 def has_live_conversation_run(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     conversation_id: str,
     for_update: bool = False,
@@ -440,7 +410,6 @@ def has_live_conversation_run(
     # looking live until some other read path happens to touch it.
     get_live_pending_approval(
         db,
-        workspace=workspace,
         user=user,
         conversation_id=conversation_id,
     )
@@ -449,7 +418,6 @@ def has_live_conversation_run(
         select(AgentRunSnapshot.id)
         .where(
             AgentRunSnapshot.conversation_id == conversation_id,
-            AgentRunSnapshot.workspace_id == workspace.id,
             AgentRunSnapshot.requested_by_user_id == user.id,
             AgentRunSnapshot.status.in_(LIVE_SNAPSHOT_STATUSES),
         )
@@ -464,7 +432,6 @@ def has_live_conversation_run(
         select(ConversationRunLock.id)
         .where(
             ConversationRunLock.conversation_id == conversation_id,
-            ConversationRunLock.workspace_id == workspace.id,
             ConversationRunLock.requested_by_user_id == user.id,
         )
         .limit(1)
@@ -493,14 +460,12 @@ def expire_stale_conversation_run_locks(
 def acquire_conversation_run_lock(
     db: Session,
     *,
-    workspace: Workspace,
     conversation: Conversation,
     requested_by_user: User,
     lock_kind: Literal["chat"] = "chat",
 ) -> ConversationRunLock:
     get_live_pending_approval(
         db,
-        workspace=workspace,
         user=requested_by_user,
         conversation_id=conversation.id,
     )
@@ -509,7 +474,6 @@ def acquire_conversation_run_lock(
         select(AgentRunSnapshot.id)
         .where(
             AgentRunSnapshot.conversation_id == conversation.id,
-            AgentRunSnapshot.workspace_id == workspace.id,
             AgentRunSnapshot.requested_by_user_id == requested_by_user.id,
             AgentRunSnapshot.status.in_(LIVE_SNAPSHOT_STATUSES),
         )
@@ -525,7 +489,6 @@ def acquire_conversation_run_lock(
     lock = ConversationRunLock(
         id=new_id(),
         conversation_id=conversation.id,
-        workspace_id=workspace.id,
         requested_by_user_id=requested_by_user.id,
         owner_id=new_id(),
         lock_kind=lock_kind,
@@ -560,7 +523,6 @@ def release_conversation_run_lock(
 def create_pending_approval(
     db: Session,
     *,
-    workspace: Workspace,
     conversation: Conversation,
     requested_by_user: User,
     agent_run_id: str,
@@ -572,7 +534,6 @@ def create_pending_approval(
 ) -> AiToolApproval:
     approval = AiToolApproval(
         id=new_id(),
-        workspace_id=workspace.id,
         conversation_id=conversation.id,
         agent_run_id=agent_run_id,
         tool_call_id=tool_call_id,
@@ -626,7 +587,6 @@ def load_snapshot(
 def persist_snapshot_on_halt(
     db: Session,
     *,
-    workspace: Workspace,
     conversation: Conversation,
     requested_by_user: User,
     messages_json: list[dict[str, Any]],
@@ -637,7 +597,6 @@ def persist_snapshot_on_halt(
     snapshot = AgentRunSnapshot(
         id=snapshot_id or new_id(),
         conversation_id=conversation.id,
-        workspace_id=workspace.id,
         requested_by_user_id=requested_by_user.id,
         status="awaiting_approval",
         messages_json=messages_json,
@@ -738,7 +697,6 @@ def _commit_expired_approval_and_raise(
 def resolve_approval(
     db: Session,
     *,
-    workspace: Workspace,
     approval_id: str,
     decision: Literal["approved", "rejected"],
     reason: str | None,
@@ -746,7 +704,6 @@ def resolve_approval(
 ) -> AiToolApproval:
     approval = get_approval(
         db,
-        workspace=workspace,
         user=resolver_user,
         approval_id=approval_id,
         for_update=True,
@@ -773,14 +730,12 @@ def resolve_approval(
 def abandon_approval(
     db: Session,
     *,
-    workspace: Workspace,
     approval_id: str,
     reason: str | None,
     resolver_user: User,
 ) -> AiToolApproval:
     approval = get_approval(
         db,
-        workspace=workspace,
         user=resolver_user,
         approval_id=approval_id,
         for_update=True,
@@ -825,7 +780,6 @@ def expire_stale_approvals(db: Session, older_than: datetime) -> int:
             )
             log_llm_tool_approval_resolved(
                 actor_user_id=None,
-                workspace_id=approval.workspace_id,
                 approval_id=approval.id,
                 tool_name=approval.tool_name,
                 decision=approval.status,
@@ -921,7 +875,6 @@ def filter_resume_tool_specs(
 def get_resume_context(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     conversation_id: str,
     approval_id: str,
@@ -929,7 +882,6 @@ def get_resume_context(
 ) -> tuple[AiToolApproval, AgentRunSnapshot]:
     approval = get_approval(
         db,
-        workspace=workspace,
         user=user,
         approval_id=approval_id,
         for_update=for_update,
@@ -944,7 +896,7 @@ def get_resume_context(
         agent_run_id=approval.agent_run_id,
         for_update=for_update,
     )
-    if snapshot.workspace_id != workspace.id or snapshot.requested_by_user_id != user.id:
+    if snapshot.requested_by_user_id != user.id:
         raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
             code="ai.agent_run_snapshot_not_found",

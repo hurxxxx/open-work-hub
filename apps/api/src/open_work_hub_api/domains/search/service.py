@@ -11,12 +11,16 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.telemetry import current_trace_id
-from open_work_hub_api.domains.auth.models import User, Workspace
-from open_work_hub_api.domains.auth.access import resolve_workspace_enabled_app_ids
+from open_work_hub_api.domains.auth.app_availability import resolve_company_enabled_app_ids
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.docs.content_text import extract_page_text
 from open_work_hub_api.domains.docs.models import NativeDocPage
 from open_work_hub_api.domains.files.search_projection import (
     hydrate_file_search_rows_from_source,
+)
+from open_work_hub_api.domains.retrieval.partitioning import (
+    flatten_read_scope,
+    resolve_resource_read_scope,
 )
 from open_work_hub_api.domains.search.backend_contracts import (
     KeywordAclFilter,
@@ -25,25 +29,20 @@ from open_work_hub_api.domains.search.backend_contracts import (
     KeywordSearchTextOperator,
 )
 from open_work_hub_api.domains.search.backend_factory import build_keyword_search_client
-from open_work_hub_api.domains.search.projections import all_workspace_search_documents
 from open_work_hub_api.domains.search.entity_adapter_registry import (
-    WorkspaceKeywordSearchScope,
-    resolve_workspace_keyword_search_scope,
+    CompanyKeywordSearchScope,
+    resolve_keyword_search_scope,
 )
+from open_work_hub_api.domains.search.projections import all_search_documents
 from open_work_hub_api.domains.search.query_policy import (
     DEFAULT_KEYWORD_SEARCH_CANDIDATE_SIZE,
     build_keyword_search_query,
     filter_and_sort_keyword_search_rows,
 )
+from open_work_hub_api.domains.search.resource_mapping import maybe_resource_type_for_search_entity
 from open_work_hub_api.domains.search.result_projection import project_keyword_search_response
 from open_work_hub_api.domains.search.schemas import KeywordSearchRequest, KeywordSearchResponse
-from open_work_hub_api.domains.search.resource_mapping import maybe_resource_type_for_search_entity
-from open_work_hub_api.domains.retrieval.partitioning import (
-    flatten_read_scope,
-    resolve_resource_read_scope,
-)
 from open_work_hub_api.domains.source_access import SourceAclPolicy
-
 
 _MAX_KEYWORD_ACL_REFILL_PAGES = 5
 _KEYWORD_PIT_KEEP_ALIVE = "1m"
@@ -55,10 +54,9 @@ class KeywordIndexRefreshSummary:
     entity_counts: dict[str, int]
 
 
-def query_workspace_keyword_search(
+def query_keyword_search(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     request: KeywordSearchRequest,
     backend_timeout_seconds: float | None = None,
@@ -69,20 +67,21 @@ def query_workspace_keyword_search(
     backend_candidate_size: int | None = None,
     partitioned_generation: bool = False,
 ) -> KeywordSearchResponse:
-    scope = resolve_workspace_keyword_search_scope(
-        resolve_workspace_enabled_app_ids(db, workspace.id),
+    scope = resolve_keyword_search_scope(
+        resolve_company_enabled_app_ids(
+            db,
+        ),
         include_inactive_entity_types=evaluation_entity_types,
     )
     if not scope.has_sources:
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="search.workspace_keyword_search_disabled",
+            code="search.keyword_search_disabled",
         )
     requested_entity_types = tuple(request.entity_types)
     allowed_entity_types = scope.constrain_entity_types(requested_entity_types)
     effective_request = request.model_copy(
         update={
-            "workspace_id": workspace.id,
             "entity_types": list(allowed_entity_types),
         }
     )
@@ -99,7 +98,6 @@ def query_workspace_keyword_search(
         db,
         scope=scope,
         allowed_entity_types=allowed_entity_types,
-        workspace=workspace,
         user=user,
         partitioned_generation=partitioned_generation,
     )
@@ -112,23 +110,15 @@ def query_workspace_keyword_search(
             doc_page_lookup=lambda _doc_id: [],
         )
 
-    policy = SourceAclPolicy.for_workspace(db, workspace=workspace, user=user)
+    policy = SourceAclPolicy.for_user(db, user=user)
     resolved_client = client or _search_client()
     try:
-        _ensure_workspace_keyword_index_ready(
-            workspace_id=workspace.id,
+        _ensure_keyword_index_ready(
             client=resolved_client,
         )
         accessible_rows = _load_authorized_ranked_candidates(
-            workspace_id=workspace.id,
-            # A partitioned generation uses its partition predicate as the
-            # complete candidate envelope. Legacy backend ACL fields are only
-            # stale hints after workspace/company transitions and may not
-            # remove candidates before the source-owned final ACL.
             acl_filter=(
-                None
-                if retrieval_partition_ids is not None
-                else policy.build_keyword_acl_filter()
+                None if retrieval_partition_ids is not None else policy.build_keyword_acl_filter()
             ),
             policy=policy,
             allowed_entity_types=frozenset(allowed_entity_types),
@@ -150,16 +140,31 @@ def query_workspace_keyword_search(
         accessible_rows = hydrate_file_search_rows_from_source(
             db,
             rows=accessible_rows,
-            execution_workspace=workspace,
         )
-    # Recheck immediately before facets/counts/highlights and response
-    # projection so a concurrent revoke cannot leak derived information.
+    # Recompute app, partition, role, and source policy immediately before
+    # facets/counts/highlights so a concurrent revoke cannot leak derivatives.
+    final_scope = resolve_keyword_search_scope(
+        resolve_company_enabled_app_ids(
+            db,
+        ),
+        include_inactive_entity_types=evaluation_entity_types,
+    )
+    final_allowed_entity_types = frozenset(
+        final_scope.constrain_entity_types(requested_entity_types)
+    )
+    final_partition_ids = _resolve_keyword_partition_ids(
+        db,
+        scope=final_scope,
+        allowed_entity_types=tuple(final_allowed_entity_types),
+        user=user,
+        partitioned_generation=partitioned_generation,
+    )
+    final_policy = SourceAclPolicy.for_user(db, user=user)
     accessible_rows = _filter_accessible_search_rows(
         accessible_rows,
-        policy,
-        workspace_id=workspace.id,
-        allowed_entity_types=frozenset(allowed_entity_types),
-        authorized_partition_ids=retrieval_partition_ids,
+        final_policy,
+        allowed_entity_types=final_allowed_entity_types,
+        authorized_partition_ids=final_partition_ids,
     )
     page_rows = accessible_rows[
         effective_request.offset : effective_request.offset + effective_request.limit
@@ -173,15 +178,15 @@ def query_workspace_keyword_search(
     )
 
 
-def refresh_workspace_keyword_index(
+def refresh_keyword_index(
     db: Session,
     *,
-    workspace: Workspace,
     client: KeywordSearchClient | None = None,
 ) -> KeywordIndexRefreshSummary:
-    rows = all_workspace_search_documents(db, workspace=workspace)
-    (client or _search_client()).rebuild_workspace(
-        workspace_id=workspace.id,
+    rows = all_search_documents(
+        db,
+    )
+    (client or _search_client()).rebuild_company_index(
         documents=rows,
     )
     return KeywordIndexRefreshSummary(
@@ -192,12 +197,10 @@ def refresh_workspace_keyword_index(
     )
 
 
-def _ensure_workspace_keyword_index_ready(
+def _ensure_keyword_index_ready(
     *,
-    workspace_id: str,
     client: KeywordSearchClient | None = None,
 ) -> None:
-    del workspace_id
     resolved_client = client or _search_client()
     if not resolved_client.index_exists():
         raise KeywordSearchBackendError(
@@ -207,7 +210,6 @@ def _ensure_workspace_keyword_index_ready(
 
 def _load_ranked_candidates(
     *,
-    workspace_id: str,
     acl_filter: KeywordAclFilter | None,
     request: KeywordSearchRequest,
     backend_timeout_seconds: float | None = None,
@@ -218,7 +220,6 @@ def _load_ranked_candidates(
     retrieval_partition_ids: tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
     rows, _, _ = _load_ranked_candidate_page(
-        workspace_id=workspace_id,
         acl_filter=acl_filter,
         request=request,
         backend_timeout_seconds=backend_timeout_seconds,
@@ -233,7 +234,6 @@ def _load_ranked_candidates(
 
 def _load_authorized_ranked_candidates(
     *,
-    workspace_id: str,
     acl_filter: KeywordAclFilter | None,
     policy: SourceAclPolicy,
     allowed_entity_types: frozenset[str],
@@ -259,7 +259,6 @@ def _load_authorized_ranked_candidates(
     try:
         for _page in range(_MAX_KEYWORD_ACL_REFILL_PAGES):
             rows, next_search_after, exhausted = _load_ranked_candidate_page(
-                workspace_id=workspace_id,
                 acl_filter=acl_filter,
                 request=request,
                 backend_timeout_seconds=backend_timeout_seconds,
@@ -285,7 +284,6 @@ def _load_authorized_ranked_candidates(
                 _filter_accessible_search_rows(
                     new_rows,
                     policy,
-                    workspace_id=workspace_id,
                     allowed_entity_types=allowed_entity_types,
                     authorized_partition_ids=retrieval_partition_ids,
                 )
@@ -312,7 +310,6 @@ def _load_authorized_ranked_candidates(
 
 def _load_ranked_candidate_page(
     *,
-    workspace_id: str,
     acl_filter: KeywordAclFilter | None,
     request: KeywordSearchRequest,
     backend_timeout_seconds: float | None,
@@ -325,7 +322,6 @@ def _load_ranked_candidate_page(
     retrieval_partition_ids: tuple[str, ...] | None = None,
 ) -> tuple[list[dict[str, Any]], tuple[Any, ...], bool]:
     query = build_keyword_search_query(
-        workspace_id=workspace_id,
         acl_filter=acl_filter,
         request=request,
         retrieval_partition_ids=retrieval_partition_ids,
@@ -361,16 +357,15 @@ def _filter_accessible_search_rows(
     candidate_rows: list[dict[str, Any]],
     policy: SourceAclPolicy,
     *,
-    workspace_id: str,
     allowed_entity_types: frozenset[str],
     authorized_partition_ids: tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
     candidates: list[tuple[dict[str, Any], str, str]] = []
     for row in candidate_rows:
-        if authorized_partition_ids is None:
-            if str(row.get("workspace_id") or "") != workspace_id:
-                continue
-        elif str(row.get("retrieval_partition_id") or "") not in authorized_partition_ids:
+        if (
+            authorized_partition_ids is not None
+            and str(row.get("retrieval_partition_id") or "") not in authorized_partition_ids
+        ):
             continue
         if str(row.get("entity_type") or "") not in allowed_entity_types:
             continue
@@ -401,9 +396,8 @@ def _filter_accessible_search_rows(
 def _resolve_keyword_partition_ids(
     db: Session,
     *,
-    scope: WorkspaceKeywordSearchScope,
+    scope: CompanyKeywordSearchScope,
     allowed_entity_types: tuple[str, ...],
-    workspace: Workspace,
     user: User,
     partitioned_generation: bool,
 ) -> tuple[str, ...] | None:
@@ -418,7 +412,6 @@ def _resolve_keyword_partition_ids(
     read_scope = resolve_resource_read_scope(
         db,
         resource_types=resource_types,
-        workspace_id=workspace.id,
         user_id=user.id,
     )
     return tuple(str(partition_id) for partition_id in flatten_read_scope(read_scope))

@@ -13,7 +13,7 @@ function folder(
     owner_name: 'Owner',
     parent_id: null,
     updated_at: '2026-06-05T00:00:00Z',
-    visibility: 'workspace',
+    visibility: 'company',
     ...input,
   };
 }

@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from dev_accounts import content_headers
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.pms.attachments import normalize_task_attachment_filename
 from open_work_hub_api.domains.pms.models import Attachment, TaskActivityLog
@@ -28,7 +29,7 @@ def test_task_attachment_upload_registers_canonical_storage_and_activity(
     task = _create_issue(client, token, task_list["id"], title="Attachment task")
 
     response = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/attachments",
+        f"/api/v1/pms/tasks/{task['id']}/attachments",
         headers=_auth_headers(token),
         files={"file": ("brief.txt", b"hello", "text/plain")},
     )
@@ -38,7 +39,7 @@ def test_task_attachment_upload_registers_canonical_storage_and_activity(
     assert payload["filename"] == "brief.txt"
     assert payload["content_type"] == "text/plain"
     assert payload["size_bytes"] == 5
-    assert payload["download_url"].startswith(f"/api/v1/pms/attachments/{payload['id']}/content?")
+    assert payload["download_url"].startswith("/api/v1/content#grant=")
     assert "127.0.0.1" not in payload["download_url"]
     assert "fake-minio" not in payload["download_url"]
     assert store.puts == [
@@ -49,7 +50,10 @@ def test_task_attachment_upload_registers_canonical_storage_and_activity(
         }
     ]
 
-    download_response = client.get(payload["download_url"])
+    download_response = client.get(
+        payload["download_url"],
+        headers=content_headers(token, payload["download_url"]),
+    )
     assert download_response.status_code == 200, download_response.text
     assert download_response.content == b"hello"
     assert download_response.headers["content-type"].startswith("text/plain")
@@ -86,7 +90,7 @@ def test_task_attachment_delete_tolerates_missing_storage_and_cleans_local_state
     task_list = _create_task_list(client, token)
     task = _create_issue(client, token, task_list["id"], title="Delete attachment")
     upload = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/attachments",
+        f"/api/v1/pms/tasks/{task['id']}/attachments",
         headers=_auth_headers(token),
         files={"file": ("delete-me.txt", b"payload", "text/plain")},
     )
@@ -94,7 +98,7 @@ def test_task_attachment_delete_tolerates_missing_storage_and_cleans_local_state
     attachment_id = upload.json()["id"]
 
     response = client.delete(
-        f"/api/v1/workspaces/administrator/pms/attachments/{attachment_id}",
+        f"/api/v1/pms/attachments/{attachment_id}",
         headers=_auth_headers(token),
     )
 
@@ -122,7 +126,7 @@ def test_task_attachment_viewer_cannot_upload_or_delete(
     task_list = _create_task_list(client, admin_token)
     task = _create_issue(client, admin_token, task_list["id"], title="Viewer attachment")
     upload = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/attachments",
+        f"/api/v1/pms/tasks/{task['id']}/attachments",
         headers=_auth_headers(admin_token),
         files={"file": ("admin.txt", b"payload", "text/plain")},
     )
@@ -138,12 +142,12 @@ def test_task_attachment_viewer_cannot_upload_or_delete(
     viewer_token = _login(client, viewer["user"]["email"], viewer["temporary_password"])
 
     viewer_upload = client.post(
-        f"/api/v1/workspaces/administrator/pms/tasks/{task['id']}/attachments",
+        f"/api/v1/pms/tasks/{task['id']}/attachments",
         headers=_auth_headers(viewer_token),
         files={"file": ("viewer.txt", b"payload", "text/plain")},
     )
     viewer_delete = client.delete(
-        f"/api/v1/workspaces/administrator/pms/attachments/{upload.json()['id']}",
+        f"/api/v1/pms/attachments/{upload.json()['id']}",
         headers=_auth_headers(viewer_token),
     )
 

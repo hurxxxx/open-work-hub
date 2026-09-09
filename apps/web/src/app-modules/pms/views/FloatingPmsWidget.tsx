@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import { useAppAdmission } from '@/src/platform/apps/app-bootstrap-context';
+import { Button, InlineNotice } from '@open-work-hub/ui';
 import {
   CalendarDays,
   CheckCircle2,
@@ -10,9 +8,13 @@ import {
   Loader2,
   Plus,
 } from 'lucide-react';
-import { Button, InlineNotice } from '@open-work-hub/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import { cn } from '@/src/lib/utils';
+import { buildAppPath } from '@/src/platform/apps/app-links';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { runRequestsWithConcurrency } from '@/src/platform/network/request-concurrency';
 import {
@@ -20,7 +22,6 @@ import {
   type FloatingPmsOpenEventDetail,
   type PersonalTodoPmsTaskCreatedEventDetail,
 } from '@/src/platform/personal-widgets/floating-panel-events';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 
 import {
   getTaskDetail,
@@ -31,13 +32,12 @@ import {
   type PmsTask,
   type PmsTaskList,
   type PmsTaskListStatus,
-  type PmsWorkspaceRef,
 } from '../api/pms-api';
 import { taskListRoleAllows } from '../api/pms-permissions';
-import { formatDate, getStatusLabel, getStatusTone } from './pms-constants';
 import { NewTaskModal } from './NewTaskModal';
 import { TaskDetail } from './TaskDetail';
 import { TaskDetailModal } from './TaskDetailModal';
+import { formatDate, getStatusLabel, getStatusTone } from './pms-constants';
 import { reconcilePmsTaskListCatalog } from './pms-task-list-catalog-model';
 import { usePmsTaskListChangeSubscription } from './usePmsTaskListChangeSubscription';
 
@@ -95,28 +95,22 @@ export function FloatingPmsWidget({
   onCreateTaskOpenRequestHandled,
   openRequest,
   reloadSeq = 0,
-  workspaceSlug,
 }: {
   onChanged?: () => void;
   onCreateTaskOpenRequestHandled?: (requestId: number) => void;
   openRequest?: FloatingPmsWidgetOpenRequest | null;
   reloadSeq?: number;
-  workspaceSlug?: string | null;
 }) {
   const { t } = useTranslation('apps');
   const { token } = useAuth();
+  const canAccessPms = useAppAdmission('pms');
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<PersonalPmsTask[]>([]);
-  const [workspaces, setWorkspaces] = useState<PmsWorkspaceRef[]>([]);
   const [taskLists, setTaskLists] = useState<PmsTaskList[]>([]);
-  const [workspaceSlugByTaskListId, setWorkspaceSlugByTaskListId] = useState<
-    Record<string, string>
-  >({});
   const [statusesByListId, setStatusesByListId] = useState<
     Record<string, PmsTaskListStatus[]>
   >({});
   const [newTaskListId, setNewTaskListId] = useState('');
-  const [newTaskWorkspaceSlug, setNewTaskWorkspaceSlug] = useState('');
   const [newTaskListsLoading, setNewTaskListsLoading] = useState(false);
   const [newTaskInitialTitle, setNewTaskInitialTitle] = useState('');
   const [newTaskModalKey, setNewTaskModalKey] = useState(0);
@@ -140,12 +134,10 @@ export function FloatingPmsWidget({
   );
   const editableTaskLists = useMemo(
     () =>
-      taskLists.filter(
-        (taskList) =>
-          taskListRoleAllows(taskList.role, 'member') &&
-          workspaceSlugByTaskListId[taskList.id] === newTaskWorkspaceSlug,
+      taskLists.filter((taskList) =>
+        taskListRoleAllows(taskList.role, 'member'),
       ),
-    [newTaskWorkspaceSlug, taskLists, workspaceSlugByTaskListId],
+    [taskLists],
   );
   const selectedNewTaskList =
     editableTaskLists.find((taskList) => taskList.id === newTaskListId) ??
@@ -164,7 +156,6 @@ export function FloatingPmsWidget({
     selectedExternalTask?.id === selectedTaskId
       ? selectedExternalTask
       : (openTasks.find((task) => task.id === selectedTaskId) ?? null);
-  const selectedTaskWorkspaceSlug = selectedTask?.workspace.slug ?? null;
   const selectedTaskList = selectedTask
     ? (taskListById.get(selectedTask.list_id) ?? null)
     : null;
@@ -172,61 +163,36 @@ export function FloatingPmsWidget({
     ? (statusesByListId[selectedTask.list_id] ?? [])
     : [];
 
-  const loadWorkspaceContext = useCallback(
-    async (targetWorkspaceSlug: string): Promise<PmsTaskList[]> => {
-      if (!token || !targetWorkspaceSlug) return [];
-      const response = await listAllPmsTaskLists(
-        token,
-        undefined,
-        targetWorkspaceSlug,
-      );
-      const lists = response.items;
-      const statusEntries = await runRequestsWithConcurrency(
-        lists.map((taskList) => taskList.id),
-        FLOATING_PMS_STATUS_LOAD_CONCURRENCY,
-        async (taskListId) => {
-          try {
-            const statusResponse = await listTaskListStatuses(
-              token,
-              taskListId,
-              targetWorkspaceSlug,
-            );
-            return [taskListId, statusResponse.items] as const;
-          } catch {
-            return [taskListId, [] as PmsTaskListStatus[]] as const;
-          }
-        },
-      );
-      setTaskLists((current) => {
-        const byId = new Map(
-          current.map((taskList) => [taskList.id, taskList]),
-        );
-        lists.forEach((taskList) => byId.set(taskList.id, taskList));
-        return Array.from(byId.values());
-      });
-      setWorkspaceSlugByTaskListId((current) => ({
-        ...current,
-        ...Object.fromEntries(
-          lists.map((taskList) => [taskList.id, targetWorkspaceSlug]),
-        ),
-      }));
-      setStatusesByListId((current) => ({
-        ...current,
-        ...Object.fromEntries(statusEntries),
-      }));
-      return lists;
-    },
-    [token],
-  );
+  const loadTaskLists = useCallback(async (): Promise<PmsTaskList[]> => {
+    if (!token) return [];
+    const response = await listAllPmsTaskLists(token, undefined);
+    const lists = response.items;
+    const statusEntries = await runRequestsWithConcurrency(
+      lists.map((taskList) => taskList.id),
+      FLOATING_PMS_STATUS_LOAD_CONCURRENCY,
+      async (taskListId) => {
+        try {
+          const statusResponse = await listTaskListStatuses(token, taskListId);
+          return [taskListId, statusResponse.items] as const;
+        } catch {
+          return [taskListId, [] as PmsTaskListStatus[]] as const;
+        }
+      },
+    );
+    setTaskLists(lists);
+    setStatusesByListId((current) => ({
+      ...current,
+      ...Object.fromEntries(statusEntries),
+    }));
+    return lists;
+  }, [token]);
 
   const reload = useCallback(async () => {
     const reloadGeneration = reloadGenerationRef.current + 1;
     reloadGenerationRef.current = reloadGeneration;
     if (!token) {
       setTasks([]);
-      setWorkspaces([]);
       setTaskLists([]);
-      setWorkspaceSlugByTaskListId({});
       setStatusesByListId({});
       setLoading(false);
       return;
@@ -238,17 +204,6 @@ export function FloatingPmsWidget({
       const assignedResponse = await listPersonalPmsAssignedTasks(token);
       if (reloadGeneration !== reloadGenerationRef.current) return;
       setTasks(assignedResponse.items);
-      setWorkspaces(assignedResponse.workspaces);
-      setNewTaskWorkspaceSlug((current) =>
-        current &&
-        assignedResponse.workspaces.some((item) => item.slug === current)
-          ? current
-          : (assignedResponse.workspaces.find(
-              (item) => item.slug === workspaceSlug,
-            )?.slug ??
-            assignedResponse.workspaces[0]?.slug ??
-            ''),
-      );
     } catch (caughtError) {
       if (reloadGeneration !== reloadGenerationRef.current) return;
       setError(
@@ -257,17 +212,12 @@ export function FloatingPmsWidget({
     } finally {
       if (reloadGeneration === reloadGenerationRef.current) setLoading(false);
     }
-  }, [t, token, workspaceSlug]);
+  }, [t, token]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!newTaskWorkspaceSlug) {
-      setNewTaskListId('');
-      setNewTaskListsLoading(false);
-      return undefined;
-    }
     setNewTaskListsLoading(true);
-    loadWorkspaceContext(newTaskWorkspaceSlug)
+    loadTaskLists()
       .then((lists) => {
         if (cancelled) return;
         setNewTaskListId((current) =>
@@ -287,7 +237,7 @@ export function FloatingPmsWidget({
     return () => {
       cancelled = true;
     };
-  }, [loadWorkspaceContext, newTaskWorkspaceSlug]);
+  }, [loadTaskLists, reloadSeq]);
 
   useEffect(() => {
     void reload();
@@ -297,9 +247,7 @@ export function FloatingPmsWidget({
     useCallback(
       (detail) => {
         const changedListId =
-          detail.type === 'updated'
-            ? detail.taskList.id
-            : detail.taskListId;
+          detail.type === 'updated' ? detail.taskList.id : detail.taskListId;
         const leftActiveCatalog =
           detail.type === 'deleted' || detail.taskList.archived;
 
@@ -320,11 +268,6 @@ export function FloatingPmsWidget({
             delete next[changedListId];
             return next;
           });
-          setWorkspaceSlugByTaskListId((current) => {
-            const next = { ...current };
-            delete next[changedListId];
-            return next;
-          });
           if (selectedTask?.list_id === changedListId) {
             setSelectedTaskId(null);
             setSelectedExternalTask(null);
@@ -333,16 +276,9 @@ export function FloatingPmsWidget({
         }
 
         void reload();
-        if (newTaskWorkspaceSlug) {
-          void loadWorkspaceContext(newTaskWorkspaceSlug);
-        }
+        void loadTaskLists();
       },
-      [
-        loadWorkspaceContext,
-        newTaskWorkspaceSlug,
-        reload,
-        selectedTask?.list_id,
-      ],
+      [loadTaskLists, reload, selectedTask?.list_id],
     ),
   );
 
@@ -363,13 +299,6 @@ export function FloatingPmsWidget({
       return undefined;
     }
     if (detail.mode === 'createTask') {
-      const requestedWorkspaceSlug = detail.workspaceSlug?.trim();
-      if (
-        requestedWorkspaceSlug &&
-        workspaces.some((item) => item.slug === requestedWorkspaceSlug)
-      ) {
-        setNewTaskWorkspaceSlug(requestedWorkspaceSlug);
-      }
       setNewTaskInitialTitle(detail.title?.trim() ?? '');
       setNewTaskModalKey((current) => current + 1);
       setNewTaskSourceTodoId(detail.sourceTodoId ?? null);
@@ -388,25 +317,13 @@ export function FloatingPmsWidget({
 
     let cancelled = false;
     const existingTask = openTasks.find((task) => task.id === detail.taskId);
-    const targetWorkspaceSlug =
-      detail.workspaceSlug?.trim() ||
-      existingTask?.workspace.slug ||
-      workspaceSlug ||
-      '';
-    const targetWorkspace = workspaces.find(
-      (item) => item.slug === targetWorkspaceSlug,
-    );
-    if (!targetWorkspaceSlug || !targetWorkspace) {
-      setError(t('pms.errors.requestedIssueFailed'));
-      return undefined;
-    }
     setError(null);
     setSelectedTaskId(detail.taskId);
     setSelectedExternalTask(existingTask ?? null);
     setLoadingTaskDetailId(detail.taskId);
 
-    void loadWorkspaceContext(targetWorkspaceSlug);
-    getTaskDetail(token, detail.taskId, targetWorkspaceSlug)
+    void loadTaskLists();
+    getTaskDetail(token, detail.taskId)
       .then(async (response) => {
         const task = response.task;
         let taskStatuses: PmsTaskListStatus[] | null = null;
@@ -414,7 +331,6 @@ export function FloatingPmsWidget({
           const statusResponse = await listTaskListStatuses(
             token,
             task.list_id,
-            targetWorkspaceSlug,
           );
           taskStatuses = statusResponse.items;
         } catch {
@@ -423,7 +339,7 @@ export function FloatingPmsWidget({
         if (cancelled) {
           return;
         }
-        setSelectedExternalTask({ ...task, workspace: targetWorkspace });
+        setSelectedExternalTask(task);
         if (taskStatuses) {
           setStatusesByListId((current) => ({
             ...current,
@@ -449,14 +365,12 @@ export function FloatingPmsWidget({
       cancelled = true;
     };
   }, [
-    loadWorkspaceContext,
+    loadTaskLists,
     onCreateTaskOpenRequestHandled,
     openRequest,
     openTasks,
     t,
     token,
-    workspaceSlug,
-    workspaces,
   ]);
 
   const handleTaskCreated = useCallback(
@@ -508,6 +422,10 @@ export function FloatingPmsWidget({
             onClose={closeSelectedTask}
           >
             <TaskDetail
+              canPublishDoc={taskListRoleAllows(
+                selectedTaskList?.role,
+                'admin',
+              )}
               canEdit={taskListRoleAllows(selectedTaskList?.role, 'member')}
               onClose={closeSelectedTask}
               onUpdate={handleTaskUpdated}
@@ -515,7 +433,6 @@ export function FloatingPmsWidget({
               spaceName={selectedTaskList?.team_name}
               task={selectedTask}
               taskListStatuses={selectedTaskStatuses}
-              workspaceSlug={selectedTaskWorkspaceSlug}
             />
           </TaskDetailModal>,
           document.body,
@@ -536,7 +453,7 @@ export function FloatingPmsWidget({
         <div className="flex shrink-0 items-center gap-2">
           <Button
             className="shrink-0 gap-1.5"
-            disabled={workspaces.length === 0}
+            disabled={!canAccessPms}
             onClick={() => {
               setNewTaskInitialTitle('');
               setNewTaskModalKey((current) => current + 1);
@@ -591,7 +508,7 @@ export function FloatingPmsWidget({
                     onClick={() => {
                       setSelectedExternalTask(task);
                       setSelectedTaskId(task.id);
-                      void loadWorkspaceContext(task.workspace.slug);
+                      void loadTaskLists();
                     }}
                   >
                     <div className="flex min-w-0 items-start gap-2.5">
@@ -605,7 +522,7 @@ export function FloatingPmsWidget({
                           {task.title}
                         </p>
                         <p className="app-text-caption mt-1 truncate text-app-ink/45">
-                          {task.workspace.name}
+                          {taskListById.get(task.list_id)?.team_name}
                           {taskList ? ` · ${taskListLabel(taskList)}` : null}
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -642,26 +559,8 @@ export function FloatingPmsWidget({
       <div className="flex shrink-0 justify-end border-t border-app-border px-4 py-3">
         <Button
           className="gap-1.5"
-          disabled={
-            !(
-              selectedTaskWorkspaceSlug ||
-              workspaces.some((item) => item.slug === workspaceSlug) ||
-              newTaskWorkspaceSlug ||
-              workspaces[0]?.slug ||
-              workspaceSlug
-            )
-          }
-          onClick={() => {
-            const targetWorkspaceSlug =
-              selectedTaskWorkspaceSlug ||
-              workspaces.find((item) => item.slug === workspaceSlug)?.slug ||
-              newTaskWorkspaceSlug ||
-              workspaces[0]?.slug ||
-              workspaceSlug;
-            if (targetWorkspaceSlug) {
-              navigate(buildWorkspaceAppPath(targetWorkspaceSlug, 'pms'));
-            }
-          }}
+          disabled={!canAccessPms}
+          onClick={() => navigate(buildAppPath('pms'))}
           variant="secondary"
         >
           <ExternalLink aria-hidden="true" size={14} />
@@ -684,7 +583,6 @@ export function FloatingPmsWidget({
           onClose={closeNewTaskModal}
           onCreated={handleTaskCreated}
           onTaskListIdChange={setNewTaskListId}
-          onWorkspaceSlugChange={setNewTaskWorkspaceSlug}
           overlayClassName="z-[119]"
           parentPickerContentClassName="z-[122]"
           parentPickerOverlayClassName="z-[121]"
@@ -697,11 +595,6 @@ export function FloatingPmsWidget({
               ? (statusesByListId[selectedNewTaskList.id] ?? [])
               : []
           }
-          workspaceOptions={workspaces.map((workspace) => ({
-            label: workspace.name,
-            slug: workspace.slug,
-          }))}
-          workspaceSlug={newTaskWorkspaceSlug}
         />
       ) : null}
 
@@ -735,7 +628,7 @@ export function useFloatingPmsAssignedSummary(
       .then((response) => {
         if (!cancelled) {
           setCount(response.items.length);
-          setAvailable(response.workspaces.length > 0);
+          setAvailable(true);
         }
       })
       .catch(() => {

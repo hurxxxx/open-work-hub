@@ -64,12 +64,10 @@ def _docx_with_malformed_vertical_merge_row() -> bytes:
 
 
 def _slide_xml(*paragraphs: str) -> str:
-    body = "".join(
-        f"<a:p><a:r><a:t>{paragraph}</a:t></a:r></a:p>" for paragraph in paragraphs
-    )
+    body = "".join(f"<a:p><a:r><a:t>{paragraph}</a:t></a:r></a:p>" for paragraph in paragraphs)
     return (
-        "<p:sld xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" "
-        "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">"
+        '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" '
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
         f"<p:cSld><p:spTree>{body}</p:spTree></p:cSld></p:sld>"
     )
 
@@ -80,8 +78,8 @@ def _notes_xml(*paragraphs: str) -> str:
 
 def _slide_with_table_xml() -> str:
     return (
-        "<p:sld xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" "
-        "xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">"
+        '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" '
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
         "<p:cSld><p:spTree>"
         "<a:p><a:r><a:t>제품 사양</a:t></a:r></a:p>"
         "<a:tbl>"
@@ -379,9 +377,7 @@ def test_html_stream_bounds_malformed_nested_captures(
 ) -> None:
     monkeypatch.setattr(html_extractor_module, "_MAX_HTML_NESTING", 3)
     content = (
-        "<!doctype html><html><body>"
-        "<p>outer<p>middle<p>inner<p>too deep"
-        "</body></html>"
+        "<!doctype html><html><body><p>outer<p>middle<p>inner<p>too deep</body></html>"
     ).encode()
 
     result = extract_html_stream(

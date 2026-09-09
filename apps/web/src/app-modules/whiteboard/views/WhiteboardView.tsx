@@ -1,15 +1,4 @@
 import {
-  Suspense,
-  lazy,
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useState,
-} from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import {
   Clock3,
   Grid3X3,
   List as ListIcon,
@@ -21,16 +10,26 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { updateWhiteboardCompanySharing } from '../api/whiteboard-api';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
   createWhiteboard,
-  deleteWhiteboardTarget,
   listWhiteboardHub,
   resolveWhiteboardSharedLink,
-  updateWhiteboardTarget,
   type WhiteboardDetail,
   type WhiteboardHubItem,
   type WhiteboardVisibility,
@@ -71,7 +70,7 @@ export function WhiteboardView() {
 function useWhiteboardViewElement() {
   const { t } = useTranslation(['apps', 'shell']);
   const { token, user } = useAuth();
-  const { workspaceSlug, whiteboardId, shareToken } = useParams();
+  const { whiteboardId, shareToken } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
@@ -85,18 +84,15 @@ function useWhiteboardViewElement() {
   );
   const { items, loadingList, sharedItem, loadingShared, error } = state;
   const view = viewFromSearch(searchParams.get('view'));
-  const currentWorkspaceId =
-    user?.workspaces.find((workspace) => workspace.slug === workspaceSlug)
-      ?.id ?? null;
   const timeZone = normalizeTimeZone(user?.time_zone);
   const isTrashView = view === 'archived';
   const ViewIcon = isTrashView ? Trash2 : PencilRuler;
   const personalItems = useMemo(
-    () => items.filter((item) => item.is_private),
+    () => items.filter((item) => !item.company_visible),
     [items],
   );
-  const workspaceItems = useMemo(
-    () => items.filter((item) => !item.is_private),
+  const companyItems = useMemo(
+    () => items.filter((item) => item.company_visible),
     [items],
   );
 
@@ -110,20 +106,16 @@ function useWhiteboardViewElement() {
       return buildWhiteboardHubItemPath({
         itemId: id,
         searchParams,
-        user,
-        workspaceSlug,
       });
     },
-    [searchParams, user, workspaceSlug],
+    [searchParams],
   );
 
   const rootPath = useCallback(() => {
     return buildWhiteboardHubRootPath({
       searchParams,
-      user,
-      workspaceSlug,
     });
-  }, [searchParams, user, workspaceSlug]);
+  }, [searchParams]);
 
   const openItem = useCallback(
     (item: WhiteboardHubItem) => {
@@ -144,7 +136,6 @@ function useWhiteboardViewElement() {
           sortValue,
           targetFilter,
         }),
-        workspaceSlug,
       );
       dispatch({ type: 'listLoaded', items: response.items });
     } catch (err) {
@@ -163,7 +154,6 @@ function useWhiteboardViewElement() {
     token,
     view,
     whiteboardId,
-    workspaceSlug,
   ]);
 
   useEffect(() => {
@@ -198,17 +188,21 @@ function useWhiteboardViewElement() {
   const handleCreate = useCallback(
     async (visibility: WhiteboardVisibility = 'personal') => {
       if (!token) return;
+      if (
+        (visibility === 'company' || targetFilter) &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
       try {
         const created = await createWhiteboard(
           token,
           buildWhiteboardCreatePayload({
             title: t('apps:whiteboard.untitled'),
             targetFilter,
-            currentWorkspaceId,
             itemCount: items.length,
             visibility,
+            companyAdminReadAcknowledged: true,
           }),
-          workspaceSlug,
         );
         dispatch({ type: 'upsertItem', item: created });
         navigate(activePath(created.id));
@@ -222,46 +216,25 @@ function useWhiteboardViewElement() {
         });
       }
     },
-    [
-      activePath,
-      currentWorkspaceId,
-      items.length,
-      navigate,
-      t,
-      targetFilter,
-      token,
-      workspaceSlug,
-    ],
+    [activePath, items.length, navigate, t, targetFilter, token],
   );
 
   const handleVisibilityChange = useCallback(
     async (item: WhiteboardHubItem, visibility: WhiteboardVisibility) => {
       if (!token) return;
-      if ((visibility === 'personal') === item.is_private) return;
+      if ((visibility === 'company') === item.company_visible) return;
+      if (
+        visibility === 'company' &&
+        !window.confirm(t('shell:contentPublication.confirm'))
+      )
+        return;
       try {
-        const updated =
-          visibility === 'personal'
-            ? await deleteWhiteboardTarget(token, item.id, workspaceSlug)
-            : currentWorkspaceId
-              ? await updateWhiteboardTarget(
-                  token,
-                  item.id,
-                  {
-                    app: 'whiteboard',
-                    type: 'workspace_sidebar',
-                    id: currentWorkspaceId,
-                    sort_order: 0,
-                  },
-                  workspaceSlug,
-                )
-              : null;
-        if (!updated) {
-          dispatch({
-            type: 'setError',
-            error: t('apps:whiteboard.workspaceMissing'),
-          });
-          return;
-        }
+        const updated = await updateWhiteboardCompanySharing(
+          token,
+          item.id,
+          visibility === 'company',
+          true,
+        );
         dispatch({ type: 'upsertItem', item: updated });
       } catch (err) {
         dispatch({
@@ -273,7 +246,7 @@ function useWhiteboardViewElement() {
         });
       }
     },
-    [currentWorkspaceId, t, token, workspaceSlug],
+    [t, token],
   );
 
   useEffect(() => {
@@ -366,7 +339,6 @@ function useWhiteboardViewElement() {
           <WhiteboardEditorSurface
             key={whiteboardId}
             boardId={whiteboardId}
-            workspaceSlug={workspaceSlug}
             onClose={handleEditorClose}
             onBoardLoaded={upsertItem}
             onBoardUpdated={upsertItem}
@@ -475,7 +447,6 @@ function useWhiteboardViewElement() {
               visibility="personal"
               items={personalItems}
               token={token}
-              workspaceSlug={workspaceSlug}
               timeZone={timeZone}
               archived={isTrashView}
               layoutMode={layoutMode}
@@ -484,10 +455,9 @@ function useWhiteboardViewElement() {
               onVisibilityChange={handleVisibilityChange}
             />
             <WhiteboardSection
-              visibility="workspace"
-              items={workspaceItems}
+              visibility="company"
+              items={companyItems}
               token={token}
-              workspaceSlug={workspaceSlug}
               timeZone={timeZone}
               archived={isTrashView}
               layoutMode={layoutMode}
@@ -506,7 +476,6 @@ function WhiteboardSection({
   visibility,
   items,
   token,
-  workspaceSlug,
   timeZone,
   archived,
   layoutMode,
@@ -517,7 +486,7 @@ function WhiteboardSection({
   visibility: WhiteboardVisibility;
   items: WhiteboardHubItem[];
   token: string | null;
-  workspaceSlug?: string | null;
+
   timeZone: string;
   archived: boolean;
   layoutMode: WhiteboardLayoutMode;
@@ -529,19 +498,19 @@ function WhiteboardSection({
   ) => void;
 }) {
   const { t } = useTranslation('apps');
-  const SectionIcon = visibility === 'workspace' ? Users : Lock;
+  const SectionIcon = visibility === 'company' ? Users : Lock;
   const titleKey =
-    visibility === 'workspace'
-      ? 'whiteboard.workspaceSectionTitle'
+    visibility === 'company'
+      ? 'whiteboard.companySectionTitle'
       : 'whiteboard.personalSectionTitle';
   const emptyKey = archived
     ? 'whiteboard.trashEmpty'
-    : visibility === 'workspace'
-      ? 'whiteboard.workspaceSectionEmpty'
+    : visibility === 'company'
+      ? 'whiteboard.companySectionEmpty'
       : 'whiteboard.personalSectionEmpty';
   const createKey =
-    visibility === 'workspace'
-      ? 'whiteboard.createWorkspace'
+    visibility === 'company'
+      ? 'whiteboard.createCompany'
       : 'whiteboard.createPersonal';
 
   return (
@@ -552,9 +521,7 @@ function WhiteboardSection({
             size={18}
             className={cn(
               'shrink-0',
-              visibility === 'workspace'
-                ? 'text-app-warning'
-                : 'text-app-ink/55',
+              visibility === 'company' ? 'text-app-warning' : 'text-app-ink/55',
             )}
           />
           <h2 className="app-text-title-md truncate text-app-ink">
@@ -583,7 +550,6 @@ function WhiteboardSection({
                 key={item.id}
                 item={item}
                 token={token}
-                workspaceSlug={workspaceSlug}
                 timeZone={timeZone}
                 onOpen={onOpen}
                 onVisibilityChange={onVisibilityChange}

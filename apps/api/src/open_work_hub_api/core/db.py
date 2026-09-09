@@ -4,13 +4,12 @@ import logging
 import os
 from collections.abc import Generator
 from functools import lru_cache
-from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from open_work_hub_api.core.model_registry import import_all_models
-from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.core.settings import WORKSPACE_ROOT, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ def get_db_session() -> Generator[Session, None, None]:
 def _alembic_config():
     from alembic.config import Config
 
-    ini_path = Path(__file__).resolve().parents[3] / "alembic.ini"
+    ini_path = WORKSPACE_ROOT / "apps" / "api" / "alembic.ini"
     cfg = Config(str(ini_path))
     cfg.set_main_option("sqlalchemy.url", get_settings().postgres_dsn)
     return cfg

@@ -1,3 +1,18 @@
+import { useConfirm } from '@open-work-hub/ui/feedback/confirm-dialog';
+import { usePrompt } from '@open-work-hub/ui/feedback/prompt-dialog';
+import {
+  ArrowUpDown,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  FolderKanban,
+  FolderOpen,
+  Layout,
+  List as ListIcon,
+  MoreHorizontal,
+  Plus,
+  Star,
+} from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -6,35 +21,17 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useConfirm } from '@open-work-hub/ui/feedback/confirm-dialog';
-import { usePrompt } from '@open-work-hub/ui/feedback/prompt-dialog';
-import {
-  ArrowUpDown,
-  ChevronDown,
-  ChevronRight,
-  FileText,
-  FolderOpen,
-  FolderKanban,
-  Layout,
-  List as ListIcon,
-  MoreHorizontal,
-  Plus,
-  Star,
-} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
-import { cn } from '@/src/lib/utils';
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import { teamRoleAllows } from '@/src/platform/auth/auth-api';
-import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
 import {
   listDocsHub,
   type DocsHubItem,
 } from '@/src/app-modules/docs/public-api';
+import { cn } from '@/src/lib/utils';
+import { buildAppPath } from '@/src/platform/apps/app-links';
+import { teamRoleAllows } from '@/src/platform/auth/auth-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   deleteSpace,
   listFolders,
@@ -45,9 +42,6 @@ import {
   type PmsSpace,
   type PmsSpaceMember,
 } from '../api/pms-api';
-import { initials } from './pms-constants';
-import { CreateTaskListModal } from './CreateTaskListModal';
-import { SpaceMembersModal } from './SpaceMembersModal';
 import { SpaceContextMenu } from '../sidebar/SpaceContextMenu';
 import { SpaceOrderEditorModal } from '../sidebar/SpaceOrderEditorModal';
 import type { SpaceOrderSavePayload } from '../sidebar/space-order-editor-model';
@@ -55,44 +49,47 @@ import {
   buildSpaceOrderChanges,
   persistSpaceOrderChanges,
 } from '../sidebar/space-order-persistence';
+import { CreateTaskListModal } from './CreateTaskListModal';
+import { PmsCenteredLoadingState } from './PmsCenteredStateBlock';
+import { PmsSpaceToolTabs } from './PmsSpaceToolTabs';
+import { SpaceMembersModal } from './SpaceMembersModal';
+import { initials } from './pms-constants';
+import {
+  dispatchPmsSpaceChanged,
+  dispatchPmsSpaceOrderChanged,
+  PMS_SPACE_CHANGED_EVENT,
+  PMS_SPACE_ORDER_CHANGED_EVENT,
+  PMS_TASK_LIST_CHANGED_EVENT,
+  type PmsSpaceChangedDetail,
+  type PmsSpaceOrderChangedDetail,
+  type PmsTaskListChangedDetail,
+} from './pms-events';
+import {
+  buildPmsSpaceDocsToolPath,
+  buildPmsTaskListToolPath,
+} from './pms-view-route';
 import {
   buildSpaceOverviewCollections,
   buildSpaceOverviewLoadSuccess,
   SPACE_OVERVIEW_INITIAL_STATE,
   spaceOverviewReducer,
 } from './space-overview-model';
-import {
-  buildPmsSpaceDocsToolPath,
-  buildPmsTaskListToolPath,
-} from './pms-view-route';
-import { PmsSpaceToolTabs } from './PmsSpaceToolTabs';
-import { PmsCenteredLoadingState } from './PmsCenteredStateBlock';
-import {
-  PMS_SPACE_CHANGED_EVENT,
-  PMS_SPACE_ORDER_CHANGED_EVENT,
-  PMS_TASK_LIST_CHANGED_EVENT,
-  dispatchPmsSpaceChanged,
-  dispatchPmsSpaceOrderChanged,
-  type PmsSpaceChangedDetail,
-  type PmsSpaceOrderChangedDetail,
-  type PmsTaskListChangedDetail,
-} from './pms-events';
 
 const AVATAR_COLORS = [
-  'bg-rose-500',
-  'bg-pink-500',
-  'bg-fuchsia-500',
-  'bg-purple-500',
-  'bg-violet-500',
-  'bg-indigo-500',
-  'bg-blue-500',
-  'bg-sky-500',
-  'bg-cyan-500',
-  'bg-teal-500',
-  'bg-emerald-500',
-  'bg-green-500',
-  'bg-amber-500',
-  'bg-orange-500',
+  'bg-rose-700',
+  'bg-pink-700',
+  'bg-fuchsia-700',
+  'bg-purple-700',
+  'bg-violet-700',
+  'bg-indigo-700',
+  'bg-blue-700',
+  'bg-sky-700',
+  'bg-cyan-700',
+  'bg-teal-700',
+  'bg-emerald-700',
+  'bg-green-700',
+  'bg-amber-700',
+  'bg-orange-700',
 ];
 
 function avatarColor(seed: string): string {
@@ -132,14 +129,10 @@ function RecentItemIcon({ kind }: { kind: 'doc' | 'folder' | 'list' }) {
 interface SpaceOverviewViewProps {
   spaceId: string;
   spaceName?: string | null;
-  workspaceSlug?: string | null;
 }
 
 export const SpaceOverviewView = (props: SpaceOverviewViewProps) => (
-  <SpaceOverviewViewSession
-    key={`${props.spaceId}:${props.workspaceSlug ?? ''}`}
-    {...props}
-  />
+  <SpaceOverviewViewSession key={props.spaceId} {...props} />
 );
 
 function SpaceOverviewViewSession(props: SpaceOverviewViewProps) {
@@ -149,13 +142,12 @@ function SpaceOverviewViewSession(props: SpaceOverviewViewProps) {
 function useSpaceOverviewViewElement({
   spaceId,
   spaceName,
-  workspaceSlug,
 }: SpaceOverviewViewProps) {
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const { t, i18n } = useTranslation('apps');
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const navigate = useNavigate();
-  const pmsRootPath = resolveDefaultWorkspaceAppPath(user, 'pms');
+  const pmsRootPath = buildAppPath('pms');
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false);
@@ -184,8 +176,8 @@ function useSpaceOverviewViewElement({
     dispatch({ type: 'loadStart' });
 
     Promise.all([
-      listPmsTaskLists(token, spaceId, workspaceSlug),
-      listFolders(token, spaceId, workspaceSlug),
+      listPmsTaskLists(token, spaceId),
+      listFolders(token, spaceId),
       listDocsHub(token, {
         view: 'all',
         space_id: spaceId,
@@ -198,13 +190,13 @@ function useSpaceOverviewViewElement({
         page: 1,
         page_size: 200,
       })),
-      listSpaceMembers(token, spaceId, workspaceSlug).catch(() => ({
+      listSpaceMembers(token, spaceId).catch(() => ({
         items: [] as PmsSpaceMember[],
         total: 0,
         page: 1,
         page_size: 50,
       })),
-      listSpaces(token, workspaceSlug).catch(() => [] as PmsSpace[]),
+      listSpaces(token).catch(() => [] as PmsSpace[]),
     ])
       .then(([listRes, folderRes, docsRes, memberRes, spaces]) => {
         if (cancelled) return;
@@ -227,7 +219,7 @@ function useSpaceOverviewViewElement({
     return () => {
       cancelled = true;
     };
-  }, [spaceId, token, workspaceSlug, refreshSeq, locale]);
+  }, [spaceId, token, refreshSeq, locale]);
 
   const canManageMembers =
     spaceMeta?.current_user_role === 'owner' ||
@@ -236,6 +228,10 @@ function useSpaceOverviewViewElement({
     spaceMeta?.current_user_role,
     'member',
   );
+  const canCreateList = canEditSpaceOrder;
+  const openCreateList = () => {
+    if (canCreateList) dispatch({ type: 'setCreateListOpen', open: true });
+  };
   const fallbackSpaceName = t('pms.spaceOverview.fallbackSpaceName');
   const displaySpaceName = spaceMeta?.name ?? spaceName ?? fallbackSpaceName;
 
@@ -247,11 +243,7 @@ function useSpaceOverviewViewElement({
         dispatch({ type: 'setSpaceMeta', spaceMeta: detail.space });
       }
       if (detail.type === 'deleted' && detail.spaceId === spaceId) {
-        navigate(
-          workspaceSlug
-            ? buildWorkspaceAppPath(workspaceSlug, 'pms')
-            : pmsRootPath,
-        );
+        navigate(buildAppPath('pms'));
       }
     };
 
@@ -259,7 +251,7 @@ function useSpaceOverviewViewElement({
     return () => {
       window.removeEventListener(PMS_SPACE_CHANGED_EVENT, handleSpaceChanged);
     };
-  }, [navigate, pmsRootPath, spaceId, workspaceSlug]);
+  }, [navigate, pmsRootPath, spaceId]);
 
   useEffect(() => {
     const handleTaskListChanged = (event: Event) => {
@@ -310,6 +302,7 @@ function useSpaceOverviewViewElement({
     async (payload: SpaceOrderSavePayload) => {
       if (!token || !canEditSpaceOrder) return;
       const changes = buildSpaceOrderChanges({
+        spaceId,
         currentDocs: spaceDocs,
         currentLists: lists,
         payload,
@@ -365,24 +358,11 @@ function useSpaceOverviewViewElement({
     try {
       await deleteSpace(token, spaceId);
       dispatchPmsSpaceChanged({ type: 'deleted', spaceId });
-      navigate(
-        workspaceSlug
-          ? buildWorkspaceAppPath(workspaceSlug, 'pms')
-          : pmsRootPath,
-      );
+      navigate(buildAppPath('pms'));
     } catch {
       /* stay on the current space if deletion fails */
     }
-  }, [
-    canManageMembers,
-    confirm,
-    navigate,
-    pmsRootPath,
-    spaceId,
-    t,
-    token,
-    workspaceSlug,
-  ]);
+  }, [canManageMembers, confirm, navigate, spaceId, t, token]);
 
   const { allFoldersCollapsed, listsByFolder, recentItems, rootLists } =
     useMemo(
@@ -458,20 +438,21 @@ function useSpaceOverviewViewElement({
               </button>
             ) : null}
           </div>
-          <button
-            className="app-text-control-sm rounded-md bg-app-ink px-3 py-1.5 text-app-bg transition-colors hover:bg-app-ink/90"
-            onClick={() => dispatch({ type: 'setCreateListOpen', open: true })}
-            type="button"
-          >
-            {t('pms.spaceOverview.newList')}
-          </button>
+          {canCreateList ? (
+            <button
+              className="app-text-control-sm rounded-md bg-app-ink px-3 py-1.5 text-app-bg transition-colors hover:bg-app-ink/90"
+              onClick={openCreateList}
+              type="button"
+            >
+              {t('pms.spaceOverview.newList')}
+            </button>
+          ) : null}
         </div>
 
         <PmsSpaceToolTabs
           activeTab="overview"
           className="mt-3"
           spaceId={spaceId}
-          workspaceSlug={workspaceSlug}
         />
       </header>
 
@@ -507,7 +488,6 @@ function useSpaceOverviewViewElement({
                         navigate(
                           buildPmsTaskListToolPath({
                             taskListId: item.id,
-                            workspaceSlug,
                           }),
                         );
                       }
@@ -516,7 +496,6 @@ function useSpaceOverviewViewElement({
                           buildPmsSpaceDocsToolPath({
                             docId: item.id,
                             spaceId,
-                            workspaceSlug,
                           }),
                         );
                     }}
@@ -549,9 +528,7 @@ function useSpaceOverviewViewElement({
                 <button
                   className="app-text-caption text-app-ink/50 hover:text-app-accent"
                   onClick={() =>
-                    navigate(
-                      buildPmsSpaceDocsToolPath({ spaceId, workspaceSlug }),
-                    )
+                    navigate(buildPmsSpaceDocsToolPath({ spaceId }))
                   }
                   type="button"
                 >
@@ -567,7 +544,6 @@ function useSpaceOverviewViewElement({
                         buildPmsSpaceDocsToolPath({
                           docId: doc.id,
                           spaceId,
-                          workspaceSlug,
                         }),
                       )
                     }
@@ -719,7 +695,6 @@ function useSpaceOverviewViewElement({
                               navigate(
                                 buildPmsTaskListToolPath({
                                   taskListId: list.id,
-                                  workspaceSlug,
                                 }),
                               )
                             }
@@ -758,16 +733,16 @@ function useSpaceOverviewViewElement({
                 <FolderKanban size={16} className="text-app-accent" />
                 {t('pms.spaceOverview.lists')}
               </h2>
-              <button
-                className="app-text-caption inline-flex items-center gap-1 text-app-ink/50 hover:text-app-accent"
-                onClick={() =>
-                  dispatch({ type: 'setCreateListOpen', open: true })
-                }
-                type="button"
-              >
-                <Plus size={13} />
-                {t('pms.spaceOverview.newList')}
-              </button>
+              {canCreateList ? (
+                <button
+                  className="app-text-caption inline-flex items-center gap-1 text-app-ink/50 hover:text-app-accent"
+                  onClick={openCreateList}
+                  type="button"
+                >
+                  <Plus size={13} />
+                  {t('pms.spaceOverview.newList')}
+                </button>
+              ) : null}
             </div>
             <div className="divide-y divide-app-border">
               {[...rootLists, ...lists.filter((list) => list.folder_id)].map(
@@ -778,7 +753,6 @@ function useSpaceOverviewViewElement({
                       navigate(
                         buildPmsTaskListToolPath({
                           taskListId: list.id,
-                          workspaceSlug,
                         }),
                       )
                     }
@@ -815,7 +789,8 @@ function useSpaceOverviewViewElement({
       </main>
 
       <CreateTaskListModal
-        isOpen={createListOpen}
+        isOpen={createListOpen && canCreateList}
+        canCreate={canCreateList}
         onClose={() => dispatch({ type: 'setCreateListOpen', open: false })}
         teamId={spaceId}
         onCreated={(taskList) => {
@@ -823,7 +798,6 @@ function useSpaceOverviewViewElement({
           navigate(
             buildPmsTaskListToolPath({
               taskListId: taskList.id,
-              workspaceSlug,
             }),
           );
         }}
@@ -834,12 +808,12 @@ function useSpaceOverviewViewElement({
         onClose={() => dispatch({ type: 'setMembersModalOpen', open: false })}
         spaceId={spaceId}
         spaceName={displaySpaceName}
-        workspaceSlug={workspaceSlug}
         canManage={canManageMembers}
         currentUserRole={spaceMeta?.current_user_role ?? null}
         onChanged={() => dispatch({ type: 'membersChanged' })}
       />
       <SpaceOrderEditorModal
+        spaceId={spaceId}
         isOpen={spaceOrderEditorOpen && canEditSpaceOrder}
         onClose={() => setSpaceOrderEditorOpen(false)}
         spaceName={displaySpaceName}

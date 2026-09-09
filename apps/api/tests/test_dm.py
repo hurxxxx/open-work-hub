@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from open_work_hub_api.domains.dm.request_normalization import DM_MESSAGE_BODY_MAX_LENGTH
-from dev_accounts import auth_headers, create_workspace_user_session, dev_login
+from dev_accounts import auth_headers, content_headers, create_company_user_session, dev_login
 
 
 PNG_BYTES = base64.b64decode(
@@ -30,26 +30,23 @@ def test_dm_user_search_is_global_and_excludes_self(client: TestClient) -> None:
     assert all(item["id"] != sender["user"]["id"] for item in items)
 
 
-def test_dm_user_search_can_be_scoped_to_an_accessible_workspace(
+def test_dm_user_directory_is_company_wide_and_rechecks_active_accounts(
     client: TestClient,
 ) -> None:
-    sender = create_workspace_user_session(
+    sender = create_company_user_session(
         client,
-        workspace_key="dm-scope-alpha",
         login_id="dmscopealpha",
         email="dm-scope-alpha@example.com",
         full_name="DM Scope Alpha Sender",
     )
-    peer = create_workspace_user_session(
+    peer = create_company_user_session(
         client,
-        workspace_key="dm-scope-alpha",
         login_id="dmscopepeer",
         email="dm-scope-peer@example.com",
         full_name="DM Scope Alpha Peer",
     )
-    outsider = create_workspace_user_session(
+    outsider = create_company_user_session(
         client,
-        workspace_key="dm-scope-beta",
         login_id="dmscopebeta",
         email="dm-scope-beta@example.com",
         full_name="DM Scope Beta Outsider",
@@ -61,7 +58,6 @@ def test_dm_user_search_can_be_scoped_to_an_accessible_workspace(
         params={
             "include_current": True,
             "q": "DM Scope",
-            "workspace_key": "dm-scope-alpha",
         },
     )
 
@@ -69,21 +65,28 @@ def test_dm_user_search_can_be_scoped_to_an_accessible_workspace(
     user_ids = {item["id"] for item in response.json()}
     assert sender["user"]["id"] in user_ids
     assert peer["user"]["id"] in user_ids
-    assert outsider["user"]["id"] not in user_ids
+    assert outsider["user"]["id"] in user_ids
 
-    forbidden_response = client.get(
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.auth.models import User
+
+    with get_session_factory().begin() as db:
+        db.get(User, outsider["user"]["id"]).login_blocked = True
+        db.get(User, peer["user"]["id"]).status = "inactive"
+    refreshed = client.get(
         "/api/v1/dm/users",
         headers=auth_headers(sender["token"]),
-        params={"workspace_key": "dm-scope-beta"},
+        params={"include_current": True, "q": "DM Scope"},
     )
-    assert forbidden_response.status_code == 403, forbidden_response.text
+    assert refreshed.status_code == 200, refreshed.text
+    assert {item["id"] for item in refreshed.json()} == {sender["user"]["id"]}
 
 
 def test_legacy_workspace_dm_user_search_is_removed(client: TestClient) -> None:
     sender = dev_login(client, "administrator")
 
     response = client.get(
-        "/api/v1/workspaces/administrator/dm/users",
+        "/api/v1/workspaces/removed-container/dm/users",
         headers=auth_headers(sender["token"]),
     )
 
@@ -225,7 +228,7 @@ def test_dm_request_schema_rejects_invalid_route_ids_and_shapes(client: TestClie
         "/api/v1/dm/attachments/bad.id/content",
         params={"expires": 1, "signature": "sig", "disposition": "attachment"},
     )
-    assert invalid_content_path_response.status_code == 422, invalid_content_path_response.text
+    assert invalid_content_path_response.status_code == 404, invalid_content_path_response.text
 
 
 def test_dm_conversations_messages_are_global_without_notification_rows(client: TestClient) -> None:
@@ -378,12 +381,8 @@ def test_dm_message_attachments_are_private_to_participants(client: TestClient) 
     assert attachment["size_bytes"] == len(PNG_BYTES)
     assert attachment["is_image"] is True
     assert attachment["message_id"] is None
-    assert attachment["download_url"].startswith(
-        f"/api/v1/dm/attachments/{attachment['id']}/content?"
-    )
-    assert attachment["preview_url"].startswith(
-        f"/api/v1/dm/attachments/{attachment['id']}/content?"
-    )
+    assert "download_url" not in attachment
+    assert "preview_url" not in attachment
 
     outsider_preview_response = client.get(
         f"/api/v1/dm/attachments/{attachment['id']}/preview",
@@ -416,7 +415,10 @@ def test_dm_message_attachments_are_private_to_participants(client: TestClient) 
         headers=auth_headers(recipient["token"]),
     )
     assert preview_url_response.status_code == 200, preview_url_response.text
-    content_response = client.get(preview_url_response.json()["url"])
+    content_url = preview_url_response.json()["url"]
+    content_response = client.get(
+        content_url, headers=content_headers(recipient["token"], content_url)
+    )
     assert content_response.status_code == 200, content_response.text
     assert content_response.content == PNG_BYTES
     assert content_response.headers["content-type"].startswith("image/png")
@@ -447,11 +449,12 @@ def test_dm_spoofed_image_attachment_is_not_previewable(
     attachment = upload_response.json()
     assert attachment["content_type"] == "application/octet-stream"
     assert attachment["is_image"] is False
-    assert attachment["preview_url"] is None
+    assert "preview_url" not in attachment
+    assert "download_url" not in attachment
 
     preview_response = client.get(
         f"/api/v1/dm/attachments/{attachment['id']}/preview",
-        headers=auth_headers(recipient["token"]),
+        headers=auth_headers(sender["token"]),
     )
     assert preview_response.status_code == 415, preview_response.text
 
@@ -479,7 +482,8 @@ def test_dm_file_attachment_download_uses_attachment_disposition(
     assert upload_response.status_code == 201, upload_response.text
     attachment = upload_response.json()
     assert attachment["is_image"] is False
-    assert attachment["preview_url"] is None
+    assert "preview_url" not in attachment
+    assert "download_url" not in attachment
 
     send_response = client.post(
         f"/api/v1/dm/conversations/{conversation_id}/messages",
@@ -499,7 +503,10 @@ def test_dm_file_attachment_download_uses_attachment_disposition(
         headers=auth_headers(recipient["token"]),
     )
     assert download_url_response.status_code == 200, download_url_response.text
-    content_response = client.get(download_url_response.json()["url"])
+    content_url = download_url_response.json()["url"]
+    content_response = client.get(
+        content_url, headers=content_headers(recipient["token"], content_url)
+    )
     assert content_response.status_code == 200, content_response.text
     assert content_response.content == b"plain notes"
     assert content_response.headers["content-type"].startswith("text/plain")
@@ -641,16 +648,14 @@ def test_group_dm_management_tracks_membership_lifecycle(client: TestClient) -> 
     owner = dev_login(client, "administrator")
     member = dev_login(client, "delivery-hub-member")
     removable = dev_login(client, "delivery-hub-admin")
-    added = create_workspace_user_session(
+    added = create_company_user_session(
         client,
-        workspace_key="administrator",
         login_id="dmadded",
         email="dm-added@open-work-hub.local",
         full_name="DM Added",
     )
-    member_added = create_workspace_user_session(
+    member_added = create_company_user_session(
         client,
-        workspace_key="administrator",
         login_id="dmmemberadded",
         email="dm-member-added@open-work-hub.local",
         full_name="DM Member Added",

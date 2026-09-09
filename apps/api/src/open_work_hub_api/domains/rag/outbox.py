@@ -5,14 +5,13 @@ from functools import lru_cache
 from typing import Any
 
 from celery import Celery
-from sqlalchemy import func, select
-from sqlalchemy import event
+from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery_publisher
 from open_work_hub_api.core.telemetry import serialize_current_trace_context
+from open_work_hub_api.core.worker_task_publisher import create_fail_fast_celery_publisher
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.rag.contracts import (
     RagJobStatus,
@@ -20,6 +19,9 @@ from open_work_hub_api.domains.rag.contracts import (
     RagSyncLane,
     RagSyncOperation,
     RagTraceContext,
+)
+from open_work_hub_api.domains.rag.default_source_adapters import (
+    ensure_rag_source_adapters_registered,
 )
 from open_work_hub_api.domains.rag.job_publication import (
     RagJobPublication,
@@ -33,7 +35,6 @@ from open_work_hub_api.domains.rag.job_state import (
     merge_sync_operation,
     normalize_trace_context,
 )
-from open_work_hub_api.domains.rag.default_source_adapters import ensure_rag_source_adapters_registered
 from open_work_hub_api.domains.rag.metrics import record_sync_queue_depth
 from open_work_hub_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
 from open_work_hub_api.domains.rag.source_adapter_registry import (
@@ -43,7 +44,6 @@ from open_work_hub_api.domains.rag.source_adapter_registry import (
 )
 from open_work_hub_api.domains.retrieval.models import RetrievalProjectionEvent
 from open_work_hub_api.domains.retrieval.projection_fencing import ProjectionEventRef
-
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +61,7 @@ def get_celery_client() -> Celery:
 def enqueue_rag_sync_job(
     db: Session,
     *,
-    workspace_id: str | None,
-    scope_kind: RagScopeKind | str = RagScopeKind.WORKSPACE,
+    scope_kind: RagScopeKind | str = RagScopeKind.COMPANY,
     resource_type: str,
     resource_id: str,
     operation: RagSyncOperation = RagSyncOperation.UPSERT,
@@ -74,7 +73,6 @@ def enqueue_rag_sync_job(
     projection_event: ProjectionEventRef | None = None,
 ) -> RagSyncJob:
     scope_kind = _normalize_rag_scope_kind(scope_kind)
-    workspace_id = _normalize_rag_workspace_id(scope_kind=scope_kind, workspace_id=workspace_id)
     operation = _normalize_rag_sync_operation(operation)
     resource_adapter = _require_registered_rag_resource_adapter(resource_type)
     resource_type = resource_adapter.resource_type
@@ -100,7 +98,6 @@ def enqueue_rag_sync_job(
     existing = _select_pending_sync_job(
         db,
         scope_kind=scope_kind.value,
-        workspace_id=workspace_id,
         lane=lane.value,
         resource_type=resource_type,
         resource_id=resource_id,
@@ -116,7 +113,6 @@ def enqueue_rag_sync_job(
             trace_context=resolved_trace_context,
             supersede_delete=supersede_delete,
             scope_kind=scope_kind.value,
-            workspace_id=workspace_id,
         )
         db.add(existing)
         db.flush()
@@ -127,7 +123,6 @@ def enqueue_rag_sync_job(
         _record_sync_queue_depth(
             db,
             scope_kind=scope_kind.value,
-            workspace_id=workspace_id,
             lane=lane.value,
         )
         return existing
@@ -135,7 +130,6 @@ def enqueue_rag_sync_job(
     job = RagSyncJob(
         id=new_id(),
         scope_kind=scope_kind.value,
-        workspace_id=workspace_id,
         lane=lane.value,
         resource_type=resource_type,
         resource_id=resource_id,
@@ -167,7 +161,6 @@ def enqueue_rag_sync_job(
         _record_sync_queue_depth(
             db,
             scope_kind=scope_kind.value,
-            workspace_id=workspace_id,
             lane=lane.value,
         )
         return job
@@ -176,7 +169,6 @@ def enqueue_rag_sync_job(
         existing = _select_pending_sync_job(
             db,
             scope_kind=scope_kind.value,
-            workspace_id=workspace_id,
             lane=lane.value,
             resource_type=resource_type,
             resource_id=resource_id,
@@ -193,7 +185,6 @@ def enqueue_rag_sync_job(
             trace_context=resolved_trace_context,
             supersede_delete=supersede_delete,
             scope_kind=scope_kind.value,
-            workspace_id=workspace_id,
         )
         db.add(existing)
         db.flush()
@@ -204,7 +195,6 @@ def enqueue_rag_sync_job(
         _record_sync_queue_depth(
             db,
             scope_kind=scope_kind.value,
-            workspace_id=workspace_id,
             lane=lane.value,
         )
         return existing
@@ -240,7 +230,6 @@ def _validate_projection_event(
             "desired_state",
             "content_checksum",
             "visibility_checksum",
-            "diagnostic_workspace_id",
         )
         if getattr(projection_event, field) != getattr(persisted, field)
     ]
@@ -284,7 +273,6 @@ def _merge_pending_sync_job(
     trace_context: dict[str, Any] | None,
     supersede_delete: bool,
     scope_kind: str,
-    workspace_id: str | None,
 ) -> None:
     existing_fence = (
         job.retrieval_partition_id,
@@ -317,7 +305,6 @@ def _merge_pending_sync_job(
             projection_event=projection_event,
             trace_context=trace_context,
             scope_kind=scope_kind,
-            workspace_id=workspace_id,
         )
         return
 
@@ -331,7 +318,6 @@ def _merge_pending_sync_job(
             projection_event=projection_event,
             trace_context=trace_context,
             scope_kind=scope_kind,
-            workspace_id=workspace_id,
         )
         return
 
@@ -373,10 +359,8 @@ def _apply_projection_event_snapshot(
     projection_event: ProjectionEventRef,
     trace_context: dict[str, Any] | None,
     scope_kind: str,
-    workspace_id: str | None,
 ) -> None:
     job.scope_kind = scope_kind
-    job.workspace_id = workspace_id
     job.operation = operation.value
     job.retrieval_partition_id = projection_event.retrieval_partition_id
     job.projection_event_sequence = projection_event.event_sequence
@@ -390,7 +374,6 @@ def _apply_projection_event_snapshot(
 def enqueue_rag_visibility_recompute_job(
     db: Session,
     *,
-    workspace_id: str,
     scope_type: str,
     scope_id: str,
     cursor: dict[str, Any] | None = None,
@@ -406,7 +389,6 @@ def enqueue_rag_visibility_recompute_job(
     normalized_cursor = dict(cursor or {}) or None
     existing = _select_pending_visibility_job(
         db,
-        workspace_id=workspace_id,
         scope_type=scope_type,
         scope_id=scope_id,
     )
@@ -419,12 +401,13 @@ def enqueue_rag_visibility_recompute_job(
             db,
             RagJobPublication.visibility_recompute(job_id=existing.id),
         )
-        _record_visibility_queue_depth(db, workspace_id=workspace_id)
+        _record_visibility_queue_depth(
+            db,
+        )
         return existing
 
     job = RagVisibilityRecomputeJob(
         id=new_id(),
-        workspace_id=workspace_id,
         scope_type=scope_type,
         scope_id=scope_id,
         trace_context=resolved_trace_context,
@@ -440,13 +423,14 @@ def enqueue_rag_visibility_recompute_job(
             db,
             RagJobPublication.visibility_recompute(job_id=job.id),
         )
-        _record_visibility_queue_depth(db, workspace_id=workspace_id)
+        _record_visibility_queue_depth(
+            db,
+        )
         return job
     except IntegrityError:
         db.expire_all()
         existing = _select_pending_visibility_job(
             db,
-            workspace_id=workspace_id,
             scope_type=scope_type,
             scope_id=scope_id,
         )
@@ -460,7 +444,9 @@ def enqueue_rag_visibility_recompute_job(
             db,
             RagJobPublication.visibility_recompute(job_id=existing.id),
         )
-        _record_visibility_queue_depth(db, workspace_id=workspace_id)
+        _record_visibility_queue_depth(
+            db,
+        )
         return existing
 
 
@@ -468,7 +454,6 @@ def _select_pending_sync_job(
     db: Session,
     *,
     scope_kind: str,
-    workspace_id: str | None,
     lane: str,
     resource_type: str,
     resource_id: str,
@@ -482,7 +467,6 @@ def _select_pending_sync_job(
     )
     if projection_event is None:
         query = query.where(
-            RagSyncJob.workspace_id == workspace_id,
             RagSyncJob.scope_kind == scope_kind,
             RagSyncJob.projection_version.is_(None),
         )
@@ -507,19 +491,6 @@ def _normalize_rag_scope_kind(scope_kind: RagScopeKind | str) -> RagScopeKind:
         return RagScopeKind(str(scope_kind))
     except ValueError as exc:
         raise ValueError(f"RAG scope_kind is not supported: {scope_kind}") from exc
-
-
-def _normalize_rag_workspace_id(
-    *,
-    scope_kind: RagScopeKind,
-    workspace_id: str | None,
-) -> str | None:
-    if scope_kind == RagScopeKind.COMPANY:
-        return None
-    normalized = str(workspace_id or "").strip()
-    if not normalized:
-        raise ValueError("RAG workspace scope requires workspace_id")
-    return normalized
 
 
 def _require_registered_rag_resource_adapter(resource_type: str) -> RagResourceAdapter:
@@ -572,14 +543,12 @@ def _require_non_empty_rag_scope_id(scope_id: str) -> str:
 def _select_pending_visibility_job(
     db: Session,
     *,
-    workspace_id: str,
     scope_type: str,
     scope_id: str,
 ) -> RagVisibilityRecomputeJob | None:
     return db.scalar(
         select(RagVisibilityRecomputeJob)
         .where(
-            RagVisibilityRecomputeJob.workspace_id == workspace_id,
             RagVisibilityRecomputeJob.scope_type == scope_type,
             RagVisibilityRecomputeJob.scope_id == scope_id,
             RagVisibilityRecomputeJob.status == RagJobStatus.PENDING.value,
@@ -593,14 +562,12 @@ def _record_sync_queue_depth(
     db: Session,
     *,
     scope_kind: str,
-    workspace_id: str | None,
     lane: str,
 ) -> None:
     pending_count = db.scalar(
         select(func.count())
         .select_from(RagSyncJob)
         .where(
-            RagSyncJob.workspace_id == workspace_id,
             RagSyncJob.scope_kind == scope_kind,
             RagSyncJob.lane == lane,
             RagSyncJob.status == RagJobStatus.PENDING.value,
@@ -608,7 +575,6 @@ def _record_sync_queue_depth(
     )
     record_sync_queue_depth(
         depth=int(pending_count or 0),
-        workspace_id=workspace_id,
         job_lane=lane,
         job_kind="resource_sync",
     )
@@ -616,20 +582,16 @@ def _record_sync_queue_depth(
 
 def _record_visibility_queue_depth(
     db: Session,
-    *,
-    workspace_id: str,
 ) -> None:
     pending_count = db.scalar(
         select(func.count())
         .select_from(RagVisibilityRecomputeJob)
         .where(
-            RagVisibilityRecomputeJob.workspace_id == workspace_id,
             RagVisibilityRecomputeJob.status == RagJobStatus.PENDING.value,
         )
     )
     record_sync_queue_depth(
         depth=int(pending_count or 0),
-        workspace_id=workspace_id,
         job_lane="visibility_recompute",
         job_kind="visibility_recompute",
     )

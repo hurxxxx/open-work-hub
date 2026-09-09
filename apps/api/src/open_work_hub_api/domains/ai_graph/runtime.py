@@ -24,11 +24,12 @@ from open_work_hub_api.domains.ai_graph.contracts import (
     AiGraphSpec,
     merge_graph_values,
 )
+from open_work_hub_api.domains.ai_graph.execution_policy import enforce_graph_run_app_policy
 from open_work_hub_api.domains.ai_graph.repository import (
     AiGraphExecutionLeaseLostError,
+    AiGraphRunInputRepository,
     AiGraphRunRepository,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +49,15 @@ class _RuntimeState(TypedDict):
 @dataclass(frozen=True)
 class AiGraphRuntimeContext:
     run_id: str
-    workspace_id: str
     requested_by_user_id: str
     app_id: str
     conversation_id: str | None
     progress_callback: Callable[[str], Awaitable[None]]
+    policy_callback: Callable[[], Awaitable[None]]
+
+
+class AiGraphExecutionDisabledError(RuntimeError):
+    pass
 
 
 class AiGraphNodeAdapter(Protocol):
@@ -83,13 +88,12 @@ def _node_runner(
         runtime: Runtime[AiGraphRuntimeContext],
     ) -> dict[str, Any]:
         try:
+            await runtime.context.policy_callback()
             result = await adapter(state, runtime.context)
             if not isinstance(result, AiGraphNodeResult):
                 result = AiGraphNodeResult.model_validate(result)
             if node.routes and result.route not in node.routes:
-                raise ValueError(
-                    f"node {node.node_id} returned unknown route {result.route!r}"
-                )
+                raise ValueError(f"node {node.node_id} returned unknown route {result.route!r}")
             if not node.routes and result.route is not None:
                 raise ValueError(f"node {node.node_id} returned an undeclared route")
             values: dict[str, Any] = {"outputs": {node.node_id: result.output}}
@@ -97,6 +101,8 @@ def _node_runner(
                 values["routes"] = {node.node_id: result.route}
             await runtime.context.progress_callback(node.node_id)
             return values
+        except AiGraphExecutionDisabledError:
+            raise
         except Exception as error:
             if node.required or node.routes:
                 logger.error(
@@ -137,25 +143,18 @@ def compile_graph(
     missing = {node.node_id for node in spec.nodes} - set(node_adapters)
     extra = set(node_adapters) - {node.node_id for node in spec.nodes}
     if missing or extra:
-        raise ValueError(
-            f"node adapter mismatch; missing={sorted(missing)}, extra={sorted(extra)}"
-        )
+        raise ValueError(f"node adapter mismatch; missing={sorted(missing)}, extra={sorted(extra)}")
 
     builder = StateGraph(_RuntimeState, context_schema=AiGraphRuntimeContext)
     for node in spec.nodes:
         builder.add_node(node.node_id, _node_runner(node, node_adapters[node.node_id]))
 
     routed_targets = {
-        target
-        for node in spec.nodes
-        for target in node.routes.values()
-        if target is not None
+        target for node in spec.nodes for target in node.routes.values() if target is not None
     }
     static_dependents = {
         node.node_id: {
-            candidate.node_id
-            for candidate in spec.nodes
-            if node.node_id in candidate.depends_on
+            candidate.node_id for candidate in spec.nodes if node.node_id in candidate.depends_on
         }
         for node in spec.nodes
     }
@@ -163,11 +162,7 @@ def compile_graph(
     for node in spec.nodes:
         if node.depends_on:
             starts: str | list[str]
-            starts = (
-                node.depends_on[0]
-                if len(node.depends_on) == 1
-                else list(node.depends_on)
-            )
+            starts = node.depends_on[0] if len(node.depends_on) == 1 else list(node.depends_on)
             builder.add_edge(starts, node.node_id)
         elif node.node_id not in routed_targets:
             builder.add_edge(START, node.node_id)
@@ -214,6 +209,31 @@ def _progress_callback(
             )
 
     return advance
+
+
+def _policy_callback(
+    session_factory: sessionmaker[Session],
+    run_id: str,
+    claim_token: str,
+) -> Callable[[], Awaitable[None]]:
+    async def enforce() -> None:
+        def persist() -> bool:
+            with session_factory() as db:
+                enabled = enforce_graph_run_app_policy(
+                    db,
+                    run_id=run_id,
+                    claim_token=claim_token,
+                    stage="graph.node_policy_gate",
+                )
+                if not enabled:
+                    AiGraphRunInputRepository(db).delete_after_terminal(run_id)
+                db.commit()
+                return enabled
+
+        if not await asyncio.to_thread(persist):
+            raise AiGraphExecutionDisabledError("app_execution_disabled")
+
+    return enforce
 
 
 async def _renew_execution_lease(
@@ -323,8 +343,7 @@ async def run_graph(
         else:
             run = repository.require(run_id)
             if (
-                run.workspace_id != request.workspace_id
-                or run.app_id != request.app_id
+                run.app_id != request.app_id
                 or run.graph_id != request.graph.graph_id
                 or run.graph_version != request.graph.graph_version
             ):
@@ -334,6 +353,19 @@ async def run_graph(
             claim_token=resolved_claim_token,
             lease_duration=_EXECUTION_LEASE_DURATION,
         )
+        if claim.acquired and not enforce_graph_run_app_policy(
+            db,
+            run_id=run_id,
+            claim_token=resolved_claim_token,
+            stage="graph.claim_policy_gate",
+        ):
+            AiGraphRunInputRepository(db).delete_after_terminal(run_id)
+            db.commit()
+            return AiGraphRunResult(
+                run_id=run_id,
+                status="skipped",
+                reason="app_disabled",
+            )
         db.commit()
         if not claim.acquired:
             return AiGraphRunResult(
@@ -344,11 +376,15 @@ async def run_graph(
 
     context = AiGraphRuntimeContext(
         run_id=run_id,
-        workspace_id=request.workspace_id,
         requested_by_user_id=request.requested_by_user_id,
         app_id=request.app_id,
         conversation_id=request.conversation_id,
         progress_callback=_progress_callback(
+            resolved_factory,
+            run_id,
+            resolved_claim_token,
+        ),
+        policy_callback=_policy_callback(
             resolved_factory,
             run_id,
             resolved_claim_token,
@@ -380,6 +416,12 @@ async def run_graph(
             session_factory=resolved_factory,
             run_id=run_id,
             claim_token=resolved_claim_token,
+        )
+    except AiGraphExecutionDisabledError:
+        return AiGraphRunResult(
+            run_id=run_id,
+            status="skipped",
+            reason="app_disabled",
         )
     except asyncio.CancelledError:
         with resolved_factory() as db:
@@ -439,6 +481,19 @@ async def run_graph(
 
     with resolved_factory() as db:
         try:
+            if not enforce_graph_run_app_policy(
+                db,
+                run_id=run_id,
+                claim_token=resolved_claim_token,
+                stage="graph.completion_policy_gate",
+            ):
+                AiGraphRunInputRepository(db).delete_after_terminal(run_id)
+                db.commit()
+                return AiGraphRunResult(
+                    run_id=run_id,
+                    status="skipped",
+                    reason="app_disabled",
+                )
             AiGraphRunRepository(db).transition(
                 run_id,
                 "completed",

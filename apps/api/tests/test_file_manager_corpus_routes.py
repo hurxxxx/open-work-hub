@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from dev_accounts import auth_headers, create_workspace_user_session, dev_login
+from dev_accounts import auth_headers, create_company_user_session, dev_login
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.files.models import (
@@ -12,90 +12,52 @@ from open_work_hub_api.domains.files.models import (
 )
 
 
-_FILES_BASE = "/api/v1/workspaces/administrator/files"
+_FILES_BASE = "/api/v1/files"
 
 
-def test_file_corpus_admin_can_create_list_and_transition(client: TestClient) -> None:
+def test_file_corpus_admin_can_create_list_with_immutable_company_scope(client: TestClient) -> None:
     admin = dev_login(client, "administrator")
     headers = auth_headers(admin["token"])
-
-    created = _create_corpus(client, headers=headers, name="General Workspace migration corpus")
-
-    listed_response = client.get(f"{_FILES_BASE}/corpora", headers=headers)
-    assert listed_response.status_code == 200, listed_response.text
-    listed = {item["id"]: item for item in listed_response.json()}
-    assert listed[created["id"]] == created
-
-    transition_response = client.post(
+    created = _create_corpus(client, headers=headers, name="Company records")
+    response = client.get(f"{_FILES_BASE}/corpora", headers=headers)
+    assert response.status_code == 200, response.text
+    assert {item["id"]: item for item in response.json()}[created["id"]] == created
+    obsolete = client.post(
         f"{_FILES_BASE}/corpora/{created['id']}/transition",
         headers=headers,
-        json={
-            "expected_metadata_version": 1,
-            "access_scope_kind": "company",
-            "reason": "Make the indexed corpus available to all company users",
-            "request_id": "test-company-transition",
-        },
+        json={"access_scope_kind": "personal", "expected_metadata_version": 1},
     )
-    assert transition_response.status_code == 200, transition_response.text
-    transitioned = transition_response.json()
-    assert transitioned["id"] == created["id"]
-    assert transitioned["retrieval_partition_id"] == created["retrieval_partition_id"]
-    assert transitioned["managed_workspace_id"] == created["managed_workspace_id"]
-    assert transitioned["access_scope_kind"] == "company"
-    assert transitioned["metadata_version"] == 2
+    assert obsolete.status_code == 404
+    with get_session_factory()() as db:
+        corpus = db.get(FileManagerCorpus, created["id"])
+        assert corpus.access_scope_kind == "company"
+        assert corpus.metadata_version == 1
 
 
-def test_file_corpus_management_denies_non_admin_workspace_member(
-    client: TestClient,
-) -> None:
+def test_file_corpus_management_denies_non_admin_company_user(client: TestClient) -> None:
     admin = dev_login(client, "administrator")
-    admin_headers = auth_headers(admin["token"])
-    corpus = _create_corpus(client, headers=admin_headers, name="Admin-only corpus")
-    member = create_workspace_user_session(
+    corpus = _create_corpus(client, headers=auth_headers(admin["token"]), name="Admin-only corpus")
+    member = create_company_user_session(
         client,
-        workspace_key="administrator",
         login_id="filecorpusmember",
-        email="file-corpus-member@open-work-hub.local",
+        email="file-corpus-member@example.test",
         full_name="File Corpus Member",
-        role="member",
     )
-    member_headers = auth_headers(member["token"])
-
-    transition_response = client.post(
-        f"{_FILES_BASE}/corpora/{corpus['id']}/transition",
-        headers=admin_headers,
-        json={
-            "expected_metadata_version": 1,
-            "access_scope_kind": "company",
-            "reason": "Publish before checking mutation authorization",
-        },
-    )
-    assert transition_response.status_code == 200, transition_response.text
-
+    headers = auth_headers(member["token"])
     responses = [
-        client.get(f"{_FILES_BASE}/corpora", headers=member_headers),
-        client.post(
-            f"{_FILES_BASE}/corpora",
-            headers=member_headers,
-            json={"name": "Forbidden corpus"},
-        ),
-        client.post(
-            f"{_FILES_BASE}/corpora/{corpus['id']}/transition",
-            headers=member_headers,
-            json={
-                "expected_metadata_version": 1,
-                "access_scope_kind": "company",
-                "reason": "Member must not manage corpus scope",
-            },
-        ),
+        client.get(f"{_FILES_BASE}/corpora", headers=headers),
+        client.post(f"{_FILES_BASE}/corpora", headers=headers, json={"name": "Denied"}),
         client.post(
             f"{_FILES_BASE}/upload",
-            headers=member_headers,
-            data={"visibility": "workspace", "corpus_id": corpus["id"]},
-            files={"file": ("unapproved.txt", b"unapproved", "text/plain")},
+            headers=headers,
+            data={
+                "visibility": "company",
+                "company_admin_read_acknowledged": True,
+                "corpus_id": corpus["id"],
+            },
+            files={"file": ("denied.txt", b"denied", "text/plain")},
         ),
     ]
-
     for response in responses:
         assert response.status_code == 403, response.text
         assert response.json()["code"] == "files.corpus_access_required"
@@ -115,19 +77,21 @@ def test_folder_and_upload_routes_persist_explicit_corpus_id(
         json={
             "name": "Corpus root",
             "visibility": "private",
+            "company_admin_read_acknowledged": True,
             "corpus_id": corpus["id"],
         },
     )
     assert folder_response.status_code == 201, folder_response.text
     folder = folder_response.json()
     assert folder["corpus_id"] == corpus["id"]
-    assert folder["visibility"] == "workspace"
+    assert folder["visibility"] == "company"
 
     upload_response = client.post(
         f"{_FILES_BASE}/upload",
         headers=headers,
         data={
             "visibility": "private",
+            "company_admin_read_acknowledged": True,
             "corpus_id": corpus["id"],
         },
         files={"file": ("corpus-source.txt", b"indexed corpus source", "text/plain")},
@@ -135,7 +99,7 @@ def test_folder_and_upload_routes_persist_explicit_corpus_id(
     assert upload_response.status_code == 201, upload_response.text
     uploaded = upload_response.json()
     assert uploaded["corpus_id"] == corpus["id"]
-    assert uploaded["visibility"] == "workspace"
+    assert uploaded["visibility"] == "company"
 
     with get_session_factory()() as db:
         stored_corpus = db.get(FileManagerCorpus, corpus["id"])
@@ -165,7 +129,7 @@ def _create_corpus(
     assert response.status_code == 201, response.text
     corpus = response.json()
     assert corpus["name"] == name
-    assert corpus["access_scope_kind"] == "workspace"
+    assert corpus["access_scope_kind"] == "company"
     assert corpus["metadata_version"] == 1
     assert corpus["retrieval_partition_id"]
     return corpus

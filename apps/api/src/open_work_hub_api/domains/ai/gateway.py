@@ -12,37 +12,48 @@ from open_work_hub_api.core.llm import (
     LlmPoolHint,
     LlmTaskContext,
     ResolvedLlmExecution,
-    complete_chat as _complete_chat,
-    complete_chat_stream as _complete_chat_stream,
-    complete_chat_text as _complete_chat_text,
     resolve_registered_chat_execution,
+)
+from open_work_hub_api.core.llm import (
+    complete_chat as _complete_chat,
+)
+from open_work_hub_api.core.llm import (
+    complete_chat_stream as _complete_chat_stream,
+)
+from open_work_hub_api.core.llm import (
+    complete_chat_text as _complete_chat_text,
 )
 from open_work_hub_api.core.llm_adapters import StreamChunk
 from open_work_hub_api.core.llm_errors import LlmProviderError
 from open_work_hub_api.core.llm_provider_registry import parse_external_llm_provider_allowlist
 from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.domains.ai.audit import log_llm_call
 from open_work_hub_api.domains.ai.boundary_safety import (
     ExternalPayloadSafetyDecision,
     evaluate_external_payload_safety,
     normalize_content_origin,
     normalize_external_safety_values,
 )
-from open_work_hub_api.domains.ai.audit import log_llm_call
 from open_work_hub_api.domains.ai.masking import (
     ExternalPayloadMaskingResult,
     evaluate_external_payload_masking,
 )
-from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.ai.model_settings_service import (
     AiModelSettingsError,
     ResolvedLlmWorkloadRoute,
     resolve_ai_model_workload_route,
 )
+from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.ai.runtime_status import build_resolved_llm_pool_config
 from open_work_hub_api.domains.ai.security_detected_values import (
     AiSecurityDetectedValueInput,
     collect_ai_security_detected_values,
     serialize_detected_values,
+)
+from open_work_hub_api.domains.ai.security_pipeline_exemption import (
+    AI_SECURITY_PIPELINE_EXEMPT_REASON,
+    AiSecurityPipelineExemptionDecision,
+    resolve_ai_security_pipeline_exemption,
 )
 from open_work_hub_api.domains.ai.security_policy import (
     AI_SECURITY_ENFORCEMENT_DISABLED_REASON,
@@ -53,20 +64,14 @@ from open_work_hub_api.domains.ai.security_policy import (
     AiSecurityExternalTransferExceptionDecision,
     AiSecurityPolicyContext,
     AiSecurityPolicyDecision,
+    ai_security_data_protection_blocker_actions,
     ai_security_enforcement_enabled,
     ai_security_enforcement_required,
-    ai_security_data_protection_blocker_actions,
     evaluate_ai_security_policy,
     external_transfer_blockers_from_safety,
     hard_external_transfer_blockers,
     resolve_ai_security_external_transfer_exception,
 )
-from open_work_hub_api.domains.ai.security_pipeline_exemption import (
-    AI_SECURITY_PIPELINE_EXEMPT_REASON,
-    AiSecurityPipelineExemptionDecision,
-    resolve_ai_security_pipeline_exemption,
-)
-
 
 _UNKNOWN_TASK_KIND_REASON = "unknown_task_kind_local_only"
 _FORBIDDEN_GATEWAY_APP_IDS = frozenset({"unknown", "none", "null", "n/a", "na"})
@@ -108,7 +113,6 @@ class AiGatewayContextPack:
 @dataclass(frozen=True)
 class AiGatewayRequest:
     task_kind: str
-    workspace_id: str
     source: str
     messages: list[dict[str, Any]] = field(default_factory=list)
     actor_user_id: str | None = None
@@ -194,7 +198,6 @@ class AiGatewayRequest:
         return LlmTaskContext(
             source=self.source,
             actor_user_id=self.actor_user_id,
-            workspace_id=self.workspace_id,
             task_kind=self.task_kind,
             app_id=self.app,
             workload_id=self.workload_id,
@@ -231,7 +234,6 @@ def ai_gateway_request_from_task_context(
         raise ValueError("LLM app_id mismatch")
     return AiGatewayRequest(
         task_kind=context.task_kind,
-        workspace_id=context.workspace_id,
         source=context.source,
         messages=list(messages or []),
         actor_user_id=context.actor_user_id,
@@ -478,7 +480,6 @@ class AiGatewayResponse:
 @dataclass(frozen=True)
 class LlmWorkloadContext:
     source: str
-    workspace_id: str
     actor_user_id: str | None = None
     principal_kind: Literal["user", "service_account", "system"] = "user"
     principal_id: str | None = None
@@ -488,7 +489,6 @@ class LlmWorkloadContext:
     def from_task_context(cls, context: LlmTaskContext) -> "LlmWorkloadContext":
         return cls(
             source=context.source,
-            workspace_id=context.workspace_id,
             actor_user_id=context.actor_user_id,
             principal_kind=context.principal_kind,
             principal_id=context.principal_id,
@@ -648,7 +648,6 @@ def build_llm_workload_request(
         workload_config=runtime_config,
         workload_local_max_output_tokens=route.local_max_output_tokens,
         workload_external_max_output_tokens=route.external_max_output_tokens,
-        workspace_id=context.workspace_id,
         source=context.source,
         actor_user_id=context.actor_user_id,
         app=app_id,
@@ -686,7 +685,6 @@ def resolve_gateway_execution(
         _raise_ai_security_enforcement_required(request)
     security_pipeline_exemption = resolve_ai_security_pipeline_exemption(
         AiSecurityPolicyContext(
-            workspace_id=request.workspace_id,
             actor_user_id=request.actor_user_id,
             app_id=request.app,
             task_kind=request.task_kind,
@@ -724,7 +722,6 @@ def resolve_gateway_execution(
     security_decision = evaluate_ai_security_policy(
         db,
         AiSecurityPolicyContext(
-            workspace_id=request.workspace_id,
             actor_user_id=request.actor_user_id,
             app_id=request.app,
             task_kind=request.task_kind,
@@ -771,7 +768,6 @@ def resolve_gateway_execution(
             external_transfer_exception = resolve_ai_security_external_transfer_exception(
                 db,
                 AiSecurityPolicyContext(
-                    workspace_id=request.workspace_id,
                     actor_user_id=request.actor_user_id,
                     app_id=request.app,
                     task_kind=request.task_kind,
@@ -967,7 +963,6 @@ def _raise_external_transfer_blocked(
             actor_user_id=request.actor_user_id,
             principal_kind=request.principal_kind,
             principal_id=request.principal_id,
-            workspace_id=request.workspace_id,
             task_kind=request.task_kind,
             workload_id=request.workload_id,
             app_id=request.app or "",
@@ -1024,7 +1019,6 @@ def _raise_ai_security_enforcement_required(request: AiGatewayRequest) -> None:
             actor_user_id=request.actor_user_id,
             principal_kind=request.principal_kind,
             principal_id=request.principal_id,
-            workspace_id=request.workspace_id,
             task_kind=request.task_kind,
             workload_id=request.workload_id,
             app_id=request.app or "",

@@ -1,5 +1,5 @@
-import { FormEvent, ReactNode, useCallback, useState } from 'react';
 import { ArrowUp, Loader2, Square } from 'lucide-react';
+import { FormEvent, ReactNode, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { NavItem } from '@/src/app/shell/navigation-types';
@@ -10,8 +10,8 @@ import {
   isSlashCommandOpen,
   shouldSubmitChatForm,
 } from './chat-composer-model';
-import { SlashCommandMenu } from './SlashCommandMenu';
 import { useSlashCommandItems } from './slash-command-items';
+import { SlashCommandMenu } from './SlashCommandMenu';
 
 export interface ChatComposerProps {
   input: string;
@@ -24,9 +24,9 @@ export interface ChatComposerProps {
   onSelectTool?: (item: NavItem) => void;
   /**
    * Candidate list for the `/` slash command menu. Callers should pass a
-   * workspace-scoped list (e.g. merged from workspaceBootstrap.data.nav) so
+   * current app-admitted list (e.g. merged from appBootstrap.data.nav) so
    * disabled/unauthorized tools don't appear. Defaults to the full NAV_ITEMS
-   * AI slice for test/storybook contexts where no workspace is available.
+   * AI slice for test/storybook contexts without app bootstrap.
    */
   toolItems?: NavItem[];
   placeholder?: string;

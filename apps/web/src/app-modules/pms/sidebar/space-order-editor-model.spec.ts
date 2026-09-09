@@ -43,15 +43,16 @@ function folder(id: string, name: string, sortOrder: number): PmsFolder {
     team_id: 'space-1',
     name,
     sort_order: sortOrder,
-    created_at: '2026-05-30T00:00:00Z',
-    updated_at: '2026-05-30T00:00:00Z',
-  } as PmsFolder;
+    list_count: 0,
+  };
 }
 
 function doc(id: string, title: string, sortOrder: number): DocsHubItem {
   return {
     id,
     title,
+    ownership_kind: 'company',
+    can_manage: true,
     primary_target: {
       app: 'pms',
       type: 'space',
@@ -62,8 +63,35 @@ function doc(id: string, title: string, sortOrder: number): DocsHubItem {
 }
 
 describe('space order editor model', () => {
+  it('excludes personal references, other primary projects and read-only documents from ordering', () => {
+    const owned = doc('owned', 'Owned', 0);
+    const referenced = {
+      ...doc('ref', 'Reference', 1),
+      ownership_kind: 'personal' as const,
+      primary_target: null,
+    };
+    const another = {
+      ...doc('other', 'Other project', 2),
+      primary_target: {
+        app: 'pms',
+        type: 'space',
+        id: 'space-2',
+        sort_order: 2,
+      },
+    };
+    const readOnly = { ...doc('read-only', 'Read only', 3), can_manage: false };
+    const draft = createSpaceOrderDraft({
+      spaceId: 'space-1',
+      lists: [],
+      docs: [owned, referenced, another, readOnly],
+    });
+    expect(draft.docs.map((item) => item.id)).toEqual(['owned']);
+    expect(referenced.ownership_kind).toBe('personal');
+  });
+
   it('creates a draft and exposes localized ordered views', () => {
     const draft = createSpaceOrderDraft({
+      spaceId: 'space-1',
       lists: [
         list('list-c', 'Charlie', 2000),
         list('list-b', 'Bravo', 1000, 'folder-b'),
@@ -125,6 +153,7 @@ describe('space order editor model', () => {
       doc('doc-b', 'Bravo', 1000),
     ];
     const draft = createSpaceOrderDraft({
+      spaceId: 'space-1',
       lists: originalLists,
       docs: originalDocs,
     });
@@ -156,6 +185,7 @@ describe('space order editor model', () => {
 
   it('moves lists within their current parent and preserves edge no-ops', () => {
     const draft = createSpaceOrderDraft({
+      spaceId: 'space-1',
       lists: [
         list('list-a', 'Alpha', 0),
         list('list-b', 'Bravo', 1000),
@@ -180,6 +210,7 @@ describe('space order editor model', () => {
 
   it('moves a list to another parent and appends it to that parent', () => {
     const draft = createSpaceOrderDraft({
+      spaceId: 'space-1',
       lists: [
         list('root', 'Root', 0),
         list('foldered', 'Foldered', 0, 'folder-a'),
@@ -204,6 +235,7 @@ describe('space order editor model', () => {
 
   it('moves docs by their flat sort order', () => {
     const draft = createSpaceOrderDraft({
+      spaceId: 'space-1',
       lists: [],
       docs: [
         doc('doc-a', 'Alpha', 0),
@@ -228,6 +260,7 @@ describe('space order editor model', () => {
 
   it('creates an isolated save payload from the current draft', () => {
     const draft = createSpaceOrderDraft({
+      spaceId: 'space-1',
       lists: [list('list-a', 'Alpha', 0)],
       docs: [doc('doc-a', 'Alpha', 0)],
     });

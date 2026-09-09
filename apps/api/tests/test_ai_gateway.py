@@ -98,7 +98,6 @@ def _request(task_kind: str, **overrides: Any) -> AiGatewayRequest:
         "workload_config": config if workload is not None else None,
         "workload_local_max_output_tokens": 32_768,
         "workload_external_max_output_tokens": 65_536,
-        "workspace_id": "workspace-1",
         "actor_user_id": "user-1",
         "source": "tests.ai_gateway",
         "app": workload.app_id if workload is not None else "chatbot",
@@ -700,7 +699,6 @@ def test_execute_llm_uses_registered_admin_route_without_caller_model_controls(
         "chatbot",
         LlmWorkloadContext(
             source="tests.registered_workload",
-            workspace_id="workspace-1",
             actor_user_id="user-1",
             app_id="chatbot",
         ),
@@ -753,7 +751,6 @@ def test_execute_llm_uses_route_cap_when_caller_omits_max_tokens(
         "chatbot",
         LlmWorkloadContext(
             source="tests.registered_workload.default_cap",
-            workspace_id="workspace-1",
             app_id="chatbot",
         ),
         object(),  # type: ignore[arg-type]
@@ -778,7 +775,6 @@ def test_llm_call_audit_payload_records_gateway_context_metadata(
         actor_user_id="user-1",
         principal_kind="user",
         principal_id=None,
-        workspace_id="workspace-1",
         task_kind="chatbot",
         app_id="chatbot",
         policy="local_only",

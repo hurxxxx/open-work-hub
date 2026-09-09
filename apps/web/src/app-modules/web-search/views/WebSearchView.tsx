@@ -1,5 +1,3 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import {
   Globe2,
   MessageSquare,
@@ -7,6 +5,8 @@ import {
   Search,
   type LucideIcon,
 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   ChatComposer,
@@ -19,17 +19,15 @@ import {
   type ConversationSummary,
   type ConversationTurn,
 } from '@/src/app-modules/chatbot/public-api';
+import { cn } from '@/src/lib/utils';
 import { iterSseEvents } from '@/src/platform/api/sse-parser';
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { cn } from '@/src/lib/utils';
 import {
-  type WebSearchAnswerResponse,
-  type WebSearchStreamEvent,
   WebSearchApiError,
   streamWebSearch,
+  type WebSearchAnswerResponse,
+  type WebSearchStreamEvent,
 } from '../api/web-search-api';
-import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
-import { resolveShellWorkspaceSlug } from '@/src/platform/workspaces/workspace-utils';
 
 export interface WebSearchExperience {
   apiPrefix: string;
@@ -228,17 +226,14 @@ export function WebSearchExperienceView({
   const { t } = useTranslation('apps');
   const i18nKey = experience.i18nKey;
   const ExperienceIcon = experience.icon;
-  const { token, user } = useAuth();
-  const workspaceBootstrap = useWorkspaceBootstrapContext();
-  const workspaceSlug =
-    workspaceBootstrap.data?.workspace.slug ??
-    resolveShellWorkspaceSlug(user, null);
+  const { token } = useAuth();
+
   const authToken = token ?? '';
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(
-    null,
-  );
+  const [activeConversationId, setActiveConversationId] = useState<
+    string | null
+  >(null);
   const [activeConversation, setActiveConversation] =
     useState<ConversationDetail | null>(null);
   const [activeTurns, setActiveTurns] = useState<ChatTurn[]>([]);
@@ -256,22 +251,20 @@ export function WebSearchExperienceView({
 
   const loadConversationDetail = useCallback(
     async (conversationId: string) => {
-      if (!authToken || !workspaceSlug) {
+      if (!authToken) {
         return;
       }
-      const detail = await getConversation(authToken, conversationId, {
-        workspaceSlug,
-      });
+      const detail = await getConversation(authToken, conversationId, {});
       setActiveConversation(detail);
       setActiveConversationId(detail.id);
       setActiveTurns(detail.turns.map(toChatTurn));
       setDraftTitle(null);
     },
-    [authToken, workspaceSlug],
+    [authToken],
   );
 
   const refreshConversationList = useCallback(async () => {
-    if (!authToken || !workspaceSlug) {
+    if (!authToken) {
       setConversations([]);
       return [];
     }
@@ -279,14 +272,13 @@ export function WebSearchExperienceView({
       limit: 50,
       scopeRef: experience.conversationScopeRef,
       scopeResourceId: 'default',
-      workspaceSlug,
     });
     setConversations(result.items);
     return result.items;
-  }, [authToken, experience.conversationScopeRef, workspaceSlug]);
+  }, [authToken, experience.conversationScopeRef]);
 
   useEffect(() => {
-    if (!authToken || !workspaceSlug) {
+    if (!authToken) {
       setConversations([]);
       setActiveConversation(null);
       setActiveConversationId(null);
@@ -325,7 +317,6 @@ export function WebSearchExperienceView({
     experience.conversationScopeRef,
     loadConversationDetail,
     refreshConversationList,
-    workspaceSlug,
   ]);
 
   useEffect(() => {
@@ -344,7 +335,7 @@ export function WebSearchExperienceView({
 
   const handleAsk = useCallback(async () => {
     const trimmed = question.trim();
-    if (!trimmed || !authToken || !workspaceSlug) {
+    if (!trimmed || !authToken) {
       return;
     }
     const existingStream = activeStreamRef.current;
@@ -372,7 +363,6 @@ export function WebSearchExperienceView({
     try {
       const response = await streamWebSearch({
         token: authToken,
-        workspaceSlug,
         question: trimmed,
         conversationId: requestedConversationId,
         apiPrefix: experience.apiPrefix,
@@ -435,11 +425,7 @@ export function WebSearchExperienceView({
           continue;
         }
         if (event.type === 'error') {
-          throw new WebSearchApiError(
-            0,
-            event.data.message,
-            event.data.code,
-          );
+          throw new WebSearchApiError(0, event.data.message, event.data.code);
         }
         if (event.type === 'done') {
           break;
@@ -478,8 +464,8 @@ export function WebSearchExperienceView({
         error.code === WEB_SEARCH_POLICY_DENIED_CODE
           ? t(`${i18nKey}.errors.policyDenied`)
           : error instanceof WebSearchApiError
-          ? error.message
-          : t(`${i18nKey}.errors.askFailed`);
+            ? error.message
+            : t(`${i18nKey}.errors.askFailed`);
       if (
         error instanceof WebSearchApiError &&
         error.code === WEB_SEARCH_POLICY_DENIED_CODE &&
@@ -518,7 +504,6 @@ export function WebSearchExperienceView({
     question,
     setActiveStream,
     t,
-    workspaceSlug,
   ]);
 
   const composer = (
@@ -535,7 +520,7 @@ export function WebSearchExperienceView({
       isStreaming={isCurrentViewStreaming}
       chatError={chatError}
       placeholder={t(`${i18nKey}.placeholder`)}
-      isDisabled={!authToken || !workspaceSlug}
+      isDisabled={!authToken}
       leadingControls={null}
     />
   );
@@ -561,48 +546,46 @@ export function WebSearchExperienceView({
       />
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-app-surface">
-          <header className="flex h-12 shrink-0 items-center justify-between border-b border-app-border px-4">
-            <div className="flex min-w-0 items-center gap-2">
-              <ExperienceIcon className="h-4 w-4 shrink-0 text-app-accent" />
-              <h1 className="truncate app-text-control text-app-ink">
-                {activeConversation?.title ??
-                  draftTitle ??
-                  t(`${i18nKey}.title`)}
-              </h1>
-            </div>
-          </header>
+        <header className="flex h-12 shrink-0 items-center justify-between border-b border-app-border px-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <ExperienceIcon className="h-4 w-4 shrink-0 text-app-accent" />
+            <h1 className="truncate app-text-control text-app-ink">
+              {activeConversation?.title ?? draftTitle ?? t(`${i18nKey}.title`)}
+            </h1>
+          </div>
+        </header>
 
-          {turns.length === 0 && !isCurrentViewStreaming ? (
-            <EmptyState
-              greeting={t(`${i18nKey}.emptyGreeting`)}
-              subline={t(`${i18nKey}.emptySubline`)}
-            >
+        {turns.length === 0 && !isCurrentViewStreaming ? (
+          <EmptyState
+            greeting={t(`${i18nKey}.emptyGreeting`)}
+            subline={t(`${i18nKey}.emptySubline`)}
+          >
+            {composer}
+          </EmptyState>
+        ) : (
+          <>
+            <ChatThread
+              turns={turns}
+              typingLabel={t(`${i18nKey}.thinking`)}
+              jumpToBottomLabel={t(`${i18nKey}.jumpToBottom`)}
+              liveAssistant={
+                isCurrentViewStreaming
+                  ? {
+                      content: liveAnswer,
+                      reasoning: '',
+                      status: 'streaming',
+                    }
+                  : null
+              }
+              onCopyTurn={async (turn) => {
+                await navigator.clipboard?.writeText(turn.content);
+              }}
+            />
+            <div className="sticky bottom-0 z-10 space-y-2 border-t border-app-border bg-app-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
               {composer}
-            </EmptyState>
-          ) : (
-            <>
-              <ChatThread
-                turns={turns}
-                typingLabel={t(`${i18nKey}.thinking`)}
-                jumpToBottomLabel={t(`${i18nKey}.jumpToBottom`)}
-                liveAssistant={
-                  isCurrentViewStreaming
-                    ? {
-                        content: liveAnswer,
-                        reasoning: '',
-                        status: 'streaming',
-                      }
-                    : null
-                }
-                onCopyTurn={async (turn) => {
-                  await navigator.clipboard?.writeText(turn.content);
-                }}
-              />
-              <div className="sticky bottom-0 z-10 space-y-2 border-t border-app-border bg-app-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-                {composer}
-              </div>
-            </>
-          )}
+            </div>
+          </>
+        )}
       </section>
     </main>
   );

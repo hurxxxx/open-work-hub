@@ -11,8 +11,7 @@ def build_text_content(sections: Iterable[str | None]) -> str:
 
 def build_projection_record(
     *,
-    workspace_id: str | None,
-    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE,
+    scope_kind: RagScopeKind = RagScopeKind.COMPANY,
     resource_type: str,
     resource_id: str,
     source_kind: str,
@@ -26,7 +25,6 @@ def build_projection_record(
 ) -> RagProjection:
     return RagProjection(
         scope_kind=scope_kind,
-        workspace_id=workspace_id,
         resource_type=resource_type,
         resource_id=resource_id,
         source_kind=source_kind,
@@ -42,8 +40,7 @@ def build_projection_record(
 
 def build_text_projection(
     *,
-    workspace_id: str | None,
-    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE,
+    scope_kind: RagScopeKind = RagScopeKind.COMPANY,
     resource_type: str,
     resource_id: str,
     source_kind: str,
@@ -56,7 +53,6 @@ def build_text_projection(
     chunks: Iterable[RagChunk] | None = None,
 ) -> RagProjection:
     return build_projection_record(
-        workspace_id=workspace_id,
         scope_kind=scope_kind,
         resource_type=resource_type,
         resource_id=resource_id,
@@ -73,8 +69,7 @@ def build_text_projection(
 
 def build_projection_chunk(
     *,
-    workspace_id: str | None,
-    scope_kind: RagScopeKind = RagScopeKind.WORKSPACE,
+    scope_kind: RagScopeKind = RagScopeKind.COMPANY,
     resource_type: str,
     resource_id: str,
     source_kind: str,
@@ -89,7 +84,6 @@ def build_projection_chunk(
         "resource_type": resource_type,
         "resource_id": resource_id,
         "source_kind": source_kind,
-        "workspace_id": workspace_id,
         "scope_kind": scope_kind.value,
         "chunk_index": chunk_index,
     }

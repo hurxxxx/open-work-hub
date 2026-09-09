@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
+import { Button, Dialog, InlineNotice, useConfirm } from '@open-work-hub/ui';
 import {
   CheckSquare,
   Download,
@@ -15,10 +15,17 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { Button, Dialog, InlineNotice, useConfirm } from '@open-work-hub/ui';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link, useNavigate } from 'react-router-dom';
 
-import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   LinkedRecordingList,
   RecordingRecoveryBanner,
@@ -31,17 +38,25 @@ import {
   type RecordingRecoveryAction,
   type RecordingTargetRef,
 } from '@/src/app-modules/recording/public-api';
-import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import {
+  downloadAuthenticatedContent,
+  openAuthenticatedContent,
+} from '@/src/platform/browser/browser-download';
+import {
+  formatDateTime,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 import {
   RAIL_VISIBLE_STATUSES,
   attachDocToMeeting,
   attachTaskToMeeting,
   deleteMeeting,
   deleteMeetingFile,
+  deleteMeetingRecording,
   detachDocFromMeeting,
   detachTaskFromMeeting,
   getMeeting,
-  deleteMeetingRecording,
   retryMeetingRecording,
   uploadMeetingFile,
   type MeetingDetail as MeetingDetailType,
@@ -52,24 +67,7 @@ import {
   canInviteAttendees,
   canRemoveAttachment,
 } from '../../api/meeting-permissions';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 
-import { AddAttendeesModal } from './AddAttendeesModal';
-import { MeetingEditModal } from './MeetingEditModal';
-import { MeetingInsightSection } from './MeetingInsightSection';
-import { Section, EmptyRow } from './MeetingSection';
-import { TaskPickerModal } from './TaskPickerModal';
-import { DocPickerModal } from './DocPickerModal';
-import { RecordingControls } from './RecordingControls';
-import { RecordingProgressRail } from './RecordingProgressRail';
-import {
-  activeRecordingLockForOtherUser,
-  formatMeetingFileSize,
-  formatMeetingRange,
-  transcriptStatusKey,
-} from './meeting-detail-model';
-import { openMeetingInsightInChat } from './openMeetingInsightInChat';
-import { useRecordingPoll } from './useRecordingPoll';
 import {
   WhiteboardEditorSurface,
   WhiteboardPickerModal,
@@ -79,9 +77,24 @@ import {
   type WhiteboardDetail,
   type WhiteboardHubItem,
 } from '@/src/app-modules/whiteboard/public-api';
+import { AddAttendeesModal } from './AddAttendeesModal';
+import { DocPickerModal } from './DocPickerModal';
+import { MeetingEditModal } from './MeetingEditModal';
+import { MeetingInsightSection } from './MeetingInsightSection';
+import { EmptyRow, Section } from './MeetingSection';
+import { RecordingControls } from './RecordingControls';
+import { RecordingProgressRail } from './RecordingProgressRail';
+import { TaskPickerModal } from './TaskPickerModal';
+import {
+  activeRecordingLockForOtherUser,
+  formatMeetingFileSize,
+  formatMeetingRange,
+  transcriptStatusKey,
+} from './meeting-detail-model';
+import { openMeetingInsightInChat } from './openMeetingInsightInChat';
+import { useRecordingPoll } from './useRecordingPoll';
 
 interface MeetingDetailProps {
-  workspaceSlug: string;
   meetingId: string;
   onClose?: () => void;
   onChanged: () => void;
@@ -122,7 +135,9 @@ function meetingDataReducer(
   switch (action.type) {
     case 'meeting:set': {
       const meeting =
-        typeof action.next === 'function' ? action.next(state.meeting) : action.next;
+        typeof action.next === 'function'
+          ? action.next(state.meeting)
+          : action.next;
       return { ...state, meeting };
     }
     case 'error:set':
@@ -133,7 +148,6 @@ function meetingDataReducer(
 }
 
 function useMeetingDetailElement({
-  workspaceSlug,
   meetingId,
   onClose,
   onChanged,
@@ -162,7 +176,9 @@ function useMeetingDetailElement({
   const [addAttendeesOpen, setAddAttendeesOpen] = useState(false);
   const [whiteboardPickerOpen, setWhiteboardPickerOpen] = useState(false);
   const [whiteboardEditorOpen, setWhiteboardEditorOpen] = useState(false);
-  const [whiteboardEditorBoardId, setWhiteboardEditorBoardId] = useState<string | null>(null);
+  const [whiteboardEditorBoardId, setWhiteboardEditorBoardId] = useState<
+    string | null
+  >(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -171,13 +187,15 @@ function useMeetingDetailElement({
     if (!token) return;
     setError(null);
     try {
-      const detail = await getMeeting(token, workspaceSlug, meetingId);
+      const detail = await getMeeting(token, meetingId);
       setMeeting(detail);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.detail.loadFailed'));
+      setError(
+        err instanceof Error ? err.message : t('meeting.detail.loadFailed'),
+      );
       setMeeting(null);
     }
-  }, [meetingId, setError, setMeeting, t, token, workspaceSlug]);
+  }, [meetingId, setError, setMeeting, t, token]);
 
   useEffect(() => {
     refresh();
@@ -188,12 +206,10 @@ function useMeetingDetailElement({
     [meetingId],
   );
   const recovery = useRecordingRecovery({
-    workspaceSlug,
     token,
     initialTarget: recordingTarget,
   });
   const recorder = useResilientRecorder({
-    workspaceSlug,
     token,
     initialTarget: recordingTarget,
     source: 'live_recording',
@@ -222,7 +238,6 @@ function useMeetingDetailElement({
 
   useRecordingPoll(
     token,
-    workspaceSlug,
     meetingId,
     meeting,
     (updated) => {
@@ -243,33 +258,45 @@ function useMeetingDetailElement({
 
   const editable = canEditMeeting(user, meeting);
   const canAttach = canAttachToMeeting(user, meeting);
+  const publicationGeneration = useRef(0);
+  useEffect(
+    () => () => {
+      publicationGeneration.current += 1;
+    },
+    [token, meetingId, canAttach],
+  );
   const canInvite = canInviteAttendees(user, meeting);
   const meetingWhiteboardContext = useMemo(
     () => ({ app: 'meeting', type: 'meeting', id: meetingId }),
     [meetingId],
   );
-  const activeWhiteboardId = whiteboardEditorBoardId ?? meeting?.whiteboard_link?.whiteboard_id ?? null;
+  const activeWhiteboardId =
+    whiteboardEditorBoardId ?? meeting?.whiteboard_link?.whiteboard_id ?? null;
 
-  const updateWhiteboardLinkFromBoard = useCallback((board: WhiteboardDetail) => {
-    setMeeting((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        whiteboard_link: {
-          id: current.whiteboard_link?.id ?? '',
-          whiteboard_id: board.id,
-          whiteboard_title: board.title,
-          added_by_id: current.whiteboard_link?.added_by_id ?? user?.id ?? null,
-          created_at: current.whiteboard_link?.created_at ?? board.created_at,
-          updated_at: board.updated_at,
-        },
-      };
-    });
-  }, [setMeeting, user?.id]);
+  const updateWhiteboardLinkFromBoard = useCallback(
+    (board: WhiteboardDetail) => {
+      setMeeting((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          whiteboard_link: {
+            id: current.whiteboard_link?.id ?? '',
+            whiteboard_id: board.id,
+            whiteboard_title: board.title,
+            added_by_id:
+              current.whiteboard_link?.added_by_id ?? user?.id ?? null,
+            created_at: current.whiteboard_link?.created_at ?? board.created_at,
+            updated_at: board.updated_at,
+          },
+        };
+      });
+    },
+    [setMeeting, user?.id],
+  );
 
   async function handleAttachTask(task: { id: string }) {
     if (!token) return;
-    const updated = await attachTaskToMeeting(token, workspaceSlug, meetingId, task.id);
+    const updated = await attachTaskToMeeting(token, meetingId, task.id);
     setMeeting(updated);
     onChanged();
   }
@@ -278,16 +305,15 @@ function useMeetingDetailElement({
     if (!token) return;
     setBusy(true);
     try {
-      const updated = await detachTaskFromMeeting(
-        token,
-        workspaceSlug,
-        meetingId,
-        taskId,
-      );
+      const updated = await detachTaskFromMeeting(token, meetingId, taskId);
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.detail.detachTaskFailed'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.detachTaskFailed'),
+      );
     } finally {
       setBusy(false);
     }
@@ -295,12 +321,7 @@ function useMeetingDetailElement({
 
   async function handleAttachDoc(doc: { source_id: string }) {
     if (!token) return;
-    const updated = await attachDocToMeeting(
-      token,
-      workspaceSlug,
-      meetingId,
-      doc.source_id,
-    );
+    const updated = await attachDocToMeeting(token, meetingId, doc.source_id);
     setMeeting(updated);
     onChanged();
   }
@@ -309,56 +330,90 @@ function useMeetingDetailElement({
     if (!token) return;
     setBusy(true);
     try {
-      const updated = await detachDocFromMeeting(token, workspaceSlug, meetingId, docId);
+      const updated = await detachDocFromMeeting(token, meetingId, docId);
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.detail.detachDocFailed'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.detachDocFailed'),
+      );
     } finally {
       setBusy(false);
     }
   }
 
   async function handleCreateWhiteboard() {
-    if (!token || !meeting) return;
+    if (!token || !meeting || !canAttach || busy) return;
+    const generation = publicationGeneration.current;
     setBusy(true);
     setError(null);
     try {
-      const board = await createWhiteboardContextSlot(
-        token,
-        {
-          ...meetingWhiteboardContext,
-          title: t('meeting.detail.whiteboardDefaultTitle', { title: meeting.title }),
-        },
-        workspaceSlug,
-      );
+      const acknowledged = await confirm({
+        title: t('shell:contentPublication.title'),
+        description: t('shell:contentPublication.confirm'),
+        confirmLabel: t('common:actions.confirm'),
+        cancelLabel: t('common:actions.cancel'),
+      });
+      if (!acknowledged || generation !== publicationGeneration.current) return;
+      const board = await createWhiteboardContextSlot(token, {
+        ...meetingWhiteboardContext,
+        company_admin_read_acknowledged: acknowledged,
+        title: t('meeting.detail.whiteboardDefaultTitle', {
+          title: meeting.title,
+        }),
+      });
+      if (generation !== publicationGeneration.current) return;
       updateWhiteboardLinkFromBoard(board);
       setWhiteboardEditorBoardId(board.id);
       setWhiteboardEditorOpen(true);
       onChanged();
       void refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.detail.createWhiteboardFailed'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.createWhiteboardFailed'),
+      );
     } finally {
       setBusy(false);
     }
   }
 
   async function handleAttachWhiteboard(item: WhiteboardHubItem) {
-    if (!token) return;
-    const board = await attachWhiteboardContextSlot(
-      token,
-      {
+    if (!token || !canAttach || busy) return false;
+    const generation = publicationGeneration.current;
+    setBusy(true);
+    try {
+      const acknowledged =
+        item.ownership_kind === 'personal'
+          ? await confirm({
+              title: t('shell:contentPublication.title'),
+              description: t('shell:contentPublication.confirm'),
+              confirmLabel: t('common:actions.confirm'),
+              cancelLabel: t('common:actions.cancel'),
+            })
+          : false;
+      if (
+        generation !== publicationGeneration.current ||
+        (item.ownership_kind === 'personal' && !acknowledged)
+      )
+        return false;
+      const board = await attachWhiteboardContextSlot(token, {
         ...meetingWhiteboardContext,
         whiteboard_id: item.id,
-      },
-      workspaceSlug,
-    );
-    updateWhiteboardLinkFromBoard(board);
-    setWhiteboardEditorBoardId(board.id);
-    setWhiteboardEditorOpen(true);
-    onChanged();
-    void refresh();
+        company_admin_read_acknowledged: acknowledged,
+      });
+      if (generation !== publicationGeneration.current) return false;
+      updateWhiteboardLinkFromBoard(board);
+      setWhiteboardEditorBoardId(board.id);
+      setWhiteboardEditorOpen(true);
+      onChanged();
+      void refresh();
+    } finally {
+      if (generation === publicationGeneration.current) setBusy(false);
+    }
   }
 
   async function handleDetachWhiteboard() {
@@ -366,14 +421,20 @@ function useMeetingDetailElement({
     setBusy(true);
     setError(null);
     try {
-      await detachWhiteboardContextSlot(token, meetingWhiteboardContext, workspaceSlug);
-      setMeeting((current) => (current ? { ...current, whiteboard_link: null } : current));
+      await detachWhiteboardContextSlot(token, meetingWhiteboardContext);
+      setMeeting((current) =>
+        current ? { ...current, whiteboard_link: null } : current,
+      );
       setWhiteboardEditorBoardId(null);
       setWhiteboardEditorOpen(false);
       onChanged();
       void refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.detail.detachWhiteboardFailed'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.detachWhiteboardFailed'),
+      );
     } finally {
       setBusy(false);
     }
@@ -387,11 +448,15 @@ function useMeetingDetailElement({
     setUploading(true);
     setError(null);
     try {
-      const updated = await uploadMeetingFile(token, workspaceSlug, meetingId, file);
+      const updated = await uploadMeetingFile(token, meetingId, file);
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.detail.uploadFileFailed'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.uploadFileFailed'),
+      );
     } finally {
       setUploading(false);
     }
@@ -402,11 +467,15 @@ function useMeetingDetailElement({
     setBusy(true);
     setError(null);
     try {
-      const updated = await deleteMeetingFile(token, workspaceSlug, meetingId, fileId);
+      const updated = await deleteMeetingFile(token, meetingId, fileId);
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.detail.deleteFileFailed'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.deleteFileFailed'),
+      );
     } finally {
       setBusy(false);
     }
@@ -419,23 +488,31 @@ function useMeetingDetailElement({
     download_url: string;
     filename: string;
   }) {
+    if (!token) return;
     try {
-      const response = await fetch(file.download_url);
-      if (!response.ok) {
-        throw new Error(t('meeting.detail.downloadFailedWithStatus', { status: response.status }));
-      }
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = objectUrl;
-      anchor.download = file.filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(objectUrl);
+      await downloadAuthenticatedContent(
+        token,
+        file.download_url,
+        file.filename,
+      );
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : t('meeting.detail.downloadFileFailed'),
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.downloadFileFailed'),
+      );
+    }
+  }
+
+  async function handleFilePreview(file: { download_url: string }) {
+    if (!token) return;
+    try {
+      await openAuthenticatedContent(token, file.download_url);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.downloadFileFailed'),
       );
     }
   }
@@ -452,10 +529,14 @@ function useMeetingDetailElement({
     if (!ok) return;
     setBusy(true);
     try {
-      await deleteMeeting(token, workspaceSlug, meetingId);
+      await deleteMeeting(token, meetingId);
       onDeleted();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.detail.deleteMeetingFailed'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.deleteMeetingFailed'),
+      );
       setBusy(false);
     }
   }
@@ -467,14 +548,17 @@ function useMeetingDetailElement({
     try {
       const updated = await retryMeetingRecording(
         token,
-        workspaceSlug,
         meetingId,
         recordingId,
       );
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.detail.retryRecordingFailed'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.retryRecordingFailed'),
+      );
     } finally {
       setBusy(false);
     }
@@ -495,14 +579,17 @@ function useMeetingDetailElement({
     try {
       const updated = await deleteMeetingRecording(
         token,
-        workspaceSlug,
         meetingId,
         recordingId,
       );
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.detail.deleteRecordingFailed'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t('meeting.detail.deleteRecordingFailed'),
+      );
     } finally {
       setBusy(false);
     }
@@ -551,7 +638,13 @@ function useMeetingDetailElement({
             {meeting.title}
           </h2>
           <p className="app-text-caption mt-1 text-app-ink/60 dark:text-app-ink/70">
-            {formatMeetingRange(meeting.start_at, meeting.end_at, timeZone, i18n.language)} · {meeting.organizer_name}
+            {formatMeetingRange(
+              meeting.start_at,
+              meeting.end_at,
+              timeZone,
+              i18n.language,
+            )}{' '}
+            · {meeting.organizer_name}
           </p>
         </div>
         <div className="ml-3 flex shrink-0 items-center gap-1">
@@ -581,11 +674,7 @@ function useMeetingDetailElement({
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
         {error ? (
-          <InlineNotice
-            role="alert"
-            className="app-text-body"
-            tone="danger"
-          >
+          <InlineNotice role="alert" className="app-text-body" tone="danger">
             {error}
           </InlineNotice>
         ) : null}
@@ -609,7 +698,10 @@ function useMeetingDetailElement({
                   <div className="min-w-0">
                     <p className="app-text-body line-clamp-1 text-app-ink">
                       <Link
-                        to={buildWorkspaceAppPath(workspaceSlug, 'pms', `?task=${encodeURIComponent(link.task_id)}`)}
+                        to={buildAppHref({
+                          routeId: 'pms.root',
+                          queryParams: { task: link.task_id },
+                        })}
                         className="hover:text-app-accent hover:underline"
                       >
                         {link.task_title || t('meeting.detail.untitled')}
@@ -620,7 +712,7 @@ function useMeetingDetailElement({
                         ? `${link.list_key}-${link.task_number}`
                         : '#'}
                     </p>
-                    </div>
+                  </div>
                   {canRemoveAttachment(user, meeting, link) ? (
                     <button
                       type="button"
@@ -656,7 +748,10 @@ function useMeetingDetailElement({
                 >
                   <p className="app-text-body line-clamp-1 text-app-ink">
                     <Link
-                      to={buildWorkspaceAppPath(workspaceSlug, 'docs', link.doc_id)}
+                      to={buildAppHref({
+                        routeId: 'docs.document',
+                        pathParams: { docId: link.doc_id },
+                      })}
                       className="hover:text-app-accent hover:underline"
                     >
                       {link.doc_title || t('meeting.detail.untitled')}
@@ -689,6 +784,7 @@ function useMeetingDetailElement({
                 <button
                   type="button"
                   onClick={() => setWhiteboardPickerOpen(true)}
+                  disabled={busy}
                   className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline"
                 >
                   <Search size={12} />
@@ -724,7 +820,9 @@ function useMeetingDetailElement({
               <button
                 type="button"
                 onClick={() => {
-                  setWhiteboardEditorBoardId(meeting.whiteboard_link?.whiteboard_id ?? null);
+                  setWhiteboardEditorBoardId(
+                    meeting.whiteboard_link?.whiteboard_id ?? null,
+                  );
                   setWhiteboardEditorOpen(true);
                 }}
                 className="min-w-0 flex-1 text-left"
@@ -745,7 +843,9 @@ function useMeetingDetailElement({
                 <button
                   type="button"
                   onClick={() => {
-                    setWhiteboardEditorBoardId(meeting.whiteboard_link?.whiteboard_id ?? null);
+                    setWhiteboardEditorBoardId(
+                      meeting.whiteboard_link?.whiteboard_id ?? null,
+                    );
                     setWhiteboardEditorOpen(true);
                   }}
                   className="app-text-caption text-app-accent hover:underline"
@@ -775,12 +875,10 @@ function useMeetingDetailElement({
           icon={<Paperclip size={14} />}
           title={t('meeting.detail.files')}
           count={meeting.file_attachments.length}
-          onAdd={
-            canAttach
-              ? () => fileInputRef.current?.click()
-              : undefined
+          onAdd={canAttach ? () => fileInputRef.current?.click() : undefined}
+          addLabel={
+            uploading ? t('meeting.detail.uploading') : t('common:actions.add')
           }
-          addLabel={uploading ? t('meeting.detail.uploading') : t('common:actions.add')}
         >
           <input
             ref={fileInputRef}
@@ -799,17 +897,17 @@ function useMeetingDetailElement({
                   className="flex items-start justify-between rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2"
                 >
                   <div className="min-w-0 flex-1">
-                    <a
-                      href={file.download_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => void handleFilePreview(file)}
                       className="app-text-body line-clamp-1 text-app-ink hover:text-app-accent"
                       title={t('meeting.detail.previewNewTab')}
                     >
                       {file.filename}
-                    </a>
+                    </button>
                     <p className="app-text-caption text-app-ink/40">
-                      {formatMeetingFileSize(file.size_bytes)} · {file.added_by_name}
+                      {formatMeetingFileSize(file.size_bytes)} ·{' '}
+                      {file.added_by_name}
                     </p>
                   </div>
                   <div className="ml-2 flex shrink-0 items-center gap-0.5">
@@ -841,7 +939,11 @@ function useMeetingDetailElement({
           )}
         </Section>
 
-        <Section icon={<Mic size={14} />} title={t('meeting.recordings')} count={meeting.recordings.length}>
+        <Section
+          icon={<Mic size={14} />}
+          title={t('meeting.recordings')}
+          count={meeting.recordings.length}
+        >
           {canAttach ? (
             <RecordingControls
               browserSupported={recorder.browserSupported}
@@ -855,47 +957,91 @@ function useMeetingDetailElement({
               wakeLockWarning={recorder.wakeLockWarning}
               inputWarning={recorder.inputWarning}
               lockedByOther={lockedByOther}
-              onStart={(linkedTaskId) => recorder.startRecording({
-                linkedTaskId,
-                title: meeting.title,
-              })}
+              onStart={(linkedTaskId) =>
+                recorder.startRecording({
+                  linkedTaskId,
+                  title: meeting.title,
+                })
+              }
               onStop={recorder.stopRecording}
-              onImportFile={(file, linkedTaskId) => recorder.importAudioFile(file, {
-                linkedTaskId,
-                title: meeting.title,
-                source: 'manual_upload',
-              })}
+              onImportFile={(file, linkedTaskId) =>
+                recorder.importAudioFile(file, {
+                  linkedTaskId,
+                  title: meeting.title,
+                  source: 'manual_upload',
+                })
+              }
             />
           ) : null}
 
           {recorder.error ? (
-            <p className="app-text-caption mt-2 text-[var(--ui-color-danger)]">{recorder.error}</p>
+            <p className="app-text-caption mt-2 text-[var(--ui-color-danger)]">
+              {recorder.error}
+            </p>
           ) : null}
 
           {recovery.items.length > 0 ? (
             <div className="mt-3 space-y-2">
               {recovery.items.map((item) => {
                 const plan = planRecordingRecoverySession(item);
-                const resumeAction = getRecordingRecoveryAction(plan, 'resume-upload');
-                const continueAction = getRecordingRecoveryAction(plan, 'continue-recording');
-                const downloadAction = getRecordingRecoveryAction(plan, 'download-original');
-                const importAction = getRecordingRecoveryAction(plan, 'import-original');
-                const discardAction = getRecordingRecoveryAction(plan, 'discard');
-                const finalizeAction = getRecordingRecoveryAction(plan, 'finalize-uploaded');
+                const resumeAction = getRecordingRecoveryAction(
+                  plan,
+                  'resume-upload',
+                );
+                const continueAction = getRecordingRecoveryAction(
+                  plan,
+                  'continue-recording',
+                );
+                const downloadAction = getRecordingRecoveryAction(
+                  plan,
+                  'download-original',
+                );
+                const importAction = getRecordingRecoveryAction(
+                  plan,
+                  'import-original',
+                );
+                const discardAction = getRecordingRecoveryAction(
+                  plan,
+                  'discard',
+                );
+                const finalizeAction = getRecordingRecoveryAction(
+                  plan,
+                  'finalize-uploaded',
+                );
                 return (
                   <RecordingRecoveryBanner
                     key={item.stagingId}
                     item={item}
                     plan={plan}
-                    onResumeUpload={resumeAction ? () => handleRecoveryAction(resumeAction) : undefined}
-                    onContinueRecording={
-                      continueAction ? () => handleRecoveryAction(continueAction) : undefined
+                    onResumeUpload={
+                      resumeAction
+                        ? () => handleRecoveryAction(resumeAction)
+                        : undefined
                     }
-                    onDownload={downloadAction ? () => handleRecoveryAction(downloadAction) : undefined}
-                    onImport={importAction ? () => handleRecoveryAction(importAction) : undefined}
-                    onDiscard={discardAction ? () => handleRecoveryAction(discardAction) : undefined}
+                    onContinueRecording={
+                      continueAction
+                        ? () => handleRecoveryAction(continueAction)
+                        : undefined
+                    }
+                    onDownload={
+                      downloadAction
+                        ? () => handleRecoveryAction(downloadAction)
+                        : undefined
+                    }
+                    onImport={
+                      importAction
+                        ? () => handleRecoveryAction(importAction)
+                        : undefined
+                    }
+                    onDiscard={
+                      discardAction
+                        ? () => handleRecoveryAction(discardAction)
+                        : undefined
+                    }
                     onFinalizeUploadedOnly={
-                      finalizeAction ? () => handleRecoveryAction(finalizeAction) : undefined
+                      finalizeAction
+                        ? () => handleRecoveryAction(finalizeAction)
+                        : undefined
                     }
                   />
                 );
@@ -908,52 +1054,69 @@ function useMeetingDetailElement({
           ) : (
             <div className="mt-3">
               <LinkedRecordingList
-                workspaceSlug={workspaceSlug}
                 emptyText={t('meeting.detail.noRecordings')}
                 disabled={busy}
                 onRetry={handleRetryRecording}
                 onDelete={handleDeleteRecording}
                 onError={(err) => {
-                  setError(err instanceof Error ? err.message : t('meeting.detail.playbackFailed'));
-                }}
-                items={meeting.recordings.map((recording): LinkedRecordingListItem => {
-                  const canManageRecording = Boolean(
-                    user && (
-                      recording.uploaded_by_id === user.id
-                      || meeting.organizer_id === user.id
-                    ),
+                  setError(
+                    err instanceof Error
+                      ? err.message
+                      : t('meeting.detail.playbackFailed'),
                   );
-                  const baseLabel =
-                    recording.source === 'manual_upload'
-                      ? t('meeting.detail.uploadedAudio')
-                      : t('meeting.detail.meetingRecording');
-                  const recordingLabel = t('meeting.detail.recordingWithSequence', {
-                    label: baseLabel,
-                    sequence: recording.sequence_no,
-                  });
-                  return {
-                    id: recording.id,
-                    title: recordingLabel,
-                    subtitle: `${formatMeetingFileSize(recording.file_size)} · ${recording.mime_type}`,
-                    detailHref: buildWorkspaceAppPath(workspaceSlug, 'recording', recording.id),
-                    statusLine: `${t('meeting.recordingStatus.audioSaved')} · ${t(transcriptStatusKey(recording))}`,
-                    rawTranscriptDocId: recording.raw_transcript_doc_id,
-                    minutesDocId: recording.minutes_doc_id,
-                    canDelete: canManageRecording,
-                    canRetry: canManageRecording && recording.transcription_status === 'failed',
-                    progress: RAIL_VISIBLE_STATUSES.has(recording.transcription_status) ? (
-                      <RecordingProgressRail recording={recording} />
-                    ) : null,
-                    doneLabel: recording.transcription_status === 'done'
-                      ? t('meeting.detail.minutesDone')
-                      : null,
-                  };
-                })}
+                }}
+                items={meeting.recordings.map(
+                  (recording): LinkedRecordingListItem => {
+                    const canManageRecording = Boolean(
+                      user &&
+                        (recording.uploaded_by_id === user.id ||
+                          meeting.organizer_id === user.id),
+                    );
+                    const baseLabel =
+                      recording.source === 'manual_upload'
+                        ? t('meeting.detail.uploadedAudio')
+                        : t('meeting.detail.meetingRecording');
+                    const recordingLabel = t(
+                      'meeting.detail.recordingWithSequence',
+                      {
+                        label: baseLabel,
+                        sequence: recording.sequence_no,
+                      },
+                    );
+                    return {
+                      id: recording.id,
+                      title: recordingLabel,
+                      subtitle: `${formatMeetingFileSize(recording.file_size)} · ${recording.mime_type}`,
+                      detailHref: buildAppHref({
+                        routeId: 'recording.detail',
+                        pathParams: { recordingId: recording.id },
+                      }),
+                      statusLine: `${t('meeting.recordingStatus.audioSaved')} · ${t(transcriptStatusKey(recording))}`,
+                      rawTranscriptDocId: recording.raw_transcript_doc_id,
+                      minutesDocId: recording.minutes_doc_id,
+                      canDelete: canManageRecording,
+                      canRetry:
+                        canManageRecording &&
+                        recording.transcription_status === 'failed',
+                      progress: RAIL_VISIBLE_STATUSES.has(
+                        recording.transcription_status,
+                      ) ? (
+                        <RecordingProgressRail recording={recording} />
+                      ) : null,
+                      doneLabel:
+                        recording.transcription_status === 'done'
+                          ? t('meeting.detail.minutesDone')
+                          : null,
+                    };
+                  },
+                )}
               />
             </div>
           )}
           {recovery.error ? (
-            <p className="app-text-caption mt-2 text-[var(--ui-color-danger)]">{recovery.error}</p>
+            <p className="app-text-caption mt-2 text-[var(--ui-color-danger)]">
+              {recovery.error}
+            </p>
           ) : null}
           {recovery.loading ? (
             <p className="app-text-caption mt-2 text-app-ink/50">
@@ -965,7 +1128,6 @@ function useMeetingDetailElement({
         {meeting.recordings.length > 0 ? (
           <MeetingInsightSection
             meeting={meeting}
-            workspaceSlug={workspaceSlug}
             token={token}
             timeZone={timeZone}
             onOpenInChat={async (insight) => {
@@ -975,7 +1137,6 @@ function useMeetingDetailElement({
               await openMeetingInsightInChat({
                 navigate,
                 token,
-                workspaceSlug,
                 meeting,
                 insight,
               });
@@ -1047,21 +1208,20 @@ function useMeetingDetailElement({
         onClose={() => setTaskPickerOpen(false)}
         onPick={handleAttachTask}
         excludeTaskIds={meeting.task_links.map((link) => link.task_id)}
-        workspaceSlug={workspaceSlug}
       />
       <DocPickerModal
         isOpen={docPickerOpen}
         onClose={() => setDocPickerOpen(false)}
         onPick={handleAttachDoc}
         excludeDocIds={meeting.doc_links.map((link) => link.doc_id)}
-        workspaceSlug={workspaceSlug}
       />
       <WhiteboardPickerModal
         isOpen={whiteboardPickerOpen}
         onClose={() => setWhiteboardPickerOpen(false)}
         onPick={handleAttachWhiteboard}
-        excludeWhiteboardIds={meeting.whiteboard_link ? [meeting.whiteboard_link.whiteboard_id] : []}
-        workspaceSlug={workspaceSlug}
+        excludeWhiteboardIds={
+          meeting.whiteboard_link ? [meeting.whiteboard_link.whiteboard_id] : []
+        }
       />
       <Dialog
         closeLabel={t('common:actions.close')}
@@ -1074,7 +1234,10 @@ function useMeetingDetailElement({
         fullSize
         dismissOnInteractOutside={false}
         actions={
-          <Button variant="secondary" onClick={() => setWhiteboardEditorOpen(false)}>
+          <Button
+            variant="secondary"
+            onClick={() => setWhiteboardEditorOpen(false)}
+          >
             {t('common:actions.close')}
           </Button>
         }
@@ -1084,7 +1247,6 @@ function useMeetingDetailElement({
             <WhiteboardEditorSurface
               key={activeWhiteboardId}
               boardId={activeWhiteboardId}
-              workspaceSlug={workspaceSlug}
               showArchive={false}
               showDetach={canAttach}
               onDetach={handleDetachWhiteboard}
@@ -1104,12 +1266,10 @@ function useMeetingDetailElement({
           setEditOpen(false);
           onChanged();
         }}
-        workspaceSlug={workspaceSlug}
       />
       <AddAttendeesModal
         isOpen={addAttendeesOpen}
         meeting={meeting}
-        workspaceSlug={workspaceSlug}
         onClose={() => setAddAttendeesOpen(false)}
         onAdded={(updated) => {
           setMeeting(updated);

@@ -1,50 +1,54 @@
-import { useState, useCallback } from 'react';
+import { LinkedRecordingsForTarget } from '@/src/app-modules/recording/public-api';
+import { DateInput } from '@/src/components/date/DateInput';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
-  X,
-  Maximize2,
-  Minimize2,
-  Share2,
-  MoreHorizontal,
-  Send,
-  Loader2,
-  ChevronRight,
+  authenticatedContentObjectUrl,
+  downloadAuthenticatedContent,
+} from '@/src/platform/browser/browser-download';
+import { useMediaUpload } from '@/src/platform/media/use-media-upload';
+import type { BlockContent } from '@open-work-hub/ui';
+import { Badge, BlockEditor, BlockViewer, Button } from '@open-work-hub/ui';
+import {
   Archive,
-  Trash2,
-  Tag,
   Check,
   CheckSquare,
-  Unlink,
-  Paperclip,
+  ChevronRight,
   Download,
-  FileIcon,
-  Plus,
   ExternalLink,
+  FileIcon,
+  Loader2,
+  Maximize2,
+  Minimize2,
+  MoreHorizontal,
+  Paperclip,
+  Plus,
+  Send,
+  Share2,
+  Tag,
+  Trash2,
+  Unlink,
+  X,
 } from 'lucide-react';
-import { Badge, Button, BlockEditor, BlockViewer } from '@open-work-hub/ui';
-import type { BlockContent } from '@open-work-hub/ui';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
-import { useAuth } from '@/src/platform/auth/auth-provider';
-import { DateInput } from '@/src/components/date/DateInput';
-import { useMediaUpload } from '@/src/platform/media/use-media-upload';
-import { LinkedRecordingsForTarget } from '@/src/app-modules/recording/public-api';
 import {
+  type PmsAttachment,
+  type PmsLabel,
+  type PmsMilestone,
   type PmsTask,
   type PmsTaskListMember,
-  type PmsMilestone,
-  type PmsLabel,
   type PmsTaskListStatus,
 } from '../api/pms-api';
 import {
+  formatDate,
   getStatusSlugs,
   getStatusTone,
   initials,
-  formatDate,
 } from './pms-constants';
+import { TaskDetailActivityPanel } from './TaskDetailActivityPanel';
 import { InlineSaveError, MetaLabel, UserRolePicker } from './TaskDetailFields';
 import { TaskDocPickerModal } from './TaskDocPickerModal';
 import { useTaskDetailAttachments } from './useTaskDetailAttachments';
-import { TaskDetailActivityPanel } from './TaskDetailActivityPanel';
 import { useTaskDetailChecklist } from './useTaskDetailChecklist';
 import { useTaskDetailComments } from './useTaskDetailComments';
 import { useTaskDetailIssueEditing } from './useTaskDetailIssueEditing';
@@ -81,17 +85,20 @@ type TaskDetailProps = {
   taskListStatuses?: PmsTaskListStatus[];
   spaceName?: string | null;
   spaceId?: string | null;
-  workspaceSlug?: string | null;
+
   canEdit?: boolean;
+  canPublishDoc?: boolean;
   onClose: () => void;
   onUpdate?: () => void | Promise<void>;
 };
 
 export function TaskDetail(props: TaskDetailProps) {
-  return useTaskDetailContent(props);
+  return <TaskDetailContent {...props} />;
 }
 
-function useTaskDetailContent({
+type TaskDetailContentProps = TaskDetailProps;
+
+function TaskDetailContent({
   task,
   members = EMPTY_MEMBERS,
   milestones = EMPTY_MILESTONES,
@@ -99,13 +106,12 @@ function useTaskDetailContent({
   taskListStatuses,
   spaceName,
   spaceId = null,
-  workspaceSlug: workspaceSlugProp = null,
-  canEdit = true,
+  canEdit: canEditProp = true,
+  canPublishDoc = false,
   onClose,
   onUpdate,
-}: TaskDetailProps) {
-  const { workspaceSlug: routeWorkspaceSlug } = useParams();
-  const workspaceSlug = workspaceSlugProp ?? routeWorkspaceSlug ?? null;
+}: TaskDetailContentProps) {
+  const canEdit = canEditProp;
   const { token, user } = useAuth();
   const { t } = useTranslation('apps');
   const { uploadFile, resolveFileUrl } = useMediaUpload();
@@ -143,6 +149,9 @@ function useTaskDetailContent({
   const [mobilePanel, setMobilePanel] = useState<'details' | 'activity'>(
     'details',
   );
+  const [downloadingAttachmentId, setDownloadingAttachmentId] = useState<
+    string | null
+  >(null);
   const {
     state: {
       activityLogs,
@@ -161,7 +170,6 @@ function useTaskDetailContent({
   } = useTaskDetailResources({
     taskId: task.id,
     token,
-    workspaceSlug,
   });
   const {
     addingSubtask,
@@ -223,6 +231,26 @@ function useTaskDetailContent({
     token,
     t,
   });
+
+  const handleDownloadAttachment = useCallback(
+    async (attachment: PmsAttachment) => {
+      if (!token || downloadingAttachmentId) return;
+      setDownloadingAttachmentId(attachment.id);
+      setSaveError(null);
+      try {
+        await downloadAuthenticatedContent(
+          token,
+          attachment.download_url,
+          attachment.filename,
+        );
+      } catch {
+        setSaveError(t('files.errors.downloadFailed'));
+      } finally {
+        setDownloadingAttachmentId(null);
+      }
+    },
+    [downloadingAttachmentId, setSaveError, t, token],
+  );
   const {
     closeMention,
     commentDraft,
@@ -243,6 +271,7 @@ function useTaskDetailContent({
   });
   const {
     buildDocPath,
+    confirmDialog,
     docPickerOpen,
     handleLinkDoc,
     handlePromoteDescriptionToDoc,
@@ -251,6 +280,7 @@ function useTaskDetailContent({
     setDocPickerOpen,
   } = useTaskDetailLinkedDocs({
     canEdit,
+    canPublishDoc,
     descriptionBlocksRef,
     issue: issueState,
     onUpdate,
@@ -259,8 +289,6 @@ function useTaskDetailContent({
     spaceId,
     token,
     t,
-    user,
-    workspaceSlug,
   });
 
   const handleToggleIssueArchive = useCallback(() => {
@@ -346,6 +374,7 @@ function useTaskDetailContent({
 
   return (
     <div className="flex h-full min-w-0 flex-col overflow-hidden">
+      {confirmDialog}
       {/* Top bar */}
       <div className="flex items-center justify-between gap-3 border-b border-app-border px-4 py-3 shrink-0 lg:px-5">
         <div className="app-text-caption flex min-w-0 items-center gap-2 text-app-ink/50">
@@ -719,7 +748,7 @@ function useTaskDetailContent({
                   {t('pms.description')}
                 </h3>
                 <div className="flex shrink-0 items-center gap-1">
-                  {canEdit ? (
+                  {canEdit && (!spaceId || canPublishDoc) ? (
                     <Button
                       variant="ghost"
                       onClick={handlePromoteDescriptionToDoc}
@@ -1172,10 +1201,9 @@ function useTaskDetailContent({
 
             <hr className="border-app-border" />
 
-            {workspaceSlug ? (
+            {
               <>
                 <LinkedRecordingsForTarget
-                  workspaceSlug={workspaceSlug}
                   targetApp="pms"
                   targetType="task"
                   targetId={task.id}
@@ -1185,7 +1213,7 @@ function useTaskDetailContent({
 
                 <hr className="border-app-border" />
               </>
-            ) : null}
+            }
 
             {/* Attachments */}
             <div className="space-y-2">
@@ -1209,10 +1237,10 @@ function useTaskDetailContent({
                         className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-app-surface-hover group transition-colors"
                       >
                         {isImage ? (
-                          <img
-                            src={att.download_url}
+                          <AuthenticatedTaskAttachmentThumbnail
                             alt={att.filename}
-                            className="size-8 rounded border border-app-border object-cover"
+                            token={token}
+                            url={att.download_url}
                           />
                         ) : (
                           <div className="flex size-8 items-center justify-center rounded border border-app-border bg-app-surface-sidebar">
@@ -1229,17 +1257,21 @@ function useTaskDetailContent({
                             {att.uploaded_by_name}
                           </p>
                         </div>
-                        <a
-                          href={att.download_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          disabled={downloadingAttachmentId !== null}
+                          onClick={() => void handleDownloadAttachment(att)}
                           aria-label={t('pms.taskDetail.downloadAttachment', {
                             filename: att.filename,
                           })}
-                          className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-app-ink transition-all"
+                          className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-app-ink transition-all disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                          <Download size={14} />
-                        </a>
+                          {downloadingAttachmentId === att.id ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Download size={14} />
+                          )}
+                        </button>
                         {canEdit ? (
                           <button
                             type="button"
@@ -1345,8 +1377,54 @@ function useTaskDetailContent({
         onClose={() => setDocPickerOpen(false)}
         onPick={(doc) => handleLinkDoc(doc.id)}
         excludeDocIds={linkedDocs.map((doc) => doc.doc_id)}
-        workspaceSlug={workspaceSlug}
       />
+    </div>
+  );
+}
+
+function AuthenticatedTaskAttachmentThumbnail({
+  alt,
+  token,
+  url,
+}: {
+  alt: string;
+  token: string | null;
+  url: string;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setSrc(null);
+    if (!token) return undefined;
+
+    void authenticatedContentObjectUrl(token, url)
+      .then((nextUrl) => {
+        objectUrl = nextUrl;
+        if (cancelled) {
+          URL.revokeObjectURL(nextUrl);
+          return;
+        }
+        setSrc(nextUrl);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [token, url]);
+
+  return src ? (
+    <img
+      src={src}
+      alt={alt}
+      className="size-8 rounded border border-app-border object-cover"
+    />
+  ) : (
+    <div className="flex size-8 items-center justify-center rounded border border-app-border bg-app-surface-sidebar">
+      <FileIcon size={14} className="text-app-ink/40" />
     </div>
   );
 }

@@ -11,7 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
+from open_work_hub_api.core.app_routes import InternalAppLocation, build_app_href
 from open_work_hub_api.core.db import get_db_session, get_session_factory
 from open_work_hub_api.core.i18n import (
     DEFAULT_LOCALE,
@@ -21,42 +23,54 @@ from open_work_hub_api.core.i18n import (
 )
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.storage import get_minio_client
-from open_work_hub_api.domains.auth.access import (
-    load_active_workspace_by_key,
-    resolve_workspace_role,
-    workspace_role_allows,
+from open_work_hub_api.domains.auth.access import is_platform_admin_user
+from open_work_hub_api.domains.auth.app_gate import (
+    require_app_access,
 )
 from open_work_hub_api.domains.auth.dependencies import (
     require_current_user,
     resolve_auth_context_from_token,
 )
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
-from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
 from open_work_hub_api.domains.collaboration.yjs_runtime import (
     CollabConnectionLimitExceeded,
     FastAPIYjsWebsocket,
 )
-from open_work_hub_api.domains.docs import realtime_protocol
-from open_work_hub_api.domains.docs import hub_projection
+from open_work_hub_api.domains.content_access.ownership import record_ownership_transition
+from open_work_hub_api.domains.docs import hub_projection, realtime_protocol
 from open_work_hub_api.domains.docs import service as docs_service
-from open_work_hub_api.domains.docs.app_catalog import DOCS_WORKSPACE_APP
 from open_work_hub_api.domains.docs.access_context import (
     PAGE_SOURCE_NATIVE_DOC,
     SOURCE_NATIVE_DOC,
     NativeAccess,
-    doc_query as _doc_query,
-    ensure_docs_workspace_access as _ensure_docs_workspace_access,
-    ensure_workspace_for_item_request as _ensure_workspace_for_item_request,
-    ensure_workspace_for_page_request as _ensure_workspace_for_page_request,
-    load_native_doc_for_access as _load_native_doc_for_access,
-    load_native_page as _load_native_page,
-    native_doc_from_item_or_404 as _native_doc_from_item_or_404,
-    normalize_page_id as _normalize_page_id,
-    primary_target as _primary_target,
-    utcnow as _utcnow,
-    workspace_for_doc as _workspace_for_doc,
+    resolve_native_doc_access,
 )
+from open_work_hub_api.domains.docs.access_context import (
+    doc_query as _doc_query,
+)
+from open_work_hub_api.domains.docs.access_context import (
+    ensure_docs_app_access as _ensure_docs_app_access,
+)
+from open_work_hub_api.domains.docs.access_context import (
+    load_native_doc_for_access as _load_native_doc_for_access,
+)
+from open_work_hub_api.domains.docs.access_context import (
+    load_native_page as _load_native_page,
+)
+from open_work_hub_api.domains.docs.access_context import (
+    native_doc_from_item_or_404 as _native_doc_from_item_or_404,
+)
+from open_work_hub_api.domains.docs.access_context import (
+    normalize_page_id as _normalize_page_id,
+)
+from open_work_hub_api.domains.docs.access_context import (
+    primary_target as _primary_target,
+)
+from open_work_hub_api.domains.docs.access_context import (
+    utcnow as _utcnow,
+)
+from open_work_hub_api.domains.docs.app_catalog import DOCS_APP
 from open_work_hub_api.domains.docs.collab import (
     DocsCollabHub,
     delete_collab_document,
@@ -70,12 +84,11 @@ from open_work_hub_api.domains.docs.models import (
     DocsCollection,
     DocsUserItemPref,
     NativeDoc,
-    NativeDocTarget,
     NativeDocLinkShare,
     NativeDocPage,
+    NativeDocTarget,
     NativeDocUserShare,
 )
-from open_work_hub_api.domains.docs.partitioning import ensure_native_doc_partition
 from open_work_hub_api.domains.docs.page_mutations import (
     CreateNativePageCommand,
     DeleteNativePageCommand,
@@ -84,26 +97,26 @@ from open_work_hub_api.domains.docs.page_mutations import (
     delete_native_page,
     update_native_page,
 )
-from open_work_hub_api.domains.usage.service import (
-    USAGE_EVENT_CONTENT_VIEW,
-    record_usage_event,
-)
+from open_work_hub_api.domains.docs.partitioning import ensure_native_doc_partition
 from open_work_hub_api.domains.docs.rag_sync import enqueue_native_doc_rag_sync
 from open_work_hub_api.domains.docs.registry import describe_source
+from open_work_hub_api.domains.media.service import cleanup_media_for_resource
+from open_work_hub_api.domains.pms import task_doc_links as pms_task_doc_links
+from open_work_hub_api.domains.rag.contracts import RagSyncOperation
+from open_work_hub_api.domains.rag.source_registry import RAG_SCOPE_OFFICIAL
 from open_work_hub_api.domains.source_access.targets import (
     TargetRef,
     project_target_access,
     resolve_target_label,
 )
-from open_work_hub_api.domains.media.service import cleanup_media_for_resource
-from open_work_hub_api.domains.pms import task_doc_links as pms_task_doc_links
-from open_work_hub_api.domains.rag.contracts import RagSyncOperation
-from open_work_hub_api.domains.rag.source_registry import RAG_SCOPE_OFFICIAL
+from open_work_hub_api.domains.usage.service import (
+    USAGE_EVENT_CONTENT_VIEW,
+    record_usage_event,
+)
 
-
-require_docs_app_enabled = require_workspace_app_enabled(
-    DOCS_WORKSPACE_APP.app_id,
-    error_code="workspace.app_disabled",
+require_docs_app_enabled = require_app_access(
+    DOCS_APP.app_id,
+    error_code="app.access_required",
 )
 
 router = APIRouter(
@@ -111,7 +124,6 @@ router = APIRouter(
     tags=["docs"],
     dependencies=[Depends(require_docs_app_enabled)],
 )
-public_router = APIRouter(prefix="/docs", tags=["docs"])
 ws_router = APIRouter(prefix="/docs", tags=["docs"])
 DocsDocType = Literal[
     "general",
@@ -135,24 +147,6 @@ DOC_TYPE_VALUES = {
     "memo",
 }
 MAX_CONTENT_TEXT_CHARS = 2 * 1024 * 1024
-
-
-def _require_workspace_slug(request: Request) -> str:
-    workspace_slug = request.path_params.get("workspace_slug")
-    if not workspace_slug:
-        raise localized_http_exception(
-            status_code=400,
-            code="docs.workspace_slug_required",
-        )
-    return workspace_slug
-
-
-def _require_docs_app_enabled_for_slug(db: Session, workspace_slug: str) -> Workspace:
-    workspace = load_active_workspace_by_key(db, workspace_slug)
-    if workspace is None:
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
-    require_docs_app_enabled(db=db, current_workspace=workspace)
-    return workspace
 
 
 def _decode_collab_yjs_state(value: str | None) -> bytes | None:
@@ -191,6 +185,8 @@ async def _receive_collab_auth_frame(websocket: WebSocket) -> str:
         parsed = json.loads(payload)
     except json.JSONDecodeError as exc:
         raise localized_http_exception(status_code=401, code="auth.required") from exc
+    if not isinstance(parsed, dict):
+        raise localized_http_exception(status_code=401, code="auth.required")
     token = parsed.get("token")
     if parsed.get("type") != "auth" or not isinstance(token, str) or not token:
         raise localized_http_exception(status_code=401, code="auth.required")
@@ -198,9 +194,8 @@ async def _receive_collab_auth_frame(websocket: WebSocket) -> str:
 
 
 async def _resolve_collab_ws_token(websocket: WebSocket) -> str:
-    query_token = websocket.query_params.get("token")
-    if query_token:
-        return query_token
+    if "token" in websocket.query_params:
+        raise localized_http_exception(status_code=401, code="auth.required")
     return await _receive_collab_auth_frame(websocket)
 
 
@@ -216,36 +211,28 @@ async def _close_websocket_for_http_error(websocket: WebSocket, exc: HTTPExcepti
         raise
 
 
+def _require_collab_edit_access(*, page_ref: str, token: str) -> None:
+    with get_session_factory()() as db:
+        auth_context = resolve_auth_context_from_token(db, token, update_last_seen=False)
+        context = resolve_collab_page_context(db, auth_context.user, page_ref)
+        if not context.can_edit:
+            raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
+
+
 async def _monitor_collab_access(
     websocket: WebSocket,
     *,
-    workspace_slug: str,
     page_ref: str,
     token: str,
 ) -> None:
-    session_factory = get_session_factory()
     settings = get_settings()
     while True:
         await asyncio.sleep(settings.collab_acl_recheck_seconds)
-        db = session_factory()
         try:
-            auth_context = resolve_auth_context_from_token(db, token, update_last_seen=False)
-            _require_docs_app_enabled_for_slug(db, workspace_slug)
-            context = resolve_collab_page_context(db, auth_context.user, workspace_slug, page_ref)
-            if not context.can_edit:
-                await websocket.close(
-                    code=4403,
-                    reason=translate_message(
-                        LocalizedApiMessage(code="docs.doc_edit_access_required"),
-                        DEFAULT_LOCALE,
-                    ),
-                )
-                return
+            await run_in_threadpool(_require_collab_edit_access, page_ref=page_ref, token=token)
         except HTTPException as exc:
             await _close_websocket_for_http_error(websocket, exc)
             return
-        finally:
-            db.close()
 
 
 class DocsShareSummary(BaseModel):
@@ -258,11 +245,10 @@ class DocsShareSummary(BaseModel):
 class DocsCollectionSummary(BaseModel):
     id: str
     name: str
-    scope: Literal["workspace", "private"]
+    scope: Literal["company", "private"]
 
 
 class DocsCollectionItem(DocsCollectionSummary):
-    workspace_id: str
     owner_id: str | None = None
     sort_order: int
     doc_count: int = 0
@@ -276,7 +262,7 @@ class DocsCollectionListResponse(BaseModel):
 
 class CreateDocsCollectionRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=140)
-    scope: Literal["workspace", "private"] = "workspace"
+    scope: Literal["company", "private"] = "private"
     sort_order: int = 0
 
     @field_validator("name")
@@ -311,6 +297,8 @@ class DocsPrimaryTarget(BaseModel):
 
 
 class DocsHubItem(BaseModel):
+    ownership_kind: Literal["personal", "company"]
+    company_visible: bool
     id: str
     source_app: str
     source_type: Literal["native_doc"] = SOURCE_NATIVE_DOC
@@ -406,6 +394,7 @@ class DocsCollabSnapshotResponse(BaseModel):
 
 
 class DocTargetPayload(BaseModel):
+    company_admin_read_acknowledged: bool = False
     app: str = Field(..., min_length=1, max_length=64)
     type: str = Field(..., min_length=1, max_length=64)
     id: str = Field(..., min_length=1, max_length=128)
@@ -413,6 +402,8 @@ class DocTargetPayload(BaseModel):
 
 
 class CreateDocItemRequest(BaseModel):
+    company_visible: bool = False
+    company_admin_read_acknowledged: bool = False
     title: str = Field(..., min_length=1, max_length=200)
     first_page_title: str | None = Field(default=None, min_length=1, max_length=200)
     source_app: str = Field(default="docs", min_length=1, max_length=64)
@@ -540,6 +531,7 @@ class ResolveSharedLinkResponse(BaseModel):
 
 
 class UpdateDocTargetRequest(BaseModel):
+    company_admin_read_acknowledged: bool = False
     app: str = Field(..., min_length=1, max_length=64)
     type: str = Field(..., min_length=1, max_length=64)
     id: str = Field(..., min_length=1, max_length=128)
@@ -559,7 +551,6 @@ def _serialize_collection_item(
 ) -> DocsCollectionItem:
     return DocsCollectionItem(
         id=collection.id,
-        workspace_id=collection.workspace_id,
         scope=collection.scope,  # type: ignore[arg-type]
         owner_id=collection.owner_id,
         name=collection.name,
@@ -573,20 +564,19 @@ def _serialize_collection_item(
 def _collection_query_for_user(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     scope: str | None = None,
 ) -> list[DocsCollection]:
-    query = select(DocsCollection).where(DocsCollection.workspace_id == workspace.id)
+    query = select(DocsCollection).where()
     if scope is not None:
         query = query.where(DocsCollection.scope == scope)
     if scope == "private":
         query = query.where(DocsCollection.owner_id == user.id)
-    elif scope == "workspace":
-        query = query.where(DocsCollection.scope == "workspace")
+    elif scope == "company":
+        query = query.where(DocsCollection.scope == "company")
     else:
         query = query.where(
-            (DocsCollection.scope == "workspace")
+            (DocsCollection.scope == "company")
             | ((DocsCollection.scope == "private") & (DocsCollection.owner_id == user.id))
         )
     return list(
@@ -601,30 +591,15 @@ def _collection_query_for_user(
     )
 
 
-def _collection_doc_scope(
-    db: Session,
-    *,
-    doc: NativeDoc,
-    user: User,
-) -> str | None:
-    workspace = _workspace_for_doc(db, doc)
-    primary_target = _primary_target(doc)
-    if (
-        primary_target is not None
-        and primary_target.target_app == "docs"
-        and primary_target.target_type == "workspace_sidebar"
-        and primary_target.target_id == workspace.id
-    ):
-        return "workspace"
-    if primary_target is None and doc.owner_id == user.id:
-        return "private"
-    return None
+def _collection_doc_scope(*, doc: NativeDoc, user: User) -> str | None:
+    if doc.ownership_kind == "company":
+        return "company"
+    return "private" if doc.owner_id == user.id else None
 
 
 def _load_collection_for_doc_scope(
     db: Session,
     *,
-    workspace: Workspace,
     user: User,
     collection_id: str | None,
     expected_scope: str | None,
@@ -634,7 +609,6 @@ def _load_collection_for_doc_scope(
     collection = db.scalar(
         select(DocsCollection).where(
             DocsCollection.id == collection_id,
-            DocsCollection.workspace_id == workspace.id,
         )
     )
     if collection is None:
@@ -643,7 +617,7 @@ def _load_collection_for_doc_scope(
         raise localized_http_exception(status_code=400, code="docs.collection_scope_mismatch")
     if collection.scope == "private" and collection.owner_id != user.id:
         raise localized_http_exception(status_code=403, code="docs.collection_access_required")
-    if collection.scope == "workspace" and resolve_workspace_role(db, user, workspace.id) is None:
+    if collection.scope == "company" and not is_platform_admin_user(user, db):
         raise localized_http_exception(status_code=403, code="docs.collection_access_required")
     return collection
 
@@ -657,7 +631,6 @@ def _load_collection_for_doc(
 ) -> DocsCollection | None:
     return _load_collection_for_doc_scope(
         db,
-        workspace=_workspace_for_doc(db, doc),
         user=user,
         collection_id=collection_id,
         expected_scope=_collection_doc_scope(db, doc=doc, user=user),
@@ -714,15 +687,13 @@ def _serialize_native_item(
     access: NativeAccess,
     pref: DocsUserItemPref | None,
 ) -> DocsHubItem:
-    workspace = _workspace_for_doc(db, doc)
     primary_target = _primary_target(doc)
     location_label = resolve_target_label(
         db=db,
-        workspace=workspace,
+        user=user,
         target=primary_target,
     )
     source = describe_source(
-        workspace=workspace,
         doc=doc,
         primary_target=primary_target,
     )
@@ -811,22 +782,9 @@ def _sort_docs(
     return sorted(docs, key=sort_key, reverse=reverse)
 
 
-def _target_write_allowed(
-    *,
-    db: Session,
-    user: User,
-    workspace: Workspace,
-    ref: TargetRef,
-) -> bool:
-    if ref.app == "docs" and ref.type == "workspace_sidebar" and ref.id == workspace.id:
-        return True
-    projection = project_target_access(
-        db=db,
-        user=user,
-        workspace=workspace,
-        ref=ref,
-    )
-    return projection.can_edit or projection.can_manage
+def _target_write_allowed(*, db: Session, user: User, ref: TargetRef) -> bool:
+    projection = project_target_access(db=db, user=user, ref=ref)
+    return projection.can_manage
 
 
 def _upsert_primary_target(
@@ -836,16 +794,27 @@ def _upsert_primary_target(
     payload: UpdateDocTargetRequest,
     current_user: User,
 ) -> NativeDocTarget:
-    workspace = _workspace_for_doc(db, doc)
+    if not resolve_native_doc_access(db, doc=doc, user=current_user).can_share:
+        raise localized_http_exception(status_code=403, code="docs.doc_share_access_required")
     ref = TargetRef(app=payload.app, type=payload.type, id=payload.id)
     if not _target_write_allowed(
         db=db,
         user=current_user,
-        workspace=workspace,
         ref=ref,
     ):
         raise localized_http_exception(status_code=403, code="docs.target_edit_access_required")
 
+    record_ownership_transition(
+        db,
+        actor_user_id=current_user.id,
+        resource_kind="native_doc",
+        resource_id=doc.id,
+        current_kind=doc.ownership_kind or "personal",
+        next_kind="company",
+        company_admin_read_acknowledged=payload.company_admin_read_acknowledged,
+    )
+    doc.ownership_kind = "company"
+    ensure_native_doc_partition(db, doc=doc)
     for target in doc.targets:
         target.is_primary = False
         db.add(target)
@@ -959,14 +928,12 @@ def _publish_doc_pages_event(
 
 @router.get("/collections", response_model=DocsCollectionListResponse)
 def list_doc_collections(
-    scope: Literal["workspace", "private"] | None = Query(default=None),
+    scope: Literal["company", "private"] | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsCollectionListResponse:
-    workspace = _ensure_docs_workspace_access(db, current_user)
     collections = _collection_query_for_user(
         db,
-        workspace=workspace,
         user=current_user,
         scope=scope,
     )
@@ -1000,15 +967,12 @@ def create_doc_collection(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsCollectionItem:
-    workspace = _ensure_docs_workspace_access(db, current_user)
-    role = resolve_workspace_role(db, current_user, workspace.id)
-    if payload.scope == "workspace" and not workspace_role_allows(role, "admin"):
+    if payload.scope == "company" and not is_platform_admin_user(current_user, db):
         raise localized_http_exception(
             status_code=403, code="docs.collection_manage_access_required"
         )
     collection = DocsCollection(
         id=new_id(),
-        workspace_id=workspace.id,
         scope=payload.scope,
         owner_id=current_user.id if payload.scope == "private" else None,
         name=payload.name,
@@ -1029,11 +993,9 @@ def update_doc_collection(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsCollectionItem:
-    workspace = _ensure_docs_workspace_access(db, current_user)
     collection = db.scalar(
         select(DocsCollection).where(
             DocsCollection.id == collection_id,
-            DocsCollection.workspace_id == workspace.id,
         )
     )
     if collection is None:
@@ -1042,10 +1004,7 @@ def update_doc_collection(
         raise localized_http_exception(
             status_code=403, code="docs.collection_manage_access_required"
         )
-    if collection.scope == "workspace" and not workspace_role_allows(
-        resolve_workspace_role(db, current_user, workspace.id),
-        "admin",
-    ):
+    if collection.scope == "company" and not is_platform_admin_user(current_user, db):
         raise localized_http_exception(
             status_code=403, code="docs.collection_manage_access_required"
         )
@@ -1073,11 +1032,9 @@ def delete_doc_collection(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    workspace = _ensure_docs_workspace_access(db, current_user)
     collection = db.scalar(
         select(DocsCollection).where(
             DocsCollection.id == collection_id,
-            DocsCollection.workspace_id == workspace.id,
         )
     )
     if collection is None:
@@ -1086,10 +1043,7 @@ def delete_doc_collection(
         raise localized_http_exception(
             status_code=403, code="docs.collection_manage_access_required"
         )
-    if collection.scope == "workspace" and not workspace_role_allows(
-        resolve_workspace_role(db, current_user, workspace.id),
-        "admin",
-    ):
+    if collection.scope == "company" and not is_platform_admin_user(current_user, db):
         raise localized_http_exception(
             status_code=403, code="docs.collection_manage_access_required"
         )
@@ -1154,14 +1108,12 @@ def create_doc_item(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsHubItem:
-    workspace = _ensure_docs_workspace_access(db, current_user)
     if payload.content_format == "block" and payload.first_page_content_text is not None:
         raise localized_http_exception(status_code=400, code="docs.content_format_mismatch")
     target_payload = payload.primary_target
     if target_payload is not None and not _target_write_allowed(
         db=db,
         user=current_user,
-        workspace=workspace,
         ref=TargetRef(app=target_payload.app, type=target_payload.type, id=target_payload.id),
     ):
         raise localized_http_exception(status_code=403, code="docs.target_edit_access_required")
@@ -1173,7 +1125,6 @@ def create_doc_item(
     )
     doc = NativeDoc(
         id=new_id(),
-        workspace_id=workspace.id,
         owner_id=current_user.id,
         title=payload.title.strip(),
         doc_type=doc_type,
@@ -1198,6 +1149,20 @@ def create_doc_item(
     )
     db.add(page)
     db.flush()
+    if payload.company_visible:
+        from open_work_hub_api.domains.content_access.ownership import record_ownership_transition
+
+        record_ownership_transition(
+            db,
+            actor_user_id=current_user.id,
+            resource_kind="native_doc",
+            resource_id=doc.id,
+            current_kind=doc.ownership_kind or "personal",
+            next_kind="company",
+            company_admin_read_acknowledged=payload.company_admin_read_acknowledged,
+        )
+        doc.ownership_kind = "company"
+        doc.company_visible = True
     if target_payload is not None:
         _upsert_primary_target(
             db,
@@ -1246,7 +1211,7 @@ def list_doc_pms_tasks(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> RelatedPmsTasksResponse:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     doc, _access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
     return _serialize_visible_related_pms_task_links(db, user=current_user, doc_id=doc.id)
 
@@ -1258,11 +1223,12 @@ def list_doc_pms_tasks(
 )
 def attach_doc_pms_task(
     item_id: str,
+    request: Request,
     payload: RelatedPmsTaskAttachRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> RelatedPmsTasksResponse:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
     if not access.can_edit:
         raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
@@ -1272,17 +1238,21 @@ def attach_doc_pms_task(
         doc=doc,
         task_id=payload.task_id,
     )
+    realtime_protocol.publish_doc_access_changed(
+        getattr(request.app.state, "app_realtime", None), doc.id
+    )
     return _serialize_visible_related_pms_task_links(db, user=current_user, doc_id=doc.id)
 
 
 @router.delete("/items/{item_id}/pms-tasks/{task_id}", response_model=RelatedPmsTasksResponse)
 def detach_doc_pms_task(
     item_id: str,
+    request: Request,
     task_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> RelatedPmsTasksResponse:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
     if not access.can_edit:
         raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
@@ -1291,6 +1261,9 @@ def detach_doc_pms_task(
         user=current_user,
         doc=doc,
         task_id=task_id,
+    )
+    realtime_protocol.publish_doc_access_changed(
+        getattr(request.app.state, "app_realtime", None), doc.id
     )
     return _serialize_visible_related_pms_task_links(db, user=current_user, doc_id=doc.id)
 
@@ -1303,7 +1276,10 @@ def update_doc_item(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsHubItem:
-    _ensure_workspace_for_item_request(db, current_user, item_id=item_id, share_token=share_token)
+    _ensure_docs_app_access(
+        db,
+        current_user,
+    )
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
     if not access.can_manage:
         raise localized_http_exception(status_code=403, code="docs.doc_manage_access_required")
@@ -1336,11 +1312,15 @@ def update_doc_item(
 @router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_doc_item(
     item_id: str,
+    request: Request,
     share_token: str | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    _ensure_workspace_for_item_request(db, current_user, item_id=item_id, share_token=share_token)
+    _ensure_docs_app_access(
+        db,
+        current_user,
+    )
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
     if not access.can_manage:
         raise localized_http_exception(status_code=403, code="docs.doc_manage_access_required")
@@ -1365,6 +1345,9 @@ def delete_doc_item(
         operation=RagSyncOperation.DELETE,
     )
     db.commit()
+    realtime_protocol.publish_doc_access_changed(
+        getattr(request.app.state, "app_realtime", None), doc.id
+    )
 
     if media_keys:
         settings = get_settings()
@@ -1386,7 +1369,10 @@ def duplicate_doc_item(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsHubItem:
-    _ensure_workspace_for_item_request(db, current_user, item_id=item_id, share_token=share_token)
+    _ensure_docs_app_access(
+        db,
+        current_user,
+    )
     source_doc, access = _native_doc_from_item_or_404(
         db, item_id, current_user, share_token=share_token
     )
@@ -1395,7 +1381,6 @@ def duplicate_doc_item(
 
     duplicate = NativeDoc(
         id=new_id(),
-        workspace_id=source_doc.workspace_id,
         owner_id=current_user.id,
         title=f"{source_doc.title} Copy",
         doc_type=source_doc.doc_type if source_doc.doc_type in DOC_TYPE_VALUES else "general",
@@ -1408,27 +1393,12 @@ def duplicate_doc_item(
     ensure_native_doc_partition(db, doc=duplicate)
     db.add(duplicate)
     db.flush()
-    for target in source_doc.targets:
-        db.add(
-            NativeDocTarget(
-                id=new_id(),
-                doc_id=duplicate.id,
-                target_app=target.target_app,
-                target_type=target.target_type,
-                target_id=target.target_id,
-                is_primary=target.is_primary,
-                sort_order=target.sort_order,
-            )
-        )
-    if source_doc.collection is not None:
-        if (
-            source_doc.collection.scope == "workspace"
-            and resolve_workspace_role(db, current_user, source_doc.workspace_id) is not None
-        ):
-            duplicate.collection_id = source_doc.collection_id
-        elif source_doc.collection.scope == "private" and source_doc.owner_id == current_user.id:
-            duplicate.collection_id = source_doc.collection_id
-        db.add(duplicate)
+    if (
+        source_doc.collection is not None
+        and source_doc.collection.scope == "private"
+        and source_doc.owner_id == current_user.id
+    ):
+        duplicate.collection_id = source_doc.collection_id
     _clone_page_tree(
         db,
         source_doc=source_doc,
@@ -1472,7 +1442,10 @@ def create_doc_page(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsPageItem:
-    _ensure_workspace_for_item_request(db, current_user, item_id=item_id, share_token=share_token)
+    _ensure_docs_app_access(
+        db,
+        current_user,
+    )
     result = create_native_page(
         db,
         user=current_user,
@@ -1528,7 +1501,10 @@ def update_doc_page(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsPageItem:
-    _ensure_workspace_for_page_request(db, current_user, page_id=page_id, share_token=share_token)
+    _ensure_docs_app_access(
+        db,
+        current_user,
+    )
     result = update_native_page(
         db,
         user=current_user,
@@ -1566,7 +1542,10 @@ def delete_doc_page(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    _ensure_workspace_for_page_request(db, current_user, page_id=page_id, share_token=share_token)
+    _ensure_docs_app_access(
+        db,
+        current_user,
+    )
     result = delete_native_page(
         db,
         user=current_user,
@@ -1595,10 +1574,11 @@ def delete_doc_page(
 def update_doc_target(
     item_id: str,
     payload: UpdateDocTargetRequest,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsHubItem:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
     if not access.can_edit:
         raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
@@ -1609,18 +1589,22 @@ def update_doc_target(
         operation=RagSyncOperation.UPSERT,
     )
     db.commit()
+    realtime_protocol.publish_doc_access_changed(
+        getattr(request.app.state, "app_realtime", None), doc.id
+    )
     return _lookup_item(db, doc.id, current_user)
 
 
 @router.delete("/items/{item_id}/target", response_model=DocsHubItem)
 def delete_doc_target(
     item_id: str,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsHubItem:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
-    if not access.can_edit:
+    if not access.can_share:
         raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
     _delete_primary_target(db, doc, current_user=current_user)
     enqueue_native_doc_rag_sync(
@@ -1629,6 +1613,9 @@ def delete_doc_target(
         operation=RagSyncOperation.UPSERT,
     )
     db.commit()
+    realtime_protocol.publish_doc_access_changed(
+        getattr(request.app.state, "app_realtime", None), doc.id
+    )
     return _lookup_item(db, doc.id, current_user)
 
 
@@ -1638,135 +1625,13 @@ def toggle_doc_favorite(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ToggleFavoriteResponse:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     item = _lookup_item(db, item_id, current_user)
     pref = _get_or_create_pref(db, current_user.id, item.source_id)
     pref.is_favorite = not pref.is_favorite
     db.add(pref)
     db.commit()
     return ToggleFavoriteResponse(is_favorite=pref.is_favorite)
-
-
-@public_router.get("/items/{item_id}", response_model=DocsHubItem)
-def get_shared_doc_item(
-    item_id: str,
-    share_token: str = Query(..., min_length=1),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsHubItem:
-    return DocsHubItem.model_validate(
-        docs_service.get_item(
-            db,
-            user=current_user,
-            item_id=item_id,
-            share_token=share_token,
-        )
-    )
-
-
-@public_router.patch("/items/{item_id}", response_model=DocsHubItem)
-def update_shared_doc_item(
-    item_id: str,
-    payload: UpdateDocItemRequest,
-    share_token: str = Query(..., min_length=1),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsHubItem:
-    return update_doc_item(item_id, payload, share_token, db, current_user)
-
-
-@public_router.post(
-    "/items/{item_id}/duplicate", response_model=DocsHubItem, status_code=status.HTTP_201_CREATED
-)
-def duplicate_shared_doc_item(
-    item_id: str,
-    share_token: str = Query(..., min_length=1),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsHubItem:
-    return duplicate_doc_item(item_id, share_token, db, current_user)
-
-
-@public_router.get("/items/{item_id}/pages", response_model=DocsPageListResponse)
-def list_shared_doc_pages(
-    item_id: str,
-    share_token: str = Query(..., min_length=1),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsPageListResponse:
-    return DocsPageListResponse.model_validate(
-        docs_service.list_pages(
-            db,
-            user=current_user,
-            item_id=item_id,
-            share_token=share_token,
-        )
-    )
-
-
-@public_router.post(
-    "/items/{item_id}/pages", response_model=DocsPageItem, status_code=status.HTTP_201_CREATED
-)
-def create_shared_doc_page(
-    item_id: str,
-    payload: CreateDocPageRequest,
-    request: Request,
-    share_token: str = Query(..., min_length=1),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsPageItem:
-    return create_doc_page(item_id, payload, request, share_token, db, current_user)
-
-
-@public_router.get("/pages/{page_id}", response_model=DocsPageItem)
-def get_shared_doc_page(
-    page_id: str,
-    share_token: str = Query(..., min_length=1),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsPageItem:
-    return DocsPageItem.model_validate(
-        docs_service.read_page(
-            db,
-            user=current_user,
-            page_id=page_id,
-            share_token=share_token,
-        )
-    )
-
-
-@public_router.patch("/pages/{page_id}", response_model=DocsPageItem)
-def update_shared_doc_page(
-    page_id: str,
-    payload: UpdateDocPageRequest,
-    request: Request,
-    share_token: str = Query(..., min_length=1),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsPageItem:
-    return update_doc_page(page_id, payload, request, share_token, db, current_user)
-
-
-@public_router.delete("/pages/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_shared_doc_page(
-    page_id: str,
-    request: Request,
-    share_token: str = Query(..., min_length=1),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    return delete_doc_page(page_id, request, share_token, db, current_user)
-
-
-@public_router.post("/items/{item_id}/view")
-def record_shared_doc_view(
-    item_id: str,
-    payload: RecordViewRequest,
-    share_token: str = Query(..., min_length=1),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> dict[str, bool]:
-    return record_doc_view(item_id, payload, share_token, db, current_user)
 
 
 @router.post("/items/{item_id}/view")
@@ -1777,7 +1642,10 @@ def record_doc_view(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> dict[str, bool]:
-    _ensure_workspace_for_item_request(db, current_user, item_id=item_id, share_token=share_token)
+    _ensure_docs_app_access(
+        db,
+        current_user,
+    )
     doc, _access = _native_doc_from_item_or_404(
         db,
         item_id,
@@ -1808,7 +1676,6 @@ def record_doc_view(
     record_usage_event(
         db,
         actor_user_id=current_user.id,
-        workspace_id=doc.workspace_id,
         app_id="docs",
         event_type=USAGE_EVENT_CONTENT_VIEW,
         content_kind="doc",
@@ -1826,7 +1693,7 @@ def list_favorite_docs(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> list[FavoriteDocItem]:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     items: list[DocsHubItem] = []
     for pref in db.scalars(
         select(DocsUserItemPref).where(
@@ -1851,7 +1718,7 @@ def list_recent_pages(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> list[RecentPageItem]:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     prefs = list(
         db.scalars(
             select(DocsUserItemPref)
@@ -1892,9 +1759,10 @@ def list_shareable_users(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> list[ShareableUserItem]:
-    current_workspace = _ensure_docs_workspace_access(db, current_user)
     query = (
-        select(User).where(User.status == "active").order_by(User.full_name.asc(), User.email.asc())
+        select(User)
+        .where(User.status == "active", User.login_blocked.is_(False))
+        .order_by(User.full_name.asc(), User.email.asc())
     )
     search = q.strip()
     if search:
@@ -1906,7 +1774,6 @@ def list_shareable_users(
         ShareableUserItem(id=user.id, email=user.email, full_name=user.full_name)
         for user in users
         if user.id != current_user.id
-        and resolve_workspace_role(db, user, current_workspace.id) is not None
     ]
 
 
@@ -1932,7 +1799,12 @@ def _serialize_sharing_response(doc: NativeDoc) -> NativeDocSharingResponse:
                 token=link_share.token,
                 access_level=link_share.access_level,
                 active=link_share.active,
-                share_path=f"/docs/shared/{link_share.token}",
+                share_path=build_app_href(
+                    InternalAppLocation(
+                        route_id="docs.shared",
+                        path_params={"shareToken": link_share.token},
+                    )
+                ),
             )
             if link_share is not None
             else None
@@ -1957,7 +1829,7 @@ def get_native_doc_sharing(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> NativeDocSharingResponse:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     doc = _load_native_doc_for_share_or_403(db, item_id, current_user)
     return _serialize_sharing_response(doc)
 
@@ -1965,23 +1837,23 @@ def get_native_doc_sharing(
 @router.put("/items/{item_id}/sharing/users/{user_id}", response_model=NativeDocSharingResponse)
 def upsert_native_doc_user_share(
     item_id: str,
+    request: Request,
     user_id: str,
     payload: UpsertUserShareRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> NativeDocSharingResponse:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     doc = _load_native_doc_for_share_or_403(db, item_id, current_user)
     if user_id == current_user.id:
         raise localized_http_exception(status_code=409, code="docs.owner_already_has_full_access")
-    target_user = db.scalar(select(User).where(User.id == user_id, User.status == "active"))
+    target_user = db.scalar(
+        select(User).where(
+            User.id == user_id, User.status == "active", User.login_blocked.is_(False)
+        )
+    )
     if target_user is None:
         raise localized_http_exception(status_code=404, code="auth.user_not_found")
-    if resolve_workspace_role(db, target_user, doc.workspace_id) is None:
-        raise localized_http_exception(
-            status_code=409,
-            code="docs.shared_users_workspace_required",
-        )
     share = next((item for item in doc.user_shares if item.user_id == user_id), None)
     if share is None:
         share = NativeDocUserShare(
@@ -2001,6 +1873,9 @@ def upsert_native_doc_user_share(
         operation=RagSyncOperation.VISIBILITY_UPDATE,
     )
     db.commit()
+    realtime_protocol.publish_doc_access_changed(
+        getattr(request.app.state, "app_realtime", None), doc.id
+    )
     doc = _load_native_doc_for_access(db, doc.id)
     assert doc is not None
     return _serialize_sharing_response(doc)
@@ -2009,11 +1884,12 @@ def upsert_native_doc_user_share(
 @router.delete("/items/{item_id}/sharing/users/{user_id}", response_model=NativeDocSharingResponse)
 def delete_native_doc_user_share(
     item_id: str,
+    request: Request,
     user_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> NativeDocSharingResponse:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     doc = _load_native_doc_for_share_or_403(db, item_id, current_user)
     share = next((item for item in doc.user_shares if item.user_id == user_id), None)
     if share is not None:
@@ -2024,6 +1900,9 @@ def delete_native_doc_user_share(
             operation=RagSyncOperation.VISIBILITY_UPDATE,
         )
         db.commit()
+        realtime_protocol.publish_doc_access_changed(
+            getattr(request.app.state, "app_realtime", None), doc.id
+        )
     doc = _load_native_doc_for_access(db, doc.id)
     assert doc is not None
     return _serialize_sharing_response(doc)
@@ -2032,11 +1911,12 @@ def delete_native_doc_user_share(
 @router.put("/items/{item_id}/sharing/link", response_model=NativeDocSharingResponse)
 def upsert_native_doc_link_share(
     item_id: str,
+    request: Request,
     payload: UpsertLinkShareRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> NativeDocSharingResponse:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     doc = _load_native_doc_for_share_or_403(db, item_id, current_user)
     link_share = next(iter(doc.link_shares), None)
     if link_share is None:
@@ -2061,6 +1941,9 @@ def upsert_native_doc_link_share(
         operation=RagSyncOperation.VISIBILITY_UPDATE,
     )
     db.commit()
+    realtime_protocol.publish_doc_access_changed(
+        getattr(request.app.state, "app_realtime", None), doc.id
+    )
     doc = _load_native_doc_for_access(db, doc.id)
     assert doc is not None
     return _serialize_sharing_response(doc)
@@ -2069,10 +1952,11 @@ def upsert_native_doc_link_share(
 @router.delete("/items/{item_id}/sharing/link", response_model=NativeDocSharingResponse)
 def disable_native_doc_link_share(
     item_id: str,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> NativeDocSharingResponse:
-    _ensure_docs_workspace_access(db, current_user)
+    _ensure_docs_app_access(db, current_user)
     doc = _load_native_doc_for_share_or_403(db, item_id, current_user)
     link_share = next(iter(doc.link_shares), None)
     if link_share is not None:
@@ -2084,12 +1968,15 @@ def disable_native_doc_link_share(
             operation=RagSyncOperation.VISIBILITY_UPDATE,
         )
         db.commit()
+        realtime_protocol.publish_doc_access_changed(
+            getattr(request.app.state, "app_realtime", None), doc.id
+        )
     doc = _load_native_doc_for_access(db, doc.id)
     assert doc is not None
     return _serialize_sharing_response(doc)
 
 
-@public_router.get("/shared-links/{share_token}", response_model=ResolveSharedLinkResponse)
+@router.get("/shared-links/{share_token}", response_model=ResolveSharedLinkResponse)
 def resolve_shared_link(
     share_token: str,
     db: Session = Depends(get_db_session),
@@ -2116,8 +2003,7 @@ def get_docs_collab_session(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsCollabSessionResponse:
-    workspace_slug = _require_workspace_slug(request)
-    context = resolve_collab_page_context(db, current_user, workspace_slug, page_ref)
+    context = resolve_collab_page_context(db, current_user, page_ref)
     collab = ensure_collab_document_state(
         db,
         source_type=context.source_type,
@@ -2154,8 +2040,7 @@ def save_docs_collab_snapshot(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsCollabSnapshotResponse:
-    workspace_slug = _require_workspace_slug(request)
-    context = resolve_collab_page_context(db, current_user, workspace_slug, page_ref)
+    context = resolve_collab_page_context(db, current_user, page_ref)
     if not context.can_edit:
         raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
 
@@ -2202,12 +2087,6 @@ async def docs_collab_websocket(
 
     try:
         token = await _resolve_collab_ws_token(websocket)
-        workspace_slug = websocket.path_params.get("workspace_slug")
-        if not workspace_slug:
-            raise localized_http_exception(
-                status_code=400,
-                code="docs.workspace_slug_required",
-            )
 
         session_factory = get_session_factory()
         db = session_factory()
@@ -2215,8 +2094,7 @@ async def docs_collab_websocket(
         try:
             auth_context = resolve_auth_context_from_token(db, token)
             auth_user_id = auth_context.user.id
-            _require_docs_app_enabled_for_slug(db, workspace_slug)
-            context = resolve_collab_page_context(db, auth_context.user, workspace_slug, page_ref)
+            context = resolve_collab_page_context(db, auth_context.user, page_ref)
             if not context.can_edit:
                 raise localized_http_exception(
                     status_code=403, code="docs.doc_edit_access_required"
@@ -2250,16 +2128,20 @@ async def docs_collab_websocket(
         monitor_task = asyncio.create_task(
             _monitor_collab_access(
                 websocket,
-                workspace_slug=workspace_slug,
                 page_ref=page_ref,
                 token=token,
             )
         )
+
+        async def authorize_collab_frame() -> None:
+            await run_in_threadpool(_require_collab_edit_access, page_ref=page_ref, token=token)
+
         yjs_websocket = FastAPIYjsWebsocket(
             websocket,
             room_key,
             runtime,
             auth_user_id,
+            authorize=authorize_collab_frame,
         )
         await runtime.room.serve(yjs_websocket)
     except HTTPException as exc:

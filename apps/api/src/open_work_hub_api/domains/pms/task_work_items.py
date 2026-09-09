@@ -34,6 +34,7 @@ def _checklist_item_dto(item: ChecklistItem) -> ChecklistItemDTO:
         created_at=item.created_at,
     )
 
+
 def create_checklist_item(
     db: Session,
     *,

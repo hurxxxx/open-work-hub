@@ -7,16 +7,13 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from company_admission_fixture import company_authority_tables, seed_company_app_access
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.core.i18n import ERROR_CODE_HEADER
-from open_work_hub_api.domains.auth.models import (
-    Team,
-    TeamMember,
-    User,
-    UserSystemRole,
-    Workspace,
-    WorkspaceUserBinding,
-)
+from open_work_hub_api.domains.auth.models import User, UserSystemRole
+from open_work_hub_api.domains.pms.space_models import Team, TeamMember
+from open_work_hub_api.domains.docs.models import NativeDocGroupShare
+from open_work_hub_api.domains.pms.space_models import SpaceGroupBinding
 from open_work_hub_api.domains.docs.models import (
     DocMeetingAccess,
     DocsCollection,
@@ -40,7 +37,7 @@ from open_work_hub_api.domains.media.resource_access import (
     media_ids_from_urls,
 )
 from open_work_hub_api.domains.meeting.models import Meeting
-from open_work_hub_api.domains.pms.models import Folder, Milestone, Task, TaskList
+from open_work_hub_api.domains.pms.models import Folder, Milestone, Task, TaskList, TaskUserAccess
 
 
 def _session() -> Session:
@@ -48,18 +45,18 @@ def _session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            Workspace.__table__,
-            User.__table__,
-            WorkspaceUserBinding.__table__,
-            UserSystemRole.__table__,
+            *company_authority_tables(),
             Team.__table__,
             TeamMember.__table__,
             Folder.__table__,
             TaskList.__table__,
             Milestone.__table__,
             Task.__table__,
+            TaskUserAccess.__table__,
             DocsCollection.__table__,
             NativeDoc.__table__,
+            NativeDocGroupShare.__table__,
+            SpaceGroupBinding.__table__,
             NativeDocPage.__table__,
             NativeDocTarget.__table__,
             NativeDocUserShare.__table__,
@@ -71,7 +68,9 @@ def _session() -> Session:
             MediaFile.__table__,
         ],
     )
-    return Session(engine)
+    session = Session(engine)
+    seed_company_app_access(session)
+    return session
 
 
 def _user(user_id: str) -> User:
@@ -114,7 +113,7 @@ def test_media_ids_from_urls_keeps_only_exact_media_refs() -> None:
     ]
 
 
-def test_can_resolve_unlinked_or_unknown_resource_for_uploader_only() -> None:
+def test_can_resolve_only_unlinked_media_for_uploader_and_rejects_unknown_sources() -> None:
     uploader = SimpleNamespace(id="uploader")
     outsider = SimpleNamespace(id="outsider")
 
@@ -126,7 +125,7 @@ def test_can_resolve_unlinked_or_unknown_resource_for_uploader_only() -> None:
             uploader,
             _media(resource_type="legacy_unknown", resource_id="resource-1"),
         )
-        is True
+        is False
     )
     assert (
         can_resolve_media(
@@ -145,12 +144,10 @@ def test_can_resolve_task_media_through_space_membership() -> None:
         outsider = _user("outsider")
         session.add_all(
             [
-                Workspace(id="workspace-1", key="workspace", name="Workspace", description=""),
                 member,
                 outsider,
                 Team(
                     id="team-1",
-                    workspace_id="workspace-1",
                     key="space",
                     name="Space",
                     description="",
@@ -354,12 +351,10 @@ def test_docs_native_page_access_distinguishes_read_from_edit() -> None:
         reader = _user("reader")
         session.add_all(
             [
-                Workspace(id="workspace-1", key="workspace", name="Workspace", description=""),
                 owner,
                 reader,
                 NativeDoc(
                     id="doc-1",
-                    workspace_id="workspace-1",
                     owner_id="owner",
                     title="Doc",
                     source_app="docs",

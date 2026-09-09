@@ -12,9 +12,11 @@ from open_work_hub_api.domains.dm import (
     conversation_queries,
     message_delivery,
     message_history,
-    participants as participant_rules,
     realtime_event_types,
     serialization,
+)
+from open_work_hub_api.domains.dm import (
+    participants as participant_rules,
 )
 from open_work_hub_api.domains.dm.models import DmMessage
 from open_work_hub_api.domains.dm.schemas import DmMessageItem, DmMessageListResponse

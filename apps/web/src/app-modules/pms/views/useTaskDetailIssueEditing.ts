@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { TFunction } from 'i18next';
 import type { BlockContent } from '@open-work-hub/ui';
+import type { TFunction } from 'i18next';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { linkMedia, extractMediaIds } from '@/src/platform/media/media-api';
+import { extractMediaIds, linkMedia } from '@/src/platform/media/media-api';
 import {
   setTaskAssignees,
   setTaskFollowers,

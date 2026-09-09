@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
 import type * as React from 'react';
+import { useEffect, useRef } from 'react';
 
 function useLatestRef<T>(value: T) {
   const ref = useRef(value);

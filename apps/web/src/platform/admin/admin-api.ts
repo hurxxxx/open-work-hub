@@ -1,39 +1,8 @@
-import { authRoutes } from '@open-work-hub/contracts/auth';
 import { apiFetchJsonWithMappedError } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
-import type {
-  AuthSessionResponse,
-  AuthUser,
-} from '@/src/platform/auth/auth-api';
+import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { emitCommunityChannelsChanged } from '@/src/platform/community/community-channel-events';
 import { i18n } from '@/src/platform/i18n';
-
-export type WorkspaceItem = ApiSchema<'WorkspaceItemResponse'>;
-export type WorkspaceBindingItem = ApiSchema<'WorkspaceBindingItemResponse'>;
-export type WorkspaceMemberCandidate =
-  ApiSchema<'WorkspaceMemberCandidateResponse'>;
-export type WorkspaceMemberItem = ApiSchema<'WorkspaceMemberItemResponse'>;
-export type WorkspaceMemberRoleCounts = ApiSchema<'WorkspaceMemberRoleCounts'>;
-export type WorkspaceMembersResponse = ApiSchema<'WorkspaceMembersResponse'>;
-
-export interface WorkspaceMembersListParams {
-  q?: string;
-  role?: string[];
-  subjectType?: 'user';
-  page?: number;
-  pageSize?: number;
-  pendingOnly?: boolean;
-}
-
-export type WorkspaceMemberBulkSubject =
-  ApiSchema<'WorkspaceMemberBulkSubject'>;
-export type WorkspaceMemberBulkResponse = Omit<
-  ApiSchema<'WorkspaceMemberBulkResponse'>,
-  'failed'
-> & {
-  failed: Array<{ subject_type: string; subject_id: string; detail: string }>;
-};
-export type TeamItem = ApiSchema<'TeamItemResponse'>;
 export type AuditLogItem = ApiSchema<'AuditLogItemResponse'>;
 export type AuditLogsResponse = ApiSchema<'AuditLogsResponse'>;
 export type AdminUsageDashboard = ApiSchema<'AdminUsageDashboardResponse'>;
@@ -61,22 +30,9 @@ export type AdminCommunityChannelInput =
   ApiSchema<'CommunityChannelCreateRequest'>;
 export type AdminCommunityChannelsResponse =
   ApiSchema<'CommunityChannelsResponse'>;
-export type PlatformAppVisibilityItem =
-  ApiSchema<'PlatformAppVisibilityItemResponse'> & {
-    availability_scope: 'platform' | 'workspace';
-  };
-export type PlatformAppVisibilityResponse = Omit<
-  ApiSchema<'PlatformAppVisibilityResponse'>,
-  'items'
-> & { items: PlatformAppVisibilityItem[] };
-export type WorkspaceAppVisibilityItem =
-  ApiSchema<'WorkspaceAppVisibilityItemResponse'> & {
-    availability_scope: 'workspace';
-  };
-export type WorkspaceAppVisibilityResponse = Omit<
-  ApiSchema<'WorkspaceAppVisibilityResponse'>,
-  'items'
-> & { items: WorkspaceAppVisibilityItem[] };
+export type CompanyAppControlItem = ApiSchema<'CompanyAppControlItemResponse'>;
+export type CompanyAppControlsResponse =
+  ApiSchema<'CompanyAppControlsResponse'>;
 export interface AdminAppBarCategoryAppItem {
   app_id: string;
   title: string;
@@ -167,8 +123,7 @@ export interface AiSecurityPolicyRule {
   enabled: boolean;
   user_id?: string | null;
   user_name?: string | null;
-  workspace_id?: string | null;
-  workspace_name?: string | null;
+
   app_id?: string | null;
   task_kind?: string | null;
   task_kinds?: string[];
@@ -187,8 +142,7 @@ export interface AiSecurityExternalTransferException {
   enabled: boolean;
   user_id?: string | null;
   user_name?: string | null;
-  workspace_id?: string | null;
-  workspace_name?: string | null;
+
   app_id?: string | null;
   task_kind?: string | null;
   task_kinds?: string[];
@@ -317,7 +271,7 @@ export interface AiSecurityRulePayload {
   description: string;
   enabled: boolean;
   user_id?: string | null;
-  workspace_id?: string | null;
+
   app_id?: string | null;
   task_kind?: string | null;
   task_kinds?: string[];
@@ -332,7 +286,7 @@ export interface AiSecurityExternalTransferExceptionPayload {
   description: string;
   enabled: boolean;
   user_id?: string | null;
-  workspace_id?: string | null;
+
   app_id?: string | null;
   task_kind?: string | null;
   task_kinds?: string[];
@@ -344,7 +298,6 @@ export interface AiSecurityExternalTransferExceptionPayload {
 }
 
 export interface AiSecuritySimulationPayload {
-  workspace_id?: string | null;
   actor_user_id?: string | null;
   app_id?: string | null;
   task_kind?: string | null;
@@ -576,6 +529,7 @@ export function createOrganizationUnit(
     slug?: string;
     unit_type: string;
     parent_id?: string | null;
+    head_user_id?: string | null;
     active: boolean;
   },
 ): Promise<OrganizationUnitItem> {
@@ -594,6 +548,7 @@ export function updateOrganizationUnit(
     slug?: string;
     unit_type?: string;
     parent_id?: string | null;
+    head_user_id?: string | null;
     active?: boolean;
   },
 ): Promise<OrganizationUnitItem> {
@@ -644,167 +599,6 @@ export function revokePlatformApiKey(
     `/api/v1/admin/platform-api-keys/${encodeURIComponent(keyId)}/revoke`,
     { method: 'POST' },
   );
-}
-
-export function listWorkspaces(
-  token: string,
-  options: { includeArchived?: boolean } = {},
-): Promise<WorkspaceItem[]> {
-  const suffix = options.includeArchived ? '?include_archived=true' : '';
-  return request<WorkspaceItem[]>(token, `/api/v1/admin/workspaces${suffix}`);
-}
-
-export function createWorkspace(
-  token: string,
-  payload: {
-    name: string;
-    description: string;
-  },
-): Promise<WorkspaceItem> {
-  return request<WorkspaceItem>(token, '/api/v1/admin/workspaces', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export function updateWorkspace(
-  token: string,
-  workspaceId: string,
-  payload: {
-    key?: string;
-    name: string;
-    description: string;
-    active?: boolean;
-  },
-): Promise<WorkspaceItem> {
-  return request<WorkspaceItem>(
-    token,
-    `/api/v1/admin/workspaces/${workspaceId}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function listWorkspaceBindings(
-  token: string,
-  workspaceId: string,
-): Promise<WorkspaceBindingItem[]> {
-  return request<WorkspaceBindingItem[]>(
-    token,
-    `/api/v1/admin/workspaces/${workspaceId}/bindings`,
-  );
-}
-
-export function replaceWorkspaceBindings(
-  token: string,
-  workspaceId: string,
-  payload: {
-    users: Array<{ subject_id: string; role: string }>;
-  },
-): Promise<WorkspaceBindingItem[]> {
-  return request<WorkspaceBindingItem[]>(
-    token,
-    `/api/v1/admin/workspaces/${workspaceId}/bindings`,
-    {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function updateWorkspaceMemberRole(
-  token: string,
-  workspaceId: string,
-  subjectType: 'user',
-  subjectId: string,
-  role: string,
-): Promise<WorkspaceBindingItem> {
-  return request<WorkspaceBindingItem>(
-    token,
-    `/api/v1/admin/workspaces/${workspaceId}/members/${subjectType}/${encodeURIComponent(subjectId)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({ role }),
-    },
-  );
-}
-
-export function removeWorkspaceMember(
-  token: string,
-  workspaceId: string,
-  subjectType: 'user',
-  subjectId: string,
-): Promise<void> {
-  return request<void>(
-    token,
-    `/api/v1/admin/workspaces/${workspaceId}/members/${subjectType}/${encodeURIComponent(subjectId)}`,
-    {
-      method: 'DELETE',
-    },
-  );
-}
-
-export function listWorkspaceMembers(
-  token: string,
-  workspaceId: string,
-  params: WorkspaceMembersListParams = {},
-): Promise<WorkspaceMembersResponse> {
-  const search = new URLSearchParams();
-  if (params.q?.trim()) search.set('q', params.q.trim());
-  if (params.subjectType) search.set('subject_type', params.subjectType);
-  if (params.page) search.set('page', String(params.page));
-  if (params.pageSize) search.set('page_size', String(params.pageSize));
-  if (params.pendingOnly) search.set('pending_only', 'true');
-  if (params.role && params.role.length > 0) {
-    for (const role of params.role) search.append('role', role);
-  }
-  const suffix = search.toString() ? `?${search.toString()}` : '';
-  return request<WorkspaceMembersResponse>(
-    token,
-    `/api/v1/admin/workspaces/${workspaceId}/members${suffix}`,
-  );
-}
-
-export function bulkWorkspaceMembers(
-  token: string,
-  workspaceId: string,
-  payload: {
-    action: 'add' | 'remove' | 'update_role';
-    subjects: WorkspaceMemberBulkSubject[];
-  },
-): Promise<WorkspaceMemberBulkResponse> {
-  return request<WorkspaceMemberBulkResponse>(
-    token,
-    `/api/v1/admin/workspaces/${workspaceId}/members/bulk`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function listWorkspaceMemberCandidates(
-  token: string,
-  workspaceId: string,
-  query?: string,
-): Promise<WorkspaceMemberCandidate[]> {
-  const suffix = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
-  return request<WorkspaceMemberCandidate[]>(
-    token,
-    `/api/v1/admin/workspaces/${workspaceId}/member-candidates${suffix}`,
-  );
-}
-
-export function listTeams(
-  token: string,
-  workspaceId?: string,
-): Promise<TeamItem[]> {
-  const suffix = workspaceId
-    ? `?workspace_id=${encodeURIComponent(workspaceId)}`
-    : '';
-  return request<TeamItem[]>(token, `/api/v1/admin/teams${suffix}`);
 }
 
 export function listAuditLogs(
@@ -1154,51 +948,24 @@ export function replaceAdminUsageTargets(
   );
 }
 
-export function listPlatformAppVisibility(
+export function listCompanyAppControls(
   token: string,
-): Promise<PlatformAppVisibilityResponse> {
-  return request<PlatformAppVisibilityResponse>(
+): Promise<CompanyAppControlsResponse> {
+  return request<CompanyAppControlsResponse>(
     token,
-    '/api/v1/admin/app-visibility',
+    '/api/v1/admin/apps/company-controls',
   );
 }
 
-export function updatePlatformAppVisibility(
+export function updateCompanyAppControls(
   token: string,
   payload: {
-    items: Array<{ app_id: string; visible: boolean }>;
+    items: Array<{ app_id: string; enabled: boolean }>;
   },
-): Promise<PlatformAppVisibilityResponse> {
-  return request<PlatformAppVisibilityResponse>(
+): Promise<CompanyAppControlsResponse> {
+  return request<CompanyAppControlsResponse>(
     token,
-    '/api/v1/admin/app-visibility',
-    {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    },
-  );
-}
-
-export function listWorkspaceAppVisibility(
-  token: string,
-  workspaceId: string,
-): Promise<WorkspaceAppVisibilityResponse> {
-  return request<WorkspaceAppVisibilityResponse>(
-    token,
-    `/api/v1/admin/workspaces/${workspaceId}/app-visibility`,
-  );
-}
-
-export function updateWorkspaceAppVisibility(
-  token: string,
-  workspaceId: string,
-  payload: {
-    items: Array<{ app_id: string; visibility_override: boolean | null }>;
-  },
-): Promise<WorkspaceAppVisibilityResponse> {
-  return request<WorkspaceAppVisibilityResponse>(
-    token,
-    `/api/v1/admin/workspaces/${workspaceId}/app-visibility`,
+    '/api/v1/admin/apps/company-controls',
     {
       method: 'PATCH',
       body: JSON.stringify(payload),
@@ -1341,20 +1108,6 @@ export function resetUserPassword(
   return request<ResetPasswordResponse>(
     token,
     `/api/v1/admin/users/${userId}/reset-password`,
-    {
-      method: 'POST',
-      body: JSON.stringify({}),
-    },
-  );
-}
-
-export function impersonateAdminUser(
-  token: string,
-  userId: string,
-): Promise<AuthSessionResponse> {
-  return request<AuthSessionResponse>(
-    token,
-    authRoutes.impersonateUser(userId),
     {
       method: 'POST',
       body: JSON.stringify({}),

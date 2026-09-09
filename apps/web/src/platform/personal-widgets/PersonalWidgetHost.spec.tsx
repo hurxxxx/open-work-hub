@@ -16,7 +16,7 @@ import {
   updatePersonalTodo,
   type PersonalTodoItem,
 } from './personal-widgets-api';
-import { PERSONAL_WIDGET_STORAGE_KEY } from './personal-widget-state';
+import { personalWidgetStorageKey } from './personal-widget-state';
 
 function translate(key: string, values?: { title?: string }) {
   return values?.title ? `${key}:${values.title}` : key;
@@ -29,7 +29,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('@/src/platform/auth/auth-provider', () => ({
-  useAuth: () => ({ token: 'token' }),
+  useAuth: () => ({ token: 'token', user: { id: 'user-1' } }),
 }));
 
 vi.mock('./personal-widgets-api', () => ({
@@ -65,7 +65,7 @@ function renderTodoWidget(
 
 beforeEach(() => {
   window.localStorage.setItem(
-    PERSONAL_WIDGET_STORAGE_KEY,
+    personalWidgetStorageKey('user-1'),
     JSON.stringify({ activeWidget: 'todo', mode: 'panel' }),
   );
   listPersonalTodosMock.mockResolvedValue({ items: [todo('Original todo')] });
@@ -85,6 +85,62 @@ afterEach(() => {
 });
 
 describe('PersonalWidgetHost todo editing', () => {
+  it('restores the selected available dock panel after remount and clears it for Todo', async () => {
+    const dockPanels = [
+      {
+        id: 'planner',
+        renderIcon: () => null,
+        renderPanel: () => <div>Today events</div>,
+        shortTitle: 'Today',
+        title: 'Today Planner',
+      },
+    ];
+    const first = renderTodoWidget({ dockPanels });
+    fireEvent.click(screen.getByRole('button', { name: 'Today Planner' }));
+    expect(await screen.findByText('Today events')).toBeTruthy();
+    first.unmount();
+
+    const second = renderTodoWidget({ dockPanels });
+    expect(await screen.findByText('Today events')).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'personalWidgets.todo.open' }),
+    );
+    expect(await screen.findByText('Original todo')).toBeTruthy();
+    second.unmount();
+
+    renderTodoWidget({ dockPanels });
+    expect(await screen.findByText('Original todo')).toBeTruthy();
+    expect(screen.queryByText('Today events')).toBeNull();
+  });
+
+  it('does not mount a stored panel that is no longer available', async () => {
+    window.localStorage.setItem(
+      personalWidgetStorageKey('user-1'),
+      JSON.stringify({
+        activeWidget: 'todo',
+        activeDockPanelId: 'planner',
+        mode: 'panel',
+      }),
+    );
+    renderTodoWidget();
+    expect(await screen.findByText('Original todo')).toBeTruthy();
+    expect(screen.queryByText('Today events')).toBeNull();
+  });
+
+  it('renders the open Todo count with the danger contrast token pair', async () => {
+    renderTodoWidget();
+
+    const todoButton = await screen.findByRole('button', {
+      name: 'personalWidgets.todo.open',
+    });
+    const badge = Array.from(todoButton.querySelectorAll('span')).find(
+      (element) =>
+        element.textContent === '1' && element.className.includes('absolute'),
+    );
+    expect(badge?.className).toContain('bg-[var(--ui-color-danger-text)]');
+    expect(badge?.className).toContain('text-[var(--ui-color-danger-bg)]');
+  });
+
   it('describes the edit, PMS registration, and delete actions on hover', async () => {
     const onConvertTodoToPms = vi.fn();
     renderTodoWidget({ onConvertTodoToPms });

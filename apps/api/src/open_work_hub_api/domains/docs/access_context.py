@@ -10,21 +10,20 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.principal import CallerPrincipal
-from open_work_hub_api.domains.auth.access import (
-    bind_current_workspace,
-    get_current_workspace,
-    resolve_workspaces,
-)
-from open_work_hub_api.domains.auth.models import User, Workspace
+from open_work_hub_api.domains.auth.access import is_platform_admin_user
+from open_work_hub_api.domains.auth.app_access import can_use_app
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.docs.hub_projection import select_primary_target
 from open_work_hub_api.domains.docs.models import (
     DocMeetingAccess,
     NativeDoc,
-    NativeDocTarget,
+    NativeDocGroupShare,
     NativeDocLinkShare,
     NativeDocPage,
+    NativeDocTarget,
     NativeDocUserShare,
 )
+from open_work_hub_api.domains.groups.service import user_group_ids_query
 from open_work_hub_api.domains.source_access.targets import (
     TargetRef,
     project_target_access,
@@ -92,71 +91,20 @@ def share_token_allows_page_without_docs_access(page_id: str) -> bool:
     return prefix in {None, PAGE_SOURCE_NATIVE_DOC}
 
 
-def ensure_workspace_for_item_request(
-    db: Session,
-    user: User,
-    *,
-    item_id: str,
-    share_token: str | None = None,
-) -> Workspace | None:
-    if share_token is not None and share_token_allows_item_without_docs_access(item_id):
-        return get_current_workspace(db)
-    return ensure_docs_workspace_access(db, user)
+def ensure_docs_app_access(db: Session, user: User) -> None:
+    if not can_use_app(db, user_id=user.id, app_id="docs"):
+        raise localized_http_exception(status_code=403, code="platform.app_disabled")
 
 
-def ensure_workspace_for_page_request(
-    db: Session,
-    user: User,
-    *,
-    page_id: str,
-    share_token: str | None = None,
-) -> Workspace | None:
-    if share_token is not None and share_token_allows_page_without_docs_access(page_id):
-        return get_current_workspace(db)
-    return ensure_docs_workspace_access(db, user)
+def require_actor(db: Session, *, principal: CallerPrincipal, user: User) -> None:
+    from open_work_hub_api.domains.auth.app_access import can_use_app
 
-
-def ensure_docs_workspace_access(db: Session, user: User) -> Workspace:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is not None:
-        return current_workspace
-
-    for summary in resolve_workspaces(db, user):
-        workspace = db.scalar(
-            select(Workspace).where(
-                Workspace.id == summary["id"],
-                Workspace.active.is_(True),
-            )
-        )
-        if workspace is None:
-            continue
-        bind_current_workspace(db, workspace)
-        return workspace
-
-    raise localized_http_exception(
-        status_code=status.HTTP_403_FORBIDDEN,
-        code="docs.requests_workspace_context_required",
-    )
-
-
-def bind_workspace_context(
-    db: Session,
-    *,
-    workspace: Workspace,
-    principal: CallerPrincipal,
-    user: User,
-) -> None:
-    bind_current_workspace(db, workspace)
-    if principal.workspace_id != workspace.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="docs.principal_workspace_mismatch",
-        )
-    if principal.kind == "user" and principal.user_id not in {None, user.id}:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="docs.principal_user_mismatch",
-        )
+    if (
+        principal.kind != "user"
+        or principal.user_id != user.id
+        or not can_use_app(db, user_id=user.id, app_id="docs")
+    ):
+        raise localized_http_exception(status_code=403, code="auth.required")
 
 
 def require_user_write_principal(principal: CallerPrincipal) -> None:
@@ -174,34 +122,17 @@ def max_access_level(*levels: str | None) -> str | None:
     return max(ranked, key=lambda item: TEAM_ACCESS_LEVEL_RANK[item])
 
 
-def workspace_for_doc(db: Session, doc: NativeDoc) -> Workspace:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is not None and current_workspace.id == doc.workspace_id:
-        return current_workspace
-    workspace = db.scalar(
-        select(Workspace).where(
-            Workspace.id == doc.workspace_id,
-            Workspace.active.is_(True),
-        )
-    )
-    if workspace is None:
-        raise localized_http_exception(status_code=404, code="workspace.not_found")
-    return workspace
-
-
 def target_access_level(
     db: Session,
     doc: NativeDoc,
     user: User,
 ) -> tuple[str | None, bool]:
-    workspace = workspace_for_doc(db, doc)
     best_level: str | None = None
     can_manage = False
-    for target in doc.targets:
+    for target in db.scalars(select(NativeDocTarget).where(NativeDocTarget.doc_id == doc.id)):
         projection = project_target_access(
             db=db,
             user=user,
-            workspace=workspace,
             ref=TargetRef(
                 app=target.target_app,
                 type=target.target_type,
@@ -222,54 +153,55 @@ def target_access_level(
 
 
 def resolve_native_doc_access(
-    db: Session,
-    doc: NativeDoc,
-    user: User,
-    *,
-    share_token: str | None = None,
+    db: Session, doc: NativeDoc, user: User, *, share_token: str | None = None
 ) -> NativeAccess:
-    if doc.owner_id == user.id:
-        link_match = next((item for item in doc.link_shares if item.active), None)
-        return NativeAccess(
-            access_level="edit",
-            can_view=True,
-            can_edit=True,
-            can_share=True,
-            can_manage=True,
-            matched_link=link_match,
+    if not can_use_app(db, user_id=user.id, app_id="docs"):
+        return NativeAccess(None, False, False, False, False, None)
+    if share_token is not None:
+        link = db.scalar(
+            select(NativeDocLinkShare).where(
+                NativeDocLinkShare.doc_id == doc.id,
+                NativeDocLinkShare.active.is_(True),
+                NativeDocLinkShare.token == share_token,
+            )
         )
-
-    direct_share = next((item for item in doc.user_shares if item.user_id == user.id), None)
-    matched_link = next(
-        (
-            item
-            for item in doc.link_shares
-            if item.active and share_token and item.token == share_token
-        ),
-        None,
+        level = getattr(link, "access_level", None)
+        # Presenting a token attenuates owner, editor and administrator rights.
+        return NativeAccess(
+            level, level in TEAM_ACCESS_LEVEL_RANK, level == "edit", False, False, link
+        )
+    if doc.owner_id == user.id:
+        return NativeAccess("edit", True, True, True, True, None)
+    direct = db.scalar(
+        select(NativeDocUserShare.access_level).where(
+            NativeDocUserShare.doc_id == doc.id, NativeDocUserShare.user_id == user.id
+        )
     )
-    meeting_grant = db.scalar(
-        select(DocMeetingAccess).where(
+    groups = list(
+        db.scalars(
+            select(NativeDocGroupShare.access_level).where(
+                NativeDocGroupShare.doc_id == doc.id,
+                NativeDocGroupShare.group_id.in_(user_group_ids_query(user.id)),
+            )
+        )
+    )
+    meeting = db.scalar(
+        select(DocMeetingAccess.access_level).where(
             DocMeetingAccess.doc_id == doc.id,
             DocMeetingAccess.user_id == user.id,
             DocMeetingAccess.revoked_at.is_(None),
             (DocMeetingAccess.expires_at.is_(None) | (DocMeetingAccess.expires_at > utcnow())),
         )
     )
-    target_level, target_can_manage = target_access_level(db, doc, user)
-    access_level = max_access_level(
-        getattr(direct_share, "access_level", None),
-        getattr(matched_link, "access_level", None),
-        getattr(meeting_grant, "access_level", None),
-        target_level,
+    target_level, target_manage = target_access_level(db, doc, user)
+    admin_level = (
+        "read" if doc.ownership_kind == "company" and is_platform_admin_user(user, db) else None
+    )
+    level = max_access_level(
+        direct, meeting, target_level, admin_level, "read" if doc.company_visible else None, *groups
     )
     return NativeAccess(
-        access_level=access_level,
-        can_view=access_level in TEAM_ACCESS_LEVEL_RANK,
-        can_edit=access_level == "edit",
-        can_share=target_can_manage,
-        can_manage=target_can_manage,
-        matched_link=matched_link,
+        level, level in TEAM_ACCESS_LEVEL_RANK, level == "edit", target_manage, target_manage, None
     )
 
 
@@ -278,6 +210,7 @@ def doc_query():
         selectinload(NativeDoc.owner),
         selectinload(NativeDoc.pages).selectinload(NativeDocPage.created_by),
         selectinload(NativeDoc.user_shares).selectinload(NativeDocUserShare.user),
+        selectinload(NativeDoc.group_shares),
         selectinload(NativeDoc.link_shares),
         selectinload(NativeDoc.targets),
         selectinload(NativeDoc.collection),
@@ -288,18 +221,12 @@ def load_native_doc_for_access(
     db: Session,
     doc_id: str,
 ) -> NativeDoc | None:
-    current_workspace = get_current_workspace(db)
     query = doc_query().where(NativeDoc.id == doc_id)
-    if current_workspace is not None:
-        query = query.where(NativeDoc.workspace_id == current_workspace.id)
     return db.scalar(query)
 
 
 def load_accessible_native_docs(db: Session, user: User) -> list[NativeDoc]:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is None:
-        return []
-    docs = list(db.scalars(doc_query().where(NativeDoc.workspace_id == current_workspace.id)))
+    docs = list(db.scalars(doc_query().where()))
     return [doc for doc in docs if resolve_native_doc_access(db, doc, user).can_view]
 
 

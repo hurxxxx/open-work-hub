@@ -30,10 +30,7 @@ describe('FileManagerWorkflow', () => {
   it('selects or clears all currently visible items', () => {
     const selected = selectAllVisibleFileManagerItems(
       {
-        files: [
-          { id: 'file-1' },
-          { id: 'file-2' },
-        ],
+        files: [{ id: 'file-1' }, { id: 'file-2' }],
         folders: [{ id: 'folder-1' }],
       },
       true,
@@ -116,14 +113,14 @@ describe('FileManagerWorkflow', () => {
       planCreateFolderCommand({
         name: 'Specs',
         currentFolderId: 'parent-folder',
-        currentFolderVisibility: 'workspace',
+        currentFolderVisibility: 'company',
         selectedVisibility: 'private',
       }),
     ).toEqual({
       payload: {
         name: 'Specs',
         parent_id: 'parent-folder',
-        visibility: 'workspace',
+        visibility: 'company',
       },
       afterSuccess: {
         closeDialog: true,
@@ -188,10 +185,9 @@ describe('FileManagerWorkflow', () => {
 
   it('plans no bulk download for empty or stale single-file selections', () => {
     expect(
-      planFileManagerBulkDownload(
-        createEmptyFileManagerSelection(),
-        [{ id: 'file-1' }],
-      ),
+      planFileManagerBulkDownload(createEmptyFileManagerSelection(), [
+        { id: 'file-1' },
+      ]),
     ).toEqual({ kind: 'none' });
 
     expect(

@@ -1,6 +1,15 @@
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  NOTIFICATION_REALTIME_EVENT_TYPES,
+  normalizeNotificationRealtimeEvent,
+} from '@open-work-hub/contracts/notifications';
+import {
+  Button,
+  IconButton,
+  InlineNotice,
+  Input,
+  Select,
+  useConfirm,
+} from '@open-work-hub/ui';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -16,19 +25,27 @@ import {
   X,
 } from 'lucide-react';
 import {
-  Button,
-  IconButton,
-  InlineNotice,
-  Input,
-  Select,
-  useConfirm,
-} from '@open-work-hub/ui';
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { UserDateTime } from '@/src/components/date/UserDateTime';
 import { hasAdminConsoleAccess } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { authenticatedContentObjectUrl } from '@/src/platform/browser/browser-download';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
+import { useRealtimeEvent } from '@/src/platform/realtime/realtime-provider';
 
+import {
+  CommunityMarkdownEditor,
+  CommunityMarkdownViewer,
+} from '@/src/platform/community/CommunityMarkdownEditor';
 import {
   createCommunityComment,
   createCommunityPost,
@@ -47,10 +64,6 @@ import {
   type CommunityPost,
   type CommunityPostDetail,
 } from '../api/community-api';
-import {
-  CommunityMarkdownEditor,
-  CommunityMarkdownViewer,
-} from '@/src/platform/community/CommunityMarkdownEditor';
 import { DEFAULT_COMMUNITY_CHANNEL_KEY } from '../community-constants';
 import { buildCommunityListUrl, buildCommunityPostUrl } from '../community-url';
 
@@ -143,6 +156,11 @@ export function CommunityView() {
   const [detail, setDetail] = useState<CommunityPostDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const selectedPostRefreshInFlightRef = useRef<{ postId: string } | null>(
+    null,
+  );
+  const detailMediaGenerationRef = useRef(0);
+  const detailMediaObjectUrlsRef = useRef(new Set<string>());
   const [composerOpen, setComposerOpen] = useState(false);
   const [postDraft, setPostDraft] = useState<PostDraft>(EMPTY_POST_DRAFT);
   const [formError, setFormError] = useState<string | null>(null);
@@ -292,6 +310,70 @@ export function CommunityView() {
     [token, unlockedPasswords],
   );
 
+  const refreshSelectedPost = useCallback(() => {
+    const postId = selectedPostId;
+    if (!postId || selectedPostRefreshInFlightRef.current?.postId === postId) {
+      return;
+    }
+
+    const refresh = { postId };
+    selectedPostRefreshInFlightRef.current = refresh;
+    void reloadDetail(postId)
+      .catch(() => undefined)
+      .finally(() => {
+        if (selectedPostRefreshInFlightRef.current === refresh) {
+          selectedPostRefreshInFlightRef.current = null;
+        }
+      });
+  }, [reloadDetail, selectedPostId]);
+
+  const handleCommunityNotification = useCallback(
+    (event: Parameters<typeof normalizeNotificationRealtimeEvent>[0]) => {
+      const notificationEvent = normalizeNotificationRealtimeEvent(event);
+      const notification = notificationEvent?.data.notification;
+      if (
+        !selectedPostId ||
+        notification?.origin_app_id !== 'community' ||
+        notification.source_type !== 'community_post' ||
+        notification.source_id !== selectedPostId
+      ) {
+        return;
+      }
+      refreshSelectedPost();
+    },
+    [refreshSelectedPost, selectedPostId],
+  );
+
+  useRealtimeEvent(
+    NOTIFICATION_REALTIME_EVENT_TYPES.created,
+    handleCommunityNotification,
+  );
+
+  useEffect(() => {
+    if (!selectedPostId) return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== 'hidden') {
+        refreshSelectedPost();
+      }
+    };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [refreshSelectedPost, selectedPostId]);
+
+  useEffect(() => {
+    detailMediaGenerationRef.current += 1;
+    const objectUrls = detailMediaObjectUrlsRef.current;
+    return () => {
+      detailMediaGenerationRef.current += 1;
+      for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl);
+      objectUrls.clear();
+    };
+  }, [detail?.id, token]);
+
   const resolveDetailFileUrl = useCallback(
     async (url: string): Promise<string> => {
       if (!url.startsWith('media:')) {
@@ -300,16 +382,28 @@ export function CommunityView() {
       if (!detail) {
         return resolveFileUrl ? resolveFileUrl(url) : url;
       }
+      if (!token) return url;
 
       try {
+        const generation = detailMediaGenerationRef.current;
         const response = await resolveCommunityPostMediaUrls(
           token,
           detail.id,
           [url],
           detail.isSecret ? unlockedPasswords[detail.id] : null,
         );
-        if (response.resolved[url]) {
-          return response.resolved[url];
+        const contentUrl = response.resolved[url];
+        if (contentUrl) {
+          const objectUrl = await authenticatedContentObjectUrl(
+            token,
+            contentUrl,
+          );
+          if (detailMediaGenerationRef.current !== generation) {
+            URL.revokeObjectURL(objectUrl);
+            return url;
+          }
+          detailMediaObjectUrlsRef.current.add(objectUrl);
+          return objectUrl;
         }
       } catch {
         return url;
@@ -409,12 +503,6 @@ export function CommunityView() {
     },
     [openPostList],
   );
-
-  useEffect(() => {
-    const legacyPostId = searchParams.get('post');
-    if (selectedPostId || !legacyPostId) return;
-    openPost(legacyPostId, activeChannelKey, { replace: true });
-  }, [activeChannelKey, openPost, searchParams, selectedPostId]);
 
   useEffect(() => {
     if (channels.length === 0) return;
@@ -664,10 +752,10 @@ export function CommunityView() {
                     <Hash size={18} className="shrink-0 text-app-ink/45" />
                     <span className="truncate">{activeChannelTitle}</span>
                   </div>
-                  <div className="mt-1 app-text-body-sm text-app-ink/55">
+                  <div className="mt-1 app-text-body-sm text-app-ink/70">
                     {activeChannelDescription}
                   </div>
-                  <div className="mt-1 app-text-caption text-app-ink/45">
+                  <div className="mt-1 app-text-caption text-app-ink/70">
                     {t('community.threadCount', { count: total })}
                   </div>
                   {activeChannelReadOnly ? (

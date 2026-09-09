@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import { ArrowLeft, X, type LucideIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 
-import { pmsHelpGuideRegistration } from '@/src/app-modules/pms';
+import {
+  getPmsHelpGuideSrc,
+  pmsHelpGuideRegistration,
+} from '@/src/app-modules/pms';
 import { NotFoundView } from '@/src/platform/auth/settings-pages';
 
 import {
-  type FeatureGuideToolIds,
   getAiFeatureGuideSrc,
   getAiFeatureGuideTitleKey,
   hasAiFeatureGuide,
+  type FeatureGuideToolIds,
 } from './ai-feature-guides';
 
 type HelpGuide = {
@@ -21,21 +24,15 @@ type HelpGuide = {
   titleKey: string;
 };
 
-// Always-available guides that are not gated by AI feature entitlements.
+// Always-available guides that are not gated by feature-specific runtime availability.
 const COMMON_GUIDES: readonly HelpGuide[] = [pmsHelpGuideRegistration] as const;
-
-// Resolve a guide by URL key. The main help center intentionally lists only
-// common guides; per-feature AI guides are launched from each feature page.
-function findGuideByKey(key: string): HelpGuide | undefined {
-  return COMMON_GUIDES.find((guide) => guide.key === key);
-}
 
 type HelpCenterPageProps = {
   onOpenGuide?: (guide: HelpGuide) => void;
 };
 
 export function HelpCenterPage({ onOpenGuide }: HelpCenterPageProps = {}) {
-  const { t } = useTranslation(['shell', 'common']);
+  const { i18n, t } = useTranslation(['shell', 'common']);
   const [modalGuide, setModalGuide] = useState<HelpGuide | null>(null);
   const openGuide = onOpenGuide ?? ((guide: HelpGuide) => setModalGuide(guide));
 
@@ -45,7 +42,18 @@ export function HelpCenterPage({ onOpenGuide }: HelpCenterPageProps = {}) {
       <button
         className="group rounded-lg border border-app-border bg-app-surface p-5 text-left shadow-sm transition-colors hover:border-app-accent/50 hover:bg-app-surface-hover"
         key={guide.key}
-        onClick={() => openGuide(guide)}
+        onClick={() =>
+          openGuide(
+            guide.key === pmsHelpGuideRegistration.key
+              ? {
+                  ...guide,
+                  src: getPmsHelpGuideSrc(
+                    i18n.resolvedLanguage ?? i18n.language,
+                  ),
+                }
+              : guide,
+          )
+        }
         type="button"
       >
         <span className="flex size-10 items-center justify-center rounded-lg border border-app-border bg-app-bg text-app-accent">
@@ -100,13 +108,12 @@ export function HelpCenterPage({ onOpenGuide }: HelpCenterPageProps = {}) {
 }
 
 export function HelpPmsGuidePage() {
-  const { t } = useTranslation('shell');
-  const guide = findGuideByKey(pmsHelpGuideRegistration.key);
+  const { i18n, t } = useTranslation('shell');
 
   return (
     <div className="flex h-full min-h-screen">
       <HelpGuideFrame
-        src={guide?.src ?? pmsHelpGuideRegistration.src}
+        src={getPmsHelpGuideSrc(i18n.resolvedLanguage ?? i18n.language)}
         title={t('helpCenter.pmsGuideTitle')}
       />
     </div>

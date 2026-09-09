@@ -1,12 +1,20 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
-import { ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react';
+import { useAppAdmission } from '@/src/platform/apps/app-bootstrap-context';
+import { useFeedback } from '@open-work-hub/ui';
 import { useConfirm } from '@open-work-hub/ui/feedback/confirm-dialog';
 import { InlineNotice } from '@open-work-hub/ui/feedback/inline-notice';
 import { usePrompt } from '@open-work-hub/ui/feedback/prompt-dialog';
-import { useFeedback } from '@open-work-hub/ui';
+import { ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react';
+import { AnimatePresence, LazyMotion, domAnimation, m } from 'motion/react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import {
   createNativeDoc,
@@ -17,56 +25,31 @@ import {
   withDocsItemPrimaryTargetSortOrder,
   type DocsHubItem,
 } from '@/src/app-modules/docs/public-api';
+import { buildAppPath } from '@/src/platform/apps/app-links';
+import { teamRoleAllows } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
-  hasWorkspaceMembership,
-  teamRoleAllows,
-} from '@/src/platform/auth/auth-api';
-import {
+  deleteFolder,
+  deletePmsTaskList,
+  deleteSpace,
   listAllPmsTaskLists,
   listFolders,
-  deletePmsTaskList,
-  updateFolder,
-  deleteFolder,
   listSpaces,
-  updateSpace,
-  deleteSpace,
+  updateFolder,
   updatePmsTaskList,
+  updateSpace,
   type PmsFolder,
-  type PmsTaskList,
   type PmsSpace,
+  type PmsTaskList,
 } from '../api/pms-api';
 import {
   applyFlatReorder,
   computeFlatDropTarget,
   type FlatDropZone,
 } from '../api/pms-sidebar-reorder';
-import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-} from '@/src/platform/workspaces/workspace-utils';
-import { CreateTaskListModal } from '../views/CreateTaskListModal';
-import { CreateSpaceModal } from '../views/CreateSpaceModal';
-import { SpaceMembersModal } from '../views/SpaceMembersModal';
 import { CreateFolderModal } from '../views/CreateFolderModal';
-import {
-  SPACE_COLORS,
-  buildPmsSidebarSpaceTree,
-  getSpaceDocSpaceId,
-  getSpaceDocSortOrder,
-  sortSpaceDocs,
-} from './space-tree-model';
-import { SpaceItem } from './SpaceTree';
-import { SpaceOrderEditorModal } from './SpaceOrderEditorModal';
-import {
-  buildSpaceOrderChanges,
-  persistSpaceOrderChanges,
-} from './space-order-persistence';
-import {
-  buildPmsSpaceDocsToolPath,
-  buildPmsSpaceToolPath,
-  buildPmsTaskListToolPath,
-} from '../views/pms-view-route';
+import { CreateSpaceModal } from '../views/CreateSpaceModal';
+import { CreateTaskListModal } from '../views/CreateTaskListModal';
 import {
   PMS_SPACE_CHANGED_EVENT,
   PMS_SPACE_ORDER_CHANGED_EVENT,
@@ -83,10 +66,29 @@ import {
   listActivePmsTaskListsForSpace,
   reconcilePmsTaskListCatalog,
 } from '../views/pms-task-list-catalog-model';
+import {
+  buildPmsSpaceDocsToolPath,
+  buildPmsSpaceToolPath,
+  buildPmsTaskListToolPath,
+} from '../views/pms-view-route';
+import { SpaceMembersModal } from '../views/SpaceMembersModal';
+import {
+  buildSpaceOrderChanges,
+  persistSpaceOrderChanges,
+} from './space-order-persistence';
+import {
+  SPACE_COLORS,
+  buildPmsSidebarSpaceTree,
+  getSpaceDocSortOrder,
+  getSpaceDocSpaceId,
+  sortSpaceDocs,
+} from './space-tree-model';
+import { SpaceOrderEditorModal } from './SpaceOrderEditorModal';
+import { SpaceItem } from './SpaceTree';
 
 interface PmsSidebarSpacesProps {
   activeNavItemId: string;
-  currentWorkspaceSlug: string | null;
+
   isExpanded: boolean;
   onToggle: () => void;
 }
@@ -111,13 +113,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-async function listSidebarTaskLists(
-  token: string,
-  workspaceSlug: string | null,
-): Promise<PmsTaskList[]> {
+async function listSidebarTaskLists(token: string): Promise<PmsTaskList[]> {
   const [active, archived] = await Promise.all([
-    listAllPmsTaskLists(token, undefined, workspaceSlug),
-    listAllPmsTaskLists(token, undefined, workspaceSlug, {
+    listAllPmsTaskLists(token, undefined),
+    listAllPmsTaskLists(token, undefined, {
       archived: true,
     }).catch(() => null),
   ]);
@@ -126,13 +125,11 @@ async function listSidebarTaskLists(
 
 export function PmsSidebarSpaces({
   activeNavItemId,
-  currentWorkspaceSlug,
   isExpanded,
   onToggle,
 }: PmsSidebarSpacesProps) {
   return usePmsSidebarSpacesElement({
     activeNavItemId,
-    currentWorkspaceSlug,
     isExpanded,
     onToggle,
   });
@@ -247,20 +244,25 @@ function pmsSidebarRuntimeReducer(
 
 function usePmsSidebarSpacesElement({
   activeNavItemId,
-  currentWorkspaceSlug,
   isExpanded,
   onToggle,
 }: PmsSidebarSpacesProps) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation('apps');
   const locale = i18n.resolvedLanguage ?? i18n.language;
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
   const toast = useFeedback();
-  const canReadTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
-  const canWriteTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
-  const pmsRootPath = resolveDefaultWorkspaceAppPath(user, 'pms');
+  const publicationGeneration = useRef(0);
+  useEffect(
+    () => () => {
+      publicationGeneration.current += 1;
+    },
+    [token],
+  );
+  const canReadTeams = useAppAdmission('pms');
+  const canWriteTeams = canReadTeams;
   const canManageSpace = useCallback(
     (team: PmsSpace) => teamRoleAllows(team.current_user_role, 'admin'),
     [],
@@ -279,6 +281,17 @@ function usePmsSidebarSpacesElement({
     collapsedSpaces,
     spaceDocsMap,
   } = state;
+  const currentSpaces = useRef(pmsTeams);
+  currentSpaces.current = pmsTeams;
+  const mayPublishInSpace = useCallback(
+    (spaceId: string) =>
+      teamRoleAllows(
+        currentSpaces.current.find((space) => space.id === spaceId)
+          ?.current_user_role,
+        'admin',
+      ),
+    [],
+  );
   const [createTaskListOpen, setCreateTaskListOpen] = useState(false);
   const [createTaskListTeamId, setCreateTaskListTeamId] = useState<
     string | null
@@ -317,12 +330,12 @@ function usePmsSidebarSpacesElement({
     dispatch({ type: 'loadStart' });
 
     Promise.all([
-      listSidebarTaskLists(token, currentWorkspaceSlug).catch(() => null),
-      listFolders(token, undefined, currentWorkspaceSlug)
+      listSidebarTaskLists(token).catch(() => null),
+      listFolders(token, undefined)
         .then((response) => response.items)
         .catch(() => []),
       canReadTeams
-        ? listSpaces(token, currentWorkspaceSlug)
+        ? listSpaces(token)
             .then((teams) => (Array.isArray(teams) ? teams : []))
             .catch(() => [])
         : Promise.resolve([]),
@@ -339,7 +352,7 @@ function usePmsSidebarSpacesElement({
     return () => {
       cancelled = true;
     };
-  }, [canReadTeams, currentWorkspaceSlug, token]);
+  }, [canReadTeams, token]);
 
   useEffect(() => {
     if (!token) return;
@@ -466,7 +479,24 @@ function usePmsSidebarSpacesElement({
     };
   }, [locale]);
 
+  const canCreateTaskList =
+    !createTaskListTeamId ||
+    teamRoleAllows(
+      pmsTeams.find((space) => space.id === createTaskListTeamId)
+        ?.current_user_role,
+      'member',
+    );
+
   const openCreateTaskList = (teamId: string | null) => {
+    if (
+      teamId &&
+      !teamRoleAllows(
+        currentSpaces.current.find((space) => space.id === teamId)
+          ?.current_user_role,
+        'member',
+      )
+    )
+      return;
     setCreateTaskListTeamId(teamId);
     setCreateTaskListFolderId(null);
     setCreateTaskListOpen(true);
@@ -483,7 +513,8 @@ function usePmsSidebarSpacesElement({
 
   const handleCreateDoc = useCallback(
     async (spaceId: string) => {
-      if (!token) return;
+      if (!token || !mayPublishInSpace(spaceId)) return;
+      const generation = publicationGeneration.current;
       const title = await prompt({
         title: t('pms.sidebar.newDocument'),
         placeholder: t('pms.sidebar.documentName'),
@@ -491,8 +522,25 @@ function usePmsSidebarSpacesElement({
         submitLabel: t('common:actions.create'),
         cancelLabel: t('common:actions.cancel'),
       });
-      if (!title) return;
+      if (
+        !title ||
+        generation !== publicationGeneration.current ||
+        !mayPublishInSpace(spaceId)
+      )
+        return;
       try {
+        const acknowledged = await confirm({
+          title: t('shell:contentPublication.title'),
+          description: t('shell:contentPublication.confirm'),
+          confirmLabel: t('common:actions.confirm'),
+          cancelLabel: t('common:actions.cancel'),
+        });
+        if (
+          !acknowledged ||
+          generation !== publicationGeneration.current ||
+          !mayPublishInSpace(spaceId)
+        )
+          return;
         const doc = await createNativeDoc(token, {
           title,
           source_app: 'pms',
@@ -501,8 +549,10 @@ function usePmsSidebarSpacesElement({
             app: 'pms',
             type: 'space',
             id: spaceId,
+            company_admin_read_acknowledged: acknowledged,
           },
         });
+        if (generation !== publicationGeneration.current) return;
         dispatch({
           type: 'setSpaceDocsMap',
           updater: (prev) => {
@@ -518,14 +568,17 @@ function usePmsSidebarSpacesElement({
           buildPmsSpaceDocsToolPath({
             docId: doc.id,
             spaceId,
-            workspaceSlug: currentWorkspaceSlug,
           }),
         );
-      } catch {
-        /* ignore */
+      } catch (error) {
+        if (generation === publicationGeneration.current) {
+          toast.error(
+            getErrorMessage(error, t('common:feedback.requestFailedRetry')),
+          );
+        }
       }
     },
-    [currentWorkspaceSlug, locale, navigate, prompt, token, t],
+    [confirm, locale, navigate, prompt, token, t, toast, mayPublishInSpace],
   );
 
   const handleRenameDoc = useCallback(
@@ -596,7 +649,6 @@ function usePmsSidebarSpacesElement({
           navigate(
             buildPmsSpaceDocsToolPath({
               spaceId: deletedTeamId,
-              workspaceSlug: currentWorkspaceSlug,
             }),
           );
         }
@@ -604,15 +656,7 @@ function usePmsSidebarSpacesElement({
         /* ignore */
       }
     },
-    [
-      activeNavItemId,
-      confirm,
-      currentWorkspaceSlug,
-      navigate,
-      spaceDocsMap,
-      token,
-      t,
-    ],
+    [activeNavItemId, confirm, navigate, spaceDocsMap, token, t],
   );
 
   const handleSaveSpaceOrder = useCallback(
@@ -637,6 +681,7 @@ function usePmsSidebarSpacesElement({
       const currentLists = listActivePmsTaskListsForSpace(pmsLists, spaceId);
       const currentDocs = spaceDocsMap.get(spaceId) ?? [];
       const changes = buildSpaceOrderChanges({
+        spaceId,
         currentDocs,
         currentLists,
         payload,
@@ -777,11 +822,7 @@ function usePmsSidebarSpacesElement({
         });
         dispatchPmsTaskListChanged({ type: 'deleted', taskListId: listId });
         if (activeNavItemId === `pms-list-${listId}`) {
-          navigate(
-            currentWorkspaceSlug
-              ? buildWorkspaceAppPath(currentWorkspaceSlug, 'pms')
-              : pmsRootPath,
-          );
+          navigate(buildAppPath('pms'));
         }
       } catch (error) {
         dispatch({
@@ -790,15 +831,7 @@ function usePmsSidebarSpacesElement({
         });
       }
     },
-    [
-      activeNavItemId,
-      confirm,
-      currentWorkspaceSlug,
-      navigate,
-      pmsRootPath,
-      token,
-      t,
-    ],
+    [activeNavItemId, confirm, navigate, token, t],
   );
 
   const handleArchiveTaskList = useCallback(
@@ -827,29 +860,14 @@ function usePmsSidebarSpacesElement({
         toast.success(t('pms.archive.archivedToast', { name: currentName }));
         if (activeNavItemId === `pms-list-${listId}`) {
           navigate(
-            spaceId
-              ? buildPmsSpaceToolPath(spaceId, {
-                  workspaceSlug: currentWorkspaceSlug,
-                })
-              : currentWorkspaceSlug
-                ? buildWorkspaceAppPath(currentWorkspaceSlug, 'pms')
-                : pmsRootPath,
+            spaceId ? buildPmsSpaceToolPath(spaceId, {}) : buildAppPath('pms'),
           );
         }
       } catch (error) {
         toast.error(getErrorMessage(error, t('pms.archive.archiveFailed')));
       }
     },
-    [
-      activeNavItemId,
-      confirm,
-      currentWorkspaceSlug,
-      navigate,
-      pmsRootPath,
-      t,
-      toast,
-      token,
-    ],
+    [activeNavItemId, confirm, navigate, t, toast, token],
   );
 
   const handleRestoreTaskList = useCallback(
@@ -1070,7 +1088,7 @@ function usePmsSidebarSpacesElement({
           updater: (current) =>
             current.filter((folder) => folder.id !== folderId),
         });
-        listSidebarTaskLists(token, currentWorkspaceSlug)
+        listSidebarTaskLists(token)
           .then((lists) => dispatch({ type: 'setLists', updater: () => lists }))
           .catch(() => undefined);
       } catch (error) {
@@ -1079,7 +1097,7 @@ function usePmsSidebarSpacesElement({
         );
       }
     },
-    [confirm, currentWorkspaceSlug, pmsLists, t, toast, token],
+    [confirm, pmsLists, t, toast, token],
   );
 
   const handleRenameSpace = useCallback(
@@ -1130,11 +1148,7 @@ function usePmsSidebarSpacesElement({
         dispatchPmsSpaceChanged({ type: 'deleted', spaceId });
 
         if (activeSpaceRoute || activeListInSpace) {
-          navigate(
-            currentWorkspaceSlug
-              ? buildWorkspaceAppPath(currentWorkspaceSlug, 'pms')
-              : pmsRootPath,
-          );
+          navigate(buildAppPath('pms'));
         }
       } catch (error) {
         dispatch({
@@ -1143,16 +1157,7 @@ function usePmsSidebarSpacesElement({
         });
       }
     },
-    [
-      activeNavItemId,
-      confirm,
-      currentWorkspaceSlug,
-      navigate,
-      pmsLists,
-      pmsRootPath,
-      token,
-      t,
-    ],
+    [activeNavItemId, confirm, navigate, pmsLists, token, t],
   );
 
   const groupedSpaces = useMemo(() => {
@@ -1170,6 +1175,7 @@ function usePmsSidebarSpacesElement({
       {confirmDialog}
       {promptDialog}
       <SpaceOrderEditorModal
+        spaceId={orderEditorSpace?.id ?? ''}
         isOpen={orderEditorSpace !== null}
         onClose={() => setOrderEditorSpace(null)}
         spaceName={orderEditorSpace?.name ?? ''}
@@ -1248,11 +1254,7 @@ function usePmsSidebarSpacesElement({
                           expanded={!collapsedSpaces.has(space.id)}
                           onToggle={() => toggleSpace(space.id)}
                           onNavigate={() =>
-                            navigate(
-                              buildPmsSpaceToolPath(space.id, {
-                                workspaceSlug: currentWorkspaceSlug,
-                              }),
-                            )
+                            navigate(buildPmsSpaceToolPath(space.id, {}))
                           }
                           onAddList={() => openCreateTaskList(space.id)}
                           onAddListToFolder={(folderId) => {
@@ -1298,7 +1300,6 @@ function usePmsSidebarSpacesElement({
                               buildPmsTaskListToolPath({
                                 taskListId: listId,
                                 settings: true,
-                                workspaceSlug: currentWorkspaceSlug,
                               }),
                             );
                           }}
@@ -1346,7 +1347,6 @@ function usePmsSidebarSpacesElement({
                             )
                           }
                           activeNavItemId={activeNavItemId}
-                          currentWorkspaceSlug={currentWorkspaceSlug}
                           canCreateSpaceContent={spaceCanCreate}
                           canManageSpace={spaceCanManage}
                           canManageCollections={teamRoleAllows(
@@ -1378,7 +1378,8 @@ function usePmsSidebarSpacesElement({
       </div>
 
       <CreateTaskListModal
-        isOpen={createTaskListOpen}
+        isOpen={createTaskListOpen && canCreateTaskList}
+        canCreate={canCreateTaskList}
         onClose={() => setCreateTaskListOpen(false)}
         teamId={createTaskListTeamId}
         folderId={createTaskListFolderId}
@@ -1394,7 +1395,6 @@ function usePmsSidebarSpacesElement({
           navigate(
             buildPmsTaskListToolPath({
               taskListId: list.id,
-              workspaceSlug: currentWorkspaceSlug,
             }),
           );
         }}
@@ -1403,13 +1403,13 @@ function usePmsSidebarSpacesElement({
       <CreateSpaceModal
         isOpen={createSpaceOpen}
         onClose={() => setCreateSpaceOpen(false)}
-        workspaceSlug={currentWorkspaceSlug}
         onCreated={(space) => {
           dispatch({
             type: 'setTeams',
             updater: (current) => upsertSpace(current, space, locale),
           });
           dispatch({ type: 'expandSpace', spaceId: space.id });
+          navigate(buildPmsSpaceToolPath(space.id));
         }}
       />
 
@@ -1418,12 +1418,11 @@ function usePmsSidebarSpacesElement({
         onClose={() => setManageMembersSpace(null)}
         spaceId={manageMembersSpace?.id ?? null}
         spaceName={manageMembersSpace?.name ?? ''}
-        workspaceSlug={currentWorkspaceSlug}
         canManage={manageMembersSpace?.canManage ?? false}
         currentUserRole={manageMembersSpace?.currentUserRole ?? null}
         onChanged={() => {
           if (token) {
-            listSpaces(token, currentWorkspaceSlug)
+            listSpaces(token)
               .then((teams) => {
                 if (Array.isArray(teams)) {
                   dispatch({ type: 'setTeams', updater: () => teams });
@@ -1445,7 +1444,7 @@ function usePmsSidebarSpacesElement({
               updater: (current) => [...current, folder],
             });
             if (token) {
-              listSidebarTaskLists(token, currentWorkspaceSlug)
+              listSidebarTaskLists(token)
                 .then((lists) =>
                   dispatch({ type: 'setLists', updater: () => lists }),
                 )

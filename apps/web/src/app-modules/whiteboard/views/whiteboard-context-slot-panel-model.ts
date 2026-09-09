@@ -1,19 +1,13 @@
-import type { WhiteboardDetail } from '../api/whiteboard-api';
+import type {
+  WhiteboardDetail,
+  WhiteboardContextSlotCreatePayload,
+  WhiteboardContextSlotAttachPayload,
+} from '../api/whiteboard-api';
 
 export interface WhiteboardContextRef {
   app: string;
   type: string;
   id: string;
-}
-
-export interface WhiteboardContextSlotCreatePayload
-  extends WhiteboardContextRef {
-  title?: string;
-}
-
-export interface WhiteboardContextSlotAttachPayload
-  extends WhiteboardContextRef {
-  whiteboard_id: string;
 }
 
 export interface WhiteboardContextSlotPanelState {
@@ -29,6 +23,7 @@ export type WhiteboardContextSlotPanelAction =
   | { type: 'load-succeeded'; item: WhiteboardDetail | null }
   | { type: 'load-failed'; error: string }
   | { type: 'create-started' }
+  | { type: 'operation-cancelled' }
   | { type: 'create-succeeded'; item: WhiteboardDetail }
   | { type: 'create-failed'; error: string }
   | { type: 'attach-started' }
@@ -57,6 +52,8 @@ export function whiteboardContextSlotPanelReducer(
   action: WhiteboardContextSlotPanelAction,
 ): WhiteboardContextSlotPanelState {
   switch (action.type) {
+    case 'operation-cancelled':
+      return { ...state, busy: false };
     case 'load-started':
       return { ...state, loading: true, error: null };
     case 'load-succeeded':
@@ -89,15 +86,21 @@ export function whiteboardContextSlotPanelReducer(
 export function buildWhiteboardContextSlotCreatePayload(
   context: WhiteboardContextRef,
   title: string,
+  acknowledged: boolean,
 ): WhiteboardContextSlotCreatePayload {
-  return { ...context, title };
+  return { ...context, title, company_admin_read_acknowledged: acknowledged };
 }
 
 export function buildWhiteboardContextSlotAttachPayload(
   context: WhiteboardContextRef,
   whiteboardId: string,
+  acknowledged: boolean,
 ): WhiteboardContextSlotAttachPayload {
-  return { ...context, whiteboard_id: whiteboardId };
+  return {
+    ...context,
+    whiteboard_id: whiteboardId,
+    company_admin_read_acknowledged: acknowledged,
+  };
 }
 
 export function getWhiteboardContextSlotExcludeIds(

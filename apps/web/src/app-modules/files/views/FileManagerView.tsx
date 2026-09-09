@@ -1,9 +1,9 @@
-import { useTranslation } from 'react-i18next';
+import { InlineNotice } from '@open-work-hub/ui';
 import {
+  CheckCircle2,
   CircleAlert,
   CircleSlash2,
   Clock3,
-  CheckCircle2,
   Download,
   Eye,
   File,
@@ -19,7 +19,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { InlineNotice } from '@open-work-hub/ui';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/src/lib/utils';
 import {
@@ -97,11 +97,11 @@ function FileManagerViewContent({
     setFolderName,
     setFolderSelected,
     setFolderVisibility,
-    setImagePreview,
+    closeImagePreview,
     setUploadVisibility,
     timeZone,
     uploadVisibility,
-    workspaceName,
+    companyName,
   } = controller;
   const visibleTitle = currentFolder?.name ?? t('files.title');
 
@@ -118,7 +118,7 @@ function FileManagerViewContent({
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-app-ink/60">
               <FolderOpenIcon />
-              <span className="app-text-overline">{workspaceName}</span>
+              <span className="app-text-overline">{companyName}</span>
             </div>
             <h1 className="app-text-title mt-1 truncate text-app-ink">
               {visibleTitle}
@@ -329,7 +329,7 @@ function FileManagerViewContent({
       {imagePreview ? (
         <FileImagePreviewDialog
           file={imagePreview.file}
-          onClose={() => setImagePreview(null)}
+          onClose={closeImagePreview}
           url={imagePreview.url}
         />
       ) : null}
@@ -465,7 +465,7 @@ function VisibilityControl({
       aria-label={label}
       className="flex h-9 items-center gap-1 rounded-md border border-app-border bg-app-surface px-1"
     >
-      {(['private', 'workspace'] as const).map((option) => {
+      {(['private', 'company'] as const).map((option) => {
         const Icon = option === 'private' ? Lock : Share2;
         return (
           <button

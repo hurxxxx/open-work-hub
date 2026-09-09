@@ -3,9 +3,10 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.security import new_id
 from open_work_hub_api.domains.organization.models import OrganizationUnit
 
@@ -14,6 +15,11 @@ class OrganizationDirectoryError(RuntimeError):
     def __init__(self, code: str):
         super().__init__(code)
         self.code = code
+
+
+def lock_organization_hierarchy(db: Session) -> None:
+    # Acquire before any unit row locks so concurrent subtree moves cannot form a cycle.
+    db.execute(select(func.pg_advisory_xact_lock(func.hashtext("organization_hierarchy"))))
 
 
 def organization_slug(value: str) -> str:
@@ -31,7 +37,7 @@ def load_organization_unit(
 ) -> OrganizationUnit:
     statement = select(OrganizationUnit).where(OrganizationUnit.id == organization_unit_id)
     if for_update:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update().execution_options(populate_existing=True)
     item = db.scalar(statement)
     if item is None:
         raise OrganizationDirectoryError("organization.unit_not_found")
@@ -74,15 +80,19 @@ def ensure_valid_parent(
     if organization_unit_id == parent_id:
         raise OrganizationDirectoryError("organization.cycle_detected")
 
-    current = load_organization_unit(db, parent_id)
+    current_id = parent_id
     visited: set[str] = set()
-    while current is not None:
-        if current.id in visited or current.id == organization_unit_id:
+    while current_id is not None:
+        if current_id in visited or current_id == organization_unit_id:
             raise OrganizationDirectoryError("organization.cycle_detected")
-        visited.add(current.id)
-        if current.parent_id is None:
-            return
-        current = load_organization_unit(db, current.parent_id)
+        visited.add(current_id)
+        # An ORM identity map may predate the hierarchy lock; read current scalar edges.
+        row = db.execute(
+            select(OrganizationUnit.parent_id).where(OrganizationUnit.id == current_id)
+        ).one_or_none()
+        if row is None:
+            raise OrganizationDirectoryError("organization.unit_not_found")
+        current_id = row[0]
 
 
 def descendant_organization_unit_ids(
@@ -116,6 +126,20 @@ def serialize_organization_unit(item: OrganizationUnit) -> dict[str, object]:
         "unit_type": item.unit_type,
         "parent_id": item.parent_id,
         "active": item.active,
+        "head_user_id": item.head_user_id,
         "created_at": item.created_at,
         "updated_at": item.updated_at,
     }
+
+
+def ensure_valid_head(db: Session, user_id: str | None) -> None:
+    if (
+        user_id is not None
+        and db.scalar(
+            select(User.id).where(
+                User.id == user_id, User.status == "active", User.login_blocked.is_(False)
+            )
+        )
+        is None
+    ):
+        raise OrganizationDirectoryError("organization.head_inactive")

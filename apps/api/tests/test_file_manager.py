@@ -9,11 +9,17 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import delete, select
 
-from dev_accounts import create_workspace_user_session, dev_login
+from dev_accounts import (
+    content_grant_headers,
+    content_headers,
+    create_company_user_session,
+    dev_login,
+)
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.settings import get_settings
-from open_work_hub_api.domains.auth.models import User, Workspace, WorkspaceUserBinding
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
 from open_work_hub_api.domains.files import (
     rag_projection,
     rag_status,
@@ -48,12 +54,11 @@ def _auth_headers(token: str) -> dict[str, str]:
 
 
 def _administrator_member_session(client: TestClient, login_id: str) -> dict:
-    return create_workspace_user_session(
+    return create_company_user_session(
         client,
-        workspace_key="administrator",
         login_id=login_id,
         email=f"{login_id}@open-work-hub.local",
-        full_name="Administrator Workspace Member",
+        full_name="Company Member",
     )
 
 
@@ -70,31 +75,35 @@ def test_file_manager_upload_download_and_delete_with_rag_job(
     headers = _auth_headers(session["token"])
 
     folder_response = client.post(
-        "/api/v1/workspaces/administrator/files/folders",
+        "/api/v1/files/folders",
         headers=headers,
-        json={"name": "Policies", "visibility": "workspace"},
+        json={"name": "Policies", "visibility": "company", "company_admin_read_acknowledged": True},
     )
     assert folder_response.status_code == 201, folder_response.text
     folder = folder_response.json()
     assert folder["name"] == "Policies"
-    assert folder["visibility"] == "workspace"
+    assert folder["visibility"] == "company"
 
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
-        data={"folder_id": folder["id"], "visibility": "workspace"},
+        data={
+            "folder_id": folder["id"],
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+        },
         files={"file": ("policy.txt", b"plain file storage", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
     file = upload_response.json()
     assert file["filename"] == "policy.txt"
     assert file["folder_id"] == folder["id"]
-    assert file["visibility"] == "workspace"
+    assert file["visibility"] == "company"
     assert file["rag_status"] == "pending"
     assert file["rag_updated_at"] is not None
 
     browse_response = client.get(
-        "/api/v1/workspaces/administrator/files",
+        "/api/v1/files",
         headers=headers,
         params={"folder_id": folder["id"]},
     )
@@ -104,15 +113,37 @@ def test_file_manager_upload_download_and_delete_with_rag_job(
     assert browse["files"][0]["id"] == file["id"]
 
     download_response = client.get(
-        f"/api/v1/workspaces/administrator/files/{file['id']}/download",
+        f"/api/v1/files/{file['id']}/download",
         headers=headers,
     )
     assert download_response.status_code == 200, download_response.text
     download_url = download_response.json()["url"]
-    assert download_url.startswith(f"/api/v1/files/content/{file['id']}?")
+    assert download_url.startswith("/api/v1/content#grant=")
     assert "127.0.0.1" not in download_url
 
-    content_response = client.get(download_url)
+    anonymous_response = client.get(
+        download_url,
+        headers=content_grant_headers(download_url),
+    )
+    assert anonymous_response.status_code == 403, anonymous_response.text
+
+    query_grant_response = client.get(
+        download_url.replace("#grant=", "?grant=", 1),
+        headers=headers,
+    )
+    assert query_grant_response.status_code == 403, query_grant_response.text
+
+    other_session = dev_login(client, "administrator")
+    other_session_response = client.get(
+        download_url,
+        headers=content_headers(other_session["token"], download_url),
+    )
+    assert other_session_response.status_code == 403, other_session_response.text
+
+    content_response = client.get(
+        download_url,
+        headers=content_headers(session["token"], download_url),
+    )
     assert content_response.status_code == 200, content_response.text
     assert content_response.content == b"plain file storage"
     assert content_response.headers["content-type"].startswith("text/plain")
@@ -125,7 +156,7 @@ def test_file_manager_upload_download_and_delete_with_rag_job(
         assert rag_job.operation == "upsert"
 
     delete_response = client.delete(
-        f"/api/v1/workspaces/administrator/files/{file['id']}",
+        f"/api/v1/files/{file['id']}",
         headers=headers,
     )
     assert delete_response.status_code == 204, delete_response.text
@@ -146,7 +177,7 @@ def test_file_manager_reports_rag_status_until_both_indexes_are_ready(
     session = dev_login(client, "administrator")
     headers = _auth_headers(session["token"])
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
         data={"visibility": "private"},
         files={"file": ("rag-status.txt", b"heater retrieval status", "text/plain")},
@@ -162,7 +193,7 @@ def test_file_manager_reports_rag_status_until_both_indexes_are_ready(
         db.commit()
 
     browse_response = client.get(
-        "/api/v1/workspaces/administrator/files",
+        "/api/v1/files",
         headers=headers,
     )
     assert browse_response.status_code == 200, browse_response.text
@@ -179,7 +210,6 @@ def test_file_manager_reports_rag_status_until_both_indexes_are_ready(
         row.extraction_blocks = [{"text": "heater retrieval status"}]
         search_job = SearchIndexJob(
             id="file-rag-status-search-job",
-            workspace_id=row.workspace_id,
             entity_type="file",
             entity_id=row.id,
             operation="upsert",
@@ -194,7 +224,7 @@ def test_file_manager_reports_rag_status_until_both_indexes_are_ready(
         db.commit()
 
     browse_response = client.get(
-        "/api/v1/workspaces/administrator/files",
+        "/api/v1/files",
         headers=headers,
     )
     assert browse_response.status_code == 200, browse_response.text
@@ -207,7 +237,7 @@ def test_file_manager_reports_rag_status_until_both_indexes_are_ready(
         db.commit()
 
     browse_response = client.get(
-        "/api/v1/workspaces/administrator/files",
+        "/api/v1/files",
         headers=headers,
     )
     assert browse_response.status_code == 200, browse_response.text
@@ -223,7 +253,7 @@ def test_file_manager_reports_rag_status_until_both_indexes_are_ready(
         db.commit()
 
     browse_response = client.get(
-        "/api/v1/workspaces/administrator/files",
+        "/api/v1/files",
         headers=headers,
     )
     assert browse_response.status_code == 200, browse_response.text
@@ -242,7 +272,7 @@ def test_file_manager_reports_adopted_file_ready_when_active_pair_covers_current
     session = dev_login(client, "administrator")
     headers = _auth_headers(session["token"])
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
         data={"visibility": "private"},
         files={"file": ("adopted-ready.txt", b"adopted generation status", "text/plain")},
@@ -268,7 +298,6 @@ def test_file_manager_reports_adopted_file_ready_when_active_pair_covers_current
             change_kind="repair",
             desired_state="active",
             content_checksum=file.extraction_content_checksum,
-            diagnostic_workspace_id=file.workspace_id,
             trace_context={"reconciliation": "legacy_files_adoption"},
         )
         db.execute(delete(RagSyncJob).where(RagSyncJob.resource_id == uploaded["id"]))
@@ -327,12 +356,11 @@ def test_file_manager_reports_adopted_file_ready_when_active_pair_covers_current
         repair_event_sequence = event.event_sequence
         partition_id = event.retrieval_partition_id
         projection_version = event.projection_version
-        workspace_id = file.workspace_id
         db.commit()
 
     def _browse_status() -> str:
         browse_response = client.get(
-            "/api/v1/workspaces/administrator/files",
+            "/api/v1/files",
             headers=headers,
         )
         assert browse_response.status_code == 200, browse_response.text
@@ -392,8 +420,7 @@ def test_file_manager_reports_adopted_file_ready_when_active_pair_covers_current
         db.add(
             RagSyncJob(
                 id="file-status-covered-current-failed",
-                scope_kind="workspace",
-                workspace_id=workspace_id,
+                scope_kind="company",
                 retrieval_partition_id=partition_id,
                 projection_event_sequence=repair_event_sequence,
                 projection_version=projection_version,
@@ -418,7 +445,7 @@ def test_file_manager_reports_adopted_file_ready_when_active_pair_covers_current
     assert _browse_status() == "failed"
 
 
-def test_file_corpus_workspace_move_preserves_ready_projection_status(
+def test_company_corpus_admission_change_preserves_ready_projection_status(
     client: TestClient,
     in_memory_object_storage: None,
     monkeypatch: pytest.MonkeyPatch,
@@ -432,16 +459,20 @@ def test_file_corpus_workspace_move_preserves_ready_projection_status(
     target_headers = _auth_headers(target_member["token"])
 
     corpus_response = client.post(
-        "/api/v1/workspaces/administrator/files/corpora",
+        "/api/v1/files/corpora",
         headers=admin_headers,
         json={"name": "Move-ready corpus"},
     )
     assert corpus_response.status_code == 201, corpus_response.text
     corpus = corpus_response.json()
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=admin_headers,
-        data={"corpus_id": corpus["id"], "visibility": "workspace"},
+        data={
+            "corpus_id": corpus["id"],
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+        },
         files={"file": ("move-ready.txt", b"stable projection", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
@@ -450,8 +481,7 @@ def test_file_corpus_workspace_move_preserves_ready_projection_status(
     with get_session_factory()() as db:
         file = db.get(FileManagerFile, uploaded["id"])
         rag_job = db.scalar(select(RagSyncJob).where(RagSyncJob.resource_id == uploaded["id"]))
-        target_workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        assert file is not None and rag_job is not None and target_workspace is not None
+        assert file is not None and rag_job is not None
         file.extraction_status = "ready"
         file.extraction_content_checksum = "c" * 64
         file.extraction_text = "stable projection"
@@ -460,7 +490,6 @@ def test_file_corpus_workspace_move_preserves_ready_projection_status(
         db.add(
             SearchIndexJob(
                 id="file-move-ready-search-job",
-                workspace_id=file.workspace_id,
                 entity_type="file",
                 entity_id=file.id,
                 operation="upsert",
@@ -472,23 +501,20 @@ def test_file_corpus_workspace_move_preserves_ready_projection_status(
                 desired_state=rag_job.desired_state,
             )
         )
-        target_workspace_id = target_workspace.id
         db.commit()
 
-    transition_response = client.post(
-        f"/api/v1/workspaces/administrator/files/corpora/{corpus['id']}/transition",
-        headers=admin_headers,
-        json={
-            "expected_metadata_version": corpus["metadata_version"],
-            "access_scope_kind": "workspace",
-            "target_workspace_id": target_workspace_id,
-            "reason": "Verify ready state survives a metadata-only move",
-        },
-    )
-    assert transition_response.status_code == 200, transition_response.text
+    with get_session_factory().begin() as db:
+        policy = db.get(AppAccessPolicy, "files")
+        assert policy is not None
+        policy.audience = "selected"
+    denied = client.get("/api/v1/files", headers=target_headers)
+    assert denied.status_code == 403, denied.text
+    with get_session_factory().begin() as db:
+        policy = db.get(AppAccessPolicy, "files")
+        policy.audience = "all"
 
     browse_response = client.get(
-        "/api/v1/workspaces/delivery-hub/files",
+        "/api/v1/files",
         headers=target_headers,
     )
     assert browse_response.status_code == 200, browse_response.text
@@ -508,7 +534,7 @@ def test_active_files_gate_enqueues_lifecycle_jobs_and_purges_extraction(
     headers = _auth_headers(session["token"])
 
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
         data={"visibility": "private"},
         files={"file": ("rag-lifecycle.txt", b"heater lifecycle", "text/plain")},
@@ -530,7 +556,7 @@ def test_active_files_gate_enqueues_lifecycle_jobs_and_purges_extraction(
         db.commit()
 
     delete_response = client.delete(
-        f"/api/v1/workspaces/administrator/files/{file_id}",
+        f"/api/v1/files/{file_id}",
         headers=headers,
     )
     assert delete_response.status_code == 204, delete_response.text
@@ -565,7 +591,7 @@ def test_extraction_result_cannot_be_persisted_after_concurrent_soft_delete(
     session = dev_login(client, "administrator")
     headers = _auth_headers(session["token"])
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
         data={"visibility": "private"},
         files={"file": ("concurrent-delete.txt", b"heater content", "text/plain")},
@@ -578,7 +604,7 @@ def test_extraction_result_cannot_be_persisted_after_concurrent_soft_delete(
         stale_file = worker_db.get(FileManagerFile, file_id)
         assert stale_file is not None and stale_file.deleted_at is None
         delete_response = client.delete(
-            f"/api/v1/workspaces/administrator/files/{file_id}",
+            f"/api/v1/files/{file_id}",
             headers=headers,
         )
         assert delete_response.status_code == 204, delete_response.text
@@ -614,7 +640,7 @@ def test_file_manager_image_preview_uses_inline_same_origin_content_url(
     headers = _auth_headers(session["token"])
 
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
         data={"visibility": "private"},
         files={"file": ("diagram.png", b"\x89PNG\r\n\x1a\npng-bytes", "image/png")},
@@ -623,15 +649,18 @@ def test_file_manager_image_preview_uses_inline_same_origin_content_url(
     file = upload_response.json()
 
     preview_response = client.get(
-        f"/api/v1/workspaces/administrator/files/{file['id']}/preview",
+        f"/api/v1/files/{file['id']}/preview",
         headers=headers,
     )
     assert preview_response.status_code == 200, preview_response.text
     preview_url = preview_response.json()["url"]
-    assert preview_url.startswith(f"/api/v1/files/content/{file['id']}?")
+    assert preview_url.startswith("/api/v1/content#grant=")
     assert "127.0.0.1" not in preview_url
 
-    content_response = client.get(preview_url)
+    content_response = client.get(
+        preview_url,
+        headers=content_headers(session["token"], preview_url),
+    )
     assert content_response.status_code == 200, content_response.text
     assert content_response.content == b"\x89PNG\r\n\x1a\npng-bytes"
     assert content_response.headers["content-type"].startswith("image/png")
@@ -639,7 +668,7 @@ def test_file_manager_image_preview_uses_inline_same_origin_content_url(
     assert "diagram.png" in content_response.headers["content-disposition"]
 
 
-def test_workspace_shared_file_is_readable_but_not_deletable_by_member(
+def test_company_shared_file_is_readable_but_not_deletable_by_user(
     client: TestClient,
     in_memory_object_storage: None,
 ) -> None:
@@ -647,23 +676,23 @@ def test_workspace_shared_file_is_readable_but_not_deletable_by_member(
     member_session = _administrator_member_session(client, "filesmember")
 
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=_auth_headers(admin_session["token"]),
-        data={"visibility": "workspace"},
+        data={"visibility": "company", "company_admin_read_acknowledged": True},
         files={"file": ("shared.txt", b"shared", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
     file = upload_response.json()
 
     browse_response = client.get(
-        "/api/v1/workspaces/administrator/files",
+        "/api/v1/files",
         headers=_auth_headers(member_session["token"]),
     )
     assert browse_response.status_code == 200, browse_response.text
     assert file["id"] in {item["id"] for item in browse_response.json()["files"]}
 
     delete_response = client.delete(
-        f"/api/v1/workspaces/administrator/files/{file['id']}",
+        f"/api/v1/files/{file['id']}",
         headers=_auth_headers(member_session["token"]),
     )
     assert delete_response.status_code == 403, delete_response.text
@@ -677,36 +706,45 @@ def test_child_folder_and_upload_inherit_parent_visibility(
     headers = _auth_headers(session["token"])
 
     parent_response = client.post(
-        "/api/v1/workspaces/administrator/files/folders",
+        "/api/v1/files/folders",
         headers=headers,
-        json={"name": "Shared root", "visibility": "workspace"},
+        json={
+            "name": "Shared root",
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+        },
     )
     assert parent_response.status_code == 201, parent_response.text
     parent = parent_response.json()
-    assert parent["visibility"] == "workspace"
+    assert parent["visibility"] == "company"
 
     child_response = client.post(
-        "/api/v1/workspaces/administrator/files/folders",
+        "/api/v1/files/folders",
         headers=headers,
         json={
             "name": "Child",
             "parent_id": parent["id"],
             "visibility": "private",
+            "company_admin_read_acknowledged": True,
         },
     )
     assert child_response.status_code == 201, child_response.text
     child = child_response.json()
-    assert child["visibility"] == "workspace"
+    assert child["visibility"] == "company"
 
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
-        data={"folder_id": child["id"], "visibility": "private"},
+        data={
+            "folder_id": child["id"],
+            "visibility": "private",
+            "company_admin_read_acknowledged": True,
+        },
         files={"file": ("inherited.txt", b"inherited", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
     file = upload_response.json()
-    assert file["visibility"] == "workspace"
+    assert file["visibility"] == "company"
 
 
 def test_folder_visibility_changes_are_rejected(client: TestClient) -> None:
@@ -714,7 +752,7 @@ def test_folder_visibility_changes_are_rejected(client: TestClient) -> None:
     headers = _auth_headers(session["token"])
 
     folder_response = client.post(
-        "/api/v1/workspaces/administrator/files/folders",
+        "/api/v1/files/folders",
         headers=headers,
         json={"name": "Stable visibility", "visibility": "private"},
     )
@@ -722,15 +760,15 @@ def test_folder_visibility_changes_are_rejected(client: TestClient) -> None:
     folder = folder_response.json()
 
     update_response = client.patch(
-        f"/api/v1/workspaces/administrator/files/folders/{folder['id']}",
+        f"/api/v1/files/folders/{folder['id']}",
         headers=headers,
-        json={"visibility": "workspace"},
+        json={"visibility": "company", "company_admin_read_acknowledged": True},
     )
     assert update_response.status_code == 422
     assert update_response.json()["code"] == "files.visibility_change_not_allowed"
 
 
-def test_private_file_is_hidden_from_workspace_member(
+def test_private_file_is_hidden_from_other_company_user(
     client: TestClient,
     in_memory_object_storage: None,
 ) -> None:
@@ -738,7 +776,7 @@ def test_private_file_is_hidden_from_workspace_member(
     member_session = _administrator_member_session(client, "filesprivateviewer")
 
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=_auth_headers(admin_session["token"]),
         data={"visibility": "private"},
         files={"file": ("private.txt", b"private", "text/plain")},
@@ -747,35 +785,35 @@ def test_private_file_is_hidden_from_workspace_member(
     file = upload_response.json()
 
     browse_response = client.get(
-        "/api/v1/workspaces/administrator/files",
+        "/api/v1/files",
         headers=_auth_headers(member_session["token"]),
     )
     assert browse_response.status_code == 200, browse_response.text
     assert file["id"] not in {item["id"] for item in browse_response.json()["files"]}
 
     download_response = client.get(
-        f"/api/v1/workspaces/administrator/files/{file['id']}/download",
+        f"/api/v1/files/{file['id']}/download",
         headers=_auth_headers(member_session["token"]),
     )
     assert download_response.status_code == 403, download_response.text
 
 
-def test_signed_file_content_rechecks_workspace_membership(
+def test_signed_file_content_rechecks_app_admission(
     client: TestClient,
     in_memory_object_storage: None,
 ) -> None:
     admin_session = dev_login(client, "administrator")
     member_session = _administrator_member_session(client, "filesurlrevoked")
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=_auth_headers(admin_session["token"]),
-        data={"visibility": "workspace"},
+        data={"visibility": "company", "company_admin_read_acknowledged": True},
         files={"file": ("revocable.txt", b"revocable", "text/plain")},
     )
     assert upload_response.status_code == 201, upload_response.text
     file_id = upload_response.json()["id"]
     download_response = client.get(
-        f"/api/v1/workspaces/administrator/files/{file_id}/download",
+        f"/api/v1/files/{file_id}/download",
         headers=_auth_headers(member_session["token"]),
     )
     assert download_response.status_code == 200, download_response.text
@@ -784,17 +822,18 @@ def test_signed_file_content_rechecks_workspace_membership(
     with get_session_factory()() as db:
         user = db.scalar(select(User).where(User.login_id == "filesurlrevoked"))
         assert user is not None
-        binding = db.scalar(
-            select(WorkspaceUserBinding).where(WorkspaceUserBinding.user_id == user.id)
-        )
-        assert binding is not None
-        db.delete(binding)
+        policy = db.get(AppAccessPolicy, "files")
+        assert policy is not None
+        policy.audience = "selected"
         db.commit()
 
-    content_response = client.get(content_url)
+    content_response = client.get(
+        content_url,
+        headers=content_headers(member_session["token"], content_url),
+    )
 
     assert content_response.status_code == 403, content_response.text
-    assert content_response.json()["code"] == "files.file_access_required"
+    assert content_response.json()["code"] == "content.grant_invalid"
 
 
 def test_file_manager_archive_and_bulk_delete_selected_items(
@@ -805,7 +844,7 @@ def test_file_manager_archive_and_bulk_delete_selected_items(
     headers = _auth_headers(session["token"])
 
     folder_response = client.post(
-        "/api/v1/workspaces/administrator/files/folders",
+        "/api/v1/files/folders",
         headers=headers,
         json={"name": "Project", "visibility": "private"},
     )
@@ -813,7 +852,7 @@ def test_file_manager_archive_and_bulk_delete_selected_items(
     folder = folder_response.json()
 
     root_upload = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
         data={"visibility": "private"},
         files={"file": ("root.txt", b"root", "text/plain")},
@@ -822,7 +861,7 @@ def test_file_manager_archive_and_bulk_delete_selected_items(
     root_file = root_upload.json()
 
     nested_upload = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
         data={"folder_id": folder["id"], "visibility": "private"},
         files={"file": ("nested.txt", b"nested", "text/plain")},
@@ -831,7 +870,7 @@ def test_file_manager_archive_and_bulk_delete_selected_items(
     nested_file = nested_upload.json()
 
     archive_response = client.post(
-        "/api/v1/workspaces/administrator/files/archive",
+        "/api/v1/files/archive",
         headers=headers,
         json={"file_ids": [root_file["id"]], "folder_ids": [folder["id"]]},
     )
@@ -843,7 +882,7 @@ def test_file_manager_archive_and_bulk_delete_selected_items(
         assert archive.read("Project/nested.txt") == b"nested"
 
     delete_response = client.post(
-        "/api/v1/workspaces/administrator/files/bulk-delete",
+        "/api/v1/files/bulk-delete",
         headers=headers,
         json={"file_ids": [root_file["id"]], "folder_ids": [folder["id"]]},
     )
@@ -867,7 +906,7 @@ def test_upload_rejects_stream_once_file_size_limit_is_exceeded(
     monkeypatch.setattr(files_service, "MAX_FILE_UPLOAD_SIZE", 4)
 
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
         data={"visibility": "private"},
         files={"file": ("too-big.txt", b"12345", "text/plain")},
@@ -891,7 +930,7 @@ def test_archive_sanitizes_windows_paths_and_rejects_large_expansions(
     headers = _auth_headers(session["token"])
 
     first_upload = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
         data={"visibility": "private"},
         files={"file": ("..\\evil.txt", b"safe", "text/plain")},
@@ -901,7 +940,7 @@ def test_archive_sanitizes_windows_paths_and_rejects_large_expansions(
     assert first_file["filename"] == "evil.txt"
 
     archive_response = client.post(
-        "/api/v1/workspaces/administrator/files/archive",
+        "/api/v1/files/archive",
         headers=headers,
         json={"file_ids": [first_file["id"]]},
     )
@@ -911,7 +950,7 @@ def test_archive_sanitizes_windows_paths_and_rejects_large_expansions(
         assert archive.read("evil.txt") == b"safe"
 
     second_upload = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
         data={"visibility": "private"},
         files={"file": ("second.txt", b"second", "text/plain")},
@@ -920,7 +959,7 @@ def test_archive_sanitizes_windows_paths_and_rejects_large_expansions(
     monkeypatch.setattr(files_service, "MAX_ARCHIVE_FILE_COUNT", 1)
 
     limited_response = client.post(
-        "/api/v1/workspaces/administrator/files/archive",
+        "/api/v1/files/archive",
         headers=headers,
         json={"file_ids": [first_file["id"], second_upload.json()["id"]]},
     )
@@ -928,22 +967,26 @@ def test_archive_sanitizes_windows_paths_and_rejects_large_expansions(
     assert limited_response.json()["code"] == "files.archive_limit_exceeded"
 
 
-def test_workspace_member_cannot_write_inside_owner_shared_folder(
+def test_other_company_user_cannot_write_inside_owner_shared_folder(
     client: TestClient,
 ) -> None:
     admin_session = dev_login(client, "administrator")
     member_session = _administrator_member_session(client, "filesfoldermember")
 
     folder_response = client.post(
-        "/api/v1/workspaces/administrator/files/folders",
+        "/api/v1/files/folders",
         headers=_auth_headers(admin_session["token"]),
-        json={"name": "Shared owner folder", "visibility": "workspace"},
+        json={
+            "name": "Shared owner folder",
+            "visibility": "company",
+            "company_admin_read_acknowledged": True,
+        },
     )
     assert folder_response.status_code == 201, folder_response.text
     folder = folder_response.json()
 
     create_child_response = client.post(
-        "/api/v1/workspaces/administrator/files/folders",
+        "/api/v1/files/folders",
         headers=_auth_headers(member_session["token"]),
         json={
             "name": "Member child",
@@ -955,7 +998,7 @@ def test_workspace_member_cannot_write_inside_owner_shared_folder(
     assert create_child_response.json()["code"] == "files.parent_manage_access_required"
 
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=_auth_headers(member_session["token"]),
         data={"folder_id": folder["id"], "visibility": "private"},
         files={"file": ("member.txt", b"member", "text/plain")},
@@ -973,7 +1016,7 @@ def test_delete_queues_storage_cleanup_job_when_minio_delete_fails(
     headers = _auth_headers(session["token"])
 
     upload_response = client.post(
-        "/api/v1/workspaces/administrator/files/upload",
+        "/api/v1/files/upload",
         headers=headers,
         data={"visibility": "private"},
         files={"file": ("cleanup.txt", b"cleanup", "text/plain")},
@@ -993,7 +1036,7 @@ def test_delete_queues_storage_cleanup_job_when_minio_delete_fails(
     monkeypatch.setattr(files_service.file_storage, "remove_file_objects", fail_remove)
 
     delete_response = client.delete(
-        f"/api/v1/workspaces/administrator/files/{file['id']}",
+        f"/api/v1/files/{file['id']}",
         headers=headers,
     )
     assert delete_response.status_code == 204, delete_response.text

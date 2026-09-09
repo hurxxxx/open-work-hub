@@ -1,5 +1,5 @@
-import { useCallback, useState, type SetStateAction } from 'react';
 import type { TFunction } from 'i18next';
+import { useCallback, useState, type SetStateAction } from 'react';
 
 import {
   createTaskListTask,
@@ -67,7 +67,9 @@ export function useTaskDetailSubtasks({
       setSaveError(null);
       try {
         await updateTask(token, subtaskId, { parent_id: null });
-        setSubtasks((prev) => prev.filter((subtask) => subtask.id !== subtaskId));
+        setSubtasks((prev) =>
+          prev.filter((subtask) => subtask.id !== subtaskId),
+        );
         await notifyTaskDetailUpdated(onUpdate);
       } catch (error) {
         setSaveError(
@@ -87,7 +89,9 @@ export function useTaskDetailSubtasks({
       setSaveError(null);
       try {
         await updateTask(token, subtaskId, { archived: true });
-        setSubtasks((prev) => prev.filter((subtask) => subtask.id !== subtaskId));
+        setSubtasks((prev) =>
+          prev.filter((subtask) => subtask.id !== subtaskId),
+        );
         setSubtaskMenuOpen(null);
         await notifyTaskDetailUpdated(onUpdate);
       } catch (error) {
@@ -108,7 +112,9 @@ export function useTaskDetailSubtasks({
       setSaveError(null);
       try {
         await deleteTask(token, subtaskId);
-        setSubtasks((prev) => prev.filter((subtask) => subtask.id !== subtaskId));
+        setSubtasks((prev) =>
+          prev.filter((subtask) => subtask.id !== subtaskId),
+        );
         setSubtaskMenuOpen(null);
         await notifyTaskDetailUpdated(onUpdate);
       } catch (error) {

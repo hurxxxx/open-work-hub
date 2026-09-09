@@ -1,12 +1,10 @@
+import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import {
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type RefObject,
-} from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+  Button,
+  DropdownMenu,
+  InlineNotice,
+  useConfirm,
+} from '@open-work-hub/ui';
 import {
   AlertCircle,
   AudioWaveform,
@@ -20,11 +18,21 @@ import {
   Square,
   Upload,
 } from 'lucide-react';
-import { Button, DropdownMenu, InlineNotice, useConfirm } from '@open-work-hub/ui';
+import {
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type RefObject,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { formatDateTime as formatZonedDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
-import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
+import {
+  formatDateTime as formatZonedDateTime,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 import type { Recording } from '../api/recording-api';
 import { RecordingRecoveryBanner } from '../recorder/RecordingRecoveryBanner';
 import {
@@ -36,6 +44,7 @@ import {
 import { useRecordingRecovery } from '../recorder/useRecordingRecovery';
 import { useResilientRecorder } from '../recorder/useResilientRecorder';
 import { RecordingStageRail } from './RecordingStageRail';
+import { useRecordingCollectionWorkflow } from './recording-collection-workflow';
 import {
   compareRecordings,
   connectionChips,
@@ -50,9 +59,12 @@ import {
   titleFor,
   type RecordingSort,
 } from './recording-view-model';
-import { useRecordingCollectionWorkflow } from './recording-collection-workflow';
 
-function formatDateTime(value: string, timeZone: string, locale: string): string {
+function formatDateTime(
+  value: string,
+  timeZone: string,
+  locale: string,
+): string {
   return formatZonedDateTime(value, {
     dateStyle: 'medium',
     fallback: value,
@@ -65,12 +77,13 @@ function formatDateTime(value: string, timeZone: string, locale: string): string
 export function RecordingView() {
   const { t, i18n } = useTranslation(['apps', 'common']);
   const { token, user } = useAuth();
-  const { workspaceSlug } = useParams();
+
   const [searchParams] = useSearchParams();
   const timeZone = normalizeTimeZone(user?.time_zone);
   const view = normalizeViewFilter(searchParams.get('view'));
   const category = normalizeCategoryFilter(searchParams.get('category'));
-  const showQuickRecorder = !searchParams.has('view') && !searchParams.has('category');
+  const showQuickRecorder =
+    !searchParams.has('view') && !searchParams.has('category');
   const { confirm, confirmDialog } = useConfirm();
 
   const [query, setQuery] = useState('');
@@ -82,7 +95,6 @@ export function RecordingView() {
   );
   const recordingCollection = useRecordingCollectionWorkflow({
     token,
-    workspaceSlug,
     scope: recordingScope,
     messages: {
       loadFailed: t('apps:recording.errors.loadFailed'),
@@ -101,24 +113,30 @@ export function RecordingView() {
       if (!recordingMatchesCategory(recording, category)) {
         continue;
       }
-      const searchableText = searchableRecordingText(recording).toLocaleLowerCase(i18n.language);
+      const searchableText = searchableRecordingText(
+        recording,
+      ).toLocaleLowerCase(i18n.language);
       if (normalizedQuery && !searchableText.includes(normalizedQuery)) {
         continue;
       }
       nextItems.push(recording);
     }
-    return nextItems.sort((left, right) => compareRecordings(left, right, sort, i18n.language));
+    return nextItems.sort((left, right) =>
+      compareRecordings(left, right, sort, i18n.language),
+    );
   }, [category, i18n.language, items, query, sort]);
-  const listCountLabel = visibleItems.length === items.length
-    ? t('apps:recording.list.count', { count: items.length })
-    : t('apps:recording.list.filteredCount', { shown: visibleItems.length, total: items.length });
+  const listCountLabel =
+    visibleItems.length === items.length
+      ? t('apps:recording.list.count', { count: items.length })
+      : t('apps:recording.list.filteredCount', {
+          shown: visibleItems.length,
+          total: items.length,
+        });
 
   const recovery = useRecordingRecovery({
-    workspaceSlug: workspaceSlug ?? '',
     token,
   });
   const recorder = useResilientRecorder({
-    workspaceSlug: workspaceSlug ?? '',
     token,
     source: 'quick_record',
     title: titleDraft,
@@ -130,8 +148,11 @@ export function RecordingView() {
   });
   const browserSupported = recorder.browserSupported;
   const isRecording = recorder.isRecording;
-  const isWorking = recorder.isBusy || ['requesting', 'stopping', 'uploading'].includes(recorder.recorderState);
-  const showRecorderState = recorder.recorderState !== 'idle' || recorder.elapsedSec > 0;
+  const isWorking =
+    recorder.isBusy ||
+    ['requesting', 'stopping', 'uploading'].includes(recorder.recorderState);
+  const showRecorderState =
+    recorder.recorderState !== 'idle' || recorder.elapsedSec > 0;
   const visibleError = error ?? recorder.error ?? recovery.error;
 
   async function handleStart() {
@@ -172,11 +193,10 @@ export function RecordingView() {
 
   function focusRecorder() {
     micButtonRef.current?.focus();
-    micButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-
-  if (!workspaceSlug) {
-    return null;
+    micButtonRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    });
   }
 
   return (
@@ -184,10 +204,19 @@ export function RecordingView() {
       <header className="flex items-center justify-between border-b border-app-border bg-app-surface px-6 py-4">
         <div className="flex items-center gap-3">
           <Mic size={20} className="text-app-ink/60" />
-          <h1 className="app-text-title-md text-app-ink">{t('apps:recording.title')}</h1>
+          <h1 className="app-text-title-md text-app-ink">
+            {t('apps:recording.title')}
+          </h1>
         </div>
-        <Button variant="secondary" onClick={() => void recordingCollection.refresh()} disabled={loading || isWorking}>
-          <RefreshCw size={14} className={loading ? 'mr-1 animate-spin' : 'mr-1'} />
+        <Button
+          variant="secondary"
+          onClick={() => void recordingCollection.refresh()}
+          disabled={loading || isWorking}
+        >
+          <RefreshCw
+            size={14}
+            className={loading ? 'mr-1 animate-spin' : 'mr-1'}
+          />
           {t('common:actions.reload')}
         </Button>
       </header>
@@ -215,18 +244,27 @@ export function RecordingView() {
           <section>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="app-text-title-sm text-app-ink">{t(listTitleKey(view, category))}</p>
+                <p className="app-text-title-sm text-app-ink">
+                  {t(listTitleKey(view, category))}
+                </p>
                 <p className="app-text-caption text-app-ink/60">
                   {listCountLabel}
                 </p>
               </div>
-              {loading ? <Loader2 size={18} className="animate-spin text-app-ink/40" /> : null}
+              {loading ? (
+                <Loader2 size={18} className="animate-spin text-app-ink/40" />
+              ) : null}
             </div>
 
             <div className="mb-4 flex flex-col gap-3 rounded-md border border-app-border bg-app-surface p-3 sm:flex-row sm:items-center">
               <label className="relative min-w-0 flex-1">
-                <span className="sr-only">{t('apps:recording.filters.searchLabel')}</span>
-                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-app-ink/35" />
+                <span className="sr-only">
+                  {t('apps:recording.filters.searchLabel')}
+                </span>
+                <Search
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-app-ink/35"
+                />
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
@@ -240,12 +278,20 @@ export function RecordingView() {
                 </span>
                 <select
                   value={sort}
-                  onChange={(event) => setSort(event.target.value as RecordingSort)}
+                  onChange={(event) =>
+                    setSort(event.target.value as RecordingSort)
+                  }
                   className="app-field-input-sm w-auto"
                 >
-                  <option value="latest">{t('apps:recording.filters.sort.latest')}</option>
-                  <option value="oldest">{t('apps:recording.filters.sort.oldest')}</option>
-                  <option value="title">{t('apps:recording.filters.sort.title')}</option>
+                  <option value="latest">
+                    {t('apps:recording.filters.sort.latest')}
+                  </option>
+                  <option value="oldest">
+                    {t('apps:recording.filters.sort.oldest')}
+                  </option>
+                  <option value="title">
+                    {t('apps:recording.filters.sort.title')}
+                  </option>
                 </select>
               </label>
             </div>
@@ -261,7 +307,9 @@ export function RecordingView() {
               <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-app-border bg-app-surface/40 px-6 text-center">
                 <AudioWaveform size={40} className="text-app-ink/25" />
                 <div>
-                  <p className="app-text-title-sm text-app-ink">{t('apps:recording.list.emptyTitle')}</p>
+                  <p className="app-text-title-sm text-app-ink">
+                    {t('apps:recording.list.emptyTitle')}
+                  </p>
                   <p className="app-text-caption mt-1 text-app-ink/55">
                     {t('apps:recording.list.emptyBody')}
                   </p>
@@ -273,7 +321,9 @@ export function RecordingView() {
                   </Button>
                 ) : (
                   <Link
-                    to={buildWorkspaceAppPath(workspaceSlug, 'recording')}
+                    to={buildAppHref({
+                      routeId: 'recording.root',
+                    })}
                     className="inline-flex h-[var(--ui-density-dense)] items-center justify-center rounded-[var(--ui-radius-sm)] border border-app-border bg-app-surface-raised px-2.5 text-[0.84rem] font-semibold text-app-ink transition-colors hover:bg-app-surface-subtle"
                   >
                     <Mic size={14} className="mr-1" />
@@ -285,7 +335,9 @@ export function RecordingView() {
               <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-app-border bg-app-surface/40 px-6 text-center">
                 <Search size={34} className="text-app-ink/25" />
                 <div>
-                  <p className="app-text-title-sm text-app-ink">{t('apps:recording.filters.emptyTitle')}</p>
+                  <p className="app-text-title-sm text-app-ink">
+                    {t('apps:recording.filters.emptyTitle')}
+                  </p>
                   <p className="app-text-caption mt-1 text-app-ink/55">
                     {t('apps:recording.filters.emptyBody')}
                   </p>
@@ -304,7 +356,10 @@ export function RecordingView() {
                     busy={busyId === recording.id}
                     locale={i18n.language}
                     recording={recording}
-                    detailHref={buildWorkspaceAppPath(workspaceSlug, 'recording', recording.id)}
+                    detailHref={buildAppHref({
+                      routeId: 'recording.detail',
+                      pathParams: { recordingId: recording.id },
+                    })}
                     timeZone={timeZone}
                     onDelete={() => void handleDelete(recording)}
                     onRetry={() => void handleRetry(recording)}
@@ -383,12 +438,15 @@ function RecordingListItem({
               <Clock3 size={13} />
               {formatDateTime(recording.started_at, timeZone, locale)}
             </span>
-            {recording.duration_sec !== null && recording.duration_sec !== undefined ? (
+            {recording.duration_sec !== null &&
+            recording.duration_sec !== undefined ? (
               <span className="app-text-caption tabular-nums">
                 {formatElapsed(recording.duration_sec)}
               </span>
             ) : null}
-            <span className="app-text-caption">{formatBytes(recording.file_size)}</span>
+            <span className="app-text-caption">
+              {formatBytes(recording.file_size)}
+            </span>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {chips.map((chip) => (
@@ -505,14 +563,20 @@ function QuickRecorderSection({
   return (
     <section className="border-b border-app-border pb-8">
       <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-4">
-        <p className="app-text-title-sm self-start text-app-ink">{t('apps:recording.quick.title')}</p>
+        <p className="app-text-title-sm self-start text-app-ink">
+          {t('apps:recording.quick.title')}
+        </p>
 
         <button
           ref={micButtonRef}
           type="button"
           onClick={() => (isRecording ? onStop() : void onStart())}
           disabled={!browserSupported || isWorking}
-          aria-label={isRecording ? t('apps:recording.quick.stop') : t('apps:recording.quick.start')}
+          aria-label={
+            isRecording
+              ? t('apps:recording.quick.stop')
+              : t('apps:recording.quick.start')
+          }
           className={`flex h-32 w-32 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all hover:scale-[1.02] disabled:scale-100 disabled:opacity-60 ${
             isRecording
               ? 'border-[var(--ui-color-danger)]/40 bg-[var(--ui-color-danger)]/10 text-[var(--ui-color-danger)]'
@@ -579,7 +643,9 @@ function QuickRecorderSection({
           />
         </div>
 
-        {recorder.persistWarning || recorder.wakeLockWarning || recorder.inputWarning ? (
+        {recorder.persistWarning ||
+        recorder.wakeLockWarning ||
+        recorder.inputWarning ? (
           <InlineNotice className="w-full" tone="warning">
             {recorder.persistWarning ? (
               <p className="app-text-caption">{recorder.persistWarning}</p>
@@ -597,26 +663,61 @@ function QuickRecorderSection({
           <div className="w-full space-y-2">
             {recovery.items.map((item) => {
               const plan = planRecordingRecoverySession(item);
-              const resumeAction = getRecordingRecoveryAction(plan, 'resume-upload');
-              const continueAction = getRecordingRecoveryAction(plan, 'continue-recording');
-              const downloadAction = getRecordingRecoveryAction(plan, 'download-original');
-              const importAction = getRecordingRecoveryAction(plan, 'import-original');
+              const resumeAction = getRecordingRecoveryAction(
+                plan,
+                'resume-upload',
+              );
+              const continueAction = getRecordingRecoveryAction(
+                plan,
+                'continue-recording',
+              );
+              const downloadAction = getRecordingRecoveryAction(
+                plan,
+                'download-original',
+              );
+              const importAction = getRecordingRecoveryAction(
+                plan,
+                'import-original',
+              );
               const discardAction = getRecordingRecoveryAction(plan, 'discard');
-              const finalizeAction = getRecordingRecoveryAction(plan, 'finalize-uploaded');
+              const finalizeAction = getRecordingRecoveryAction(
+                plan,
+                'finalize-uploaded',
+              );
               return (
                 <RecordingRecoveryBanner
                   key={item.stagingId}
                   item={item}
                   plan={plan}
-                  onResumeUpload={resumeAction ? () => handleRecoveryAction(resumeAction) : undefined}
-                  onContinueRecording={
-                    continueAction ? () => handleRecoveryAction(continueAction) : undefined
+                  onResumeUpload={
+                    resumeAction
+                      ? () => handleRecoveryAction(resumeAction)
+                      : undefined
                   }
-                  onDownload={downloadAction ? () => handleRecoveryAction(downloadAction) : undefined}
-                  onImport={importAction ? () => handleRecoveryAction(importAction) : undefined}
-                  onDiscard={discardAction ? () => handleRecoveryAction(discardAction) : undefined}
+                  onContinueRecording={
+                    continueAction
+                      ? () => handleRecoveryAction(continueAction)
+                      : undefined
+                  }
+                  onDownload={
+                    downloadAction
+                      ? () => handleRecoveryAction(downloadAction)
+                      : undefined
+                  }
+                  onImport={
+                    importAction
+                      ? () => handleRecoveryAction(importAction)
+                      : undefined
+                  }
+                  onDiscard={
+                    discardAction
+                      ? () => handleRecoveryAction(discardAction)
+                      : undefined
+                  }
                   onFinalizeUploadedOnly={
-                    finalizeAction ? () => handleRecoveryAction(finalizeAction) : undefined
+                    finalizeAction
+                      ? () => handleRecoveryAction(finalizeAction)
+                      : undefined
                   }
                 />
               );

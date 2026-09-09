@@ -24,6 +24,5 @@ def mark_conversation_read(
         user_id=current_user.id,
     )
     db.add(receipt.participant)
-    db.add_all(receipt.notifications)
     db.commit()
     return serialization.serialize_conversation(db, conversation, current_user=current_user)

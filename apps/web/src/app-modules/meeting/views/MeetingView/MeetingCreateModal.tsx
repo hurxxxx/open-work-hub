@@ -1,11 +1,11 @@
-import { useRef, type ChangeEvent } from 'react';
 import { InlineNotice } from '@open-work-hub/ui';
+import { useRef, type ChangeEvent } from 'react';
 
 import { FormDialog } from '@/src/components/form/FormDialog';
-import { TaskPickerModal } from './TaskPickerModal';
 import { DocPickerModal } from './DocPickerModal';
 import { MeetingCreateLinkedWorkSection } from './MeetingCreateLinkedWorkSection';
 import { MeetingFormFields } from './MeetingFormFields';
+import { TaskPickerModal } from './TaskPickerModal';
 import { formatFileSize } from './meeting-form-model';
 import { useMeetingCreateFormWorkflow } from './meeting-form-workflow';
 
@@ -15,7 +15,7 @@ export interface MeetingCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreated: (meetingId: string) => void;
-  workspaceSlug: string;
+
   /** Pre-fill start/end when opened from a calendar slot selection. */
   initialRange?: { start: Date; end: Date; allDay: boolean } | null;
 }
@@ -24,14 +24,12 @@ export function MeetingCreateModal({
   isOpen,
   onClose,
   onCreated,
-  workspaceSlug,
   initialRange,
 }: MeetingCreateModalProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { state, projection, t, user, actions } = useMeetingCreateFormWorkflow({
     isOpen,
     onCreated,
-    workspaceSlug,
     initialRange,
   });
   const {
@@ -97,6 +95,9 @@ export function MeetingCreateModal({
       submitting={createdMeetingId ? false : submitting}
     >
       <div className="space-y-5 text-app-ink">
+        <p className="app-text-caption text-app-ink/60">
+          {t('meeting.companyContentNotice')}
+        </p>
         {error ? (
           <InlineNotice role="alert" tone="warning">
             <p>{error}</p>
@@ -170,14 +171,12 @@ export function MeetingCreateModal({
             usersLoading,
           }}
           timeZone={user?.time_zone}
-          workspaceSlug={workspaceSlug}
         />
       </div>
 
       <TaskPickerModal
         isOpen={taskPickerOpen}
         onClose={() => actions.patch({ taskPickerOpen: false })}
-        workspaceSlug={workspaceSlug}
         excludeTaskIds={pickedTaskIds}
         onPick={(task) => {
           actions.pickTask({
@@ -190,7 +189,6 @@ export function MeetingCreateModal({
       <DocPickerModal
         isOpen={docPickerOpen}
         onClose={() => actions.patch({ docPickerOpen: false })}
-        workspaceSlug={workspaceSlug}
         excludeDocIds={pickedDocIds}
         onPick={(doc) => {
           actions.pickDoc({ id: doc.source_id, title: doc.title });

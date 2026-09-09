@@ -8,29 +8,17 @@ describe('settings admin app routes', () => {
       adminSectionRoutes
         .filter((route) => route.section === 'apps')
         .map((route) => route.path),
-    ).toEqual([
-      '/admin/apps/platform',
-      '/admin/apps/workspace',
-      '/admin/apps/app-bar',
-    ]);
+    ).toEqual(['/admin/apps/access', '/admin/apps/app-bar']);
   });
 
-  it('keeps the old apps URL as a redirect alias', () => {
-    expect(adminRedirectRoutes.map((route) => route.path)).toContain(
-      '/admin/apps',
-    );
-  });
-
-  it('publishes people management and keeps the old users alias', () => {
+  it('publishes people management without legacy route aliases', () => {
     expect(
       adminSectionRoutes.find((route) => route.section === 'people'),
     ).toMatchObject({
       path: '/admin/people',
       section: 'people',
     });
-    expect(adminRedirectRoutes.map((route) => route.path)).toContain(
-      '/admin/users',
-    );
+    expect(adminRedirectRoutes).toEqual([]);
   });
 
   it('publishes organization and API integration administration', () => {

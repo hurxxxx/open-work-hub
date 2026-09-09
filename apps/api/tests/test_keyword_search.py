@@ -8,14 +8,9 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import select
 
-from conftest import (
-    _build_client,
-    _teardown_client_state,
-)
-from dev_accounts import create_workspace_user_session, dev_login
+from conftest import _build_client, _teardown_client_state
+from dev_accounts import create_company_user_session, dev_login
 from open_work_hub_api.core.db import get_session_factory
-from open_work_hub_api.domains.auth.access import ensure_dev_login_seed_data
-from open_work_hub_api.domains.auth.models import Workspace
 from open_work_hub_api.domains.docs import service as docs_service
 from open_work_hub_api.domains.pms.access_grants import grant_task_access, revoke_task_access
 from open_work_hub_api.domains.search.indexing import process_search_index_job
@@ -64,14 +59,6 @@ def _headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _workspace_id(key: str) -> str:
-    with get_session_factory()() as db:
-        ensure_dev_login_seed_data(db)
-        workspace = db.scalar(select(Workspace).where(Workspace.key == key))
-        assert workspace is not None
-        return workspace.id
-
-
 def _process_pending_search_jobs() -> None:
     while True:
         with get_session_factory()() as db:
@@ -93,16 +80,13 @@ def _search(
     client: TestClient,
     *,
     token: str,
-    workspace_key: str,
-    workspace_id: str,
     query: str,
     entity_types: list[str],
 ) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_key}/search/query",
+        "/api/v1/search/query",
         headers=_headers(token),
         json={
-            "workspace_id": workspace_id,
             "query": query,
             "entity_types": entity_types,
             "sort": {"field": "relevance", "direction": "desc"},
@@ -118,9 +102,9 @@ def _hit_ids(payload: dict) -> set[str]:
     return {hit["entity_id"] for hit in payload["hits"]}
 
 
-def _create_sentinel_doc(client: TestClient, *, token: str, workspace_key: str, title: str) -> None:
+def _create_sentinel_doc(client: TestClient, *, token: str, title: str) -> None:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_key}/docs/items",
+        "/api/v1/docs/items",
         headers=_headers(token),
         json={"title": title},
     )
@@ -128,9 +112,9 @@ def _create_sentinel_doc(client: TestClient, *, token: str, workspace_key: str, 
     _process_pending_search_jobs()
 
 
-def _create_pms_space(client: TestClient, *, token: str, workspace_key: str, name: str) -> dict:
+def _create_pms_space(client: TestClient, *, token: str, name: str) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_key}/pms/spaces",
+        "/api/v1/pms/spaces",
         headers=_headers(token),
         json={"name": name, "description": ""},
     )
@@ -142,13 +126,12 @@ def _create_pms_task_list(
     client: TestClient,
     *,
     token: str,
-    workspace_key: str,
     team_id: str,
     key: str,
     name: str,
 ) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_key}/pms/lists",
+        "/api/v1/pms/lists",
         headers=_headers(token),
         json={"key": key, "name": name, "description": "", "team_id": team_id},
     )
@@ -160,12 +143,11 @@ def _create_pms_task(
     client: TestClient,
     *,
     token: str,
-    workspace_key: str,
     list_id: str,
     title: str,
 ) -> dict:
     response = client.post(
-        f"/api/v1/workspaces/{workspace_key}/pms/lists/{list_id}/tasks",
+        f"/api/v1/pms/lists/{list_id}/tasks",
         headers=_headers(token),
         json={
             "title": title,
@@ -186,12 +168,8 @@ def test_keyword_search_returns_contract_facets_snippets_and_deep_links(
     token = session["token"]
     user_id = session["user"]["id"]
     with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
-        assert workspace is not None
-        workspace_id = workspace.id
         doc, page = docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=user_id,
             title="예산 리스크 검토",
             content_blocks=[
@@ -203,15 +181,14 @@ def test_keyword_search_returns_contract_facets_snippets_and_deep_links(
                 }
             ],
         )
-        expected_deep_link = f"/w/delivery-hub/docs/{doc.id}?page={page.id}"
+        expected_deep_link = f"/apps/docs/documents/{doc.id}?page={page.id}"
         db.commit()
     _process_pending_search_jobs()
 
     response = search_client.post(
-        "/api/v1/workspaces/delivery-hub/search/query",
+        "/api/v1/search/query",
         headers=_headers(token),
         json={
-            "workspace_id": workspace_id,
             "query": "예산 리스크",
             "entity_types": ["doc"],
             "sort": {"field": "relevance", "direction": "desc"},
@@ -234,9 +211,8 @@ def test_keyword_search_returns_contract_facets_snippets_and_deep_links(
 
 def test_keyword_search_filters_private_docs_by_acl(search_client: TestClient) -> None:
     owner_session = _dev_login(search_client, "administrator")
-    viewer_session = create_workspace_user_session(
+    viewer_session = create_company_user_session(
         search_client,
-        workspace_key="administrator",
         login_id="searchviewer",
         email="search-viewer@open-work-hub.local",
         full_name="Search Viewer",
@@ -245,12 +221,8 @@ def test_keyword_search_filters_private_docs_by_acl(search_client: TestClient) -
     viewer_token = viewer_session["token"]
     owner_id = owner_session["user"]["id"]
     with get_session_factory()() as db:
-        workspace = db.scalar(select(Workspace).where(Workspace.key == "administrator"))
-        assert workspace is not None
-        workspace_id = workspace.id
         docs_service.create_native_doc_for_user(
             db,
-            workspace_id=workspace.id,
             owner_id=owner_id,
             title="비공개 강아지 메모",
             content_blocks=[
@@ -264,7 +236,6 @@ def test_keyword_search_filters_private_docs_by_acl(search_client: TestClient) -
     _process_pending_search_jobs()
 
     payload = {
-        "workspace_id": workspace_id,
         "query": "복슬",
         "entity_types": ["doc"],
         "sort": {"field": "relevance", "direction": "desc"},
@@ -272,12 +243,12 @@ def test_keyword_search_filters_private_docs_by_acl(search_client: TestClient) -
         "offset": 0,
     }
     owner_response = search_client.post(
-        "/api/v1/workspaces/administrator/search/query",
+        "/api/v1/search/query",
         headers=_headers(owner_token),
         json=payload,
     )
     viewer_response = search_client.post(
-        "/api/v1/workspaces/administrator/search/query",
+        "/api/v1/search/query",
         headers=_headers(viewer_token),
         json=payload,
     )
@@ -295,10 +266,9 @@ def test_keyword_search_filters_private_docs_by_acl(search_client: TestClient) -
 def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(
     search_client: TestClient,
 ) -> None:
-    workspace_key = "delivery-hub"
+
     admin = _dev_login(search_client, "delivery-hub-admin")
     member = _dev_login(search_client, "delivery-hub-member")
-    workspace_id = _workspace_id(workspace_key)
     suffix = uuid.uuid4().hex[:8]
     original_title = f"ACL 문서 검색 원본 {suffix}"
     updated_title = f"ACL 문서 검색 수정 {suffix}"
@@ -307,12 +277,11 @@ def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(
     _create_sentinel_doc(
         search_client,
         token=admin["token"],
-        workspace_key=workspace_key,
         title=sentinel_title,
     )
 
     create_response = search_client.post(
-        f"/api/v1/workspaces/{workspace_key}/docs/items",
+        "/api/v1/docs/items",
         headers=_headers(admin["token"]),
         json={"title": original_title, "first_page_title": f"ACL 문서 페이지 {suffix}"},
     )
@@ -324,8 +293,6 @@ def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=original_title,
             entity_types=["doc"],
         )
@@ -334,15 +301,13 @@ def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(
         _search(
             search_client,
             token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=original_title,
             entity_types=["doc"],
         )
     )
 
     share_response = search_client.put(
-        f"/api/v1/workspaces/{workspace_key}/docs/items/{doc['id']}/sharing/users/{member['user']['id']}",
+        f"/api/v1/docs/items/{doc['id']}/sharing/users/{member['user']['id']}",
         headers=_headers(admin["token"]),
         json={"access_level": "read"},
     )
@@ -352,15 +317,13 @@ def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(
         _search(
             search_client,
             token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=original_title,
             entity_types=["doc"],
         )
     )
 
     revoke_response = search_client.delete(
-        f"/api/v1/workspaces/{workspace_key}/docs/items/{doc['id']}/sharing/users/{member['user']['id']}",
+        f"/api/v1/docs/items/{doc['id']}/sharing/users/{member['user']['id']}",
         headers=_headers(admin["token"]),
     )
     assert revoke_response.status_code == 200, revoke_response.text
@@ -369,15 +332,13 @@ def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(
         _search(
             search_client,
             token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=original_title,
             entity_types=["doc"],
         )
     )
 
     update_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/docs/items/{doc['id']}",
+        f"/api/v1/docs/items/{doc['id']}",
         headers=_headers(admin["token"]),
         json={"title": updated_title},
     )
@@ -387,8 +348,6 @@ def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=updated_title,
             entity_types=["doc"],
         )
@@ -397,15 +356,13 @@ def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=original_title,
             entity_types=["doc"],
         )
     )
 
     delete_response = search_client.delete(
-        f"/api/v1/workspaces/{workspace_key}/docs/items/{doc['id']}",
+        f"/api/v1/docs/items/{doc['id']}",
         headers=_headers(admin["token"]),
     )
     assert delete_response.status_code == 204, delete_response.text
@@ -414,8 +371,6 @@ def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=updated_title,
             entity_types=["doc"],
         )
@@ -425,14 +380,13 @@ def test_keyword_search_doc_acl_grant_revoke_and_crud_updates_index(
 def test_keyword_search_meeting_attendee_acl_add_remove_updates_index(
     search_client: TestClient,
 ) -> None:
-    workspace_key = "delivery-hub"
+
     admin = _dev_login(search_client, "delivery-hub-admin")
     member = _dev_login(search_client, "delivery-hub-member")
-    workspace_id = _workspace_id(workspace_key)
     title = f"ACL 회의 검색 {uuid.uuid4().hex[:8]}"
 
     create_response = search_client.post(
-        f"/api/v1/workspaces/{workspace_key}/meeting/meetings",
+        "/api/v1/meeting/meetings",
         headers=_headers(admin["token"]),
         json={
             "title": title,
@@ -452,8 +406,6 @@ def test_keyword_search_meeting_attendee_acl_add_remove_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=title,
             entity_types=["meeting"],
         )
@@ -462,15 +414,13 @@ def test_keyword_search_meeting_attendee_acl_add_remove_updates_index(
         _search(
             search_client,
             token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=title,
             entity_types=["meeting"],
         )
     )
 
     add_response = search_client.post(
-        f"/api/v1/workspaces/{workspace_key}/meeting/meetings/{meeting['id']}/attendees",
+        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
         headers=_headers(admin["token"]),
         json={"attendees": [{"user_id": member["user"]["id"], "role": "required"}]},
     )
@@ -480,15 +430,13 @@ def test_keyword_search_meeting_attendee_acl_add_remove_updates_index(
         _search(
             search_client,
             token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=title,
             entity_types=["meeting"],
         )
     )
 
     remove_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/meeting/meetings/{meeting['id']}",
+        f"/api/v1/meeting/meetings/{meeting['id']}",
         headers=_headers(admin["token"]),
         json={"attendees": []},
     )
@@ -498,8 +446,6 @@ def test_keyword_search_meeting_attendee_acl_add_remove_updates_index(
         _search(
             search_client,
             token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=title,
             entity_types=["meeting"],
         )
@@ -509,10 +455,9 @@ def test_keyword_search_meeting_attendee_acl_add_remove_updates_index(
 def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
     search_client: TestClient,
 ) -> None:
-    workspace_key = "delivery-hub"
+
     admin = _dev_login(search_client, "delivery-hub-admin")
     member = _dev_login(search_client, "delivery-hub-member")
-    workspace_id = _workspace_id(workspace_key)
     suffix = uuid.uuid4().hex[:8]
     title = f"ACL PMS 검색 원본 {suffix}"
     updated_title = f"ACL PMS 검색 수정 {suffix}"
@@ -520,19 +465,16 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
     _create_sentinel_doc(
         search_client,
         token=admin["token"],
-        workspace_key=workspace_key,
         title=f"ACL PMS 센티널 {suffix}",
     )
     space = _create_pms_space(
         search_client,
         token=admin["token"],
-        workspace_key=workspace_key,
         name=f"Search ACL Space {suffix}",
     )
     task_list = _create_pms_task_list(
         search_client,
         token=admin["token"],
-        workspace_key=workspace_key,
         team_id=space["id"],
         key=f"S{suffix[:5]}",
         name=f"Search ACL List {suffix}",
@@ -540,7 +482,6 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
     issue = _create_pms_task(
         search_client,
         token=admin["token"],
-        workspace_key=workspace_key,
         list_id=task_list["id"],
         title=title,
     )
@@ -550,8 +491,6 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=title,
             entity_types=["pms_task"],
         )
@@ -560,8 +499,6 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
         _search(
             search_client,
             token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=title,
             entity_types=["pms_task"],
         )
@@ -582,8 +519,6 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
         _search(
             search_client,
             token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=title,
             entity_types=["pms_task"],
         )
@@ -606,15 +541,13 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
         _search(
             search_client,
             token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=title,
             entity_types=["pms_task"],
         )
     )
 
     update_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_headers(admin["token"]),
         json={"title": updated_title},
     )
@@ -624,8 +557,6 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=updated_title,
             entity_types=["pms_task"],
         )
@@ -634,15 +565,13 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=title,
             entity_types=["pms_task"],
         )
     )
 
     archive_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/pms/tasks/{issue['id']}",
+        f"/api/v1/pms/tasks/{issue['id']}",
         headers=_headers(admin["token"]),
         json={"archived": True},
     )
@@ -652,15 +581,13 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=updated_title,
             entity_types=["pms_task"],
         )
     )
 
     restore_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/pms/lists/{task_list['id']}/tasks/bulk",
+        f"/api/v1/pms/lists/{task_list['id']}/tasks/bulk",
         headers=_headers(admin["token"]),
         json={"task_ids": [issue["id"]], "archived": False},
     )
@@ -670,15 +597,13 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=updated_title,
             entity_types=["pms_task"],
         )
     )
 
     archive_list_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/pms/lists/{task_list['id']}",
+        f"/api/v1/pms/lists/{task_list['id']}",
         headers=_headers(admin["token"]),
         json={"archived": True},
     )
@@ -688,15 +613,13 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=updated_title,
             entity_types=["pms_task"],
         )
     )
 
     restore_list_response = search_client.patch(
-        f"/api/v1/workspaces/{workspace_key}/pms/lists/{task_list['id']}",
+        f"/api/v1/pms/lists/{task_list['id']}",
         headers=_headers(admin["token"]),
         json={"archived": False},
     )
@@ -706,8 +629,6 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=updated_title,
             entity_types=["pms_task"],
         )
@@ -715,15 +636,13 @@ def test_keyword_search_pms_task_grant_revoke_and_archive_restore_updates_index(
 
 
 def test_keyword_search_excludes_personal_planner_events(search_client: TestClient) -> None:
-    workspace_key = "delivery-hub"
+
     admin = _dev_login(search_client, "delivery-hub-admin")
     member = _dev_login(search_client, "delivery-hub-member")
-    workspace_id = _workspace_id(workspace_key)
     title = f"ACL 플래너 검색 {uuid.uuid4().hex[:8]}"
     _create_sentinel_doc(
         search_client,
         token=admin["token"],
-        workspace_key=workspace_key,
         title=f"Planner search index sentinel {uuid.uuid4().hex[:8]}",
     )
 
@@ -747,8 +666,6 @@ def test_keyword_search_excludes_personal_planner_events(search_client: TestClie
         _search(
             search_client,
             token=admin["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=title,
             entity_types=["planner_event"],
         )
@@ -757,8 +674,6 @@ def test_keyword_search_excludes_personal_planner_events(search_client: TestClie
         _search(
             search_client,
             token=member["token"],
-            workspace_key=workspace_key,
-            workspace_id=workspace_id,
             query=title,
             entity_types=["planner_event"],
         )

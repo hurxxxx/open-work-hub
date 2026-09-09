@@ -13,6 +13,9 @@ export interface PlannerEvent {
   endHasTime: boolean;
   start: string;
   end: string;
+  calendarStart: string;
+  calendarEnd: string;
+  calendarAllDay: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -61,13 +64,8 @@ async function request<T>(
 
 export function listPlannerEvents(
   token: string,
-  optionsOrLegacyWorkspace: { from?: string; to?: string } | string = {},
-  legacyOptions: { from?: string; to?: string } = {},
+  options: { from?: string; to?: string } = {},
 ): Promise<PlannerEventsResponse> {
-  const options =
-    typeof optionsOrLegacyWorkspace === 'string'
-      ? legacyOptions
-      : optionsOrLegacyWorkspace;
   const params = new URLSearchParams();
   if (options.from) params.set('from', options.from);
   if (options.to) params.set('to', options.to);

@@ -6,9 +6,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
-
 ArtifactType = Literal["report", "analysis"]
-ArtifactVisibility = Literal["private", "workspace"]
+ArtifactVisibility = Literal["private", "company"]
 ArtifactStatus = Literal["pending", "building", "completed", "failed"]
 ArtifactExactness = Literal["exact", "estimated", "semantic", "mixed", "unknown"]
 QueryExecutionStatus = Literal["not_executed", "completed", "failed"]
@@ -24,8 +23,6 @@ class _CamelModel(BaseModel):
 
 class AiArtifactCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-    workspace_id: str = Field(min_length=1, max_length=36)
     owner_user_id: str | None = Field(default=None, min_length=1, max_length=36)
     app_id: str = Field(min_length=1, max_length=64)
     artifact_type: ArtifactType
@@ -39,11 +36,14 @@ class AiArtifactCreate(BaseModel):
     supersedes_artifact_id: str | None = Field(default=None, max_length=36)
     schema_version: int = Field(default=1, ge=1)
     visibility: ArtifactVisibility = "private"
+    company_admin_read_acknowledged: bool = False
 
     @model_validator(mode="after")
     def validate_ownership(self) -> "AiArtifactCreate":
-        if self.owner_user_id is None and self.visibility != "workspace":
-            raise ValueError("ownerless system artifacts must use workspace visibility")
+        if self.visibility == "company" and not self.company_admin_read_acknowledged:
+            raise ValueError("company publication requires explicit acknowledgement")
+        if self.owner_user_id is None and self.visibility != "company":
+            raise ValueError("ownerless system artifacts must use company visibility")
         return self
 
 
@@ -101,8 +101,6 @@ class AiArtifactIndexGenerationCreate(BaseModel):
 
 class AiIndexGenerationCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-    workspace_id: str = Field(min_length=1, max_length=36)
     app_id: str = Field(min_length=1, max_length=64)
     generation_key: str = Field(min_length=1, max_length=256)
     backend: str = Field(min_length=1, max_length=64)
@@ -121,7 +119,6 @@ class AiIndexGenerationCreate(BaseModel):
 class AiArtifactResponse(_CamelModel):
     id: str
     artifact_number: str
-    workspace_id: str
     owner_user_id: str | None
     graph_run_id: str | None
     conversation_id: str | None

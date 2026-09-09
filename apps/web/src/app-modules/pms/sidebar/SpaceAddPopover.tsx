@@ -1,7 +1,7 @@
-import { useRef } from 'react';
-import type * as React from 'react';
-import { createPortal } from 'react-dom';
 import { FileText, FolderOpen, List as ListIcon } from 'lucide-react';
+import type * as React from 'react';
+import { useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   useDismissOnOutside,
@@ -14,7 +14,7 @@ type SpaceAddPopoverProps = {
   onClose: () => void;
   onCreateList: () => void;
   onCreateFolder: () => void;
-  onOpenDocs: () => void;
+  onOpenDocs?: () => void;
 };
 
 export function SpaceAddPopover({
@@ -77,24 +77,26 @@ export function SpaceAddPopover({
           </div>
         </div>
       </button>
-      <button
-        type="button"
-        onClick={() => {
-          onOpenDocs();
-          onClose();
-        }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
-      >
-        <FileText size={16} className="text-app-ink/45" />
-        <div className="text-left">
-          <div className="app-text-control-sm text-app-ink">
-            {t('pms.spaceTree.doc')}
+      {onOpenDocs ? (
+        <button
+          type="button"
+          onClick={() => {
+            onOpenDocs();
+            onClose();
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
+        >
+          <FileText size={16} className="text-app-ink/45" />
+          <div className="text-left">
+            <div className="app-text-control-sm text-app-ink">
+              {t('pms.spaceTree.doc')}
+            </div>
+            <div className="app-text-micro text-app-ink/40">
+              {t('pms.spaceTree.docDescription')}
+            </div>
           </div>
-          <div className="app-text-micro text-app-ink/40">
-            {t('pms.spaceTree.docDescription')}
-          </div>
-        </div>
-      </button>
+        </button>
+      ) : null}
     </div>,
     document.body,
   );

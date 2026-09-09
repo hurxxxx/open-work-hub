@@ -25,7 +25,6 @@ export interface RecordingRecorderRuntimeStore
   appendChunk(chunk: RecordingChunkState): Promise<void>;
   getSession(stagingId: string): Promise<RecordingSessionState | null>;
   listIncompleteSessions(options: {
-    workspaceSlug: string;
     scopeKey?: string | null;
   }): Promise<RecordingSessionState[]>;
   markSessionComplete(stagingId: string): Promise<void>;
@@ -181,7 +180,6 @@ export class RecordingRecorderRuntime<TRecording> {
   }
 
   async resumeRecoverableUploads(options: {
-    workspaceSlug: string;
     scopeKey?: string | null;
   }): Promise<void> {
     if (!this.canUpload()) {

@@ -56,7 +56,6 @@ def test_execute_external_capability_fails_closed_in_production_like_environment
         execute_external_capability(
             AiExternalCapabilityRequest(
                 source="test.external",
-                workspace_id="workspace-1",
                 actor_user_id="user-1",
                 principal_id="user-1",
                 task_kind="web_search",
@@ -98,7 +97,6 @@ def test_execute_external_capability_fails_closed_without_security_db_in_product
         execute_external_capability(
             AiExternalCapabilityRequest(
                 source="test.external",
-                workspace_id="workspace-1",
                 actor_user_id="user-1",
                 principal_id="user-1",
                 task_kind="document_summary",
@@ -141,7 +139,6 @@ def test_execute_external_capability_allows_production_when_security_is_on(
     result = execute_external_capability(
         AiExternalCapabilityRequest(
             source="test.external",
-            workspace_id="workspace-1",
             actor_user_id="user-1",
             principal_id="user-1",
             task_kind="web_search",
@@ -174,7 +171,6 @@ def test_execute_external_capability_keeps_development_off_compatibility(
     result = execute_external_capability(
         AiExternalCapabilityRequest(
             source="test.external",
-            workspace_id="workspace-1",
             actor_user_id="user-1",
             principal_id="user-1",
             task_kind="web_search",
@@ -204,7 +200,6 @@ def test_execute_external_capability_records_success_without_raw_input(monkeypat
     result = execute_external_capability(
         AiExternalCapabilityRequest(
             source="test.external",
-            workspace_id="workspace-1",
             actor_user_id="user-1",
             principal_id="user-1",
             task_kind="document_summary",
@@ -249,7 +244,6 @@ def test_execute_external_capability_blocks_pii_before_callback(monkeypatch) -> 
         execute_external_capability(
             AiExternalCapabilityRequest(
                 source="test.external",
-                workspace_id="workspace-1",
                 actor_user_id="user-1",
                 principal_id="user-1",
                 task_kind="web_search",
@@ -291,7 +285,6 @@ def test_execute_external_capability_blocks_overlong_rrn_before_callback(
         execute_external_capability(
             AiExternalCapabilityRequest(
                 source="test.external",
-                workspace_id="workspace-1",
                 actor_user_id="user-1",
                 principal_id="user-1",
                 task_kind="web_search",
@@ -332,7 +325,6 @@ def test_execute_external_capability_blocks_internal_context_before_callback(
         execute_external_capability(
             AiExternalCapabilityRequest(
                 source="test.external",
-                workspace_id="workspace-1",
                 actor_user_id="user-1",
                 principal_id="user-1",
                 task_kind="document_summary",
@@ -377,7 +369,6 @@ def test_execute_external_capability_blocks_security_document_before_callback(
         execute_external_capability(
             AiExternalCapabilityRequest(
                 source="test.external",
-                workspace_id="workspace-1",
                 actor_user_id="user-1",
                 principal_id="user-1",
                 task_kind="web_search",

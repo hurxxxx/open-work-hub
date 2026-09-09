@@ -12,8 +12,13 @@ FastAPI composition layer for health, auth, app bootstrap, domains, AI Gateway, 
 - Runtime env contract: root `.env.example` plus ignored `.env`
 - Do not commit secrets or operations data.
 - Readiness: `curl http://127.0.0.1:8001/readyz`
-- Authenticated AI health: `/api/v1/workspaces/{workspace_slug}/chatbot/health`
-- Workspace AI routes mount only behind `require_current_user` plus workspace membership.
+- Authenticated AI health: `/api/v1/chatbot/health`
+- Executable app routes require the current user, declared execution context, and owning-app
+  company app admission before domain source ACL is evaluated. Core platform features retain
+  their explicit account and source permissions. PMS spaces are app-owned resources; they never
+  become a global execution context.
+- App bootstrap, route, and availability ownership: [App Platform Contract](../../docs/domains/app-platform/README.md).
+- Authenticated byte delivery: [Content Access](../../docs/domains/content-access/README.md).
 
 ## LLM
 
@@ -32,7 +37,9 @@ MLX_MODEL=org/local-model-id bash scripts/mlx-serve.sh
 ## Alembic
 
 - Alembic owns schema. Do not reintroduce `Base.metadata.create_all()` or hand SQL compatibility lists.
-- Baseline revision: `0b843a383b2b_baseline_2026_04_10`.
+- Baseline revision: `company_20260908` (`company users, groups and app-owned access schema`).
+  Previous schemas and data are unsupported; upgrading an old product database is not a migration path.
+  See the [release cutover procedure](../../docs/domains/release/README.md).
 
 ```bash
 cd apps/api
@@ -45,8 +52,15 @@ Rules:
 
 - Autogenerate only against intended dev DB from typed env.
 - Review generated migration manually.
-- Local developer launcher must not auto-migrate shared dev DB.
-- Test DB applies Alembic/runtime seed once per isolated run.
+- Root `./dev.sh` upgrades the development DB to `head` before starting API processes by default,
+  then disables per-process auto-migration. Set `OPEN_WORK_HUB_DEV_API_MIGRATION_PREFLIGHT=0` only
+  when the caller explicitly owns migration ordering.
+- Standalone `scripts/dev-api.sh` enables auto-migration only for the primary `8001` instance by
+  default; secondary instances never race schema changes.
+- Test workers migrate their isolated database once, capture the application-ready seed baseline,
+  and reset data without dropping migration-owned schema.
 - Staging/prod migrations are explicit pre-start operations.
 - Do not `stamp`, `DROP`, or repair drift without approved plan.
-- `test_alembic_check_reports_no_model_drift` guards model/migration drift.
+- `pnpm check:alembic-graph` and `pnpm test:alembic-graph` validate the static revision graph;
+  `pnpm nx run api:test-migrations` exercises the migration-marked suite. Autogenerate output still
+  requires manual model/schema review; there is no automatic model-drift oracle.

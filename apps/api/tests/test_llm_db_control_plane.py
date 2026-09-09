@@ -92,9 +92,7 @@ def test_external_workload_fails_closed_without_enabled_database_provider(
         provider.enabled = False
         if provider_state == "missing":
             db.execute(
-                delete(AiModelCatalogEntry).where(
-                    AiModelCatalogEntry.provider_id == "anthropic"
-                )
+                delete(AiModelCatalogEntry).where(AiModelCatalogEntry.provider_id == "anthropic")
             )
             db.delete(provider)
         db.commit()
@@ -133,9 +131,7 @@ def test_enabled_database_provider_is_the_redacted_external_route_source(
     assert "env-only-model" not in repr(resolved)
 
     serialized = snapshot.model_dump()
-    anthropic = next(
-        item for item in serialized["providers"] if item["provider_id"] == "anthropic"
-    )
+    anthropic = next(item for item in serialized["providers"] if item["provider_id"] == "anthropic")
     assert anthropic["has_api_key"] is True
     assert set(anthropic).isdisjoint({"api_key", "api_key_ciphertext"})
     serialized_json = snapshot.model_dump_json()
@@ -168,7 +164,6 @@ def test_build_workload_request_does_not_read_legacy_pool_config_for_database_ro
             _WORKLOAD_ID,
             LlmWorkloadContext(
                 source="tests.llm_db_control_plane",
-                workspace_id="workspace-1",
                 app_id="web-search",
             ),
             db,

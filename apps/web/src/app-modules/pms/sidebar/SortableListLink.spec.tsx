@@ -72,7 +72,6 @@ function renderLink({
             onRename={onRename}
             onRestore={onRestore}
             onSettings={onSettings}
-            workspaceSlug="administrator"
           />
         </SortableContext>
       </DndContext>

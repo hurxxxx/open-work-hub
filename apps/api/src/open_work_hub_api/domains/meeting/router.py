@@ -4,48 +4,42 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Form, Header, Query, Response, UploadFile, status
-from fastapi.responses import StreamingResponse
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.core.principal import user_principal
-from open_work_hub_api.domains.auth.dependencies import (
-    require_current_user,
-    require_current_workspace,
-)
-from open_work_hub_api.domains.auth.models import (
-    User,
-    Workspace,
-)
-from open_work_hub_api.domains.auth.workspace_app_gate import require_workspace_app_enabled
+from open_work_hub_api.domains.auth.app_gate import require_app_access
+from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.content_access.dependencies import require_content_grant_issuer
+from open_work_hub_api.domains.content_access.grants import ContentGrantIssuer
 from open_work_hub_api.domains.meeting import recordings as recording_service
 from open_work_hub_api.domains.meeting import service as meeting_service
-from open_work_hub_api.domains.meeting.app_catalog import MEETING_WORKSPACE_APP
-from open_work_hub_api.domains.meeting.availability_projection import workspace_meeting_user_ids_subquery
+from open_work_hub_api.domains.meeting.app_catalog import MEETING_APP
+from open_work_hub_api.domains.meeting.models import Meeting
 from open_work_hub_api.domains.meeting.schemas import (
-    MeetingAvailabilityResponse,
     MeetingAttendeesAddRequest,
+    MeetingAvailabilityResponse,
     MeetingCreateRequest,
     MeetingDetail,
     MeetingDocAttachRequest,
     MeetingListResponse,
+    MeetingTaskAttachRequest,
+    MeetingUpdateRequest,
+    MeetingUserItem,
     RecordingChunkAck,
     RecordingCompleteRequest,
     RecordingPlaybackResponse,
     RecordingStagingInitRequest,
     RecordingStagingItem,
-    MeetingTaskAttachRequest,
-    MeetingUpdateRequest,
-    MeetingUserItem,
 )
 from open_work_hub_api.domains.planner.event_time import parse_iso_or_date
 
-
-require_meeting_app_enabled = require_workspace_app_enabled(
-    MEETING_WORKSPACE_APP.app_id,
-    error_code="workspace.app_disabled",
+require_meeting_app_enabled = require_app_access(
+    MEETING_APP.app_id,
+    error_code="app.access_required",
 )
 
 router = APIRouter(
@@ -53,10 +47,21 @@ router = APIRouter(
     tags=["meeting"],
     dependencies=[Depends(require_meeting_app_enabled)],
 )
-public_router = APIRouter(
-    prefix="/meeting",
-    tags=["meeting"],
-)
+
+
+def _meeting_detail_response(
+    db: Session,
+    *,
+    meeting: Meeting,
+    user: User,
+    content_grant_issuer: ContentGrantIssuer,
+) -> MeetingDetail:
+    return meeting_service.serialize_meeting_for_http(
+        db,
+        meeting,
+        viewer_user_id=user.id,
+        content_grant_issuer=content_grant_issuer,
+    )
 
 
 @router.get("/meetings", response_model=MeetingListResponse)
@@ -66,13 +71,10 @@ def list_meetings(
     to_at: datetime | None = Query(default=None, alias="to"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingListResponse:
     return meeting_service.list_meetings(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.meeting.list_meetings",
         ),
@@ -92,10 +94,18 @@ def create_meeting(
     payload: MeetingCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.create_meeting(
-        db, workspace=workspace, organizer=current_user, payload=payload
+    meeting = meeting_service.create_meeting(
+        db,
+        organizer=current_user,
+        payload=payload,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -104,18 +114,22 @@ def get_meeting(
     meeting_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.get_meeting(
+    meeting = meeting_service.get_meeting(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.meeting.get_meeting",
         ),
         user=current_user,
         meeting_id=meeting_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -125,10 +139,19 @@ def update_meeting(
     payload: MeetingUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.update_meeting(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, payload=payload
+    meeting = meeting_service.update_meeting(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        payload=payload,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -137,13 +160,18 @@ def ensure_meeting_notes(
     meeting_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.ensure_meeting_notes(
+    meeting = meeting_service.ensure_meeting_notes(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -155,11 +183,8 @@ def delete_meeting(
     meeting_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
-    meeting_service.delete_meeting(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id
-    )
+    meeting_service.delete_meeting(db, user=current_user, meeting_id=meeting_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -169,19 +194,24 @@ def add_meeting_attendees(
     payload: MeetingAttendeesAddRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
     """Append attendees to an existing meeting.
 
     Permission: any current participant (organizer or existing attendee). The
     full attendee replace path stays organizer-only via ``PATCH /meetings/{id}``.
     """
-    return meeting_service.add_attendees(
+    meeting = meeting_service.add_attendees(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         attendees=list(payload.attendees),
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -191,10 +221,19 @@ def attach_task(
     payload: MeetingTaskAttachRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.attach_task(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, task_id=payload.task_id
+    meeting = meeting_service.attach_task(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        task_id=payload.task_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -207,10 +246,19 @@ def detach_task(
     task_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.detach_task(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, task_id=task_id
+    meeting = meeting_service.detach_task(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        task_id=task_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -220,10 +268,19 @@ def attach_doc(
     payload: MeetingDocAttachRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.attach_doc(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, doc_id=payload.doc_id
+    meeting = meeting_service.attach_doc(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        doc_id=payload.doc_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -236,10 +293,19 @@ def detach_doc(
     doc_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.detach_doc(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, doc_id=doc_id
+    meeting = meeting_service.detach_doc(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        doc_id=doc_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -249,10 +315,19 @@ async def attach_file(
     file: UploadFile,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return await meeting_service.attach_file(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, upload=file
+    meeting = await meeting_service.attach_file(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        upload=file,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -265,32 +340,19 @@ def detach_file(
     file_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return meeting_service.detach_file(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id, file_id=file_id
-    )
-
-
-@public_router.get("/files/{file_id}/content")
-def proxy_file_attachment_content(
-    file_id: str,
-    expires: int = Query(..., ge=1),
-    signature: str = Query(..., min_length=1),
-    disposition: meeting_service.MeetingAttachmentDisposition = "attachment",
-    db: Session = Depends(get_db_session),
-) -> StreamingResponse:
-    content = meeting_service.open_file_attachment_content(
+    meeting = meeting_service.detach_file(
         db,
+        user=current_user,
+        meeting_id=meeting_id,
         file_id=file_id,
-        expires=expires,
-        signature=signature,
-        disposition=disposition,
     )
-    return StreamingResponse(
-        content.body,
-        media_type=content.media_type,
-        headers=content.headers,
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -304,11 +366,9 @@ def init_recording_staging(
     payload: RecordingStagingInitRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingStagingItem:
     return recording_service.init_staging(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         payload=payload,
@@ -327,11 +387,9 @@ async def upload_recording_chunk(
     x_chunk_sha256: str | None = Header(default=None, alias="X-Chunk-Sha256"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingChunkAck:
     return await recording_service.upload_chunk(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         staging_id=staging_id,
@@ -351,15 +409,20 @@ def complete_recording_staging(
     payload: RecordingCompleteRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return recording_service.complete_staging(
+    meeting = recording_service.complete_staging(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         staging_id=staging_id,
         payload=payload,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -371,11 +434,9 @@ def list_recording_staging(
     meeting_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> list[RecordingStagingItem]:
     return recording_service.list_my_staging(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
     )
@@ -390,11 +451,9 @@ def discard_recording_staging(
     staging_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     recording_service.discard_staging(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         staging_id=staging_id,
@@ -411,14 +470,19 @@ def delete_meeting_recording(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return recording_service.delete_recording(
+    meeting = recording_service.delete_recording(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         recording_id=recording_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -429,15 +493,20 @@ def import_recording(
     linked_task_id: str | None = Form(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return recording_service.import_recording(
+    meeting = recording_service.import_recording(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         upload=file,
         linked_task_id=linked_task_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -450,11 +519,9 @@ def get_recording_playback(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingPlaybackResponse:
     return recording_service.get_recording_playback(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         recording_id=recording_id,
@@ -467,11 +534,9 @@ def stream_recording_media(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ):
     return recording_service.stream_recording_media(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         recording_id=recording_id,
@@ -487,14 +552,19 @@ def retry_recording(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
+    content_grant_issuer: ContentGrantIssuer = Depends(require_content_grant_issuer),
 ) -> MeetingDetail:
-    return recording_service.retry_recording(
+    meeting = recording_service.retry_recording(
         db,
-        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         recording_id=recording_id,
+    )
+    return _meeting_detail_response(
+        db,
+        meeting=meeting,
+        user=current_user,
+        content_grant_issuer=content_grant_issuer,
     )
 
 
@@ -504,15 +574,9 @@ def list_meeting_users(
     limit: int = Query(default=100, ge=1, le=200),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> list[MeetingUserItem]:
-    """Search workspace members for meeting attendee selection."""
-    member_user_ids = workspace_meeting_user_ids_subquery(workspace.id)
-    query = (
-        select(User)
-        .join(member_user_ids, member_user_ids.c.user_id == User.id)
-        .where(User.status == "active")
-    )
+    """Search active users currently admitted to the meeting app."""
+    query = select(User).where(User.status == "active", User.login_blocked.is_(False))
     search = q.strip()
     if search:
         like = f"%{search}%"
@@ -523,8 +587,15 @@ def list_meeting_users(
                 User.display_name.ilike(like),
             )
         )
-    query = query.order_by(User.full_name.asc(), User.email.asc()).limit(limit)
-    users = db.scalars(query).all()
+    from open_work_hub_api.domains.auth.app_access import can_use_app
+
+    query = query.order_by(User.full_name.asc(), User.email.asc()).execution_options(yield_per=100)
+    users = []
+    for user in db.scalars(query):
+        if can_use_app(db, user_id=user.id, app_id="meeting"):
+            users.append(user)
+            if len(users) == limit:
+                break
     return [
         MeetingUserItem(
             id=user.id,
@@ -542,7 +613,6 @@ def get_meeting_availability(
     to_param: str = Query(..., alias="to", description="Exclusive end (ISO)"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingAvailabilityResponse:
     try:
         from_at = parse_iso_or_date(from_param)
@@ -566,9 +636,7 @@ def get_meeting_availability(
         )
     return meeting_service.list_meeting_availability(
         db,
-        workspace=workspace,
         principal=user_principal(
-            workspace_id=workspace.id,
             user_id=current_user.id,
             source="api.meeting.find_availability",
         ),

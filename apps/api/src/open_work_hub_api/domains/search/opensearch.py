@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 
+from open_work_hub_api.domains.retrieval.projection_identity import canonical_search_document_id
 from open_work_hub_api.domains.search.backend_contracts import (
     KeywordAclBranch,
     KeywordAclClause,
@@ -24,17 +25,15 @@ from open_work_hub_api.domains.search.index_gateway import (
     keyword_index_definition,
     keyword_partitioned_index_definition,
     keyword_search_index_alias,
-    keyword_search_partitioned_index_alias,
-    keyword_search_legacy_index_name,
     keyword_search_index_name,
+    keyword_search_legacy_index_name,
+    keyword_search_partitioned_index_alias,
     keyword_search_partitioned_index_name,
     keyword_search_versioned_index_name,
     search_index_document_id,
     search_index_document_key,
 )
-from open_work_hub_api.domains.retrieval.projection_identity import canonical_search_document_id
 from open_work_hub_api.domains.search.query_policy import KEYWORD_SEARCH_TEXT_FIELDS
-
 
 MAX_BULK_INDEX_BYTES = 5 * 1024 * 1024
 MAX_BULK_INDEX_DOCUMENTS = 500
@@ -258,7 +257,6 @@ class OpenSearchKeywordClient:
                 "size": MAX_BULK_INDEX_DOCUMENTS,
                 "query": {"match_all": {}},
                 "sort": [
-                    {"workspace_id": "asc"},
                     {"entity_type": "asc"},
                     {"entity_id": "asc"},
                 ],
@@ -394,17 +392,16 @@ class OpenSearchKeywordClient:
         self._require_partitioned_staging_client()
         self._request("POST", f"/{self.index_name}/_refresh")
 
-    def rebuild_workspace(self, *, workspace_id: str, documents: list[dict[str, Any]]) -> None:
+    def rebuild_company_index(self, *, documents: list[dict[str, Any]]) -> None:
         self._require_legacy_mutation_client()
         self.ensure_index()
         if documents:
             self._bulk_index_documents(documents)
-            self._delete_stale_workspace_documents(
-                workspace_id=workspace_id,
+            self._delete_stale_documents(
                 current_document_ids=[search_index_document_id(document) for document in documents],
             )
         else:
-            self._delete_all_workspace_documents(workspace_id=workspace_id)
+            self._delete_all_documents()
         self._request("POST", f"/{self.index_name}/_refresh")
 
     def upsert_document(self, document: dict[str, Any]) -> None:
@@ -506,11 +503,10 @@ class OpenSearchKeywordClient:
             if error_message is not None:
                 raise OpenSearchError(error_message)
 
-    def delete_document(self, *, workspace_id: str, entity_type: str, entity_id: str) -> None:
+    def delete_document(self, *, entity_type: str, entity_id: str) -> None:
         self._require_legacy_mutation_client()
         self.ensure_index()
         document_id = search_index_document_key(
-            workspace_id=workspace_id,
             entity_type=entity_type,
             entity_id=entity_id,
         )
@@ -521,20 +517,19 @@ class OpenSearchKeywordClient:
             params={"refresh": "true"},
         )
 
-    def count_workspace_documents(
+    def count_company_documents(
         self,
         *,
-        workspace_id: str,
         entity_types: tuple[str, ...] = (),
     ) -> int:
         self._require_legacy_mutation_client()
-        filters: list[dict[str, Any]] = [{"term": {"workspace_id": workspace_id}}]
-        if entity_types:
-            filters.append({"terms": {"entity_type": list(entity_types)}})
+        query = (
+            {"terms": {"entity_type": list(entity_types)}} if entity_types else {"match_all": {}}
+        )
         response = self._request(
             "POST",
             f"/{self.index_name}/_count",
-            json={"query": filters[0] if len(filters) == 1 else {"bool": {"filter": filters}}},
+            json={"query": query},
         )
         return int(response.json().get("count") or 0)
 
@@ -594,19 +589,20 @@ class OpenSearchKeywordClient:
             if error_message is not None:
                 raise OpenSearchError(error_message)
 
-    def _delete_all_workspace_documents(self, *, workspace_id: str) -> None:
+    def _delete_all_documents(
+        self,
+    ) -> None:
         self._require_legacy_mutation_client()
         self._request(
             "POST",
             f"/{self.index_name}/_delete_by_query",
-            json={"query": {"term": {"workspace_id": workspace_id}}},
+            json={"query": {"match_all": {}}},
             params={"refresh": "false", "conflicts": "proceed"},
         )
 
-    def _delete_stale_workspace_documents(
+    def _delete_stale_documents(
         self,
         *,
-        workspace_id: str,
         current_document_ids: list[str],
     ) -> None:
         self._require_legacy_mutation_client()
@@ -616,7 +612,6 @@ class OpenSearchKeywordClient:
             json={
                 "query": {
                     "bool": {
-                        "filter": [{"term": {"workspace_id": workspace_id}}],
                         "must_not": [{"ids": {"values": current_document_ids}}],
                     }
                 }
@@ -814,8 +809,6 @@ def build_keyword_search_opensearch_query(query: KeywordSearchQuery) -> dict[str
     filters: list[dict[str, Any]] = []
     if query.retrieval_partition_ids is not None:
         filters.append({"terms": {"retrieval_partition_id": list(query.retrieval_partition_ids)}})
-    else:
-        filters.append({"term": {"workspace_id": query.workspace_id}})
     if query.entity_types:
         filters.append({"terms": {"entity_type": list(query.entity_types)}})
     if query.acl_filter is not None:

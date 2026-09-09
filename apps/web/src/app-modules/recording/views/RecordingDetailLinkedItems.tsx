@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { FileText, Loader2, Plus, Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 
 import type { RecordingTarget } from '../api/recording-api';
 import { recordingTargetHref } from './recording-detail-model';
@@ -15,7 +15,7 @@ interface LinkedSubsectionProps {
   emptyLabel: string;
   items: RecordingTarget[];
   busyId: string | null;
-  workspaceSlug: string;
+
   onDetach: (target: RecordingTarget) => void;
   detachLabel: string;
 }
@@ -29,7 +29,6 @@ export function LinkedSubsection({
   emptyLabel,
   items,
   busyId,
-  workspaceSlug,
   onDetach,
   detachLabel,
 }: LinkedSubsectionProps) {
@@ -61,7 +60,7 @@ export function LinkedSubsection({
               key={target.id}
               busy={busyId === target.id}
               target={target}
-              href={recordingTargetHref(workspaceSlug, target)}
+              href={recordingTargetHref(target)}
               onDetach={() => onDetach(target)}
               detachLabel={detachLabel}
             />
@@ -118,18 +117,12 @@ function TargetRow({
   detachLabel,
 }: TargetRowProps) {
   const { t } = useTranslation('apps');
-  const appLabel = t(
-    `recording.detail.targetApps.${target.target_app}`,
-    {
-      defaultValue: target.target_app,
-    },
-  );
-  const typeLabel = t(
-    `recording.detail.targetTypes.${target.target_type}`,
-    {
-      defaultValue: target.target_type,
-    },
-  );
+  const appLabel = t(`recording.detail.targetApps.${target.target_app}`, {
+    defaultValue: target.target_app,
+  });
+  const typeLabel = t(`recording.detail.targetTypes.${target.target_type}`, {
+    defaultValue: target.target_type,
+  });
   const shortId =
     target.target_id.length > 12
       ? `${target.target_id.slice(0, 8)}...${target.target_id.slice(-4)}`

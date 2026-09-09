@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
 import re
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
 
 UNIT_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,39}$")
 
@@ -30,6 +29,7 @@ class OrganizationUnitResponse(BaseModel):
     unit_type: str
     parent_id: str | None
     active: bool
+    head_user_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -40,6 +40,7 @@ class OrganizationUnitSummaryResponse(BaseModel):
     slug: str
     unit_type: str
     active: bool
+    head_user_id: str | None = None
 
 
 class OrganizationUnitCreateRequest(BaseModel):
@@ -50,6 +51,7 @@ class OrganizationUnitCreateRequest(BaseModel):
     unit_type: str = Field(default="department", min_length=1, max_length=40)
     parent_id: str | None = Field(default=None, max_length=36)
     active: bool = True
+    head_user_id: str | None = Field(default=None, min_length=1, max_length=36)
 
     @field_validator("name")
     @classmethod
@@ -70,6 +72,7 @@ class OrganizationUnitUpdateRequest(BaseModel):
     unit_type: str | None = Field(default=None, min_length=1, max_length=40)
     parent_id: str | None = Field(default=None, max_length=36)
     active: bool | None = None
+    head_user_id: str | None = Field(default=None, min_length=1, max_length=36)
 
     @field_validator("name")
     @classmethod
