@@ -10,13 +10,14 @@ Web·API·Worker는 저장소 소스에서 실행하고, 최초 셋업의 Postgr
 ## 1. 에이전트에 설치 요청하기
 
 먼저 서버에 접근할 수 있는 Codex 또는 Claude Code를 설치하고 로그인한다.
+Codex의 사전 패키지 설치와 실행 명령은 [README](README.md)를 따른다.
 도구 설치는 [Codex 공식 안내](https://learn.chatgpt.com/docs/codex/cli) 또는
 [Claude Code 공식 안내](https://code.claude.com/docs/en/quickstart)를 따른다.
 서버 접근 권한과 필요한 OS 패키지를 설치할 권한을 준비한다.
 최초 도입에는 GitHub 원본을 읽을 수 있는 네트워크가 필요하고,
 기존 조직에 참여할 때는 내부 GitLab 저장소 접근 권한이 필요하다.
 코딩 에이전트의 로그인과 프로젝트 안에서 사용하는 AI 서비스 인증은 별개다.
-Codex는 실행 후 [README 3절](README.md)의 `/permissions` → **Full access** 설정과 주의사항을 따른다.
+Codex 실행 후 `/permissions`에서 **Full access**를 선택한다.
 
 2절에서 상황에 맞는 경로로 저장소를 내려받아 연 뒤 다음과 같이 요청한다.
 
@@ -170,7 +171,8 @@ free -h
 | 도구 | 버전 기준 및 설치 방법 |
 | --- | --- |
 | Bash, Git, curl, CA 인증서, 시스템 `python3`, `lsof`, `pgrep` | 해당 Linux 배포판의 패키지 관리자로 준비. 개발 스크립트와 환경설정 도구가 사용한다. |
-| Node.js와 npm | [package.json](package.json)의 `engines.node`를 만족하도록 [Node.js 공식 안내](https://nodejs.org/en/download)를 따른다. |
+| Node.js와 npm | Codex 실행 전에 [README](README.md)의 nvm 설치·Bash 재로드·`nvm install 24` 명령을 따른다. 버전 범위는 [package.json](package.json)의 `engines.node`가 기준이다. |
+| bubblewrap (Linux Codex) | Codex 실행 전에 설치한다. [README](README.md) · [공식 샌드박스 요건](https://developers.openai.com/codex/concepts/sandboxing#prerequisites) |
 | pnpm | 루트 `package.json`의 `packageManager`에 지정된 버전을 사용한다. [공식 설치 안내](https://pnpm.io/installation) |
 | uv와 앱용 Python | [uv 설치 안내](https://docs.astral.sh/uv/getting-started/installation/)와 [Python 설치 안내](https://docs.astral.sh/uv/guides/install-python/)를 따른다. Python 범위는 [API](apps/api/pyproject.toml)·[Worker](apps/worker/pyproject.toml)의 `requires-python`이 기준이다. |
 | PostgreSQL·Redis | 4절에 따라 호스트에 네이티브로 설치하고 systemd 서비스로 관리한다. |
@@ -293,7 +295,7 @@ pnpm dev:login-smoke
 
 기본 Web 주소는 `http://127.0.0.1:4200`, API 주소는 `http://127.0.0.1:8001`이다.
 포트를 변경한 환경에서는 실제 개발 설정을 따른다.
-개발용 로그인 계정은 [README의 안내](README.md#dev)를 따른다.
+개발용 로그인 계정은 `administrator` / `open-work-hub-dev-only`다.
 공유·공개 운영 서비스에는 개발용 기본 계정을 사용하지 않는다.
 
 브라우저 검사까지 수행하려면 다음을 실행한다.
