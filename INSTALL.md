@@ -5,6 +5,8 @@ Web·API·Worker는 저장소 소스에서 실행하고, 최초 셋업의 Postgr
 기존 Docker Compose 방식은 선택 사항이며, 추가 서비스는 사용할 기능에 따라 준비한다.
 조직 최초 도입은 GitHub 원본에서 시작하고, 최초 실행을 확인한 뒤 내부 서버의 GitLab을 구성해
 이후 코드와 협업을 관리한다. 이미 내부 GitLab이 준비된 조직의 참여자는 그 저장소에서 시작한다.
+서버 셋업은 개발 Web을 `0.0.0.0`에서 실행하고 PC가 서버 IP로 직접 접속할 수 있도록 준비한다.
+조직 최초 도입의 완료 기준은 GitLab 관리자·인증·프로젝트·Runner·CI 변수 구성, 실제 개발 MR 파이프라인 성공, 외부 접속과 개발 시드 계정 로그인이다.
 운영 배포는 [Release Domain](docs/domains/release/README.md)의 별도 절차를 따른다.
 
 ## 설치 계정 권한
@@ -36,8 +38,10 @@ Codex 실행 후 `/permissions`에서 **Full access**를 선택한다.
 > AGENTS.md와 INSTALL.md를 읽고 이 리눅스 서버에
 > 개발 환경을 설치해줘. 기존 설정과 데이터를 보존하고 필요한 도구만 설치해줘.
 > PostgreSQL·Redis는 Docker가 아닌 호스트에 네이티브로 설치하고 systemd 서비스로 관리해줘.
-> 개발 설정을 해당 서비스에 맞추고 ./dev.sh --minimal-infra --no-infra로 실행해줘.
-> 먼저 최소 환경에서 로그인과 화면을 확인한 뒤, 내가 개발할 기능에 필요한 서비스를 연결해줘.
+> 개발 설정을 해당 서비스에 맞추고 OPEN_WORK_HUB_WEB_DEV_HOST=0.0.0.0으로 ./dev.sh --minimal-infra --no-infra를 실행해줘.
+> API·개발 DB·Redis는 loopback 수신을 유지하고, 내 PC에서 서버 IP로 직접 접속해 시드 계정으로 로그인할 수 있게 해줘.
+> pnpm dev:login-smoke 명령과 agent-browser로 서버 IP 주소의 로그인과 화면을 확인해줘.
+> 조직 최초 도입이면 README 4절의 셋업 요청 범위로 GitLab·Runner·CI 변수와 개발 MR 파이프라인 성공까지 진행해줘. GitLab 도메인·DNS 설정은 제외하고 서버 IP를 사용해줘.
 > 비밀값은 대화에 요청하지 말고 서버에서 입력할 방법을 안내해줘.
 > 로그인 정보는 1.1절에 따라 프로젝트 루트의 .auth_info에 기록·갱신하고, 비밀값 대신 파일 경로를 알려줘.
 > 끝나면 접속 방법, 실행한 검사, 사용 가능한 기능과 추가 설정이 필요한 기능을 알려줘.
@@ -115,12 +119,13 @@ git rev-parse HEAD
 출력된 최초 기준 커밋 SHA를 설치 결과에 기록한다.
 
 이제 2.4절의 개발 도구를 준비하고 3~5절에서 최소 환경의 로그인과 화면을 확인한다.
-첫 실행 확인 뒤 같은 체크아웃에서 2.2절을 진행한다.
+첫 실행 확인 뒤 같은 체크아웃에서 2.2절과 2.5절을 진행하고, 7절의 완료 기준까지 확인한다. 최소 환경 실행만으로 조직 최초 도입을 완료했다고 보고하지 않는다.
 
 ### 2.2. 내부 GitLab 구성과 최초 코드 등록
 
 조직 관리자가 내부 서버에 GitLab을 별도 관리 서비스로 준비한다.
 에이전트에게 맡길 때는 서버 설치, 관리자 설정, `glab` 인증, 초기 코드 push와 CI 준비를 작업 범위에 명시한다.
+[README의 셋업 프롬프트](README.md#4-codex에-셋업-요청)는 검증용 작업 브랜치·설치 관련 변경의 커밋과 push·`dev` 대상 Draft MR 생성·파이프라인 재실행까지 포함한다. 그 범위로 요청받았다면 같은 권한을 다시 확인하느라 중단하지 않는다.
 관리자 설정·PAT 발급·`glab` 인증도 명시적으로 위임하면 에이전트가 서버에서 수행할 수 있다.
 실제 비밀값은 보호된 파일이나 표준 입력으로 전달하고 명령 인자·대화·로그에 남기지 않는다.
 사용자가 직접 진행하기로 정한 단계나 추가 인증이 필요한 단계에서만 방법을 안내하고 완료를 기다린다.
@@ -129,22 +134,25 @@ GitLab 서버, `glab` 클라이언트, 실제 작업을 실행하는 GitLab Runn
 
 #### 2.2.1. GitLab 서버 설치
 
-설치 전에 내부 DNS 이름, HTTPS 인증서, SSH 포트, 데이터·설정의 영속 저장과 백업 위치를 정한다.
+GitLab 도메인·DNS 설정은 이 셋업에서 제외한다. 현재 SSH 접속 대상과 서버 네트워크를 확인해 PC·Runner에서 도달 가능한 IP를 사용한다.
+HTTPS 포트는 사용 가능한 `8443`을 기본 예시로 삼고, 충돌하면 빈 포트를 선택해 실제 주소를 기록한다. 도메인 이름을 받기 위해 대기하지 않는다.
+설치 전에 IP용 HTTPS 인증서, SSH 포트, 데이터·설정의 영속 저장과 백업 위치를 준비한다.
 앱과 같은 서버라면 기존 서비스의 포트와 메모리·디스크 사용량을 확인한다.
 GitLab 자체 DB·Redis는 프로젝트 개발용 DB·Redis와 구분하며 임의로 같은 데이터베이스에 연결하지 않는다.
 
 [공식 Ubuntu 설치 안내](https://docs.gitlab.com/install/package/ubuntu/)와
 [지원 플랫폼](https://docs.gitlab.com/install/package/#supported-platforms)에서 실제 OS·CPU 아키텍처와 선택한 GitLab 버전의 지원 여부를 확인한다.
 다음은 **새 서버의 Community Edition Linux 패키지 설치 예시**다.
-도메인과 패키지 버전은 조직이 정한 값으로 바꾼다. 내부 인증서를 사용할 때는 공식 설치 절차에 따라
-HTTPS 설정을 준비하며, 사설 도메인에서 자동 인증서 발급이 된다고 가정하지 않는다.
+아래 IP·포트·패키지 버전은 서버에서 확인한 값으로 바꾼다.
+기존 인증서가 없으면 서버에서 사설 CA와 접속 IP를 SAN에 넣은 서버 인증서를 준비하고, [수동 HTTPS 설정](https://docs.gitlab.com/omnibus/settings/ssl/#configure-https-manually)에 따라 설치 전에 `/etc/gitlab/gitlab.rb`에 `letsencrypt['enable'] = false`와 인증서 경로를 설정한다.
+CA·서버 개인키는 서버에 제한된 권한으로 보관하고, 기존 CA·인증서가 있으면 보존한다. 외부 도메인이나 자동 인증서 발급 대기를 선행 조건으로 두지 않는다.
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y curl ca-certificates openssh-server tzdata perl
+sudo apt-get install -y curl ca-certificates openssh-server openssl tzdata perl
 curl -fsSL https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | sudo bash
 apt-cache policy gitlab-ce
-sudo EXTERNAL_URL='https://gitlab.example.com' apt-get install 'gitlab-ce=<설치할-패키지-버전>'
+sudo EXTERNAL_URL='https://<서버-IP>:8443' apt-get install 'gitlab-ce=<설치할-패키지-버전>'
 sudo gitlab-ctl status
 ```
 
@@ -154,7 +162,7 @@ Docker 방식은 앱의 PostgreSQL·Redis 네이티브 설치 방식을 바꾸�
 설치 후 브라우저에서 정한 HTTPS 주소에 접속한다. 사설 CA는 개발 서버와 Runner에도 신뢰하도록 등록하고 TLS 검증을 끄지 않는다.
 Docker executor의 작업·helper 컨테이너에도 [Runner 인증서 설정](https://docs.gitlab.com/runner/configuration/tls-self-signed/)을 적용한다.
 
-PC에서 직접 접속할 주소를 `external_url`로 사용한다. 내부 DNS가 없으면 고정된 사설 IP를 사용할 수 있다.
+PC에서 직접 접속할 IP 기반 주소를 `external_url`로 사용한다. [GitLab의 외부 URL 설정](https://docs.gitlab.com/omnibus/settings/configuration/#configure-the-external-url-for-gitlab)은 서버 IP를 지원한다.
 예를 들어 `https://<서버-IP>:8443`으로 설정했다면 인증서 SAN에 해당 **IP 주소**를 포함하고,
 NGINX가 PC에서 도달 가능한 인터페이스에서 수신하도록 해당 버전의
 [NGINX 설정](https://docs.gitlab.com/omnibus/settings/nginx/)을 적용한 뒤 `sudo gitlab-ctl reconfigure`를 실행한다.
@@ -177,7 +185,7 @@ Linux는 배포판의 CA 저장소에 등록한다. 별도 인증서 저장소�
 3. `Admin > Overview > Users > New user`에서 실제 운영 담당자 계정을 만든다.
    아래 초기 설정 예시를 사용할 수 있으며, 기존 관리자 계정이 있으면 새로 만들지 말고 해당 계정을 편집한다.
    서버 관리가 필요한 계정에만 `Administrator` 권한을 부여하고, 해당 계정의 로그인·비밀번호 설정과 2FA를 완료한다.
-   SMTP와 계정 확인 메일도 구성한다. 일반 개발자는 프로젝트 역할로 권한을 부여하며 모두 관리자로 만들지 않는다.
+   SMTP가 준비되어 있으면 계정 확인 메일도 구성한다. 미설정이면 아래 관리자 확인 절차로 계정을 준비하고 SMTP를 후속 항목으로 기록한다. 일반 개발자는 프로젝트 역할로 권한을 부여하며 모두 관리자로 만들지 않는다.
 4. 일상 작업은 개인 계정이나 별도 자동화 계정으로 진행한다.
    `root`는 복구용으로 안전하게 관리하고 관리자 비밀번호나 관리자 PAT를 CI 작업에 넣지 않는다.
 5. 계정 설정·비밀번호 변경 후 [로그인 정보 파일](#11-로그인-정보-파일-관리)의 GitLab 항목을 갱신한다.
@@ -238,8 +246,8 @@ SSH 방식의 Git 접근은 계정에 SSH 공개키를 별도로 등록한다.
 `--token <비밀값>`처럼 명령에 직접 쓰거나 셸 이력·대화에 남기지 않는다.
 
 ```bash
-GITLAB_HOST='gitlab.example.com'
-GITLAB_API_HOST="$GITLAB_HOST" # HTTPS가 8443이면 gitlab.example.com:8443
+GITLAB_HOST='<서버-IP>'
+GITLAB_API_HOST="$GITLAB_HOST:8443" # 실제 GitLab HTTPS 포트로 변경
 GITLAB_REPO="https://$GITLAB_API_HOST/group/open-work-hub"
 glab auth login --hostname "$GITLAB_HOST" --api-host "$GITLAB_API_HOST" --api-protocol https --git-protocol ssh
 glab auth status --hostname "$GITLAB_HOST"
@@ -355,8 +363,8 @@ ARM64 등 다른 아키텍처의 빌드는 [검증 이미지 플랫폼 계약](d
 다른 Docker 데몬에서 실행하는 Runner라면 같은 검증된 이미지가 그 데몬에도 준비되어야 한다.
 CI의 Redis·MinIO 서비스 이미지도 내려받을 수 있어야 한다.
 OpenSearch는 앱의 최소 첫 실행에는 선택 사항이지만 현재 릴리스 CI에는 필요한 서비스다.
-추가 서비스 설치를 보류했다면 OpenSearch 빌드도 보류하고 검증 Runner는 일시 중지 상태로 둔다.
-리뷰 Runner 준비와 릴리스 검증 준비를 구분하며, 필요한 이미지·서비스·DB를 확인한 뒤 검증 Runner를 재개한다.
+개발 앱의 추가 서비스 시작을 보류해도, GitLab CI까지 포함한 셋업에서는 필요한 검증 이미지·테스트 DB·CI 서비스 준비를 끝낸다.
+리뷰 Runner 준비와 릴리스 검증 준비를 구분하며, 필요한 이미지·서비스·DB와 등록·온라인 상태를 확인한다. 릴리스 파이프라인 실행은 별도 릴리스 범위를 따른다.
 
 리뷰 Runner의 **실제 실행 계정**에 Git·Node.js·Codex·Linux 샌드박스 선행 도구와 Codex 인증을 준비한다.
 개발 사용자의 로그인이나 nvm 설정이 Runner 서비스에 자동으로 전달된다고 가정하지 말고 서비스의 PATH를 맞춘다.
@@ -385,7 +393,8 @@ Debian 계열에서 클러스터 이름은 `ci`처럼 하이픈 없이 정해 sy
 
 새 프로젝트에 `OPEN_WORK_HUB_CI_POSTGRES_DSN`을 아래와 같이 등록한다.
 기존 변수가 있으면 새로 만들거나 덮어쓰기 전에 환경 범위와 소유자를 확인한다.
-값은 사용자가 서버 터미널에 직접 입력하며 명령 인자나 파일로 남기지 않는다.
+에이전트가 셋업한 CI DB의 값은 보호된 입력에서 표준 입력으로 전달한다. 이미 알고 있는 값을 사용자에게 다시 요청하지 않는다.
+사용자가 직접 인증 정보를 제공하는 경우에만 아래 대화형 입력을 사용한다. 비밀값을 명령 인자·대화·로그에 남기지 않는다.
 
 ```bash
 set +x
@@ -410,17 +419,28 @@ glab ci list --repo "$GITLAB_REPO"
 ```
 
 실제 실행은 **명시적으로 승인된 작업 브랜치와 MR**에서 확인한다.
+README의 전체 셋업 프롬프트로 위임받은 경우에는 그 범위 안에서 검증용 작업 브랜치를 준비하고, 설치 관련 변경을 검토·커밋·push한 뒤 `dev` 대상 Draft MR을 생성한다. 기존 검증용 MR이 있으면 재사용한다.
+MR에는 비밀값이나 서버별 실행 로그를 포함하지 않는다. 준비된 source 브랜치에서 다음과 같이 생성할 수 있다.
+
+```bash
+glab mr create --source-branch '<검증용-작업-브랜치>' --target-branch dev \
+  --draft --title 'Validate development setup' \
+  --description 'Verify the installation changes and GitLab CI setup.' \
+  --repo "$GITLAB_REPO" --yes
+```
+
 MR 생성·새 커밋 push로 파이프라인이 생성되며, 이미 열린 MR을 다시 실행하려면 대상 source 브랜치를 지정한다.
 
 ```bash
 glab ci run --mr --branch '<MR의-source-브랜치>' --repo "$GITLAB_REPO"
 ```
 
-명령 기준: [CI lint](https://docs.gitlab.com/cli/ci/lint/),
+명령 기준: [Draft MR 생성](https://docs.gitlab.com/cli/mr/create/), [CI lint](https://docs.gitlab.com/cli/ci/lint/),
 [MR 파이프라인 실행](https://docs.gitlab.com/cli/ci/run/),
 [CI 변수 등록](https://docs.gitlab.com/cli/variable/set/).
 lint 성공이나 파이프라인 생성만으로 설치 완료로 판단하지 않는다.
 최신 MR 커밋에서 예상한 job이 실제 실행되어 성공했는지 확인하고, pending·인증·이미지·DB 연결 실패를 구분해 보고한다.
+실행 실패는 셋업 범위에서 원인을 해결하고 재실행한다. `dev` 대상 MR의 `codex_review` 성공을 개발 파이프라인 완료 증거로 남기며, `release_validation` 실행 여부와 혼동하지 않는다.
 `dev → main` 릴리스 MR·병합·운영 배포는 각각 별도 승인 대상이다.
 GitLab 접속, 관리자 로그인·비밀번호 변경, `glab` 인증, Runner 온라인, 변수 등록, 실제 CI 통과 여부를 나누어 설치 결과에 기록한다.
 
@@ -466,7 +486,7 @@ free -h
 | bubblewrap (Linux Codex) | Codex 실행 전에 설치한다. [README](README.md) · [공식 샌드박스 요건](https://developers.openai.com/codex/concepts/sandboxing#prerequisites) |
 | pnpm | 루트 `package.json`의 `packageManager`에 지정된 버전을 사용한다. [공식 설치 안내](https://pnpm.io/installation) |
 | uv와 앱용 Python | [uv 설치 안내](https://docs.astral.sh/uv/getting-started/installation/)와 [Python 설치 안내](https://docs.astral.sh/uv/guides/install-python/)를 따른다. Python 범위는 [API](apps/api/pyproject.toml)·[Worker](apps/worker/pyproject.toml)의 `requires-python`이 기준이다. |
-| agent-browser | 직접 브라우저를 조작하는 검사에 사용한다. `npm install --global agent-browser`로 설치하고 `agent-browser --version`으로 확인한다. |
+| agent-browser | 최초 셋업과 에이전트의 화면 확인에 사용한다. CLI가 없을 때 `npm install --global agent-browser`로 설치하고 `agent-browser --version`으로 확인한다. 브라우저 준비와 검사는 4.1절을 따른다. |
 | PostgreSQL·Redis | 4절에 따라 호스트에 네이티브로 설치하고 systemd 서비스로 관리한다. |
 | Docker Engine와 Compose 플러그인 (선택) | Docker 기반 추가 서비스나 기존 Compose 방식을 사용할 때만 [Docker 공식 설치 안내](https://docs.docker.com/engine/install/)를 따른다. 네이티브 최소 구성에는 필요하지 않다. |
 
@@ -623,7 +643,20 @@ OpenSearch를 포함한 추가 서비스는 이 단계에서 필요하지 않으
 인증을 포함한 설정 파일은 해당 서비스만 읽도록 제한하고 loopback·protected mode·영속 저장을 유지한다.
 systemd unit에는 실제 바이너리·설정·데이터 경로를 사용하고 서비스 계정으로 인증 연결을 검증한다.
 
-첫 터미널에서 실행하고 종료하지 않는다.
+첫 실행 전에 개발 `.env`에서 다음 항목을 설정한다. 서버 IP는 PC에서 실제로 접속할 주소로 바꾸고 기존의 다른 설정은 보존한다.
+
+```dotenv
+OPEN_WORK_HUB_WEB_DEV_HOST=0.0.0.0
+OPEN_WORK_HUB_WEB_DEV_PORT=4200
+OPEN_WORK_HUB_API_DEV_LOGIN_ALLOWED_HOSTS=<서버-IP>
+```
+
+Web은 모든 IPv4 인터페이스에서 수신하고 API 요청을 loopback의 API로 프록시한다.
+API·개발 PostgreSQL·Redis의 수신 주소는 loopback으로 유지한다. `0.0.0.0`은 수신 설정이며 사용자에게 전달할 접속 주소는 서버 IP다.
+새 개발 DB의 시드 비밀번호는 첫 실행 전에 `OPEN_WORK_HUB_API_DEV_LOGIN_PASSWORD`에 고유한 값으로 설정하고 `.auth_info`에 기록한다.
+기존 DB에서는 기존 계정·비밀번호를 보존한다. 이 환경값을 바꾸는 것만으로 기존 계정의 비밀번호가 갱신되지는 않는다.
+
+첫 실행은 터미널에서 아래 명령으로 확인한다. 최종 인계 전에는 7절의 지속 실행과 외부 로그인 확인까지 마친다.
 
 ```bash
 ./dev.sh --minimal-infra --no-infra
@@ -644,28 +677,59 @@ DB를 지우거나 `stamp`로 오류를 건너뛰지 않는다. 이전 스키마
 pnpm dev:login-smoke
 ```
 
-기본 Web 주소는 `http://127.0.0.1:4200`, API 주소는 `http://127.0.0.1:8001`이다.
-포트를 변경한 환경에서는 실제 개발 설정을 따른다.
-개발용 로그인 계정은 `administrator` / `open-work-hub-dev-only`다.
+PC에 안내할 Web 주소는 `http://<서버-IP>:4200`이며, 서버 내부 API 주소는 `http://127.0.0.1:8001`이다.
+포트를 변경한 환경에서는 실제 개발 설정을 따른다. 서버 내부의 loopback 검사 통과 후에도 5절의 외부 접속 검사를 완료해야 한다.
+개발용 로그인 아이디는 `administrator`이며 비밀번호는 `.auth_info`에서 확인한다. 템플릿의 초기 비밀번호는 `open-work-hub-dev-only`이므로 새 설치에서는 위 단계에서 바꾼 값을 사용한다.
 공유·공개 운영 서비스에는 개발용 기본 계정을 사용하지 않는다.
 확인한 개발용 시드 계정과 DB·Redis 접속 정보는 [로그인 정보 파일](#11-로그인-정보-파일-관리)의 개발 항목에 기록한다.
 
-브라우저 검사까지 수행하려면 다음을 실행한다.
+### 4.1. agent-browser로 셋업 화면 확인
+
+최초 셋업과 에이전트의 화면 확인에는 **`agent-browser`를 기본으로 사용한다.**
+2.4절에서 CLI를 준비한 뒤 설치된 버전의 지원 명령을 확인한다.
+
+```bash
+agent-browser --version
+agent-browser --help
+```
+
+사용 가능한 브라우저가 없을 때만 `agent-browser install`로 준비한다.
+기존 Chromium을 사용할 때는 `--executable-path '<검증된-Chromium-실행파일>'`을 지정한다.
+Linux에서 OS 라이브러리 누락으로 실행이 실패하면 `agent-browser install --with-deps`로 필요한 의존성을 준비한다.
+설치된 CLI가 `skills` 명령을 제공하면 `agent-browser skills get core`도 참고한다.
+
+PC에서 사용할 서버 IP의 개발 주소로 로그인 화면을 열고 현재 화면의 요소를 확인한다. IP·포트는 실제 설정으로 바꾼다.
+
+```bash
+agent-browser --session owh-setup open 'http://<서버-IP>:4200/login'
+agent-browser --session owh-setup snapshot -i
+```
+
+1.1절의 비밀값 취급 절차를 지키며 로그인하고, 앱 목록·주요 화면의 접근과 로그아웃 후 로그인 화면 복귀까지 확인한다.
+페이지 열기나 snapshot 출력만으로 로그인 검사를 통과했다고 보고하지 않는다. 검사 결과와 미확인 항목을 구분하고, 실패한 경우에도 사용한 세션을 종료한다.
+
+```bash
+agent-browser --session owh-setup close
+```
+
+사설 GitLab 인증서는 2.2.1절의 CA 신뢰 설정을 적용하고 TLS 검증을 유지한다.
+
+### 4.2. 기존 Playwright 회귀검사가 필요한 경우
+
+기존 Playwright 로그인 회귀검사나 E2E를 실행하는 작업, 또는 변경 범위상 해당 검사가 필요한 작업에서만 다음 준비를 수행한다.
+이 절은 최초 셋업의 기본 필수 단계가 아니다. `agent-browser` 화면 확인은 기존 자동 테스트·CI의 필수 검사를 대체하지 않는다.
 
 ```bash
 pnpm e2e:install
 pnpm dev:login-browser-smoke
 ```
 
+`pnpm e2e:install`은 저장소의 Playwright용 Chromium을 설치하고, `pnpm dev:login-browser-smoke`는 기존 로그인 회귀검사를 실행한다.
+`pnpm agent-browser:smoke`도 현재 Playwright E2E를 실행하는 별칭이므로, 직접 화면을 확인할 때는 4.1절의 `agent-browser` CLI를 사용한다.
+
 Chromium의 OS 라이브러리가 빠졌다면
 [Playwright 시스템 의존성 안내](https://playwright.dev/docs/browsers#install-system-dependencies)에 따라
 `pnpm exec playwright install-deps chromium`으로 준비한 뒤 다시 검사한다.
-
-`agent-browser`는 에이전트가 실제 화면을 탐색하고 조작하는 도구이고, 위 로그인 회귀 검사는 저장소에 고정된 Playwright를 사용한다.
-직접 브라우저 검사에는 `agent-browser install`로 Chromium을 준비하거나
-`agent-browser --executable-path '<검증된-Chromium-실행파일>'`로 기존 브라우저를 지정한다.
-사용법은 `agent-browser skills get core`에서 확인하며, 로그인 후 실제 화면을 검사하고 검사 세션을 종료한다.
-사설 GitLab 인증서는 `--ca-cert '<공개-CA-인증서>'`로 전달하고 TLS 검증을 유지한다.
 
 새 Ubuntu 릴리스가 고정된 Playwright의 다운로드 목록에 없다면 OS 이름만으로 지원을 추정하지 않는다.
 예를 들어 Playwright 1.59.1의 Ubuntu 26.04 지원 범위는
@@ -673,6 +737,8 @@ Chromium의 OS 라이브러리가 빠졌다면
 동일 CPU의 호환 배포본을 검증할 때만 `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-arm64 pnpm e2e:install`처럼
 일회성 다운로드 대상을 지정할 수 있다. 시스템 의존성은 현재 OS의 패키지로 준비하고 실제 Chromium 실행·로그인 검사를 통과해야 한다.
 필요 패키지는 같은 플랫폼 지정으로 `pnpm exec playwright install-deps chromium --dry-run`을 실행해 먼저 확인한다.
+
+### 4.3. Chromium 실행이 AppArmor에 차단된 경우
 
 Ubuntu의 AppArmor가 Chromium의 사용자 네임스페이스를 차단하면
 [Chromium의 AppArmor 안내](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md)를 따른다.
@@ -683,33 +749,29 @@ Ubuntu의 AppArmor가 Chromium의 사용자 네임스페이스를 차단하면
 
 ## 5. 내 PC 브라우저에서 서버 접속
 
-서버의 `127.0.0.1`은 서버 자신을 가리킨다. 기본 개발 환경은 내 PC에서 SSH 터널로 확인할 수 있다.
-다음 명령은 **내 PC의 터미널**에서 실행한다. 사용자·서버 주소는 실제 SSH 접속 대상으로 바꾼다.
+기본 접속 방식은 **SSH 터널 없이 서버 IP로 직접 접속**하는 것이다.
+4절에서 설정한 `.env`의 `OPEN_WORK_HUB_WEB_DEV_HOST=0.0.0.0`과 실제 Web 포트를 확인한다.
+개발 앱을 재시작한 뒤 `ss -ltn`으로 `0.0.0.0:<개발-Web-포트>` 수신을 확인한다.
+VM 네트워크·라우팅·방화벽에서 PC가 해당 IP와 Web 포트에 도달할 수 있게 구성한다. NAT 환경이면 필요한 포트 전달을 함께 설정한다.
+사용자에게 `http://<서버-IP>:<개발-Web-포트>/login`을 안내한다. `0.0.0.0`이나 서버의 `127.0.0.1`을 PC 접속 주소로 안내하지 않는다.
+기본 Web 개발 서버가 API 요청을 프록시하므로 API·개발 PostgreSQL·Redis는 loopback 바인딩을 유지한다.
 
-```bash
-ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:4200:127.0.0.1:4200 '<사용자>@<서버주소>'
-```
-
-터널을 유지한 채 내 PC에서 `http://127.0.0.1:4200`에 접속한다.
-기본 Web 개발 서버가 API 요청을 프록시하므로 첫 로그인에는 API 포트를 별도로 공개할 필요가 없다.
-Bento처럼 별도 주소를 쓰는 기능은 해당 기능 문서의 접속 설정과 추가 터널을 함께 구성한다.
-
-내부 네트워크에서 서버 IP로 직접 접속하려면 `.env`의 `OPEN_WORK_HUB_WEB_DEV_HOST=0.0.0.0`을 설정하고 재시작한다.
-접속 주소는 `http://<서버-IP>:4200`이며, API·PostgreSQL·Redis의 loopback 바인딩은 유지한다.
-VM이 PC에서 도달 가능한 네트워크에 연결되어 있는지와 Web 포트 허용 여부도 확인한다.
-서버에서는 아래와 같이 실제 PC 접속 주소를 대상으로 로그인·브라우저 검사를 수행하고, PC에서도 페이지를 연다.
+서버에서는 실제 PC 접속 주소를 대상으로 다음 검사를 수행한다. IP·포트는 환경에 맞춘다.
 
 ```bash
 OPEN_WORK_HUB_DEV_SMOKE_API_URL='http://<서버-IP>:4200' pnpm dev:login-smoke
-OPEN_WORK_HUB_DEV_SMOKE_WEB_URL='http://<서버-IP>:4200' pnpm dev:login-browser-smoke
+agent-browser --session owh-setup open 'http://<서버-IP>:4200/login'
+agent-browser --session owh-setup snapshot -i
 ```
 
+4.1절에 따라 시드 계정으로 로그인·화면·로그아웃을 확인하고 `agent-browser --session owh-setup close`로 세션을 종료한다.
+**PC 또는 같은 외부 접속 경로의 브라우저에서도** 로그인 화면을 열고 `.auth_info`의 시드 계정으로 실제 로그인해 앱 화면까지 확인한다.
+서버에서 자기 IP로 실행한 검사만으로 PC의 접속 성공을 단정하지 않는다. PC 조작 권한이 없으면 사용자에게 이 마지막 확인만 요청하고, 그동안 GitLab·CI 등 나머지 셋업을 계속한다.
 GitLab의 별도 HTTPS 접속·인증서 설정은 2.2.1절을 따른다.
 
-여러 사람이 사용할 공개 개발 도메인은 HTTPS 프록시·호스트 허용 설정·계정 구성을 따로 준비한다.
-포트 전체를 공개하여 해결하지 않는다. 공개 접속 검사와 상시 실행 방식은
-[지속 실행 계약](docs/domains/release/README.md#persistent-development-runtime) 및
-[사용자 수용 검사](docs/product/core-platform-user-acceptance.md)를 따른다.
+도메인·DNS 연결은 이번 셋업의 선행 조건이 아니다. 필요한 Web·GitLab·SSH 포트만 허용한다.
+Bento 등 별도 주소를 쓰는 기능은 사용 시 해당 기능 문서의 접속 설정을 추가한다.
+기능별 사용자 수용 검사는 [사용자 수용 검사](docs/product/core-platform-user-acceptance.md)를 따른다.
 
 ## 6. 실제 기능 개발용 서비스 연결
 
@@ -802,13 +864,28 @@ sudo systemctl start '<개발-PostgreSQL-unit>' '<개발-Redis-unit>'
 GitLab Linux 패키지는 `sudo gitlab-ctl stop`, `sudo gitlab-ctl start`, `sudo gitlab-ctl restart`로 관리한다.
 Runner는 `sudo systemctl stop gitlab-runner`, `sudo systemctl start gitlab-runner`로 관리한다.
 앱 종료가 이 서비스들을 멈추지는 않는다. 재부팅 자동 시작은 해당 systemd unit의 enabled 상태로 확인하고,
-전경 앱의 상시 실행이 필요하면 위 지속 실행 계약을 따른다.
+셋업 인계 시 개발 앱은 SSH·에이전트 세션이 끝나도 실행 중이어야 한다.
+위 지속 실행 계약에 따라 systemd 등 호스트 감독 서비스로 같은 체크아웃의 최소 실행 명령을 관리하고, 자동 시작·재시작과 로그를 준비한다.
+호스트별 서비스 파일은 저장소 밖에서 관리하고 실제 서비스 이름과 중지·재시작 명령을 인계한다.
+
+**조직 최초 도입은 아래 조건을 모두 확인한 뒤 완료로 보고한다.**
+
+- 개발 Web의 `0.0.0.0` 수신과 PC에서 서버 IP로 접속 가능한 상태, 로그인 화면 표시·시드 계정 로그인·앱 화면 접근.
+- 세션 종료와 무관한 개발 앱 실행, PostgreSQL·Redis 인증 연결과 API readiness.
+- IP 기반 GitLab 로그인, 관리자 설정·`glab` 인증, 비공개 프로젝트와 `origin` 연결, `dev`·`main` 등록·보호와 개발·운영 체크아웃 분리.
+- Runner 등록·온라인 상태와 필요한 이미지·CI 변수·테스트 DB 준비, 검증용 `dev` 대상 MR의 최신 커밋에 대한 실제 파이프라인 성공.
+- `.auth_info`의 최신 개발·GitLab·DB 로그인 정보, 소유자 전용 권한과 Git 제외·미추적 상태.
+
+GitLab 패키지 다운로드·lint·최소 환경 실행은 중간 단계다. 실패한 필수 항목은 원인을 해결하고 재검사한다.
+필수 인증이나 외부 네트워크 권한처럼 사용자만 처리할 수 있는 항목이 남으면 정확한 미완료 항목과 필요한 조치만 요청하며, 독립적으로 가능한 설치 작업은 계속한다.
+운영 배포와 `dev → main` 릴리스는 이 개발 셋업 완료 기준에 포함하지 않는다.
 
 설치 완료 시 사용자에게 다음을 전달한다.
 
 - 선택한 최소/전체 실행 구성, 작업 경로와 브라우저 접속 방법.
 - 최초 도입/기존 조직 참여 경로, 최초 기준 커밋과 원격·브랜치 연결 결과. GitLab 코드 등록과 CI 준비 상태는 구분한다.
 - 실제 실행한 명령과 로그인·브라우저·준비 상태 검사 결과. 미실행 검사는 구분한다.
+- PC에서 사용할 개발 로그인 URL과 GitLab URL, 시드 계정 로그인 결과, 검증 MR·파이프라인 링크·최신 커밋·성공한 job.
 - 요청된 업무 기능의 문서 저장·다시 열기, 파일 업로드·다운로드 등 실제 확인 결과.
 - 작은 화면 수정이 개발 서버에 반영되는지 확인한 결과와 변경한 파일. 불필요한 확인용 수정은 남기지 않는다.
 - 추가 자격증명·서비스가 필요한 기능과 중지·재시작 방법.
