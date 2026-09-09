@@ -7,6 +7,13 @@ Web·API·Worker는 저장소 소스에서 실행하고, 최초 셋업의 Postgr
 이후 코드와 협업을 관리한다. 이미 내부 GitLab이 준비된 조직의 참여자는 그 저장소에서 시작한다.
 운영 배포는 [Release Domain](docs/domains/release/README.md)의 별도 절차를 따른다.
 
+## PostgreSQL·Redis 최초 설치 버전
+
+- 새로 설치하는 프로젝트용 PostgreSQL과 Redis Open Source는 **설치 시점의 최신 안정 버전(최신 정식 메이저의 최신 패치)**을 사용한다. beta·RC·nightly는 제외한다.
+- Ubuntu 기본 패키지를 최신으로 간주하지 않는다. [PostgreSQL 공식 APT 저장소(PGDG)](https://www.postgresql.org/download/linux/ubuntu/)와 [Redis 공식 APT 저장소](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/apt/) 안내를 따라 공식 릴리스·OS 지원·APT 후보 버전을 확인한 뒤 호스트에 네이티브로 설치하고 systemd로 관리한다.
+- 실제 설치 버전과 출처, 연결·마이그레이션 확인 결과를 셋업 결과에 기록한다. 최신 안정판의 OS 지원이나 프로젝트 호환성에 문제가 있으면 임의로 낮추지 말고 이유와 대안을 안내하여 사용자와 결정한다.
+- 기존 서비스·데이터는 보존한다. 기존 데이터베이스의 메이저 업그레이드는 백업·호환성·복구 계획과 별도 승인이 필요하다. GitLab 번들 데이터베이스와 Docker/CI의 고정 버전 변경도 이 네이티브 최초 설치 작업에 포함하지 않는다.
+
 ## 1. 에이전트에 설치 요청하기
 
 먼저 서버에 접근할 수 있는 Codex 또는 Claude Code를 설치하고 로그인한다.
