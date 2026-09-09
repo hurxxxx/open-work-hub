@@ -56,7 +56,7 @@ PostgreSQL·Redis는 미리 설치하지 않아도 됩니다. 아래 프롬프�
 ```text
 AGENTS.md와 INSTALL.md를 따라 현재 open-work-hub/dev에 최소 개발 환경을 설치해줘.
 기존 저장소·설정·데이터를 보존하고 필요한 도구와 의존성을 준비해줘.
-PostgreSQL·Redis는 호스트에 네이티브로 설치하고 systemd로 관리해줘.
+PostgreSQL·Redis는 INSTALL.md의 버전 기준에 따라 설치 시점의 최신 안정 버전을 공식 패키지 저장소에서 확인해 호스트에 네이티브로 설치하고 systemd로 관리해줘.
 개발 설정을 맞춰 ./dev.sh --minimal-infra --no-infra로 실행하고 로그인·브라우저 검사를 수행해줘.
 OpenSearch 등 추가 서비스는 당장 설치하지 마.
 최소 실행 확인 후 INSTALL.md 2.2절에 따라 내부 GitLab과 glab을 설치해줘.
