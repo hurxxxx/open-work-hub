@@ -46,13 +46,18 @@ Git과 CA 인증서가 없으면 Linux 배포판의 패키지 관리자로 먼�
 | `origin` | 조직 내부 GitLab 프로젝트 | 내부 변경사항, MR, CI와 배포 기준을 관리하는 곳 |
 
 원격 역할과 브랜치·게시 권한은 [저장소 정책](AGENTS.md#git-and-delivery)을 따른다.
+체크아웃은 하나의 `open-work-hub` 디렉터리 아래에서 관리한다.
+처음에는 `open-work-hub/dev`만 만들고, 운영 체크아웃 `open-work-hub/prod`와
+작업별 체크아웃 `open-work-hub/worktrees/<작업명>`은 해당 작업이 필요할 때 추가한다.
 
 ### 2.1. 조직 최초 도입: GitHub 원본에서 시작
 
-원하는 작업 경로 아래의 새 `dev` 디렉터리에 Git 이력을 포함해 내려받는다.
+원하는 작업 위치에 `open-work-hub`를 만들고 그 아래의 새 `dev` 디렉터리에 Git 이력을 포함해 내려받는다.
 이 예시는 원본 `main`의 체크아웃 시점 커밋을 최초 기준으로 사용한다.
 
 ```bash
+mkdir -p open-work-hub
+cd open-work-hub
 git clone --origin upstream --branch main https://github.com/hurxxxx/open-work-hub.git dev
 cd dev
 git switch --no-track -c dev
@@ -124,9 +129,11 @@ git ls-remote --heads origin main dev
 ### 2.3. 기존 조직에 개발자·서버 추가
 
 내부 GitLab에 `dev` 브랜치가 준비되어 있으면 프로젝트의 Clone 메뉴에서 주소를 받아
-원하는 작업 경로 아래의 새 `dev` 디렉터리에 내려받는다.
+원하는 작업 위치의 `open-work-hub/dev`에 내려받는다.
 
 ```bash
+mkdir -p open-work-hub
+cd open-work-hub
 git clone --branch dev '<GitLab에서-받은-저장소-주소>' dev
 cd dev
 git remote add upstream https://github.com/hurxxxx/open-work-hub.git
@@ -235,6 +242,8 @@ pnpm check:skills
 새 개발 DB에서 설치 경로를 확인하는 단계다. 기존 DB가 있다면 대상과 마이그레이션 호환성을 먼저 확인한다.
 최소 환경은 PostgreSQL·Redis와 Web·API를 실행하고 개발용 계정을 준비한다.
 파일 저장소·검색·AI·RAG·화상회의 기능이 빠진 로그인·화면 확인용 구성이다.
+PostgreSQL·Redis는 Docker로 준비하므로 호스트에 별도로 미리 설치할 필요는 없다.
+OpenSearch를 포함한 추가 서비스는 이 단계에서 필요하지 않으며, 사용할 기능에 따라 6절에서 준비한다.
 
 첫 터미널에서 실행하고 종료하지 않는다.
 
