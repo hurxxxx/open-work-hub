@@ -49,12 +49,20 @@ nvm install 24
 
 ## 2. 원본 코드 받기
 
-`open-work-hub/dev`에 설치합니다. 이후 같은 상위 경로에 `prod`와 `worktrees`를 추가해 관리할 수 있습니다.
-기존 체크아웃이 있다면 clone 명령을 다시 실행하지 마세요.
+아래 예시를 그대로 실행하면 `/projects/open-work-hub/dev`에 설치됩니다.
+다른 위치를 원하면 첫 줄의 `owh_install_root`를 원하는 상위 디렉터리 경로로 바꾸세요.
+그 아래에 개발 저장소 `dev`를 만들고, 이후 같은 상위 경로에 `prod`와 `worktrees`를 추가해 관리할 수 있습니다.
+기존 체크아웃이 있다면 해당 저장소로 이동해 3절부터 진행하고 아래 명령은 건너뛰세요.
+
+설치 계정으로 실행합니다. 상위 디렉터리가 없으면 새로 만들어 설치 계정에 소유권을 부여합니다.
+이미 있다면 소유권을 유지하므로, 설치 계정에 해당 디렉터리의 쓰기 권한이 있어야 합니다.
 
 ```bash
-mkdir -p open-work-hub
-cd open-work-hub
+owh_install_root=/projects/open-work-hub
+if [ ! -e "$owh_install_root" ] && [ ! -L "$owh_install_root" ]; then
+  sudo install -d -m 0755 -o "$(id -u)" -g "$(id -g)" "$owh_install_root"
+fi
+cd "$owh_install_root"
 git clone --origin upstream --branch main https://github.com/hurxxxx/open-work-hub.git dev
 cd dev
 git switch --no-track -c dev
@@ -68,7 +76,7 @@ node -p 'require("./package.json").engines.node'
 ## 3. Codex 설치와 인증
 
 인증 명령이 표시하는 링크를 내 PC의 브라우저에서 열고 일회용 코드를 입력합니다.
-인증이 끝나면 현재 `open-work-hub/dev` 경로에서 Codex를 실행하세요.
+인증이 끝나면 앞에서 준비한 개발 저장소 루트에서 Codex를 실행하세요.
 
 ```bash
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
@@ -97,7 +105,7 @@ approval_policy = "never"
 PostgreSQL·Redis는 미리 설치하지 않아도 됩니다. 아래 프롬프트로 Codex가 네이티브 설치와 개발용 DB·연결 설정을 함께 준비하도록 요청합니다.
 
 ```text
-AGENTS.md와 INSTALL.md를 따라 현재 open-work-hub/dev에 최소 개발 환경을 설치해줘.
+AGENTS.md와 INSTALL.md를 따라 현재 체크아웃 경로에 최소 개발 환경을 설치해줘. 사용자가 선택한 설치 경로를 유지해줘.
 기존 저장소·설정·데이터를 보존하고 필요한 도구와 의존성을 준비해줘.
 PostgreSQL·Redis는 INSTALL.md의 버전 기준에 따라 설치 시점의 최신 안정 버전을 공식 패키지 저장소에서 확인해 호스트에 네이티브로 설치하고 systemd로 관리해줘.
 개발 설정을 맞춰 ./dev.sh --minimal-infra --no-infra로 실행하고 로그인·브라우저 검사를 수행해줘.
