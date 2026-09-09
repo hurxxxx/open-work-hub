@@ -3,11 +3,23 @@ import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-export function queryGitLab(host, route, run = execFileSync) {
+// Replaced only by the trusted installer after validating the resolved executable.
+const installedGlabBin = null;
+
+export function queryGitLab(
+  host,
+  route,
+  run = execFileSync,
+  glabBin = installedGlabBin,
+) {
+  if (typeof glabBin !== 'string' || !glabBin.startsWith('/'))
+    throw new Error(
+      'Install the evidence helper with a verified glab executable',
+    );
   let response;
   try {
     response = run(
-      '/usr/bin/glab',
+      glabBin,
       ['api', '--hostname', host.hostname, `${host.href}/${route}`],
       {
         cwd: process.env.HOME,
@@ -22,6 +34,66 @@ export function queryGitLab(host, route, run = execFileSync) {
     throw new Error('Authenticated GitLab evidence request failed');
   }
   return JSON.parse(response);
+}
+
+// GitLab RefMatcher treats only * as a wildcard; all other characters are literal.
+export function matchesBranch(pattern, branch) {
+  let p = 0,
+    b = 0,
+    star = -1,
+    retry = 0;
+  while (b < branch.length) {
+    if (pattern[p] === '*') {
+      star = p++;
+      retry = b;
+    } else if (pattern[p] === branch[b]) {
+      p++;
+      b++;
+    } else if (star !== -1) {
+      p = star + 1;
+      b = ++retry;
+    } else return false;
+  }
+  while (pattern[p] === '*') p++;
+  return p === pattern.length;
+}
+
+export function verifyBranchProtection(api, prefix, branch) {
+  let matched = false;
+  // Bound requests, but never accept an incomplete list at the limit.
+  for (let page = 1; page <= 10; page++) {
+    const rules = api(`${prefix}/protected_branches?per_page=100&page=${page}`);
+    if (!Array.isArray(rules) || rules.length > 100)
+      throw new Error('Invalid protected branch page');
+    for (const rule of rules) {
+      if (
+        typeof rule?.name !== 'string' ||
+        !rule.name ||
+        rule.name.length > 1024
+      )
+        throw new Error('Invalid protected branch pattern');
+      if (!matchesBranch(rule.name, branch)) continue;
+      matched = true;
+      if (
+        rule.allow_force_push !== false ||
+        !Array.isArray(rule.push_access_levels) ||
+        rule.push_access_levels.length === 0 ||
+        !rule.push_access_levels.every(
+          (level) =>
+            level?.access_level === 0 &&
+            ['user_id', 'group_id', 'deploy_key_id', 'member_role_id'].every(
+              (key) => level[key] == null,
+            ),
+        )
+      )
+        throw new Error('A matching target rule permits direct/force push');
+    }
+    if (rules.length < 100) {
+      if (!matched) throw new Error('No matching protected branch rule');
+      return;
+    }
+  }
+  throw new Error('Protected branch rule list exceeds verification limit');
 }
 
 export function verifyEvidence(env, config, query = queryGitLab) {
@@ -87,15 +159,7 @@ export function verifyEvidence(env, config, query = queryGitLab) {
     target.commit?.id === env.REVIEW_TARGET_SHA && target.protected === true,
     'Protected target SHA changed',
   );
-  const protection = api(
-    `${prefix}/protected_branches/${encodeURIComponent(mr.target_branch)}`,
-  );
-  requireValue(
-    protection.allow_force_push === false &&
-      protection.push_access_levels?.length > 0 &&
-      protection.push_access_levels.every((level) => level.access_level === 0),
-    'Target direct/force-push protection is not enforced',
-  );
+  verifyBranchProtection(api, prefix, mr.target_branch);
   const pipeline = api(`${prefix}/pipelines/${pipelineId}`);
   requireValue(
     pipeline.sha === env.CI_COMMIT_SHA &&

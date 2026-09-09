@@ -388,7 +388,9 @@ Runner 상세 조회에는 해당 프로젝트의 Maintainer 역할이 필요하
 gitlab-runner ALL=(owh-review-evidence) NOPASSWD: /usr/local/libexec/open-work-hub-review-evidence ""
 ```
 
-아래 설치기는 root 소유이며 서비스 계정이 수정할 수 없는 Node.js를 PATH에서 사용해야 한다.
+아래 설치기는 PATH에서 Node.js와 `glab`의 실제 실행 경로를 찾아 실행 파일과 상위 디렉터리가
+root 소유이며 그룹·다른 사용자가 쓸 수 없는지 검사한다. 검증한 `glab` 절대 경로를 설치된 도우미에 기록하므로,
+`/usr/local/bin` 등 다른 설치 경로도 사용할 수 있다. 실행 파일을 옮기면 설치기를 다시 실행한다.
 인증 정보는 분리 계정에 남고, 실행기는 검증한 상태값만 Codex에 전달한다. 리뷰 이후 상태가 바뀌면 실패한다.
 승인된 커밋의 체크아웃에서 신뢰된 실행기를 설치한다.
 

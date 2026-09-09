@@ -7,7 +7,12 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-import { queryGitLab, verifyEvidence } from './codex-review-evidence.mjs';
+import {
+  queryGitLab,
+  verifyEvidence,
+  verifyBranchProtection,
+  matchesBranch,
+} from './codex-review-evidence.mjs';
 
 const runnerSourcePath = path.join(repoRoot, 'scripts/codex-review-ci.sh');
 const runnerSource = fs.readFileSync(runnerSourcePath, 'utf8');
@@ -163,10 +168,13 @@ test('keeps source instructions out of the review checkout but in its diff', () 
         commit: { id: baseSha },
         protected: true,
       },
-      'projects/1/protected_branches/dev': {
-        allow_force_push: false,
-        push_access_levels: [{ access_level: 0 }],
-      },
+      'projects/1/protected_branches?per_page=100&page=1': [
+        {
+          name: 'dev',
+          allow_force_push: false,
+          push_access_levels: [{ access_level: 0 }],
+        },
+      ],
       'projects/1/pipelines/2': {
         sha: sourceSha,
         source: 'merge_request_event',
@@ -220,6 +228,11 @@ assert.deepEqual(process.argv.slice(2), ['-n', '-H', '-u', 'owh-review-evidence'
     if (evidence.__change_after_snapshot && route === 'projects/1/merge_requests/1') {
       const counter = ${JSON.stringify(`${evidenceFile}.calls`)};
       if (fs.existsSync(counter)) evidence[route].sha = '0'.repeat(40);
+      fs.writeFileSync(counter, 'called');
+    }
+    if (evidence.__change_protection_after_snapshot && route === 'projects/1/protected_branches?per_page=100&page=1') {
+      const counter = ${JSON.stringify(`${evidenceFile}.protection-calls`)};
+      if (fs.existsSync(counter)) evidence[route].push({name: '*', allow_force_push: true, push_access_levels: [{access_level: 40}]});
       fs.writeFileSync(counter, 'called');
     }
     return evidence[route];
@@ -394,9 +407,9 @@ printf '%s\n' \\
       [
         'direct pushes enabled',
         (v) => {
-          v['projects/1/protected_branches/dev'].push_access_levels = [
-            { access_level: 40 },
-          ];
+          v[
+            'projects/1/protected_branches?per_page=100&page=1'
+          ][0].push_access_levels = [{ access_level: 40 }];
         },
       ],
       [
@@ -412,6 +425,13 @@ printf '%s\n' \\
         (v) => {
           v['projects/1/merge_requests/1'].head_pipeline.id = 99;
         },
+      ],
+      [
+        'protection changed during review',
+        (v) => {
+          v.__change_protection_after_snapshot = true;
+        },
+        /post-review verification failed/,
       ],
       [
         'changed during review',
@@ -467,7 +487,7 @@ test('preserves the configured HTTPS port and excludes caller credentials', () =
     new URL('https://gitlab.example.invalid:8443/api/v4'),
     'projects/1',
     (file, args, options) => {
-      assert.equal(file, '/usr/bin/glab');
+      assert.equal(file, '/usr/local/bin/glab');
       assert.deepEqual(args, [
         'api',
         '--hostname',
@@ -481,6 +501,7 @@ test('preserves the configured HTTPS port and excludes caller credentials', () =
       ]);
       return '{"id":1}';
     },
+    '/usr/local/bin/glab',
   );
   assert.deepEqual(value, { id: 1 });
 });
@@ -514,4 +535,232 @@ test('rejects untrusted API servers and projects before accessing credentials', 
       ),
     /Unexpected evidence project/,
   );
+});
+
+test('checks every matching rule, including inherited and wildcard-only rules', () => {
+  const strict = {
+    name: 'dev',
+    allow_force_push: false,
+    push_access_levels: [{ access_level: 0 }],
+  };
+  const verify = (rules) =>
+    verifyBranchProtection(() => rules, 'projects/1', 'dev');
+  for (const name of ['*', 'd*', '*ev', 'd*v']) {
+    verify([{ ...strict, name, inherited: true }]);
+    assert.throws(
+      () =>
+        verify([
+          strict,
+          { ...strict, name, inherited: true, allow_force_push: true },
+        ]),
+      /permits/,
+    );
+    assert.throws(
+      () =>
+        verify([
+          strict,
+          { ...strict, name, push_access_levels: [{ access_level: 40 }] },
+        ]),
+      /permits/,
+    );
+  }
+  for (const field of [
+    'user_id',
+    'group_id',
+    'deploy_key_id',
+    'member_role_id',
+  ]) {
+    assert.throws(
+      () =>
+        verify([
+          { ...strict, push_access_levels: [{ access_level: 0, [field]: 5 }] },
+        ]),
+      /permits/,
+    );
+  }
+  verify([
+    strict,
+    {
+      name: 'main',
+      allow_force_push: true,
+      push_access_levels: [{ access_level: 40 }],
+    },
+  ]);
+  assert.throws(() => verify([]), /No matching/);
+  assert.throws(
+    () => verify([{ ...strict, allow_force_push: undefined }]),
+    /permits/,
+  );
+  assert.throws(
+    () => verify([{ ...strict, push_access_levels: [] }]),
+    /permits/,
+  );
+  assert.throws(() => verify([null]), /Invalid/);
+});
+
+test('uses GitLab literal and case-sensitive star matching', () => {
+  for (const [pattern, branch, expected] of [
+    ['*', 'dev', true],
+    ['d**v', 'dev', true],
+    ['dev*', 'dev', true],
+    ['DEV', 'dev', false],
+    ['d.v', 'dev', false],
+    ['d?v', 'dev', false],
+    ['release/*', 'release/1/x', true],
+    ['release/1.0', 'release/1x0', false],
+    ['dev', 'develop', false],
+    ['*ev', 'dev', true],
+    ['*ev', 'deva', false],
+  ])
+    assert.equal(
+      matchesBranch(pattern, branch),
+      expected,
+      `${pattern}: ${branch}`,
+    );
+});
+
+test('reads later protection pages and fails closed on missing or unbounded evidence', () => {
+  const first = Array.from({ length: 100 }, (_, i) => ({
+    name: `unrelated-${i}`,
+  }));
+  const strict = {
+    name: 'dev',
+    allow_force_push: false,
+    push_access_levels: [{ access_level: 0 }],
+  };
+  const routes = [];
+  verifyBranchProtection(
+    (route) => {
+      routes.push(route);
+      return route.endsWith('page=1') ? first : [strict];
+    },
+    'projects/1',
+    'dev',
+  );
+  assert.deepEqual(routes, [
+    'projects/1/protected_branches?per_page=100&page=1',
+    'projects/1/protected_branches?per_page=100&page=2',
+  ]);
+  assert.throws(
+    () =>
+      verifyBranchProtection(
+        (route) =>
+          route.endsWith('page=1')
+            ? [strict, ...first.slice(1)]
+            : [{ ...strict, name: '*', allow_force_push: true }],
+        'projects/1',
+        'dev',
+      ),
+    /permits/,
+  );
+  assert.throws(
+    () =>
+      verifyBranchProtection(
+        (route) => {
+          if (route.endsWith('page=1')) return first;
+          throw new Error('page unavailable');
+        },
+        'projects/1',
+        'dev',
+      ),
+    /unavailable/,
+  );
+  assert.throws(
+    () => verifyBranchProtection(() => first, 'projects/1', 'dev'),
+    /limit/,
+  );
+  assert.throws(
+    () => verifyBranchProtection(() => ({}), 'projects/1', 'dev'),
+    /Invalid/,
+  );
+});
+
+test('installer embeds the resolved glab path and rejects unsafe executable paths', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'owh-evidence-install.'));
+  try {
+    const bin = path.join(root, 'bin');
+    const custom = path.join(root, 'custom tools');
+    fs.mkdirSync(bin);
+    fs.mkdirSync(custom);
+    const glab = path.join(custom, 'glab-$&-real');
+    fs.writeFileSync(glab, `#!/bin/sh\nprintf '{"id":1}\\n'\n`, {
+      mode: 0o755,
+    });
+    fs.symlinkSync(glab, path.join(bin, 'glab'));
+    fs.symlinkSync(process.execPath, path.join(bin, 'node'));
+    for (const name of ['id', 'codex'])
+      fs.writeFileSync(path.join(bin, name), '#!/bin/sh\nexit 0\n', {
+        mode: 0o755,
+      });
+    fs.writeFileSync(
+      path.join(bin, 'stat'),
+      `#!/bin/sh
+if [ "$2" = '%u' ]; then
+  if [ "$3" = "$BAD_OWNER_PATH" ]; then echo 1000; else echo 0; fi
+elif [ "$3" = "$BAD_MODE_PATH" ]; then echo 777; else echo 755; fi
+`,
+      { mode: 0o755 },
+    );
+    fs.writeFileSync(
+      path.join(bin, 'sudo'),
+      `#!/bin/bash
+set -eu
+[[ "$1" == install ]]
+if [[ "\${@: -1}" == /usr/local/libexec/open-work-hub-review-evidence ]]; then
+  cp "\${@: -2:1}" "$INSTALL_FIXTURE_OUTPUT"
+fi
+`,
+      { mode: 0o755 },
+    );
+    const output = path.join(root, 'installed.mjs');
+    const env = {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      INSTALL_FIXTURE_OUTPUT: output,
+    };
+    const install = (extra) =>
+      spawnSync(
+        'bash',
+        [
+          path.join(
+            repoRoot,
+            'scripts/install-codex-review-runner-entrypoint.sh',
+          ),
+        ],
+        { env: { ...env, ...extra }, encoding: 'utf8' },
+      );
+    const result = install({});
+    assert.equal(result.status, 0, result.stderr);
+    const probe = execFileSync(process.execPath, ['--input-type=module', '-'], {
+      input: `import {queryGitLab} from ${JSON.stringify(output)};
+import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+const result = queryGitLab(new URL('https://gitlab.invalid:8443/api/v4'), 'projects/1', (file,args,options) => {
+  assert.equal(file, ${JSON.stringify(glab)});
+  return execFileSync(file,args,options);
+});
+assert.deepEqual(result,{id:1});`,
+      encoding: 'utf8',
+    });
+    assert.equal(probe, '');
+    for (const extra of [
+      { BAD_OWNER_PATH: glab },
+      { BAD_MODE_PATH: glab },
+      { BAD_MODE_PATH: custom },
+    ]) {
+      fs.unlinkSync(output);
+      const failed = install(extra);
+      assert.notEqual(failed.status, 0);
+      assert.match(failed.stderr, /root-owned/);
+      assert.equal(fs.existsSync(output), false);
+      // Restore the successful fixture for the next rejection case.
+      fs.writeFileSync(output, '');
+    }
+    assert.throws(
+      () => queryGitLab(new URL('https://gitlab.invalid/api/v4'), 'projects/1'),
+      /Install the evidence helper/,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
