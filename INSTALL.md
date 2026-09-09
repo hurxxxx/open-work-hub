@@ -372,13 +372,34 @@ OpenSearch는 앱의 최소 첫 실행에는 선택 사항이지만 현재 릴�
 
 리뷰 Runner의 **실제 실행 계정**에 Git·Node.js·Codex·Linux 샌드박스 선행 도구와 Codex 인증을 준비한다.
 개발 사용자의 로그인이나 nvm 설정이 Runner 서비스에 자동으로 전달된다고 가정하지 말고 서비스의 PATH를 맞춘다.
+shell executor의 로그인 셸이 서비스 PATH를 초기화할 수 있으므로, Runner 작업 계정에서도 도구 탐색을 확인한다.
+필요하면 해당 Runner의 `config.toml`에 지원되는 `environment = ["PATH=<검증한-도구-경로>:<기본-PATH>"]`를 지정하고 실제 job으로 재검사한다.
+리뷰 전·후 GitLab 메타데이터 검증은 Codex와 **다른 OS 계정** `owh-review-evidence`에서 수행한다.
+[리뷰 실행기 인증 계약](docs/agents/local-codex-review.md#contract)에 따라 홈 `0700`인 비로그인 서비스 계정을 준비하고,
+그 계정으로 단일 프로젝트 비관리자 GitLab 계정의 `read_api` PAT를 표준 입력으로 받아 `glab`을 인증한다.
+Runner 상세 조회에는 해당 프로젝트의 Maintainer 역할이 필요하다. 인증 파일은 `0600`으로 유지하고 Runner 홈·CI 변수에 복사하지 않는다.
+`glab`의 `--hostname`에는 호스트명, `--api-host`에는 포트를 포함한 주소를 사용하며 실제 API 접속을 확인한다.
+예를 들어 서비스 계정은 `sudo useradd --system --create-home --home-dir /var/lib/owh-review-evidence --shell /usr/sbin/nologin owh-review-evidence`로 만들고,
+기존 계정이 있으면 재생성하지 않고 소유권과 접근 범위를 검증한다. 홈에는 `sudo chmod 700 /var/lib/owh-review-evidence`를 적용한다.
+`/etc/open-work-hub/review-evidence.json`을 root 소유로 준비해 실제 값의 `{"api_url":"https://<서버-IP>:8443/api/v4","project_id":<프로젝트-ID>}`를 기록한다.
+`/etc/sudoers.d/owh-review-evidence`에는 실제 Runner 사용자 기준으로 다음 한 명령만 허용하고 `0440` 및 `visudo -cf` 검사를 적용한다.
+
+```sudoers
+gitlab-runner ALL=(owh-review-evidence) NOPASSWD: /usr/local/libexec/open-work-hub-review-evidence ""
+```
+
+아래 설치기는 PATH에서 Node.js와 `glab`의 실제 실행 경로를 찾아 실행 파일과 상위 디렉터리가
+root 소유이며 그룹·다른 사용자가 쓸 수 없는지 검사한다. 검증한 `glab` 절대 경로를 설치된 도우미에 기록하므로,
+`/usr/local/bin` 등 다른 설치 경로도 사용할 수 있다. 실행 파일을 옮기면 설치기를 다시 실행한다.
+인증 정보는 분리 계정에 남고, 실행기는 검증한 상태값만 Codex에 전달한다. 리뷰 이후 상태가 바뀌면 실패한다.
 승인된 커밋의 체크아웃에서 신뢰된 실행기를 설치한다.
 
 ```bash
 bash scripts/install-codex-review-runner-entrypoint.sh
 ```
 
-설치 대상은 `/usr/local/bin/open-work-hub-codex-review-ci`다.
+설치 대상은 `/usr/local/bin/open-work-hub-codex-review-ci`와 `/usr/local/libexec/open-work-hub-review-evidence`다.
+설치 계정에서 `bash scripts/check-review-credential-isolation.sh`를 실행해 합성 인증 파일의 Runner 접근 거부와 sudo 명령 제한을 확인한다.
 MR 소스의 스크립트를 직접 실행하도록 바꾸지 않으며, 리뷰의 읽기 전용 실행과 CI 신원·이미지 검사를 유지한다.
 상세 계약은 [Local Codex MR Review](docs/agents/local-codex-review.md),
 검증 이미지·실행 계약은 [Release Domain](docs/domains/release/README.md)을 따른다.
@@ -443,6 +464,9 @@ glab ci run --mr --branch '<MR의-source-브랜치>' --repo "$GITLAB_REPO"
 [MR 파이프라인 실행](https://docs.gitlab.com/cli/ci/run/),
 [CI 변수 등록](https://docs.gitlab.com/cli/variable/set/).
 lint 성공이나 파이프라인 생성만으로 설치 완료로 판단하지 않는다.
+설치 계정에서 실행한 검사를 격리된 리뷰 환경이 재실행할 수 없다면, 정확한 깨끗한 MR 커밋에서 명령을 실행한 후
+[GitLab commit status API](https://docs.gitlab.com/api/commits/#set-commit-pipeline-status)로 기존 MR의 `pipeline_id`에 검사명과 실제 결과를 등록할 수 있다.
+성공하지 않은 검사를 성공으로 등록하지 않는다. 리뷰가 시작되기 전에 근거를 등록하며, 리뷰 도중 근거가 달라지면 재검토한다.
 최신 MR 커밋에서 예상한 job이 실제 실행되어 성공했는지 확인하고, pending·인증·이미지·DB 연결 실패를 구분해 보고한다.
 실행 실패는 셋업 범위에서 원인을 해결하고 재실행한다. `dev` 대상 MR의 `codex_review` 성공을 개발 파이프라인 완료 증거로 남기며, `release_validation` 실행 여부와 혼동하지 않는다.
 `dev → main` 릴리스 MR·병합·운영 배포는 각각 별도 승인 대상이다.
@@ -702,6 +726,23 @@ agent-browser --help
 Linux에서 OS 라이브러리 누락으로 실행이 실패하면 `agent-browser install --with-deps`로 필요한 의존성을 준비한다.
 설치된 CLI가 `skills` 명령을 제공하면 `agent-browser skills get core`도 참고한다.
 
+Linux ARM64에서 `agent-browser install`이 Chrome for Testing 빌드 부재를 보고하면
+현재 배포판의 Chromium 패키지를 사용한다. Ubuntu의 `chromium-browser`는 snap을 설치할 수 있다.
+snap의 격리된 임시 디렉터리 때문에 자동 연결이 실패하면 Chromium을 직접 실행하고,
+loopback에만 연 디버깅 포트에 `agent-browser --session <검사용-세션> --cdp <포트>`로 연결한다.
+프로필은 Chromium 패키지가 접근을 허용하는 소유자 전용 디렉터리에 두고,
+검사 후 agent-browser 세션과 직접 실행한 Chromium을 모두 종료한다. 디버깅 포트를 외부에 공개하지 않는다.
+`chrome://sandbox`에서 namespace·seccomp 활성화를 확인하며, `--no-sandbox`로 우회하지 않는다.
+화면 캡처에서 한글이 사각형으로 보이면 Ubuntu의 `fonts-noto-cjk` 등 배포판 글꼴을 설치하고
+브라우저를 다시 시작해 실제 렌더링을 재검사한다.
+
+사설 CA가 필요한 GitLab 검사에서는 브라우저의 CA 신뢰까지 별도로 확인한다.
+설치한 브라우저는 호스트의 공유 라이브러리와 4.3절의 샌드박스 검사를 통과해야 한다.
+설치된 CLI가 지원하면
+`--executable-path '<Chromium>' --ca-cert '<공개-CA-인증서>'`로 지정 CA만 신뢰시킨다.
+CLI의 `--ca-cert`가 CDP 연결이나 영속 프로필과 함께 지원되는지는 해당 버전 도움말을 확인한다.
+TLS 오류를 무시하는 옵션으로 대체하지 않는다.
+
 PC에서 사용할 서버 IP의 개발 주소로 로그인 화면을 열고 현재 화면의 요소를 확인한다. IP·포트는 실제 설정으로 바꾼다.
 
 ```bash
@@ -749,6 +790,9 @@ Ubuntu의 AppArmor가 Chromium의 사용자 네임스페이스를 차단하면
 실행파일은 일반 사용자가 바꿀 수 없는 관리자 소유 경로에 두고 그 **정확한 경로만** 허용하는 프로필을 적용한다.
 `--no-sandbox`나 시스템 전체의 사용자 네임스페이스 제한 해제로 우회하지 않는다.
 적용 후 `chrome://sandbox`에서 namespace·seccomp 샌드박스가 활성화되었는지 확인한다.
+내부 페이지를 제공하지 않는 Chromium headless shell은 해당 renderer 프로세스의
+`/proc/<PID>/status`에서 `Seccomp: 2`·`NoNewPrivs: 1`을 확인하고,
+PID·network namespace가 호스트와 분리됐는지 `/proc/<PID>/ns/`로 검사한다.
 최소 환경 검사 통과는 전체 업무 기능의 설치 완료를 뜻하지 않는다.
 
 ## 5. 내 PC 브라우저에서 서버 접속
