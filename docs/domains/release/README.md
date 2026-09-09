@@ -57,6 +57,7 @@ Selector maintenance checks: `node --test scripts/release-validation.test.mjs`, 
 ## Production app contract
 
 - Run app commands only from a clean checkout named `prod` at `origin/main`.
+- Initial sibling `dev`/`prod` checkout creation is documented in [installation §2.5](../../../INSTALL.md). Creating the `main` worktree does not configure production credentials, promote a release, or deploy; never copy the development `.env` into it.
 - Keep `.env` aligned with `.env.example`; production preflight rejects dev login/seed flags, an unsafe attachment-signing key, an untrusted proxy wildcard, non-public or shared app/Bento origins, and host-port collisions.
 - Route each public hostname directly from the external HTTPS proxy to its declared service port. `OPEN_WORK_HUB_APP_FORWARDED_ALLOW_IPS` lists only the exact external proxy IPs. Bind Bento to loopback for a local proxy or the exact private proxy-facing IPv4 address; production rejects wildcard, public-IP, IPv6, and hostname bindings.
 - The app image contains the web build, API, worker, migrations, and collaboration codec at one source revision. The Compose runtime starts the privacy filter, API, worker, and scheduler with restart policies and health checks.
@@ -96,8 +97,8 @@ Before exposing an empty deployment, initialize its administrator through the ne
 An incompatible deployment must supply both options to the guarded entrypoint:
 
 ```bash
-pnpm app:prod:deploy --rollback-env-file /protected/path/previous.env --rollback-image sha256:<previous-image-id>
-pnpm app:prod:rollback --rollback-env-file /protected/path/previous.env --rollback-image sha256:<previous-image-id>
+pnpm app:prod:deploy --rollback-env-file /protected/path/previous.env --rollback-image 'sha256:<previous-image-id>'
+pnpm app:prod:rollback --rollback-env-file /protected/path/previous.env --rollback-image 'sha256:<previous-image-id>'
 ```
 
 The env backup must be a regular non-symlink file with mode 0600. The image must be immutable and match the current image before deploy or the previous image before manual rollback. Its full revision label must identify an available Git commit. Preflight snapshots that revision's `ops`, `scripts`, and `package.json` under the ignored, protected `.runtime/prod-app/rollback/` directory and validates the backup with the previous revision's config validator before build or migration.
@@ -111,6 +112,8 @@ Recovery stops only the production app Compose project without deleting volumes,
 ## Build and test storage
 
 `scripts/docker-storage.mjs` owns project image retention and capacity preflight. Before building a validation image or starting an app build, run `node scripts/docker-storage.mjs check` against the local Docker daemon. Require at least 15 GiB **and** 15% available on its filesystem; these are conservative minimums, not a guarantee that an arbitrary build fits. Release CI checks its workspace filesystem before launching suites and records a failed preflight without running them. If CI services use another filesystem/host, inspect that storage at its owner too. Do not disable OpenSearch disk watermarks or index-creation protection to make tests pass.
+
+Harness fixtures also run capacity checks on their temporary workspaces. If the default temporary directory is a small tmpfs, set `TMPDIR` to an ignored, owner-only directory on a filesystem that satisfies the same capacity threshold before running `pnpm ci:harness`. Check that filesystem's free space; do not lower the threshold or bypass preflight.
 
 An explicitly authorized production deploy applies retention before building and again after successful public smoke. `node scripts/docker-storage.mjs cleanup` is a read-only plan; `cleanup --apply` requires deploy or project artifact-cleanup scope. It removes only recognized generated app/validation image tags older than 48 hours, preserving current production, its previous rollback image, the canonical CI image, every container-referenced image (including stopped containers), recent builds and unknown/manual tags. Each image is rechecked before non-force removal. Docker's own dangling-image pruning is restricted to positive project build-cache/app labels and the same age threshold. It never prunes volumes, containers, other projects, or the Docker daemon globally. Cleanup failure is reported; it does not roll back a healthy deployment.
 
@@ -127,3 +130,18 @@ Release CI preserves Playwright's existing failure traces, videos, and error con
 Do not export Docker tar backups for reproducible builds/test images. Preserve the current and previous runtime tags for image rollback; back up persistent business data only through its separately authorized data-retention policy. Image sizes share layers: compare filesystem free space before/after cleanup rather than summing `docker image ls` sizes. Verify current/previous image IDs and runtime health remain unchanged after maintenance. Run `pnpm test:prod-app`, `node --test scripts/release-validation.test.mjs`, and the release pipeline when changing these controls.
 
 Official behavior: [Docker cache invalidation](https://docs.docker.com/reference/dockerfile/#impact-on-build-caching), [uv Docker caching](https://docs.astral.sh/uv/guides/integration/docker/#caching), [positive-label image pruning](https://docs.docker.com/reference/cli/docker/image/prune/).
+
+## Validation image platform and database
+
+Build from an approved source revision with `scripts/build-ci-validation-image.sh`. Its Dockerfile and dependency hashes are the image contract; `--print-contract` reports them without building. Development host Node/PostgreSQL versions do not replace the validation image's pinned toolchain.
+
+The current `ops/ci/validation-runner/Dockerfile` pins the PostgreSQL 17.11 Bookworm **AMD64 child manifest**. On ARM64, inspect the official release's manifest list and verify that it contains the pinned AMD64 digest before selecting its ARM64 sibling. Use that immutable sibling through the existing `POSTGRES_CLIENT_IMAGE` Docker build argument; do not substitute a floating tag or claim that the default helper automatically selects it. The helper currently does not forward an environment override for this argument, so a native build requires invoking `docker build` with the Dockerfile's public arguments:
+
+- Keep `NODE_IMAGE` and `UV_IMAGE` pins unless the selected platform requires a separately verified equivalent.
+- Pass `API_DEPENDENCY_SHA256`, `NODE_DEPENDENCY_SHA256`, and `WORKER_DEPENDENCY_SHA256` from the approved revision's `--print-contract` output. Keep all Dockerfile dependency checks enabled.
+- Use the expected image name on the validation Runner's Docker daemon. Run every post-build check in `build_image`: tool versions, PostgreSQL clients, dependency identity files, and Chromium launch. Also verify native package execution such as `pnpm exec nx --version`.
+- From that image and Runner network, verify GitLab TLS trust and authenticated access to the CI DB. A successful cross-platform build alone does not prove job execution; emulation failures remain failed checks.
+
+Docker platform selection follows [Docker's multi-platform build documentation](https://docs.docker.com/build/building/multi-platform/). A supported platform change preserves image/dependency identity enforcement and all CI gates.
+
+The validation image checks for PostgreSQL **17** clients. Provision a separate PostgreSQL 17 CI server while that contract is pinned: [`pg_dump` cannot dump a newer server major](https://www.postgresql.org/docs/current/app-pgdump.html#APP-PGDUMP-NOTES). A development PostgreSQL 18 installation therefore does not supply this CI DB. Use a dedicated non-production database and login role with `CREATEDB`, without superuser or role-creation privileges; the suites may create and drop test databases. Restrict network/HBA access to that role and the Runner network. GitLab's bundled database and application development data are separate services. See [installation and CI variables](../../../INSTALL.md#226-ci-변수-등록과-실제-실행-확인) for wiring.
