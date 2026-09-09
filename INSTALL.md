@@ -7,6 +7,10 @@ Web·API·Worker는 저장소 소스에서 실행하고, 최초 셋업의 Postgr
 이후 코드와 협업을 관리한다. 이미 내부 GitLab이 준비된 조직의 참여자는 그 저장소에서 시작한다.
 운영 배포는 [Release Domain](docs/domains/release/README.md)의 별도 절차를 따른다.
 
+## 설치 계정 권한
+
+네이티브 최초 설치 계정은 비밀번호 없이 `sudo`를 실행할 수 있는 `sudo` 그룹 소속 일반 사용자여야 한다. 관리자가 [README의 설치 계정 권한 설정](README.md#0-설치-계정-권한-설정)을 먼저 완료한다. 에이전트는 `sudo -n true`로 권한을 확인하고, 실패하면 권한을 자동 변경하거나 비밀번호를 요청하지 말고 관리자에게 사전 설정을 요청한다.
+
 ## PostgreSQL·Redis 최초 설치 버전
 
 - 새로 설치하는 프로젝트용 PostgreSQL과 Redis Open Source는 **설치 시점의 최신 안정 버전(최신 정식 메이저의 최신 패치)**을 사용한다. beta·RC·nightly는 제외한다.
