@@ -265,19 +265,26 @@ test('routing is focused; unavailable checks and timeouts remain visible', () =>
   );
 });
 
-test('native execpolicy rules deny known mutations but permit read-only and canonical commands', (t) => {
+test('native execpolicy rules allow PR operations and retain unrelated mutation denials', (t) => {
   if (spawnSync('codex', ['--version']).status !== 0) {
     t.skip(
       'Codex CLI unavailable; native integration must run on a Codex host',
     );
     return;
   }
-  for (const [argv, denied] of [
-    [['gh', 'pr', 'create'], true],
+  for (const [argv, denied, expectedDecision] of [
+    [['gh', 'pr', 'create'], false, 'allow'],
+    [['gh', 'pr', 'edit', '1'], false, 'allow'],
+    [['gh', 'pr', 'merge', '1'], false, 'allow'],
+    [['gh', 'pr', 'review', '1'], false, 'allow'],
+    [['gh', 'pr', 'comment', '1'], false, 'allow'],
+    [['gh', 'pr', 'close', '1'], false, 'allow'],
+    [['gh', 'pr', 'reopen', '1'], false, 'allow'],
     [['gh', 'pr', 'view', '1'], false],
     [['gh', 'issue', 'edit', '1'], true],
     [['gh', 'issue', 'view', '1'], false],
     [['git', 'push', 'upstream', 'dev'], true],
+    [['git', 'push', 'upstream', 'HEAD:main'], true],
     [['git', 'fetch', 'upstream'], false],
     [['git', 'push', 'origin', 'dev'], false],
     [
@@ -316,6 +323,9 @@ test('native execpolicy rules deny known mutations but permit read-only and cano
       ),
     );
     assert.equal(output.decision === 'forbidden', denied, argv.join(' '));
+    if (expectedDecision) {
+      assert.equal(output.decision, expectedDecision, argv.join(' '));
+    }
   }
 });
 
