@@ -4,7 +4,9 @@
 
 Ubuntu Server 26.04 LTS 권장 · CPU 4코어 이상 · 메모리 32GB 이상 · 프로젝트용 여유 공간 100GB 이상
 
-## 설치
+## 1. 기본 도구와 Node.js 설치
+
+서버에 SSH로 접속한 뒤 일반 사용자의 Bash에서 실행합니다. `sudo` 비밀번호는 서버 터미널에 입력하세요.
 
 ```bash
 sudo apt-get update
@@ -13,7 +15,14 @@ sudo apt-get install -y git curl ca-certificates bubblewrap
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 source ~/.bashrc # 현재 Bash에 nvm 적용
 nvm install 24
+```
 
+## 2. 원본 코드 받기
+
+`open-work-hub/dev`에 설치합니다. 이후 같은 상위 경로에 `prod`와 `worktrees`를 추가해 관리할 수 있습니다.
+기존 체크아웃이 있다면 clone 명령을 다시 실행하지 마세요.
+
+```bash
 mkdir -p open-work-hub
 cd open-work-hub
 git clone --origin upstream --branch main https://github.com/hurxxxx/open-work-hub.git dev
@@ -21,9 +30,17 @@ cd dev
 git switch --no-track -c dev
 git config remote.pushDefault origin
 
+# 현재 Node.js 버전과 프로젝트 요구 범위 확인
 node --version
 node -p 'require("./package.json").engines.node'
+```
 
+## 3. Codex 설치와 인증
+
+인증 명령이 표시하는 링크를 내 PC의 브라우저에서 열고 일회용 코드를 입력합니다.
+인증이 끝나면 현재 `open-work-hub/dev` 경로에서 Codex를 실행하세요.
+
+```bash
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
 codex login --device-auth
@@ -32,7 +49,9 @@ codex
 
 `/permissions` → **Full access**
 
-## Codex 셋업 프롬프트
+## 4. Codex에 셋업 요청
+
+PostgreSQL·Redis는 미리 설치하지 않아도 됩니다. 아래 프롬프트로 Codex가 네이티브 설치와 개발용 DB·연결 설정을 함께 준비하도록 요청합니다.
 
 ```text
 AGENTS.md와 INSTALL.md를 따라 현재 open-work-hub/dev에 최소 개발 환경을 설치해줘.
