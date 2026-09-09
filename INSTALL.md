@@ -1,7 +1,8 @@
 # 리눅스 개발 환경 설치 가이드
 
 현업 참여자가 Codex 또는 Claude Code로 코드를 수정하고 브라우저에서 확인하기 위한 설치 절차다.
-Web·API·Worker는 저장소 소스에서 실행하고, PostgreSQL·Redis 등 기반 서비스는 기존 Docker Compose로 실행한다.
+Web·API·Worker는 저장소 소스에서 실행하고, 최초 셋업의 PostgreSQL·Redis는 호스트에 네이티브로 설치한다.
+기존 Docker Compose 방식은 선택 사항이며, 추가 서비스는 사용할 기능에 따라 준비한다.
 조직 최초 도입은 GitHub 원본에서 시작하고, 최초 실행을 확인한 뒤 내부 서버의 GitLab을 구성해
 이후 코드와 협업을 관리한다. 이미 내부 GitLab이 준비된 조직의 참여자는 그 저장소에서 시작한다.
 운영 배포는 [Release Domain](docs/domains/release/README.md)의 별도 절차를 따른다.
@@ -15,11 +16,14 @@ Web·API·Worker는 저장소 소스에서 실행하고, PostgreSQL·Redis 등 �
 최초 도입에는 GitHub 원본을 읽을 수 있는 네트워크가 필요하고,
 기존 조직에 참여할 때는 내부 GitLab 저장소 접근 권한이 필요하다.
 코딩 에이전트의 로그인과 프로젝트 안에서 사용하는 AI 서비스 인증은 별개다.
+Codex는 실행 후 [README 3절](README.md)의 `/permissions` → **Full access** 설정과 주의사항을 따른다.
 
 2절에서 상황에 맞는 경로로 저장소를 내려받아 연 뒤 다음과 같이 요청한다.
 
 > AGENTS.md와 INSTALL.md를 읽고 이 리눅스 서버에
 > 개발 환경을 설치해줘. 기존 설정과 데이터를 보존하고 필요한 도구만 설치해줘.
+> PostgreSQL·Redis는 Docker가 아닌 호스트에 네이티브로 설치하고 systemd 서비스로 관리해줘.
+> 개발 설정을 해당 서비스에 맞추고 ./dev.sh --minimal-infra --no-infra로 실행해줘.
 > 먼저 최소 환경에서 로그인과 화면을 확인한 뒤, 내가 개발할 기능에 필요한 서비스를 연결해줘.
 > 비밀값은 대화에 요청하지 말고 서버에서 입력할 방법을 안내해줘.
 > 끝나면 접속 방법, 실행한 검사, 사용 가능한 기능과 추가 설정이 필요한 기능을 알려줘.
@@ -29,6 +33,9 @@ Web·API·Worker는 저장소 소스에서 실행하고, PostgreSQL·Redis 등 �
 이 문서는 설치 절차의 진입점이며 기능별 설정은 아래의 소유 문서에서 확인한다.
 
 ## 2. 서버와 저장소 준비
+
+권장 OS와 최소 서버 사양은 [README의 사전 준비](README.md#사전-준비)를 따른다.
+이는 프로젝트를 위한 최소 준비 기준이며, 전체 기능이나 GitLab 동시 운영의 성능을 보장하는 실측 사양은 아니다.
 
 Git과 CA 인증서가 없으면 Linux 배포판의 패키지 관리자로 먼저 설치한다.
 기존 체크아웃이 있으면 그 위치에서 `git status --short --branch`로 상태를 확인하고,
@@ -166,7 +173,8 @@ free -h
 | Node.js와 npm | [package.json](package.json)의 `engines.node`를 만족하도록 [Node.js 공식 안내](https://nodejs.org/en/download)를 따른다. |
 | pnpm | 루트 `package.json`의 `packageManager`에 지정된 버전을 사용한다. [공식 설치 안내](https://pnpm.io/installation) |
 | uv와 앱용 Python | [uv 설치 안내](https://docs.astral.sh/uv/getting-started/installation/)와 [Python 설치 안내](https://docs.astral.sh/uv/guides/install-python/)를 따른다. Python 범위는 [API](apps/api/pyproject.toml)·[Worker](apps/worker/pyproject.toml)의 `requires-python`이 기준이다. |
-| Docker Engine와 Compose 플러그인 | [Docker 공식 설치 안내](https://docs.docker.com/engine/install/)에서 배포판별 절차를 선택한다. |
+| PostgreSQL·Redis | 4절에 따라 호스트에 네이티브로 설치하고 systemd 서비스로 관리한다. |
+| Docker Engine와 Compose 플러그인 (선택) | Docker 기반 추가 서비스나 기존 Compose 방식을 사용할 때만 [Docker 공식 설치 안내](https://docs.docker.com/engine/install/)를 따른다. 네이티브 최소 구성에는 필요하지 않다. |
 
 Node/npm 설치 후 pnpm이 없거나 버전이 다르면 현재 Node 설치의 패키지 관리 방식에 맞춰
 아래의 프로젝트 지정 버전을 설치한다. 프로젝트 의존성 설치는 일반 개발 사용자로 진행한다.
@@ -184,12 +192,16 @@ node --version
 pnpm --version
 python3 --version
 uv --version
-docker compose version
-docker info --format '{{.ServerVersion}}'
 command -v git curl lsof pgrep
 ```
 
-Docker 데몬 연결과 사용 권한을 해결한 뒤 다음 단계로 간다.
+Docker를 선택한 경우에만 다음 명령으로 데몬 연결과 사용 권한을 확인한다.
+
+```bash
+docker compose version
+docker info --format '{{.ServerVersion}}'
+```
+
 `docker` 실행 파일만 존재하거나 기존 컨테이너가 보인다는 이유로 준비 완료로 판단하지 않는다.
 첫 Python 의존성 설치에는 AI 라이브러리도 포함되어 다운로드가 클 수 있다.
 추가 기능의 모델 다운로드·브라우저 설치까지 고려하고, 서버 사양이 검증되었다고 추정하지 않는다.
@@ -242,23 +254,39 @@ pnpm check:skills
 새 개발 DB에서 설치 경로를 확인하는 단계다. 기존 DB가 있다면 대상과 마이그레이션 호환성을 먼저 확인한다.
 최소 환경은 PostgreSQL·Redis와 Web·API를 실행하고 개발용 계정을 준비한다.
 파일 저장소·검색·AI·RAG·화상회의 기능이 빠진 로그인·화면 확인용 구성이다.
-PostgreSQL·Redis는 Docker로 준비하므로 호스트에 별도로 미리 설치할 필요는 없다.
+PostgreSQL·Redis는 에이전트가 호스트에 네이티브로 설치하며 사람이 미리 설치할 필요는 없다.
 OpenSearch를 포함한 추가 서비스는 이 단계에서 필요하지 않으며, 사용할 기능에 따라 6절에서 준비한다.
+
+1. [개발 Compose](ops/compose/open-work-hub-dev.infra.yml)의 PostgreSQL·Redis 메이저 버전을 기준으로
+   [PostgreSQL Ubuntu 설치 안내](https://www.postgresql.org/download/linux/ubuntu/)와
+   [Redis Linux 설치 안내](https://redis.io/docs/latest/operate/oss_and_stack/install/archive/install-redis/install-redis-on-linux/)를 따라 네이티브 패키지를 설치한다.
+   권장 Ubuntu 버전에서 제공되는 패키지와 버전을 먼저 확인하고, 호환성 확인 없이 다른 메이저 버전이나 대체 제품으로 바꾸지 않는다.
+2. 프로젝트용 개발 DB·사용자와 Redis 인스턴스를 준비하고 loopback 주소에서만 접근하도록 구성한다.
+   기존 서비스·데이터·포트를 보존하고, 실제 PostgreSQL 클러스터와 Redis의 systemd unit을 확인해 시작·자동 시작을 설정한다.
+3. `.env`의 `OPEN_WORK_HUB_POSTGRES_DSN`, `OPEN_WORK_HUB_INFRA_POSTGRES_PORT`,
+   `OPEN_WORK_HUB_INFRA_REDIS_PORT`를 실제 네이티브 서비스에 맞춘다.
+   템플릿의 포트 `55433`·`56380`을 네이티브 기본 포트와 같다고 가정하지 않는다.
+   기존 개발용 Redis·Worker 연결 재정의도 [개발 환경 설정](scripts/dev-env.sh)에 따라 함께 맞추고 비밀값은 출력하지 않는다.
+4. systemd 상태뿐 아니라 실제 대상에 대한 `pg_isready`, DB 사용자 인증과 쿼리,
+   Redis의 인증된 `PING` 응답으로 연결을 확인한다. 기존 데이터베이스를 재생성하거나 Redis 데이터를 비우지 않는다.
 
 첫 터미널에서 실행하고 종료하지 않는다.
 
 ```bash
-pnpm dev:minimal
+./dev.sh --minimal-infra --no-infra
 ```
 
-`dev.sh`가 개발 인프라를 준비하고, 기본 설정에서는 API 시작 전에 Alembic 마이그레이션을 실행한다.
+`--minimal-infra`는 선택 기능의 시작 의존성을 끄고, `--no-infra`는 Docker 인프라 시작을 건너뛴다.
+기본 설정에서는 API 시작 전에 Alembic 마이그레이션을 실행한다.
 DB를 지우거나 `stamp`로 오류를 건너뛰지 않는다. 이전 스키마라면
 [API 마이그레이션 안내](apps/api/README.md#alembic)를 먼저 확인한다.
+
+기존 Docker 방식을 선택한 경우에만 위 실행 명령 대신 `pnpm dev:minimal`을 사용하고,
+컨테이너 상태는 `pnpm dev:infra:minimal:status`로 확인한다. 네이티브 구성에서는 이 명령들을 사용하지 않는다.
 
 두 번째 터미널에서 같은 저장소로 이동해 확인한다.
 
 ```bash
-pnpm dev:infra:minimal:status
 ./dev.sh --status
 pnpm dev:login-smoke
 ```
@@ -306,7 +334,7 @@ Bento처럼 별도 주소를 쓰는 기능은 해당 기능 문서의 접속 설
 
 | 확인 대상 | 준비할 내용과 소유 문서 |
 | --- | --- |
-| PostgreSQL·Redis·파일 저장소·검색 | 개발 DB, 큐, 버킷, 색인 연결이 실제 실행 대상과 일치하는지 확인한다. [개발 Compose](ops/compose/open-work-hub-dev.infra.yml)와 [개발 환경 설정](scripts/dev-env.sh)이 실행 정의다. |
+| PostgreSQL·Redis·파일 저장소·검색 | 네이티브 DB·Redis 연결은 유지하고 필요한 저장소·검색만 추가한다. 개발 DB, 큐, 버킷, 색인 연결이 실제 실행 대상과 일치하는지 확인한다. Docker 서비스 정의는 [개발 Compose](ops/compose/open-work-hub-dev.infra.yml), 앱 연결 설정은 [개발 환경 설정](scripts/dev-env.sh)을 따른다. |
 | 개인정보 필터 | `OPEN_WORK_HUB_OPF_SERVICE_BASE_URL`에 별도 서비스 주소가 있으면 해당 서비스를 먼저 준비한다. 아래 실행 예와 [서비스 구현](apps/api/src/open_work_hub_api/domains/ai/privacy_filter_service.py)을 따른다. |
 | 일반 챗봇·Hermes Terminal | 키·서비스 활성화·공급자 정책·검증은 [Hermes 설치 문서](docs/domains/ai/hermes.md#fresh-environment-setup)를 따른다. 호스트에 Hermes를 별도 설치하지 않는다. |
 | 문서 AI·OCR·음성 인식 | 설정한 [Inference Gateway](docs/domains/inference-gateway/README.md)와 [RAG](docs/domains/rag/README.md) 연결을 준비한다. 개발 Compose가 외부 추론 서버까지 설치하지는 않는다. |
@@ -337,17 +365,24 @@ PY
 )
 ```
 
-필요한 설정이 준비되면 최소 실행 터미널에서 `Ctrl+C`를 누른 뒤 다음을 실행한다.
+네이티브 PostgreSQL·Redis를 유지하는 경우 추가 서비스만 해당 소유 문서에 따라 준비한다.
+`pnpm dev:infra:up`은 Redis 등을 포함한 전체 Docker 인프라를 준비하므로 네이티브 구성에서 그대로 실행하지 않는다.
+전체 인프라를 Docker로 구성하기로 선택한 경우에만 다음을 실행한다.
 
 ```bash
 pnpm dev:infra:up
+```
+
+필요한 서비스와 설정이 준비되면 최소 실행 터미널에서 `Ctrl+C`를 누른 뒤 다음을 실행한다.
+
+```bash
 ./dev.sh --with-worker --no-infra
 ```
 
-별도 터미널에서 인프라와 Worker를 포함한 앱 상태를 확인한다.
+네이티브 DB·Redis는 4절의 연결 검사로, Docker 서비스는 `pnpm infra:dev:status`로 확인한다.
+별도 터미널에서 Worker를 포함한 앱 상태를 확인한다.
 
 ```bash
-pnpm infra:dev:status
 ./dev.sh --with-worker --status
 pnpm dev:login-smoke
 curl --fail --silent --output /dev/null http://127.0.0.1:8001/readyz
@@ -359,12 +394,15 @@ AI 보호 정책을 끄지 않는다. 추가 키·서버가 필요한 기능은 
 
 ## 7. 실행 종료·재시작과 완료 확인
 
-`dev.sh`는 전경 실행이다. `Ctrl+C` 또는 터미널 종료 시 앱 프로세스가 멈추며 Docker 인프라는 남는다.
-최소 실행은 `pnpm dev:minimal`, 전체 실행은 6절의 명령으로 다시 시작한다.
+`dev.sh`는 전경 실행이다. `Ctrl+C` 또는 터미널 종료 시 앱 프로세스가 멈추며 네이티브 DB·Redis와 Docker 인프라는 남는다.
+네이티브 최소 실행은 `./dev.sh --minimal-infra --no-infra`, Docker 최소 실행은 `pnpm dev:minimal`,
+전체 실행은 6절의 명령으로 다시 시작한다.
 다른 터미널에서 중지할 때는 실행 대상에 맞춰 `./dev.sh --stop` 또는
 `./dev.sh --with-worker --stop`을 사용한다. 호스트 감독 서비스로 실행 중이면
 [지속 실행 계약](docs/domains/release/README.md#persistent-development-runtime)에 따라 그 감독 서비스를 사용한다.
-최소 인프라만 멈출 때는 `pnpm dev:infra:minimal:down`을 사용한다. 데이터 볼륨을 삭제하지 않는다.
+네이티브 DB·Redis를 멈춰야 한다면 대상이 이 프로젝트 전용인지 확인한 뒤 해당 systemd unit만 중지한다.
+공유 서비스는 임의로 중지하지 않는다. Docker 최소 인프라만 멈출 때는 `pnpm dev:infra:minimal:down`을 사용한다.
+데이터 디렉터리나 볼륨을 삭제하지 않는다.
 
 설치 완료 시 사용자에게 다음을 전달한다.
 
