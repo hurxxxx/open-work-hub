@@ -7,11 +7,14 @@
 
 | 구분 | 준비할 항목 |
 | --- | --- |
+| 권장 OS | [Ubuntu Server 26.04 LTS](https://ubuntu.com/download/server) |
+| 최소 서버 사양 | CPU 4코어 이상, 메모리 32GB 이상, 이 프로젝트를 위한 디스크 여유 공간 100GB 이상 |
 | 사람이 미리 준비 | 리눅스 서버, SSH·sudo 권한, Git·curl·CA 인증서, Codex 사용이 가능한 ChatGPT 계정, 외부 다운로드 연결 |
-| Codex가 설치 | Node.js·pnpm, Python·uv, Docker Engine·Compose와 프로젝트 의존성 |
-| 최소 실행 서비스 | Web·API와 PostgreSQL·Redis. DB 서비스는 Docker로 준비하므로 호스트에 따로 설치하지 않아도 됩니다. |
+| Codex가 설치 | Node.js·pnpm, Python·uv, PostgreSQL·Redis와 프로젝트 의존성. PostgreSQL·Redis는 호스트에 네이티브로 설치합니다. |
+| 최소 실행 서비스 | Web·API와 PostgreSQL·Redis. 최소 구성에는 Docker가 필요하지 않습니다. |
 
 최소 구성은 로그인·화면 확인용입니다. OpenSearch·파일 저장소·AI 등은 사용할 기능에 따라 나중에 준비합니다.
+GitLab 동시 운영, AI 모델, 데이터·백업 용량은 최소 사양 외에 추가 자원을 고려하세요.
 
 ## 1. 원본 코드 받기
 
@@ -62,12 +65,16 @@ codex login --device-auth
 codex
 ```
 
-다음 프롬프트를 입력하세요.
+Codex 입력창에서 `/permissions`를 입력하고 **Full access**를 선택한 뒤 다음 프롬프트로 작업하세요.
+Full access는 파일·네트워크 접근 제한과 승인 확인을 해제하므로 신뢰하는 전용 셋업 서버에서 사용하고,
+설치 후에는 기본 권한으로 되돌리세요. OS의 `sudo` 권한은 별도로 필요합니다.
+자세한 범위는 [공식 권한 안내](https://learn.chatgpt.com/docs/sandboxing#how-permissions-work)를 따릅니다.
 
 ```text
 AGENTS.md와 INSTALL.md를 따라 현재 open-work-hub/dev에 최소 개발 환경을 설치해줘.
 이미 clone한 저장소와 기존 설정·데이터를 보존하고 필요한 도구와 의존성을 준비해줘.
-PostgreSQL·Redis를 Docker로 실행하고 로그인·브라우저 검사를 수행해줘.
+PostgreSQL·Redis는 Docker가 아닌 호스트에 네이티브로 설치하고 systemd 서비스로 관리해줘.
+개발 설정을 해당 서비스에 맞추고 ./dev.sh --minimal-infra --no-infra로 실행한 뒤 로그인·브라우저 검사를 수행해줘.
 OpenSearch 등 추가 서비스는 당장 설치하지 말고 사용할 기능을 확인한 뒤 준비해줘.
 최소 실행 확인 후 내부 GitLab의 대상·주소를 확인하고, 필요하면 설치·비공개 프로젝트 생성·초기 push까지 진행해줘.
 기존 GitLab이 있으면 그 이력을 보존해서 연결하고 GitHub는 upstream, 내부 GitLab은 origin으로 유지해줘.
