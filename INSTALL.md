@@ -66,8 +66,9 @@ Git과 CA 인증서가 없으면 Linux 배포판의 패키지 관리자로 먼�
 
 원격 역할과 브랜치·게시 권한은 [저장소 정책](AGENTS.md#git-and-delivery)을 따른다.
 체크아웃은 하나의 `open-work-hub` 디렉터리 아래에서 관리한다.
-처음에는 `open-work-hub/dev`만 만들고, 운영 체크아웃 `open-work-hub/prod`와
-작업별 체크아웃 `open-work-hub/worktrees/<작업명>`은 해당 작업이 필요할 때 추가한다.
+최소 첫 실행은 `open-work-hub/dev`에서 준비한다. 내부 GitLab의 `main` 등록 뒤 개발·운영 경로를 함께
+준비하는 설치에서는 2.5절에 따라 `open-work-hub/prod`를 만든다. 작업별 체크아웃은 필요할 때
+`open-work-hub/worktrees/<작업명>`에 추가한다.
 
 ### 2.1. 조직 최초 도입: GitHub 원본에서 시작
 
@@ -96,8 +97,9 @@ git rev-parse HEAD
 
 조직 관리자가 내부 서버에 GitLab을 별도 관리 서비스로 준비한다.
 에이전트에게 맡길 때는 서버 설치, 관리자 설정, `glab` 인증, 초기 코드 push와 CI 준비를 작업 범위에 명시한다.
-관리자 계정 생성·비밀번호 변경·PAT 발급·`glab` 인증은 사용자가 직접 진행한다.
-에이전트는 필요한 방법을 안내하고 사용자의 완료 확인을 받은 뒤 프로젝트·CI 구성을 이어간다.
+관리자 설정·PAT 발급·`glab` 인증도 명시적으로 위임하면 에이전트가 서버에서 수행할 수 있다.
+실제 비밀값은 보호된 파일이나 표준 입력으로 전달하고 명령 인자·대화·로그에 남기지 않는다.
+사용자가 직접 진행하기로 정한 단계나 추가 인증이 필요한 단계에서만 방법을 안내하고 완료를 기다린다.
 이미 GitLab이나 프로젝트가 있다면 기존 설정과 이력을 확인해 사용하고 새로 초기화하지 않는다.
 GitLab 서버, `glab` 클라이언트, 실제 작업을 실행하는 GitLab Runner는 각각 설치해야 한다.
 
@@ -107,7 +109,8 @@ GitLab 서버, `glab` 클라이언트, 실제 작업을 실행하는 GitLab Runn
 앱과 같은 서버라면 기존 서비스의 포트와 메모리·디스크 사용량을 확인한다.
 GitLab 자체 DB·Redis는 프로젝트 개발용 DB·Redis와 구분하며 임의로 같은 데이터베이스에 연결하지 않는다.
 
-[공식 Ubuntu 설치 안내](https://docs.gitlab.com/install/package/ubuntu/)에서 실제 OS와 선택한 GitLab 버전의 지원 여부를 확인한다.
+[공식 Ubuntu 설치 안내](https://docs.gitlab.com/install/package/ubuntu/)와
+[지원 플랫폼](https://docs.gitlab.com/install/package/#supported-platforms)에서 실제 OS·CPU 아키텍처와 선택한 GitLab 버전의 지원 여부를 확인한다.
 다음은 **새 서버의 Community Edition Linux 패키지 설치 예시**다.
 도메인과 패키지 버전은 조직이 정한 값으로 바꾼다. 내부 인증서를 사용할 때는 공식 설치 절차에 따라
 HTTPS 설정을 준비하며, 사설 도메인에서 자동 인증서 발급이 된다고 가정하지 않는다.
@@ -125,19 +128,50 @@ sudo gitlab-ctl status
 지원되는 별도 서버 또는 [공식 Docker 설치 방식](https://docs.gitlab.com/install/docker/installation/)을 선택하고 버전을 고정한다.
 Docker 방식은 앱의 PostgreSQL·Redis 네이티브 설치 방식을 바꾸지 않는다.
 설치 후 브라우저에서 정한 HTTPS 주소에 접속한다. 사설 CA는 개발 서버와 Runner에도 신뢰하도록 등록하고 TLS 검증을 끄지 않는다.
+Docker executor의 작업·helper 컨테이너에도 [Runner 인증서 설정](https://docs.gitlab.com/runner/configuration/tls-self-signed/)을 적용한다.
+
+PC에서 직접 접속할 주소를 `external_url`로 사용한다. 내부 DNS가 없으면 고정된 사설 IP를 사용할 수 있다.
+예를 들어 `https://<서버-IP>:8443`으로 설정했다면 인증서 SAN에 해당 **IP 주소**를 포함하고,
+NGINX가 PC에서 도달 가능한 인터페이스에서 수신하도록 해당 버전의
+[NGINX 설정](https://docs.gitlab.com/omnibus/settings/nginx/)을 적용한 뒤 `sudo gitlab-ctl reconfigure`를 실행한다.
+GitLab 19.2 이상에서는 수신 주소·인증서 같은 Rails용 설정 키가 `gitlab_rails['nginx'][...]` 아래에 있다.
+HTTPS 포트에는 `http://`로 접속할 수 없다. VM 네트워크와 방화벽은 필요한 HTTPS·SSH 포트만 허용한다.
+
+사설 CA의 **공개 인증서만** 신뢰할 수 있는 SSH 연결 등으로 PC에 전달한다. CA 개인키는 서버 밖으로 복사하지 않는다.
+Windows는 인증서 관리자의 신뢰할 수 있는 루트 인증 기관, macOS는 키체인 접근의 시스템 키체인,
+Linux는 배포판의 CA 저장소에 등록한다. 별도 인증서 저장소를 사용하는 브라우저도 확인한다.
+서버 내부 점검은 `/-/readiness?all=1`, PC 접속 점검은 `/users/sign_in`과 실제 로그인을 사용한다.
+모니터링 경로의 IP 허용 목록을 PC 접속을 위해 넓히지 않는다.
 
 #### 2.2.2. 초기 관리자와 비밀번호 설정
 
 1. 설치 시 생성되는 GitLab 관리자 `root`로 최초 로그인한다.
-   초기 비밀번호는 GitLab 서버의 `/etc/gitlab/initial_root_password`에서 **사용자가 직접** 확인한다.
+   초기 비밀번호는 GitLab 서버의 `/etc/gitlab/initial_root_password`에서 확인한다.
    Docker 설치에서는 컨테이너 내부의 같은 경로다. 비밀번호를 에이전트 출력이나 대화에 붙여 넣지 않는다.
 2. 로그인 후 초기 비밀번호와 관리자 이메일을 변경한다.
    관리자 화면의 `Overview > Users`에서 `root`를 편집해 비밀번호를 변경할 수 있다.
 3. `Admin > Overview > Users > New user`에서 실제 운영 담당자 계정을 만든다.
+   아래 초기 설정 예시를 사용할 수 있으며, 기존 관리자 계정이 있으면 새로 만들지 말고 해당 계정을 편집한다.
    서버 관리가 필요한 계정에만 `Administrator` 권한을 부여하고, 해당 계정의 로그인·비밀번호 설정과 2FA를 완료한다.
    SMTP와 계정 확인 메일도 구성한다. 일반 개발자는 프로젝트 역할로 권한을 부여하며 모두 관리자로 만들지 않는다.
 4. 일상 작업은 개인 계정이나 별도 자동화 계정으로 진행한다.
    `root`는 복구용으로 안전하게 관리하고 관리자 비밀번호나 관리자 PAT를 CI 작업에 넣지 않는다.
+
+| 초기 설정 예시 | 값 |
+| --- | --- |
+| 관리자 로그인 아이디 | `owh-admin` |
+| 임시 비밀번호 | `test1234!` |
+
+이 값은 GitLab이 자동 생성하는 기본 계정이 아니라 설치 시 지정하는 공개된 초기 설정 예시다.
+**임시 비밀번호는 첫 로그인 후 반드시 고유한 비밀번호로 변경한 뒤 사용한다.**
+조직의 비밀번호 정책이 예시를 거부하면 정책을 유지하고 다른 임시 비밀번호를 서버에서 입력한다.
+`admin`은 GitLab의 [예약된 사용자 이름](https://docs.gitlab.com/user/reserved_names/)이므로 로그인 아이디로 사용할 수 없다.
+기존 계정의 이름을 바꿀 때는 사용자 ID·멤버십을 보존하고 개인 네임스페이스 주소 변경도 확인한다.
+
+관리자와 자동화 계정 모두 이메일 확인이 완료되었는지 확인한다. 미확인 계정은 PAT 인증이 되더라도
+CI lint나 파이프라인 생성이 거부될 수 있다. 확인 메일을 사용하거나 관리자가 신원을 확인한 뒤
+사용자 관리 화면의 `Confirm user`를 실행한다. 자신을 확인할 수 없는 경우 다른 관리자가 처리하며,
+인스턴스의 계정 확인 정책을 끄지 않는다.
 
 초기 비밀번호 파일이 없거나 로그인할 수 없으면 **관리자가 서버 터미널에서** 대화형 재설정을 실행한다.
 비밀번호를 명령 인자나 스크립트에 쓰지 않는다. 아래 두 방식 중 실제 설치 방식에 맞는 것만 사용한다.
@@ -168,8 +202,11 @@ glab --version
 ```
 
 GitLab 웹에서 사용할 계정의 [Personal access token](https://docs.gitlab.com/user/profile/personal_access_tokens/)을 만든다.
-프로젝트·Runner·CI 변수 관리에는 해당 프로젝트의 관리 권한과 `api` 범위가 필요하다.
+프로젝트·CI 변수 관리에는 해당 프로젝트의 관리 권한과 `api` 범위가 필요하다.
+`glab auth login --help`의 요구 범위(`api`, `write_repository`)를 확인한다.
+[Runner 생성 API](https://docs.gitlab.com/api/users/#create-a-runner-linked-to-a-user)도 사용할 때는 `create_runner`를 추가한다.
 만료일을 설정하고, 인스턴스 관리 권한이 필요하지 않은 작업에는 관리자 토큰을 사용하지 않는다.
+프로젝트 자동화에는 별도 비관리자 계정에 필요한 그룹·프로젝트 역할만 부여할 수 있다.
 SSH 방식의 Git 접근은 계정에 SSH 공개키를 별도로 등록한다.
 
 아래 예시 호스트·그룹을 실제 내부 GitLab 값으로 바꾸고, 로그인 질문에서 토큰 인증을 선택해 터미널에 입력한다.
@@ -177,13 +214,17 @@ SSH 방식의 Git 접근은 계정에 SSH 공개키를 별도로 등록한다.
 
 ```bash
 GITLAB_HOST='gitlab.example.com'
-GITLAB_REPO="https://$GITLAB_HOST/group/open-work-hub"
-glab auth login --hostname "$GITLAB_HOST" --api-protocol https --git-protocol ssh
+GITLAB_API_HOST="$GITLAB_HOST" # HTTPS가 8443이면 gitlab.example.com:8443
+GITLAB_REPO="https://$GITLAB_API_HOST/group/open-work-hub"
+glab auth login --hostname "$GITLAB_HOST" --api-host "$GITLAB_API_HOST" --api-protocol https --git-protocol ssh
 glab auth status --hostname "$GITLAB_HOST"
 glab api --hostname "$GITLAB_HOST" user | jq '{username, is_admin}'
 ```
 
 [glab 인증](https://docs.gitlab.com/cli/auth/login/)은 GitLab 계정 비밀번호와 별개다.
+PAT로 인증했다면 비밀번호 변경만으로 다시 인증할 필요는 없다. 토큰의 만료·폐기·회전,
+계정 차단이나 권한 변경은 별도로 영향을 준다. 다른 자동화 계정의 PAT는 관리자 비밀번호 변경과도 무관하다.
+자동화할 때는 같은 명령에 `--stdin`을 추가하여 보호된 비밀 입력에서 토큰을 전달한다.
 키링이 없는 서버에서는 토큰이 사용자 설정 파일에 평문으로 저장될 수 있으므로 해당 파일을 소유자만 읽게 보호한다.
 토큰·설정 파일을 저장소나 CI 아티팩트에 복사하지 않는다.
 인증 성공은 프로젝트 관리 권한을 보장하지 않으므로 그룹·프로젝트 역할도 확인한다.
@@ -225,6 +266,11 @@ glab api --hostname "$GITLAB_HOST" --method PUT 'projects/:id' \
 
 이 명령은 보호 브랜치·리뷰 승인 규칙까지 구성하지는 않는다.
 브랜치별 push·병합 권한은 프로젝트 설정에서 별도로 적용한다.
+새 프로젝트는 최초 push 이후 기본 브랜치가 `dev`인지 다시 확인한다.
+`dev`·`main`의 직접 push와 force push를 금지하고 병합은 필요한 관리 역할에만 허용한다.
+보호 브랜치 API는 에디션·버전별 지원 범위가 다르므로 응답 성공만 믿지 말고 저장된 권한을 다시 읽는다.
+권한 변경이 반영되지 않으면 `Settings > Repository > Branch rules`에서 해당 규칙을 편집한다.
+파이프라인 성공·미해결 토론 해소를 병합 조건으로 유지하고 릴리스 후 `dev` 자동 삭제를 끈다.
 
 토큰 없는 주소로 구성한 새 체크아웃에서 연결 결과를 확인한다.
 
@@ -238,6 +284,7 @@ git ls-remote --heads origin main dev
 `origin`은 내부 GitLab, `upstream`은 GitHub 원본이어야 한다.
 로컬 `dev`·`main`의 추적 대상은 각각 `origin/dev`·`origin/main`이고 기본 push 대상은 `origin`이어야 한다.
 원격의 두 브랜치가 등록한 커밋을 가리키는지 확인한다.
+개발·운영 경로 분리는 2.5절에서 준비한다. 코드 등록과 경로 생성만으로 CI가 실행되거나 운영 앱이 배포되지는 않는다.
 
 #### 2.2.5. Runner와 파이프라인 준비
 
@@ -278,10 +325,13 @@ docker build -f ops/opensearch/Dockerfile -t open-work-hub-opensearch:3.3.2-nori
 
 검증 이미지 이름은 현재 `open-work-hub-validation:node22-python312`다.
 개발 서버의 Node.js 24 설치와는 별도이며, 이름만 같은 다른 이미지로 대체하지 않는다.
+ARM64 등 다른 아키텍처의 빌드는 [검증 이미지 플랫폼 계약](docs/domains/release/README.md#validation-image-platform-and-database)을 따른다.
 로컬 이미지를 쓰는 전용 Runner는 `if-not-present` 등 그 배포 방식에 맞는 pull 정책을 구성한다.
 다른 Docker 데몬에서 실행하는 Runner라면 같은 검증된 이미지가 그 데몬에도 준비되어야 한다.
 CI의 Redis·MinIO 서비스 이미지도 내려받을 수 있어야 한다.
 OpenSearch는 앱의 최소 첫 실행에는 선택 사항이지만 현재 릴리스 CI에는 필요한 서비스다.
+추가 서비스 설치를 보류했다면 OpenSearch 빌드도 보류하고 검증 Runner는 일시 중지 상태로 둔다.
+리뷰 Runner 준비와 릴리스 검증 준비를 구분하며, 필요한 이미지·서비스·DB를 확인한 뒤 검증 Runner를 재개한다.
 
 리뷰 Runner의 **실제 실행 계정**에 Git·Node.js·Codex·Linux 샌드박스 선행 도구와 Codex 인증을 준비한다.
 개발 사용자의 로그인이나 nvm 설정이 Runner 서비스에 자동으로 전달된다고 가정하지 말고 서비스의 PATH를 맞춘다.
@@ -301,6 +351,12 @@ MR 소스의 스크립트를 직접 실행하도록 바꾸지 않으며, 리뷰�
 검증 Runner에서 접근할 수 있는 **CI 전용 비운영 PostgreSQL DB와 계정**을 준비한다.
 테스트용 DB 생성·삭제에 필요한 권한만 부여하고 GitLab 자체 DB, 개발 업무 DB나 운영 DB를 사용하지 않는다.
 Docker 작업 안의 `127.0.0.1`은 호스트 DB 주소가 아니므로 Runner의 실제 네트워크에서 접속 가능한 주소를 사용한다.
+현재 검증 이미지의 PostgreSQL 클라이언트와 맞는 서버 버전은
+[검증 DB 계약](docs/domains/release/README.md#validation-image-platform-and-database)을 따른다.
+네이티브 CI 클러스터는 개발용과 별도 데이터 디렉터리·포트·계정을 사용한다.
+Docker 전용 네트워크로 연결할 때는 해당 인터페이스와 CIDR에만 DB 수신·`pg_hba.conf` 접근을 허용하고,
+부팅 시 네트워크를 만드는 Docker 서비스가 DB보다 먼저 준비되도록 systemd 의존성을 설정한다.
+Debian 계열에서 클러스터 이름은 `ci`처럼 하이픈 없이 정해 systemd 인스턴스 이름의 경로 변환을 피한다.
 
 새 프로젝트에 `OPEN_WORK_HUB_CI_POSTGRES_DSN`을 아래와 같이 등록한다.
 기존 변수가 있으면 새로 만들거나 덮어쓰기 전에 환경 범위와 소유자를 확인한다.
@@ -360,6 +416,7 @@ git config remote.pushDefault origin
 이 경로에서는 clone한 내부 GitLab이 자동으로 `origin`이 된다.
 다른 체크아웃의 추가 원격 설정은 clone으로 승계되지 않으므로 각 체크아웃에 `upstream`을 등록한다.
 GitHub와 내부 GitLab 사이에 자동 미러링을 구성할 필요는 없다. 원본 업데이트는 8절을 따른다.
+이 서버에 운영 체크아웃도 준비하기로 했다면 2.5절을 따른다.
 
 ### 2.4. 공통 서버 확인과 개발 도구 준비
 
@@ -384,6 +441,7 @@ free -h
 | bubblewrap (Linux Codex) | Codex 실행 전에 설치한다. [README](README.md) · [공식 샌드박스 요건](https://developers.openai.com/codex/concepts/sandboxing#prerequisites) |
 | pnpm | 루트 `package.json`의 `packageManager`에 지정된 버전을 사용한다. [공식 설치 안내](https://pnpm.io/installation) |
 | uv와 앱용 Python | [uv 설치 안내](https://docs.astral.sh/uv/getting-started/installation/)와 [Python 설치 안내](https://docs.astral.sh/uv/guides/install-python/)를 따른다. Python 범위는 [API](apps/api/pyproject.toml)·[Worker](apps/worker/pyproject.toml)의 `requires-python`이 기준이다. |
+| agent-browser | 직접 브라우저를 조작하는 검사에 사용한다. `npm install --global agent-browser`로 설치하고 `agent-browser --version`으로 확인한다. |
 | PostgreSQL·Redis | 4절에 따라 호스트에 네이티브로 설치하고 systemd 서비스로 관리한다. |
 | Docker Engine와 Compose 플러그인 (선택) | Docker 기반 추가 서비스나 기존 Compose 방식을 사용할 때만 [Docker 공식 설치 안내](https://docs.docker.com/engine/install/)를 따른다. 네이티브 최소 구성에는 필요하지 않다. |
 
@@ -416,6 +474,48 @@ docker info --format '{{.ServerVersion}}'
 `docker` 실행 파일만 존재하거나 기존 컨테이너가 보인다는 이유로 준비 완료로 판단하지 않는다.
 첫 Python 의존성 설치에는 AI 라이브러리도 포함되어 다운로드가 클 수 있다.
 추가 기능의 모델 다운로드·브라우저 설치까지 고려하고, 서버 사양이 검증되었다고 추정하지 않는다.
+
+### 2.5. 개발·운영 체크아웃 경로 분리
+
+내부 GitLab의 `origin/dev`·`origin/main`이 준비된 뒤, 개발·운영 경로 구성을 포함한 설치에서 진행한다.
+운영 서비스 실행과 자격증명 설정은 별도 단계다. 개발만 필요한 참여자에게 운영 접근 권한을 추가하지 않는다.
+
+| 상대 경로 | 브랜치·용도 | 환경설정 |
+| --- | --- | --- |
+| `open-work-hub/dev` | `dev` → `origin/dev`, 개발 실행과 통합 | 개발용 `.env` |
+| `open-work-hub/prod` | `main` → `origin/main`, 승인된 운영 작업 전용 | 운영 준비 시 별도 `.env` 구성 |
+| `open-work-hub/worktrees/<작업명>` | 요청된 기능·MR 작업 브랜치 | 해당 작업에 필요한 개발 설정 |
+
+`dev`에서 실행하는 아래 명령은 **`prod`가 아직 없는 경우**의 예시다.
+기존 디렉터리나 등록된 worktree가 있으면 브랜치·dirty 상태·소유자를 먼저 확인해 재사용하고 덮어쓰지 않는다.
+로컬 `main`이 원격과 다르면 명령은 중단한다. 강제 reset 대신 이력과 진행 중인 작업을 확인한다.
+
+```bash
+(
+  set -e
+  git fetch origin dev main
+  git worktree list
+  if ! git show-ref --verify --quiet refs/heads/main; then
+    git branch --track main origin/main
+  fi
+  test "$(git rev-parse main)" = "$(git rev-parse origin/main)"
+  git branch --set-upstream-to=origin/main main
+  git worktree add ../prod main
+  mkdir -p ../worktrees
+)
+git -C ../prod status --short --branch
+git worktree list
+```
+
+연결된 worktree는 Git 이력·원격 설정을 공유하지만 파일·환경설정은 별도다.
+`origin`·`upstream`을 다시 추가하거나 개발 `.env`·가상환경·데이터를 `prod`로 복사하지 않는다.
+운영 실행 준비 전에는 `prod/.env`를 비워 둔 파일로 만들지 않고 미생성 상태로 둔다.
+운영 설정은 [운영 앱 계약](docs/domains/release/README.md#production-app-contract)에 따라 별도로 준비한다.
+`prod`의 HEAD가 `origin/main`과 같고 작업 트리가 깨끗한지 확인한다.
+
+CI의 작업 브랜치 → `dev` 리뷰와 `dev` → `main` 릴리스 검증은 2.2.5~2.2.6절의 MR 조건으로 실행된다.
+Runner의 job 체크아웃은 이 두 상시 경로와 별도이며, 경로를 만들었다고 자동 배포 job이 추가되지는 않는다.
+`main` 승격·운영 체크아웃 갱신·운영 배포는 각각 승인된 절차에서 수행한다.
 
 ## 3. 의존성과 환경설정 준비
 
@@ -468,18 +568,35 @@ pnpm check:skills
 PostgreSQL·Redis는 에이전트가 호스트에 네이티브로 설치하며 사람이 미리 설치할 필요는 없다.
 OpenSearch를 포함한 추가 서비스는 이 단계에서 필요하지 않으며, 사용할 기능에 따라 6절에서 준비한다.
 
-1. [개발 Compose](ops/compose/open-work-hub-dev.infra.yml)의 PostgreSQL·Redis 메이저 버전을 기준으로
+1. 문서 앞의 **PostgreSQL·Redis 최초 설치 버전** 기준에 따라 최신 안정 버전을 확인하고,
    [PostgreSQL Ubuntu 설치 안내](https://www.postgresql.org/download/linux/ubuntu/)와
-   [Redis Linux 설치 안내](https://redis.io/docs/latest/operate/oss_and_stack/install/archive/install-redis/install-redis-on-linux/)를 따라 네이티브 패키지를 설치한다.
-   권장 Ubuntu 버전에서 제공되는 패키지와 버전을 먼저 확인하고, 호환성 확인 없이 다른 메이저 버전이나 대체 제품으로 바꾸지 않는다.
+   [Redis 공식 APT 설치 안내](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/apt/)를 따라 네이티브 패키지를 설치한다.
+   [개발 Compose](ops/compose/open-work-hub-dev.infra.yml)의 고정 메이저 버전을 네이티브 신규 설치 버전으로 대신 사용하지 않는다.
 2. 프로젝트용 개발 DB·사용자와 Redis 인스턴스를 준비하고 loopback 주소에서만 접근하도록 구성한다.
    기존 서비스·데이터·포트를 보존하고, 실제 PostgreSQL 클러스터와 Redis의 systemd unit을 확인해 시작·자동 시작을 설정한다.
 3. `.env`의 `OPEN_WORK_HUB_POSTGRES_DSN`, `OPEN_WORK_HUB_INFRA_POSTGRES_PORT`,
    `OPEN_WORK_HUB_INFRA_REDIS_PORT`를 실제 네이티브 서비스에 맞춘다.
    템플릿의 포트 `55433`·`56380`을 네이티브 기본 포트와 같다고 가정하지 않는다.
    기존 개발용 Redis·Worker 연결 재정의도 [개발 환경 설정](scripts/dev-env.sh)에 따라 함께 맞추고 비밀값은 출력하지 않는다.
+   Redis 인증이 필요하면 `OPEN_WORK_HUB_DEV_REDIS_URL`과 `OPEN_WORK_HUB_DEV_REDIS_RESULT_BACKEND`를 설정한다.
+   `--minimal-infra`는 PostgreSQL DSN을 `OPEN_WORK_HUB_INFRA_POSTGRES_*`에서 구성하므로 사용자·비밀번호·DB 이름도 맞춘다.
 4. systemd 상태뿐 아니라 실제 대상에 대한 `pg_isready`, DB 사용자 인증과 쿼리,
    Redis의 인증된 `PING` 응답으로 연결을 확인한다. 기존 데이터베이스를 재생성하거나 Redis 데이터를 비우지 않는다.
+
+개발용 PostgreSQL의 메이저 버전을 변경할 때는 해당 OS·CPU를 지원하는 공식 PGDG 패키지를 사용하고,
+마이그레이션·인증 쿼리·로그인 검사를 수행한다. 개발 DB의 선택이 Compose나 CI DB 버전을 함께 변경하지는 않는다.
+기존 클러스터를 업그레이드할 때는 백업·포트·확장 호환성을 먼저 확인하고
+[pg_upgradecluster](https://manpages.debian.org/unstable/postgresql-common/pg_upgradecluster.1.en.html) 등 배포판의 전환 절차를 따른다.
+검사 옵션으로 사전 확인한 뒤 전환하며, 이전 클러스터는 중지 상태와 복구 가능한 데이터로 보존한다.
+`pg_lsclusters`로 실제 포트와 대상 버전을 확인하고 구 클러스터가 자동 시작되어 충돌하지 않게 한다.
+
+필요한 Redis 메이저 버전의 패키지가 없다면 다른 배포판 저장소를 섞지 않는다.
+[공식 소스 빌드](https://redis.io/docs/latest/operate/oss_and_stack/install/archive/install-redis/install-redis-from-source/)를 선택할 수 있다.
+릴리스와 [공식 체크섬](https://github.com/redis/redis-hashes)을 고정·검증하고 일반 사용자로 빌드한다.
+`Type=notify` 서비스에는 `USE_SYSTEMD=yes` 빌드와 `supervised systemd` 설정을 함께 사용한다.
+바이너리는 root 소유로 설치하고, 전용 비로그인 서비스 계정에 데이터 디렉터리 쓰기 권한만 부여한다.
+인증을 포함한 설정 파일은 해당 서비스만 읽도록 제한하고 loopback·protected mode·영속 저장을 유지한다.
+systemd unit에는 실제 바이너리·설정·데이터 경로를 사용하고 서비스 계정으로 인증 연결을 검증한다.
 
 첫 터미널에서 실행하고 종료하지 않는다.
 
@@ -517,6 +634,25 @@ pnpm dev:login-browser-smoke
 Chromium의 OS 라이브러리가 빠졌다면
 [Playwright 시스템 의존성 안내](https://playwright.dev/docs/browsers#install-system-dependencies)에 따라
 `pnpm exec playwright install-deps chromium`으로 준비한 뒤 다시 검사한다.
+
+`agent-browser`는 에이전트가 실제 화면을 탐색하고 조작하는 도구이고, 위 로그인 회귀 검사는 저장소에 고정된 Playwright를 사용한다.
+직접 브라우저 검사에는 `agent-browser install`로 Chromium을 준비하거나
+`agent-browser --executable-path '<검증된-Chromium-실행파일>'`로 기존 브라우저를 지정한다.
+사용법은 `agent-browser skills get core`에서 확인하며, 로그인 후 실제 화면을 검사하고 검사 세션을 종료한다.
+사설 GitLab 인증서는 `--ca-cert '<공개-CA-인증서>'`로 전달하고 TLS 검증을 유지한다.
+
+새 Ubuntu 릴리스가 고정된 Playwright의 다운로드 목록에 없다면 OS 이름만으로 지원을 추정하지 않는다.
+예를 들어 Playwright 1.59.1의 Ubuntu 26.04 지원 범위는
+[공식 이슈](https://github.com/microsoft/playwright/issues/40117)를 확인한다.
+동일 CPU의 호환 배포본을 검증할 때만 `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-arm64 pnpm e2e:install`처럼
+일회성 다운로드 대상을 지정할 수 있다. 시스템 의존성은 현재 OS의 패키지로 준비하고 실제 Chromium 실행·로그인 검사를 통과해야 한다.
+필요 패키지는 같은 플랫폼 지정으로 `pnpm exec playwright install-deps chromium --dry-run`을 실행해 먼저 확인한다.
+
+Ubuntu의 AppArmor가 Chromium의 사용자 네임스페이스를 차단하면
+[Chromium의 AppArmor 안내](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md)를 따른다.
+실행파일은 일반 사용자가 바꿀 수 없는 관리자 소유 경로에 두고 그 **정확한 경로만** 허용하는 프로필을 적용한다.
+`--no-sandbox`나 시스템 전체의 사용자 네임스페이스 제한 해제로 우회하지 않는다.
+적용 후 `chrome://sandbox`에서 namespace·seccomp 샌드박스가 활성화되었는지 확인한다.
 최소 환경 검사 통과는 전체 업무 기능의 설치 완료를 뜻하지 않는다.
 
 ## 5. 내 PC 브라우저에서 서버 접속
@@ -531,6 +667,18 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:4200:127.0.0.1:4200 '<사용자>
 터널을 유지한 채 내 PC에서 `http://127.0.0.1:4200`에 접속한다.
 기본 Web 개발 서버가 API 요청을 프록시하므로 첫 로그인에는 API 포트를 별도로 공개할 필요가 없다.
 Bento처럼 별도 주소를 쓰는 기능은 해당 기능 문서의 접속 설정과 추가 터널을 함께 구성한다.
+
+내부 네트워크에서 서버 IP로 직접 접속하려면 `.env`의 `OPEN_WORK_HUB_WEB_DEV_HOST=0.0.0.0`을 설정하고 재시작한다.
+접속 주소는 `http://<서버-IP>:4200`이며, API·PostgreSQL·Redis의 loopback 바인딩은 유지한다.
+VM이 PC에서 도달 가능한 네트워크에 연결되어 있는지와 Web 포트 허용 여부도 확인한다.
+서버에서는 아래와 같이 실제 PC 접속 주소를 대상으로 로그인·브라우저 검사를 수행하고, PC에서도 페이지를 연다.
+
+```bash
+OPEN_WORK_HUB_DEV_SMOKE_API_URL='http://<서버-IP>:4200' pnpm dev:login-smoke
+OPEN_WORK_HUB_DEV_SMOKE_WEB_URL='http://<서버-IP>:4200' pnpm dev:login-browser-smoke
+```
+
+GitLab의 별도 HTTPS 접속·인증서 설정은 2.2.1절을 따른다.
 
 여러 사람이 사용할 공개 개발 도메인은 HTTPS 프록시·호스트 허용 설정·계정 구성을 따로 준비한다.
 포트 전체를 공개하여 해결하지 않는다. 공개 접속 검사와 상시 실행 방식은
@@ -615,6 +763,21 @@ AI 보호 정책을 끄지 않는다. 추가 키·서버가 필요한 기능은 
 공유 서비스는 임의로 중지하지 않는다. Docker 최소 인프라만 멈출 때는 `pnpm dev:infra:minimal:down`을 사용한다.
 데이터 디렉터리나 볼륨을 삭제하지 않는다.
 
+네이티브 서비스는 설치 시 확인한 unit 이름으로 관리한다. PostgreSQL은 전체 클러스터를 함께 조작하는
+상위 unit 대신 개발 대상 인스턴스를 지정한다.
+
+```bash
+sudo systemctl stop '<개발-PostgreSQL-unit>' '<개발-Redis-unit>'
+sudo systemctl start '<개발-PostgreSQL-unit>' '<개발-Redis-unit>'
+# DB·Redis 연결을 다시 확인한 뒤 앱 실행
+./dev.sh --minimal-infra --no-infra
+```
+
+GitLab Linux 패키지는 `sudo gitlab-ctl stop`, `sudo gitlab-ctl start`, `sudo gitlab-ctl restart`로 관리한다.
+Runner는 `sudo systemctl stop gitlab-runner`, `sudo systemctl start gitlab-runner`로 관리한다.
+앱 종료가 이 서비스들을 멈추지는 않는다. 재부팅 자동 시작은 해당 systemd unit의 enabled 상태로 확인하고,
+전경 앱의 상시 실행이 필요하면 위 지속 실행 계약을 따른다.
+
 설치 완료 시 사용자에게 다음을 전달한다.
 
 - 선택한 최소/전체 실행 구성, 작업 경로와 브라우저 접속 방법.
@@ -626,6 +789,8 @@ AI 보호 정책을 끄지 않는다. 추가 키·서버가 필요한 기능은 
 
 설치 관련 코드나 설정을 바꿀 때는 [문서 유지 지침](AGENTS.md#documentation-and-skills)에 따라
 이 가이드의 영향받는 절차와 연결된 소유 문서를 같은 변경에서 갱신한다.
+이 문서에는 다른 설치에서도 재사용할 절차·전제 조건·복구 방법을 남긴다.
+특정 서버의 주소·계정·실행 시각·명령 출력·검사 로그는 설치 결과 전달에서만 보고한다.
 
 ## 8. 내부 관리 시작 후 원본 업데이트
 
