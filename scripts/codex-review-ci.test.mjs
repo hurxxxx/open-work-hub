@@ -7,6 +7,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+import { queryGitLab, verifyEvidence } from './codex-review-evidence.mjs';
+
 const runnerSourcePath = path.join(repoRoot, 'scripts/codex-review-ci.sh');
 const runnerSource = fs.readFileSync(runnerSourcePath, 'utf8');
 const invocationStart = runnerSource.indexOf('  env -i \\');
@@ -68,6 +70,8 @@ test('keeps source instructions out of the review checkout but in its diff', () 
   const checkout = path.join(fixtureRoot, 'checkout');
   const fakeCodex = path.join(fixtureRoot, 'fake-codex');
   const codexHome = path.join(fixtureRoot, 'codex-home');
+  const mockBin = path.join(fixtureRoot, 'bin');
+  const evidenceFile = path.join(fixtureRoot, 'evidence.json');
   const git = (args, cwd = fixtureRoot) =>
     execFileSync('git', args, {
       cwd,
@@ -135,6 +139,98 @@ test('keeps source instructions out of the review checkout but in its diff', () 
     );
     git(['commit', '-m', 'feature'], checkout);
     const sourceSha = git(['rev-parse', 'HEAD'], checkout);
+    fs.mkdirSync(mockBin);
+    const evidence = {
+      'projects/1': {
+        id: 1,
+        only_allow_merge_if_pipeline_succeeds: true,
+        only_allow_merge_if_all_discussions_are_resolved: true,
+      },
+      'projects/1/merge_requests/1': {
+        state: 'opened',
+        source_project_id: 1,
+        target_project_id: 1,
+        source_branch: 'feature',
+        target_branch: 'dev',
+        sha: sourceSha,
+        diff_refs: { base_sha: baseSha },
+        head_pipeline: { id: 2 },
+        has_conflicts: false,
+        blocking_discussions_resolved: true,
+        description: 'UNTRUSTED_MR_CONTENT_MUST_NOT_REACH_CODEX',
+      },
+      'projects/1/repository/branches/dev': {
+        commit: { id: baseSha },
+        protected: true,
+      },
+      'projects/1/protected_branches/dev': {
+        allow_force_push: false,
+        push_access_levels: [{ access_level: 0 }],
+      },
+      'projects/1/pipelines/2': {
+        sha: sourceSha,
+        source: 'merge_request_event',
+        status: 'running',
+      },
+      'projects/1/pipelines/2/jobs?include_retried=false&per_page=100': [
+        {
+          id: 3,
+          name: 'codex_review',
+          stage: 'review',
+          status: 'running',
+          allow_failure: false,
+          commit: { id: sourceSha },
+          runner: { id: 4 },
+        },
+      ],
+      [`projects/1/repository/commits/${sourceSha}/statuses?pipeline_id=2&all=false&per_page=100`]:
+        [
+          {
+            name: 'pnpm-ci-harness',
+            sha: sourceSha,
+            pipeline_id: 2,
+            allow_failure: false,
+            status: 'success',
+          },
+        ],
+      'runners/4': {
+        id: 4,
+        tag_list: ['codex-local'],
+        run_untagged: false,
+        locked: true,
+        runner_type: 'project_type',
+        projects: [{ id: 1 }],
+      },
+    };
+    fs.writeFileSync(evidenceFile, JSON.stringify(evidence));
+    fs.writeFileSync(
+      path.join(mockBin, 'sudo'),
+      `#!/usr/bin/env node
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+assert.deepEqual(process.argv.slice(2), ['-n', '-H', '-u', 'owh-review-evidence', '/usr/local/libexec/open-work-hub-review-evidence']);
+(async () => {
+  const { verifyEvidence } = await import(${JSON.stringify(path.join(repoRoot, 'scripts/codex-review-evidence.mjs'))});
+  const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+  assert.equal(input.CI_JOB_TOKEN, undefined);
+  const query = (host, route) => {
+    assert.equal(host.host, 'gitlab.example.invalid:8443');
+    const evidence = JSON.parse(fs.readFileSync(${JSON.stringify(evidenceFile)}, 'utf8'));
+    if (!Object.hasOwn(evidence, route)) throw new Error('Unexpected route');
+    if (evidence.__change_after_snapshot && route === 'projects/1/merge_requests/1') {
+      const counter = ${JSON.stringify(`${evidenceFile}.calls`)};
+      if (fs.existsSync(counter)) evidence[route].sha = '0'.repeat(40);
+      fs.writeFileSync(counter, 'called');
+    }
+    return evidence[route];
+  };
+  process.stdout.write(JSON.stringify(verifyEvidence(input, {
+    api_url: 'https://gitlab.example.invalid:8443/api/v4', project_id: 1,
+  }, query)));
+})().catch(() => { process.exitCode = 1; });
+`,
+      { mode: 0o755 },
+    );
 
     fs.writeFileSync(
       fakeCodex,
@@ -176,7 +272,12 @@ if (!value.includes("trusted target root instructions")) process.exit(1);
 if (!value.includes("trusted target API instructions")) process.exit(1);
 if (value.includes("untrusted source root instructions")) process.exit(1);
 if (value.includes("untrusted source API instructions")) process.exit(1);
+if (value.includes("UNTRUSTED_MR_CONTENT_MUST_NOT_REACH_CODEX")) process.exit(1);
+if (!value.includes("pipeline_success_required_for_merge")) process.exit(1);
+if (!value.includes("Authenticated runner verification")) process.exit(1);
+if (!value.includes("pnpm-ci-harness")) process.exit(1);
 ' "$trusted_instructions"
+[[ -z "\${CI_JOB_TOKEN:-}" && -z "\${MOCK_GITLAB_EVIDENCE:-}" ]]
 [[ -n "$workspace" && -n "$output" && "$base" == "origin/dev" ]]
 [[ ! -e "$workspace/AGENTS.md" && ! -e "$workspace/apps/api/AGENTS.md" && ! -e "$workspace/.agents" && ! -e "$workspace/.codex" ]]
 [[ -z "$(git -C "$workspace" remote)" ]]
@@ -206,6 +307,14 @@ printf '%s\n' \\
       encoding: 'utf8',
       env: {
         ...process.env,
+        PATH: `${mockBin}${path.delimiter}${process.env.PATH}`,
+        MOCK_GITLAB_EVIDENCE: evidenceFile,
+        CI_API_V4_URL: 'https://gitlab.example.invalid:8443/api/v4',
+        CI_PIPELINE_ID: '2',
+        CI_JOB_ID: '3',
+        CI_RUNNER_ID: '4',
+        CI_MERGE_REQUEST_IID: '1',
+        CI_JOB_TOKEN: 'fixture-secret-not-for-codex',
         CODEX_BIN: fakeCodex,
         CODEX_HOME: codexHome,
         CI_COMMIT_SHA: sourceSha,
@@ -233,7 +342,176 @@ printf '%s\n' \\
     assert.match(policyContext, new RegExp(`target_sha=${baseSha}`));
     assert.match(policyContext, /policy_path=AGENTS\.md blob=/);
     assert.match(policyContext, /policy_path=apps\/api\/AGENTS\.md blob=/);
+
+    const failedCases = [
+      [
+        'failed external check',
+        (v) => {
+          v[
+            `projects/1/repository/commits/${sourceSha}/statuses?pipeline_id=2&all=false&per_page=100`
+          ][0].status = 'failed';
+        },
+      ],
+      [
+        'stale external check',
+        (v) => {
+          v[
+            `projects/1/repository/commits/${sourceSha}/statuses?pipeline_id=2&all=false&per_page=100`
+          ][0].pipeline_id = 99;
+        },
+      ],
+      [
+        'stale source',
+        (v) => {
+          v['projects/1/merge_requests/1'].sha = baseSha;
+        },
+      ],
+      [
+        'unresolved discussion',
+        (v) => {
+          v['projects/1/merge_requests/1'].blocking_discussions_resolved =
+            false;
+        },
+      ],
+      [
+        'disabled pipeline gate',
+        (v) => {
+          v['projects/1'].only_allow_merge_if_pipeline_succeeds = false;
+        },
+      ],
+      [
+        'wrong runner',
+        (v) => {
+          v['runners/4'].tag_list = ['untrusted'];
+        },
+      ],
+      [
+        'shared runner',
+        (v) => {
+          v['runners/4'].projects.push({ id: 2 });
+        },
+      ],
+      [
+        'direct pushes enabled',
+        (v) => {
+          v['projects/1/protected_branches/dev'].push_access_levels = [
+            { access_level: 40 },
+          ];
+        },
+      ],
+      [
+        'other required check failed',
+        (v) => {
+          v[
+            'projects/1/pipelines/2/jobs?include_retried=false&per_page=100'
+          ].push({ id: 9, allow_failure: false, status: 'failed' });
+        },
+      ],
+      [
+        'newer pipeline',
+        (v) => {
+          v['projects/1/merge_requests/1'].head_pipeline.id = 99;
+        },
+      ],
+      [
+        'changed during review',
+        (v) => {
+          v.__change_after_snapshot = true;
+        },
+        /post-review verification failed/,
+      ],
+    ];
+    for (const [
+      name,
+      mutate,
+      expected = /pre-review verification failed/,
+    ] of failedCases) {
+      const changed = structuredClone(evidence);
+      mutate(changed);
+      fs.writeFileSync(evidenceFile, JSON.stringify(changed));
+      const failed = spawnSync(runnerSourcePath, {
+        cwd: checkout,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${mockBin}${path.delimiter}${process.env.PATH}`,
+          MOCK_GITLAB_EVIDENCE: evidenceFile,
+          CODEX_BIN: fakeCodex,
+          CODEX_HOME: codexHome,
+          CI_API_V4_URL: 'https://gitlab.example.invalid:8443/api/v4',
+          CI_PROJECT_ID: '1',
+          CI_PIPELINE_ID: '2',
+          CI_JOB_ID: '3',
+          CI_RUNNER_ID: '4',
+          CI_MERGE_REQUEST_IID: '1',
+          CI_COMMIT_SHA: sourceSha,
+          CI_JOB_NAME: 'codex_review',
+          CI_JOB_STAGE: 'review',
+          CI_MERGE_REQUEST_DIFF_BASE_SHA: baseSha,
+          CI_MERGE_REQUEST_SOURCE_BRANCH_NAME: 'feature',
+          CI_MERGE_REQUEST_SOURCE_PROJECT_ID: '1',
+          CI_MERGE_REQUEST_TARGET_BRANCH_NAME: 'dev',
+          CI_PIPELINE_SOURCE: 'merge_request_event',
+        },
+      });
+      assert.notEqual(failed.status, 0, name);
+      assert.match(failed.stderr, expected, name);
+    }
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
   }
+});
+
+test('preserves the configured HTTPS port and excludes caller credentials', () => {
+  const value = queryGitLab(
+    new URL('https://gitlab.example.invalid:8443/api/v4'),
+    'projects/1',
+    (file, args, options) => {
+      assert.equal(file, '/usr/bin/glab');
+      assert.deepEqual(args, [
+        'api',
+        '--hostname',
+        'gitlab.example.invalid',
+        'https://gitlab.example.invalid:8443/api/v4/projects/1',
+      ]);
+      assert.deepEqual(Object.keys(options.env).sort(), [
+        'HOME',
+        'LANG',
+        'PATH',
+      ]);
+      return '{"id":1}';
+    },
+  );
+  assert.deepEqual(value, { id: 1 });
+});
+
+test('rejects untrusted API servers and projects before accessing credentials', () => {
+  const config = {
+    api_url: 'https://gitlab.example.invalid:8443/api/v4',
+    project_id: 1,
+  };
+  const query = () => {
+    assert.fail('must not call GitLab');
+  };
+  assert.throws(
+    () =>
+      verifyEvidence(
+        {
+          CI_API_V4_URL: 'https://attacker.invalid/api/v4',
+          CI_PROJECT_ID: '1',
+        },
+        config,
+        query,
+      ),
+    /trusted HTTPS/,
+  );
+  assert.throws(
+    () =>
+      verifyEvidence(
+        { CI_API_V4_URL: config.api_url, CI_PROJECT_ID: '2' },
+        config,
+        query,
+      ),
+    /Unexpected evidence project/,
+  );
 });
