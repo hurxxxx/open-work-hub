@@ -27,7 +27,7 @@ Use the narrowest owner doc. Code and tests are final for implemented behavior.
 | `product/` | product-wide UI/data rules |
 | `../adr/` | accepted architecture decisions |
 
-GitLab `origin` is canonical for this site. GitHub `upstream` is source-only.
+Git workflow and upstream contribution authorization: [root agent rules](../AGENTS.md#git-and-delivery).
 Issue/MR rules: [Issue Tracker](agents/issue-tracker.md), [Vibe Harness](agents/vibe-coding-harness.md).
 
 Do not add parallel current-truth trees, raw logs, progress dumps, or large generated artifacts.
