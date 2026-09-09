@@ -79,6 +79,19 @@ codex
 
 `/permissions` → **Full access**
 
+새 세션에서도 Full access를 기본으로 사용하려면, 위 권한을 선택한 뒤 Codex 대화창에 아래 프롬프트를 입력하세요.
+
+```text
+새 세션을 시작해도 항상 Full access 권한으로 시작하도록 설정 변경해줘.
+사용자 설정 파일(기본 ~/.codex/config.toml, CODEX_HOME이 지정되어 있으면 해당 경로의 config.toml)의 최상위 항목을 아래처럼 설정하고, 기존의 다른 설정은 유지해줘.
+
+sandbox_mode = "danger-full-access"
+approval_policy = "never"
+```
+
+설정 변경이 끝나면 Codex를 종료하고 다시 실행한 뒤 `/permissions`에서 적용 여부를 확인하세요.
+사용자 기본 설정과 프로젝트·실행 옵션의 우선순위는 [공식 Codex 설정 안내](https://developers.openai.com/codex/config-basic)를 참고하세요.
+
 ## 4. Codex에 셋업 요청
 
 PostgreSQL·Redis는 미리 설치하지 않아도 됩니다. 아래 프롬프트로 Codex가 네이티브 설치와 개발용 DB·연결 설정을 함께 준비하도록 요청합니다.
