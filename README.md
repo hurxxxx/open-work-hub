@@ -4,9 +4,39 @@
 
 Ubuntu Server 26.04 LTS 권장 · CPU 4코어 이상 · 메모리 32GB 이상 · 프로젝트용 여유 공간 100GB 이상
 
+## 0. 설치 계정 권한 설정
+
+설치용 일반 사용자 계정은 `sudo` 그룹에 속하고 **비밀번호 없이 `sudo`를 실행할 수 있어야 합니다**. 아래 명령은 기존 관리자 계정에서 실행하며, `user`는 실제 설치 계정명으로 바꾸세요.
+
+```bash
+sudo usermod -aG sudo user
+sudo visudo -f /etc/sudoers.d/99-open-work-hub-installer
+```
+
+열린 편집기에 아래 규칙을 입력합니다. 여기의 `user`도 같은 설치 계정명으로 바꾸세요.
+
+```sudoers
+user ALL=(ALL:ALL) NOPASSWD: ALL
+```
+
+관리자 세션에서 문법을 확인합니다. 오류가 있으면 `visudo`로 수정하고, 확인이 끝날 때까지 관리자 세션을 유지하세요.
+
+```bash
+sudo visudo -c
+```
+
+설치 계정으로 새 SSH 세션에 접속한 뒤 아래 명령이 비밀번호 요청이나 오류 없이 끝나면 다음 단계로 진행합니다.
+
+```bash
+sudo -k
+sudo -n true
+```
+
+이 설정은 전체 관리자 권한을 부여하므로 신뢰하는 설치 계정에만 적용하세요. [공식 visudo 안내](https://www.sudo.ws/docs/man/visudo.man/)
+
 ## 1. 기본 도구와 Node.js 설치
 
-서버에 SSH로 접속한 뒤 일반 사용자의 Bash에서 실행합니다. `sudo` 비밀번호는 서버 터미널에 입력하세요.
+서버에 SSH로 접속한 뒤 설치 계정의 Bash에서 실행합니다.
 
 ```bash
 sudo apt-get update
