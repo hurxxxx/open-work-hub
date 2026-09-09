@@ -84,17 +84,105 @@ git rev-parse HEAD
 ### 2.2. 내부 GitLab 구성과 최초 코드 등록
 
 조직 관리자가 내부 서버에 GitLab을 별도 관리 서비스로 준비한다.
-에이전트에게 맡길 때는 GitLab 설치와 초기 코드 push까지 작업 범위에 명시한다.
+에이전트에게 맡길 때는 서버 설치, 관리자 설정, `glab` 인증, 초기 코드 push와 CI 준비를 작업 범위에 명시한다.
+관리자 계정 생성·비밀번호 변경·PAT 발급·`glab` 인증은 사용자가 직접 진행한다.
+에이전트는 필요한 방법을 안내하고 사용자의 완료 확인을 받은 뒤 프로젝트·CI 구성을 이어간다.
 이미 GitLab이나 프로젝트가 있다면 기존 설정과 이력을 확인해 사용하고 새로 초기화하지 않는다.
+GitLab 서버, `glab` 클라이언트, 실제 작업을 실행하는 GitLab Runner는 각각 설치해야 한다.
 
-1. [GitLab 공식 설치 안내](https://docs.gitlab.com/install/)에서 서버에 맞는 설치 방식을 선택한다.
-   Docker를 사용한다면 [공식 Docker 설치 절차](https://docs.gitlab.com/install/docker/installation/)를 따른다.
-   사용할 버전을 고정하고 내부 접속용 호스트명·HTTPS·SSH 포트, 데이터와 설정의 영속 저장·백업을 준비한다.
-   앱과 같은 물리 서버를 사용하면 기존 SSH·웹 포트와 메모리·디스크 사용량을 함께 확인한다.
-2. 관리자 계정과 참여자 접근을 구성한 뒤 내부 그룹에
-   [비공개 빈 프로젝트](https://docs.gitlab.com/user/project/)를 만든다.
-   README·라이선스·`.gitignore` 자동 생성은 선택하지 않아 원본과 무관한 초기 커밋이 생기지 않게 한다.
-3. 프로젝트의 Clone 메뉴에서 조직이 사용할 SSH 또는 HTTPS 주소를 받는다.
+#### 2.2.1. GitLab 서버 설치
+
+설치 전에 내부 DNS 이름, HTTPS 인증서, SSH 포트, 데이터·설정의 영속 저장과 백업 위치를 정한다.
+앱과 같은 서버라면 기존 서비스의 포트와 메모리·디스크 사용량을 확인한다.
+GitLab 자체 DB·Redis는 프로젝트 개발용 DB·Redis와 구분하며 임의로 같은 데이터베이스에 연결하지 않는다.
+
+[공식 Ubuntu 설치 안내](https://docs.gitlab.com/install/package/ubuntu/)에서 실제 OS와 선택한 GitLab 버전의 지원 여부를 확인한다.
+다음은 **새 서버의 Community Edition Linux 패키지 설치 예시**다.
+도메인과 패키지 버전은 조직이 정한 값으로 바꾼다. 내부 인증서를 사용할 때는 공식 설치 절차에 따라
+HTTPS 설정을 준비하며, 사설 도메인에서 자동 인증서 발급이 된다고 가정하지 않는다.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y curl ca-certificates openssh-server tzdata perl
+curl -fsSL https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | sudo bash
+apt-cache policy gitlab-ce
+sudo EXTERNAL_URL='https://gitlab.example.com' apt-get install 'gitlab-ce=<설치할-패키지-버전>'
+sudo gitlab-ctl status
+```
+
+대상 OS의 패키지가 없으면 다른 Ubuntu 버전의 저장소를 섞지 않는다.
+지원되는 별도 서버 또는 [공식 Docker 설치 방식](https://docs.gitlab.com/install/docker/installation/)을 선택하고 버전을 고정한다.
+Docker 방식은 앱의 PostgreSQL·Redis 네이티브 설치 방식을 바꾸지 않는다.
+설치 후 브라우저에서 정한 HTTPS 주소에 접속한다. 사설 CA는 개발 서버와 Runner에도 신뢰하도록 등록하고 TLS 검증을 끄지 않는다.
+
+#### 2.2.2. 초기 관리자와 비밀번호 설정
+
+1. 설치 시 생성되는 GitLab 관리자 `root`로 최초 로그인한다.
+   초기 비밀번호는 GitLab 서버의 `/etc/gitlab/initial_root_password`에서 **사용자가 직접** 확인한다.
+   Docker 설치에서는 컨테이너 내부의 같은 경로다. 비밀번호를 에이전트 출력이나 대화에 붙여 넣지 않는다.
+2. 로그인 후 초기 비밀번호와 관리자 이메일을 변경한다.
+   관리자 화면의 `Overview > Users`에서 `root`를 편집해 비밀번호를 변경할 수 있다.
+3. `Admin > Overview > Users > New user`에서 실제 운영 담당자 계정을 만든다.
+   서버 관리가 필요한 계정에만 `Administrator` 권한을 부여하고, 해당 계정의 로그인·비밀번호 설정과 2FA를 완료한다.
+   SMTP와 계정 확인 메일도 구성한다. 일반 개발자는 프로젝트 역할로 권한을 부여하며 모두 관리자로 만들지 않는다.
+4. 일상 작업은 개인 계정이나 별도 자동화 계정으로 진행한다.
+   `root`는 복구용으로 안전하게 관리하고 관리자 비밀번호나 관리자 PAT를 CI 작업에 넣지 않는다.
+
+초기 비밀번호 파일이 없거나 로그인할 수 없으면 **관리자가 서버 터미널에서** 대화형 재설정을 실행한다.
+비밀번호를 명령 인자나 스크립트에 쓰지 않는다. 아래 두 방식 중 실제 설치 방식에 맞는 것만 사용한다.
+
+```bash
+# Linux 패키지 설치
+sudo gitlab-rake 'gitlab:password:reset[root]'
+
+# Docker 설치: 실제 GitLab 컨테이너 이름으로 변경
+sudo docker exec -it '<GitLab-컨테이너>' gitlab-rake 'gitlab:password:reset[root]'
+```
+
+기준 문서: [최초 로그인](https://docs.gitlab.com/install/next_steps/),
+[사용자 생성](https://docs.gitlab.com/user/profile/account/create_accounts/),
+[비밀번호 변경·복구](https://docs.gitlab.com/security/reset_user_password/).
+GitLab의 `root`는 OS의 `root`나 Open Work Hub의 개발용 `administrator` 계정과 별개다.
+
+#### 2.2.3. glab 설치와 내부 GitLab 인증
+
+`glab`은 Codex가 작업하는 개발 서버에 일반 사용자 계정으로 인증한다.
+Ubuntu 패키지를 사용하는 예시는 다음과 같다. 패키지가 없거나 필요한 옵션을 지원하지 않으면
+[공식 CLI 배포 안내](https://gitlab.com/gitlab-org/cli)에서 버전·CPU 아키텍처에 맞는 배포 패키지를 설치한다.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y glab jq
+glab --version
+```
+
+GitLab 웹에서 사용할 계정의 [Personal access token](https://docs.gitlab.com/user/profile/personal_access_tokens/)을 만든다.
+프로젝트·Runner·CI 변수 관리에는 해당 프로젝트의 관리 권한과 `api` 범위가 필요하다.
+만료일을 설정하고, 인스턴스 관리 권한이 필요하지 않은 작업에는 관리자 토큰을 사용하지 않는다.
+SSH 방식의 Git 접근은 계정에 SSH 공개키를 별도로 등록한다.
+
+아래 예시 호스트·그룹을 실제 내부 GitLab 값으로 바꾸고, 로그인 질문에서 토큰 인증을 선택해 터미널에 입력한다.
+`--token <비밀값>`처럼 명령에 직접 쓰거나 셸 이력·대화에 남기지 않는다.
+
+```bash
+GITLAB_HOST='gitlab.example.com'
+GITLAB_REPO="https://$GITLAB_HOST/group/open-work-hub"
+glab auth login --hostname "$GITLAB_HOST" --api-protocol https --git-protocol ssh
+glab auth status --hostname "$GITLAB_HOST"
+glab api --hostname "$GITLAB_HOST" user | jq '{username, is_admin}'
+```
+
+[glab 인증](https://docs.gitlab.com/cli/auth/login/)은 GitLab 계정 비밀번호와 별개다.
+키링이 없는 서버에서는 토큰이 사용자 설정 파일에 평문으로 저장될 수 있으므로 해당 파일을 소유자만 읽게 보호한다.
+토큰·설정 파일을 저장소나 CI 아티팩트에 복사하지 않는다.
+인증 성공은 프로젝트 관리 권한을 보장하지 않으므로 그룹·프로젝트 역할도 확인한다.
+
+#### 2.2.4. 내부 프로젝트와 원격 등록
+
+1. 내부 그룹에 [비공개 빈 프로젝트](https://docs.gitlab.com/user/project/)를 만든다.
+   README·라이선스·`.gitignore` 자동 생성은 선택하지 않는다.
+   운영 담당자에게 그룹 Owner 또는 필요한 프로젝트 Maintainer 권한을 부여한다.
+2. 프로젝트의 Clone 메뉴에서 조직이 사용할 SSH 또는 HTTPS 주소를 받는다.
    개발 서버에서 그 주소에 접근할 수 있도록 SSH 키 또는 자격증명 관리자를 설정한다.
 
 2.1절에서 만든 체크아웃의 `dev` 브랜치에서, 초기 등록 권한이 있는 계정으로 실행한다.
@@ -114,12 +202,18 @@ git push --set-upstream origin main dev
 `main`은 내부 운영 배포 기준이며, `dev → main` 릴리스 MR 뒤에도 `dev`를 삭제하지 않는다.
 이 초기 코드 등록은 운영 배포를 실행하지 않는다.
 
-CI를 사용하려면 [GitLab Runner 등록](https://docs.gitlab.com/runner/register/)과 함께
-[현재 CI 정의](.gitlab-ci.yml)에 지정된 Runner 태그·검증 이미지·비운영 테스트 DB·리뷰 실행기를 준비한다.
-검증 환경은 [Release Domain](docs/domains/release/README.md),
-리뷰 실행 계약은 [Local Codex MR Review](docs/agents/local-codex-review.md)를 따른다.
-파이프라인 생성 조건은 CI 정의가 기준이며, 초기 브랜치 push만으로 CI 통과를 확인할 수는 없다.
-승인된 MR 작업에서 해당 검사가 실제 실행되어 통과하는지 확인하고, 미구성 항목을 구분해 보고한다.
+새 프로젝트의 기본 브랜치와 파이프라인 성공 필수 설정은 저장소 루트에서 `glab`으로 적용할 수도 있다.
+기존 프로젝트에서는 현재 설정과 조직 정책을 확인한 뒤 필요한 값만 변경한다.
+
+```bash
+glab api --hostname "$GITLAB_HOST" --method PUT 'projects/:id' \
+  --field default_branch=dev \
+  --field only_allow_merge_if_pipeline_succeeds=true \
+  --silent
+```
+
+이 명령은 보호 브랜치·리뷰 승인 규칙까지 구성하지는 않는다.
+브랜치별 push·병합 권한은 프로젝트 설정에서 별도로 적용한다.
 
 토큰 없는 주소로 구성한 새 체크아웃에서 연결 결과를 확인한다.
 
@@ -133,6 +227,110 @@ git ls-remote --heads origin main dev
 `origin`은 내부 GitLab, `upstream`은 GitHub 원본이어야 한다.
 로컬 `dev`·`main`의 추적 대상은 각각 `origin/dev`·`origin/main`이고 기본 push 대상은 `origin`이어야 한다.
 원격의 두 브랜치가 등록한 커밋을 가리키는지 확인한다.
+
+#### 2.2.5. Runner와 파이프라인 준비
+
+`glab`은 GitLab API를 조작하는 도구이며 Runner나 CI 실행 환경을 대신 설치하지 않는다.
+정확한 실행 조건과 이미지·태그는 [현재 CI 정의](.gitlab-ci.yml)가 기준이다.
+
+| 현재 실행 대상 | 필요한 준비 |
+| --- | --- |
+| 같은 프로젝트의 작업 브랜치 → `dev` MR | `codex-local` 태그의 리뷰 Runner와 설치된 Codex 리뷰 실행기 |
+| 같은 프로젝트의 `dev` → `main` 릴리스 MR | `open-work-hub-validation` 태그의 검증 Runner, 검증 이미지, 테스트 DB와 CI 변수 |
+| `contracts-v<버전>` 형식 중 CI 규칙에 맞는 태그 | 검증 Runner와 GitLab npm Package Registry 접근. 실제 패키지 게시이므로 설치 확인용 태그를 만들지 않는다. |
+
+일반 브랜치 push나 `glab ci run --branch dev`는 현재 workflow의 MR 조건을 만족하지 않는다.
+실행되지 않는다고 CI 규칙이나 필수 검사를 완화하지 않는다.
+
+1. Runner 호스트에 [GitLab Runner](https://docs.gitlab.com/runner/install/)를 설치한다.
+   검증용은 Docker executor, 리뷰용은 신뢰된 전용 호스트의 shell executor 등 설치된 리뷰 실행기를 사용할 수 있는 환경으로 준비한다.
+   리뷰 Runner를 운영 서버·운영 자격증명과 분리하고 다른 프로젝트에 공유하지 않는다.
+2. 프로젝트의 `Settings > CI/CD > Runners`에서 검증용과 리뷰용 Runner를 각각 만들고 위 태그를 지정한다.
+   프로젝트에 실행 범위를 한정하고 태그 없는 작업 실행은 끈다.
+   리뷰 Runner는 일반 작업 브랜치 MR을, 검증 Runner는 보호된 릴리스 브랜치·게시 태그를 실행할 수 있도록 접근 정책을 맞춘다.
+3. 생성된 `glrt-` Runner 인증 토큰으로 각 Runner를 등록한다.
+   아래 명령의 질문에 GitLab URL·토큰·executor를 입력한다. 오래된 registration token 방식은 사용하지 않는다.
+
+```bash
+sudo gitlab-runner register
+sudo gitlab-runner verify
+```
+
+등록 절차는 [공식 Runner 안내](https://docs.gitlab.com/runner/register/)를 따른다.
+등록 성공만으로 작업 실행 준비가 끝나는 것은 아니다. 검증 Runner가 사용하는 Docker 데몬에서
+**승인된 저장소 커밋**으로 다음 이미지를 준비한다.
+
+```bash
+bash scripts/build-ci-validation-image.sh
+docker build -f ops/opensearch/Dockerfile -t open-work-hub-opensearch:3.3.2-nori .
+```
+
+검증 이미지 이름은 현재 `open-work-hub-validation:node22-python312`다.
+개발 서버의 Node.js 24 설치와는 별도이며, 이름만 같은 다른 이미지로 대체하지 않는다.
+로컬 이미지를 쓰는 전용 Runner는 `if-not-present` 등 그 배포 방식에 맞는 pull 정책을 구성한다.
+다른 Docker 데몬에서 실행하는 Runner라면 같은 검증된 이미지가 그 데몬에도 준비되어야 한다.
+CI의 Redis·MinIO 서비스 이미지도 내려받을 수 있어야 한다.
+OpenSearch는 앱의 최소 첫 실행에는 선택 사항이지만 현재 릴리스 CI에는 필요한 서비스다.
+
+리뷰 Runner의 **실제 실행 계정**에 Git·Node.js·Codex·Linux 샌드박스 선행 도구와 Codex 인증을 준비한다.
+개발 사용자의 로그인이나 nvm 설정이 Runner 서비스에 자동으로 전달된다고 가정하지 말고 서비스의 PATH를 맞춘다.
+승인된 커밋의 체크아웃에서 신뢰된 실행기를 설치한다.
+
+```bash
+bash scripts/install-codex-review-runner-entrypoint.sh
+```
+
+설치 대상은 `/usr/local/bin/open-work-hub-codex-review-ci`다.
+MR 소스의 스크립트를 직접 실행하도록 바꾸지 않으며, 리뷰의 읽기 전용 실행과 CI 신원·이미지 검사를 유지한다.
+상세 계약은 [Local Codex MR Review](docs/agents/local-codex-review.md),
+검증 이미지·실행 계약은 [Release Domain](docs/domains/release/README.md)을 따른다.
+
+#### 2.2.6. CI 변수 등록과 실제 실행 확인
+
+검증 Runner에서 접근할 수 있는 **CI 전용 비운영 PostgreSQL DB와 계정**을 준비한다.
+테스트용 DB 생성·삭제에 필요한 권한만 부여하고 GitLab 자체 DB, 개발 업무 DB나 운영 DB를 사용하지 않는다.
+Docker 작업 안의 `127.0.0.1`은 호스트 DB 주소가 아니므로 Runner의 실제 네트워크에서 접속 가능한 주소를 사용한다.
+
+새 프로젝트에 `OPEN_WORK_HUB_CI_POSTGRES_DSN`을 아래와 같이 등록한다.
+기존 변수가 있으면 새로 만들거나 덮어쓰기 전에 환경 범위와 소유자를 확인한다.
+값은 사용자가 서버 터미널에 직접 입력하며 명령 인자나 파일로 남기지 않는다.
+
+```bash
+set +x
+read -r -s -p 'CI PostgreSQL DSN: ' ci_postgres_dsn
+printf '\n'
+printf '%s' "$ci_postgres_dsn" | glab variable set OPEN_WORK_HUB_CI_POSTGRES_DSN \
+  --repo "$GITLAB_REPO" --masked --protected --raw --scope ci-validation
+unset ci_postgres_dsn
+```
+
+`ci-validation`은 현재 검증 job의 environment 이름이다.
+`dev`·`main` 보호와 함께 프로젝트의 MR 파이프라인에서 보호 변수·Runner를 사용할 수 있는 설정과 실행자 권한을 확인한다.
+필요 조건은 [보호 리소스 접근 안내](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/#control-access-to-protected-variables-and-runners)를 따른다.
+변수가 보이지 않는다고 보호를 해제하거나 관리자 토큰을 대신 넣지 않는다.
+`CI_JOB_TOKEN` 등 GitLab이 공급하는 기본 변수를 수동으로 재정의하지 않는다.
+
+저장소 루트에서 CI 설정을 검사하고 파이프라인 목록을 확인한다.
+
+```bash
+glab ci lint .gitlab-ci.yml --repo "$GITLAB_REPO"
+glab ci list --repo "$GITLAB_REPO"
+```
+
+실제 실행은 **명시적으로 승인된 작업 브랜치와 MR**에서 확인한다.
+MR 생성·새 커밋 push로 파이프라인이 생성되며, 이미 열린 MR을 다시 실행하려면 대상 source 브랜치를 지정한다.
+
+```bash
+glab ci run --mr --branch '<MR의-source-브랜치>' --repo "$GITLAB_REPO"
+```
+
+명령 기준: [CI lint](https://docs.gitlab.com/cli/ci/lint/),
+[MR 파이프라인 실행](https://docs.gitlab.com/cli/ci/run/),
+[CI 변수 등록](https://docs.gitlab.com/cli/variable/set/).
+lint 성공이나 파이프라인 생성만으로 설치 완료로 판단하지 않는다.
+최신 MR 커밋에서 예상한 job이 실제 실행되어 성공했는지 확인하고, pending·인증·이미지·DB 연결 실패를 구분해 보고한다.
+`dev → main` 릴리스 MR·병합·운영 배포는 각각 별도 승인 대상이다.
+GitLab 접속, 관리자 로그인·비밀번호 변경, `glab` 인증, Runner 온라인, 변수 등록, 실제 CI 통과 여부를 나누어 설치 결과에 기록한다.
 
 ### 2.3. 기존 조직에 개발자·서버 추가
 
