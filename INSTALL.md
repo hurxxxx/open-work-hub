@@ -50,6 +50,8 @@ Codex 실행 후 `/permissions`에서 **Full access**를 선택한다.
 에이전트는 [AGENTS.md](AGENTS.md)와
 [개발 환경 스킬](.agents/skills/owh-dev-environment/SKILL.md)을 따른다.
 이 문서는 설치 절차의 진입점이며 기능별 설정은 아래의 소유 문서에서 확인한다.
+로케일 복구, 플랫폼별 브라우저·CA 신뢰, 접속 검사와 GitLab·Runner 설치 후 점검은
+[설치 환경별 운영 확인](docs/domains/release/installation-operations.md)에서 관리한다.
 
 ### 1.1. 로그인 정보 파일 관리
 
@@ -136,7 +138,7 @@ GitLab 서버, `glab` 클라이언트, 실제 작업을 실행하는 GitLab Runn
 #### 2.2.1. GitLab 서버 설치
 
 GitLab 도메인·DNS 설정은 이 셋업에서 제외한다. 현재 SSH 접속 대상과 서버 네트워크를 확인해 PC·Runner에서 도달 가능한 IP를 사용한다.
-HTTPS 포트는 사용 가능한 `8443`을 기본 예시로 삼고, 충돌하면 빈 포트를 선택해 실제 주소를 기록한다. 도메인 이름을 받기 위해 대기하지 않는다.
+HTTPS 포트는 기존 서비스와 충돌하지 않고 PC·Runner에서 접근할 수 있는 포트를 선택해 실제 주소를 기록한다. 도메인 이름을 받기 위해 대기하지 않는다.
 설치 전에 IP용 HTTPS 인증서, SSH 포트, 데이터·설정의 영속 저장과 백업 위치를 준비한다.
 앱과 같은 서버라면 기존 서비스의 포트와 메모리·디스크 사용량을 확인한다.
 GitLab 자체 DB·Redis는 프로젝트 개발용 DB·Redis와 구분하며 임의로 같은 데이터베이스에 연결하지 않는다.
@@ -153,28 +155,26 @@ sudo apt-get update
 sudo apt-get install -y curl ca-certificates openssh-server openssl tzdata perl
 curl -fsSL https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | sudo bash
 apt-cache policy gitlab-ce
-sudo EXTERNAL_URL='https://<서버-IP>:8443' apt-get install 'gitlab-ce=<설치할-패키지-버전>'
+sudo EXTERNAL_URL='https://<서버-IP>:<GitLab-HTTPS-포트>' apt-get install 'gitlab-ce=<설치할-패키지-버전>'
 sudo gitlab-ctl status
 ```
 
 대상 OS의 패키지가 없으면 다른 Ubuntu 버전의 저장소를 섞지 않는다.
 지원되는 별도 서버 또는 [공식 Docker 설치 방식](https://docs.gitlab.com/install/docker/installation/)을 선택하고 버전을 고정한다.
 Docker 방식은 앱의 PostgreSQL·Redis 네이티브 설치 방식을 바꾸지 않는다.
-설치 후 브라우저에서 정한 HTTPS 주소에 접속한다. 사설 CA는 개발 서버와 Runner에도 신뢰하도록 등록하고 TLS 검증을 끄지 않는다.
-Docker executor의 작업·helper 컨테이너에도 [Runner 인증서 설정](https://docs.gitlab.com/runner/configuration/tls-self-signed/)을 적용한다.
+설치 후 [HTTPS 신뢰 등록과 실행 환경별 검증](docs/domains/release/installation-operations.md#https-trust)을 적용한다.
+개발 서버·클라이언트 PC·브라우저·Runner와 작업·helper 컨테이너에서 실제 HTTPS 연결을 확인한다.
 
 PC에서 직접 접속할 IP 기반 주소를 `external_url`로 사용한다. [GitLab의 외부 URL 설정](https://docs.gitlab.com/omnibus/settings/configuration/#configure-the-external-url-for-gitlab)은 서버 IP를 지원한다.
-예를 들어 `https://<서버-IP>:8443`으로 설정했다면 인증서 SAN에 해당 **IP 주소**를 포함하고,
+`https://<서버-IP>:<GitLab-HTTPS-포트>`로 설정했다면 인증서 SAN에 해당 **IP 주소**를 포함하고,
 NGINX가 PC에서 도달 가능한 인터페이스에서 수신하도록 해당 버전의
 [NGINX 설정](https://docs.gitlab.com/omnibus/settings/nginx/)을 적용한 뒤 `sudo gitlab-ctl reconfigure`를 실행한다.
 GitLab 19.2 이상에서는 수신 주소·인증서 같은 Rails용 설정 키가 `gitlab_rails['nginx'][...]` 아래에 있다.
 HTTPS 포트에는 `http://`로 접속할 수 없다. VM 네트워크와 방화벽은 필요한 HTTPS·SSH 포트만 허용한다.
 
-사설 CA의 **공개 인증서만** 신뢰할 수 있는 SSH 연결 등으로 PC에 전달한다. CA 개인키는 서버 밖으로 복사하지 않는다.
-Windows는 인증서 관리자의 신뢰할 수 있는 루트 인증 기관, macOS는 키체인 접근의 시스템 키체인,
-Linux는 배포판의 CA 저장소에 등록한다. 별도 인증서 저장소를 사용하는 브라우저도 확인한다.
-서버 내부 점검은 `/-/readiness?all=1`, PC 접속 점검은 `/users/sign_in`과 실제 로그인을 사용한다.
-모니터링 경로의 IP 허용 목록을 PC 접속을 위해 넓히지 않는다.
+[GitLab 전체 수신 포트와 HTTPS readiness 검사](docs/domains/release/installation-operations.md#gitlab-listeners-and-readiness)로
+웹·SSH 외의 모니터링 서비스까지 실제 수신 범위를 확인한다. 서버 내부 readiness는 TLS 신원과 접근 정책을 모두 만족하는 경로에서 검사하고,
+PC 접속은 로그인 화면과 실제 로그인으로 확인한다. 재구성·업데이트 후에도 같은 검사를 반복한다.
 
 #### 2.2.2. 초기 관리자와 비밀번호 설정
 
@@ -328,7 +328,8 @@ git ls-remote --heads origin main dev
 일반 브랜치 push나 `glab ci run --branch dev`는 현재 workflow의 MR 조건을 만족하지 않는다.
 실행되지 않는다고 CI 규칙이나 필수 검사를 완화하지 않는다.
 
-1. Runner 호스트에 [GitLab Runner](https://docs.gitlab.com/runner/install/)를 설치한다.
+1. [Runner 패키지의 Docker 정리 확인과 설치 순서](docs/domains/release/installation-operations.md#runner-installation-and-updates)를 먼저 확인하고 Runner 호스트에 [GitLab Runner](https://docs.gitlab.com/runner/install/)를 설치한다.
+   공유 Docker 호스트에서는 선택한 패키지 버전의 정리 동작·공식 방지 옵션을 확인하며, CI 전용 네트워크·서비스는 패키지 설치 완료 후 구성한다.
    검증용은 Docker executor, 리뷰용은 신뢰된 전용 호스트의 shell executor 등 설치된 리뷰 실행기를 사용할 수 있는 환경으로 준비한다.
    리뷰 Runner를 운영 서버·운영 자격증명과 분리하고 다른 프로젝트에 공유하지 않는다.
 2. 프로젝트의 `Settings > CI/CD > Runners`에서 검증용과 리뷰용 Runner를 각각 만들고 위 태그를 지정한다.
@@ -403,6 +404,7 @@ bash scripts/install-codex-review-runner-entrypoint.sh
 MR 소스의 스크립트를 직접 실행하도록 바꾸지 않으며, 리뷰의 읽기 전용 실행과 CI 신원·이미지 검사를 유지한다.
 상세 계약은 [Local Codex MR Review](docs/agents/local-codex-review.md),
 검증 이미지·실행 계약은 [Release Domain](docs/domains/release/README.md)을 따른다.
+Runner 업데이트 후에는 [네트워크·테스트 DB 재검사와 복구](docs/domains/release/installation-operations.md#업데이트-후-재검사와-복구)를 수행한다.
 
 #### 2.2.6. CI 변수 등록과 실제 실행 확인
 
@@ -641,7 +643,8 @@ pnpm check:skills
 PostgreSQL·Redis는 에이전트가 호스트에 네이티브로 설치하며 사람이 미리 설치할 필요는 없다.
 OpenSearch를 포함한 추가 서비스는 이 단계에서 필요하지 않으며, 사용할 기능에 따라 6절에서 준비한다.
 
-1. 문서 앞의 **PostgreSQL·Redis 최초 설치 버전** 기준에 따라 최신 안정 버전을 확인하고,
+1. **패키지 설치 전에** [UTF-8 로케일 확인과 신규 설치·기존 환경 복구 분기](docs/domains/release/installation-operations.md#postgresql-locale)를 따른다.
+   문서 앞의 **PostgreSQL·Redis 최초 설치 버전** 기준에 따라 최신 안정 버전을 확인하고,
    [PostgreSQL Ubuntu 설치 안내](https://www.postgresql.org/download/linux/ubuntu/)와
    [Redis 공식 APT 설치 안내](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/apt/)를 따라 네이티브 패키지를 설치한다.
    [개발 Compose](ops/compose/open-work-hub-dev.infra.yml)의 고정 메이저 버전을 네이티브 신규 설치 버전으로 대신 사용하지 않는다.
@@ -721,32 +724,18 @@ agent-browser --version
 agent-browser --help
 ```
 
-사용 가능한 브라우저가 없을 때만 `agent-browser install`로 준비한다.
-기존 Chromium을 사용할 때는 `--executable-path '<검증된-Chromium-실행파일>'`을 지정한다.
-Linux에서 OS 라이브러리 누락으로 실행이 실패하면 `agent-browser install --with-deps`로 필요한 의존성을 준비한다.
 설치된 CLI가 `skills` 명령을 제공하면 `agent-browser skills get core`도 참고한다.
 
-Linux ARM64에서 `agent-browser install`이 Chrome for Testing 빌드 부재를 보고하면
-현재 배포판의 Chromium 패키지를 사용한다. Ubuntu의 `chromium-browser`는 snap을 설치할 수 있다.
-snap의 격리된 임시 디렉터리 때문에 자동 연결이 실패하면 Chromium을 직접 실행하고,
-loopback에만 연 디버깅 포트에 `agent-browser --session <검사용-세션> --cdp <포트>`로 연결한다.
-프로필은 Chromium 패키지가 접근을 허용하는 소유자 전용 디렉터리에 두고,
-검사 후 agent-browser 세션과 직접 실행한 Chromium을 모두 종료한다. 디버깅 포트를 외부에 공개하지 않는다.
-`chrome://sandbox`에서 namespace·seccomp 활성화를 확인하며, `--no-sandbox`로 우회하지 않는다.
-화면 캡처에서 한글이 사각형으로 보이면 Ubuntu의 `fonts-noto-cjk` 등 배포판 글꼴을 설치하고
-브라우저를 다시 시작해 실제 렌더링을 재검사한다.
-
-사설 CA가 필요한 GitLab 검사에서는 브라우저의 CA 신뢰까지 별도로 확인한다.
-설치한 브라우저는 호스트의 공유 라이브러리와 4.3절의 샌드박스 검사를 통과해야 한다.
-설치된 CLI가 지원하면
-`--executable-path '<Chromium>' --ca-cert '<공개-CA-인증서>'`로 지정 CA만 신뢰시킨다.
-CLI의 `--ca-cert`가 CDP 연결이나 영속 프로필과 함께 지원되는지는 해당 버전 도움말을 확인한다.
-TLS 오류를 무시하는 옵션으로 대체하지 않는다.
+브라우저 자동 설치·기존 실행파일 지정과 자동 다운로드가 지원되지 않는 OS·CPU 조합은
+[브라우저 선택과 공식 CDP 연결](docs/domains/release/installation-operations.md#browser-installation-and-rendering)을 따른다.
+Snap 등은 호스트 글꼴 설치만으로 한글이 표시된다고 가정하지 말고 해당 패키지의 글꼴 설정과 실제 렌더링을 확인한다.
+설치한 브라우저는 4.3절의 샌드박스 검사를 통과해야 한다. 내부 CA를 사용하는 HTTPS 검사는
+[브라우저 정책·실행 모드별 CA 신뢰](docs/domains/release/installation-operations.md#https-trust)도 적용한다.
 
 PC에서 사용할 서버 IP의 개발 주소로 로그인 화면을 열고 현재 화면의 요소를 확인한다. IP·포트는 실제 설정으로 바꾼다.
 
 ```bash
-agent-browser --session owh-setup open 'http://<서버-IP>:4200/login'
+agent-browser --session owh-setup open 'http://<서버-IP>:<개발-Web-포트>/login'
 agent-browser --session owh-setup snapshot -i
 ```
 
@@ -807,15 +796,18 @@ VM 네트워크·라우팅·방화벽에서 PC가 해당 IP와 Web 포트에 도
 서버에서는 실제 PC 접속 주소를 대상으로 다음 검사를 수행한다. IP·포트는 환경에 맞춘다.
 
 ```bash
-OPEN_WORK_HUB_DEV_SMOKE_API_URL='http://<서버-IP>:4200' pnpm dev:login-smoke
-agent-browser --session owh-setup open 'http://<서버-IP>:4200/login'
+OPEN_WORK_HUB_DEV_SMOKE_API_URL='http://<서버-IP>:<개발-Web-포트>' pnpm dev:login-smoke
+agent-browser --session owh-setup open 'http://<서버-IP>:<개발-Web-포트>/login'
 agent-browser --session owh-setup snapshot -i
 ```
 
 4.1절에 따라 시드 계정으로 로그인·화면·로그아웃을 확인하고 `agent-browser --session owh-setup close`로 세션을 종료한다.
-**PC 또는 같은 외부 접속 경로의 브라우저에서도** 로그인 화면을 열고 `.auth_info`의 시드 계정으로 실제 로그인해 앱 화면까지 확인한다.
+**PC 또는 같은 외부 접속 경로의 브라우저에서도** 로그인 화면을 열고 `.auth_info`의 시드 계정으로 실제 로그인해 앱 화면·로그아웃까지 확인한다.
 서버에서 자기 IP로 실행한 검사만으로 PC의 접속 성공을 단정하지 않는다. PC 조작 권한이 없으면 사용자에게 이 마지막 확인만 요청하고, 그동안 GitLab·CI 등 나머지 셋업을 계속한다.
 GitLab의 별도 HTTPS 접속·인증서 설정은 2.2.1절을 따른다.
+`pnpm dev:public-smoke`는 **HTTPS 공개 도메인 origin**을 요구하므로 HTTP 개발 주소나 HTTPS IP 주소에는 사용하지 않는다.
+HTTPS 공개 도메인을 연결한 개발 환경에서는 기존 public smoke를 유지한다.
+시작·복구 후의 로컬 readiness와 구성별 검사 조건은 [개발 접속 검사](docs/domains/release/installation-operations.md#development-access-checks)를 따른다.
 
 도메인·DNS 연결은 이번 셋업의 선행 조건이 아니다. 필요한 Web·GitLab·SSH 포트만 허용한다.
 Bento 등 별도 주소를 쓰는 기능은 사용 시 해당 기능 문서의 접속 설정을 추가한다.
@@ -915,6 +907,8 @@ Runner는 `sudo systemctl stop gitlab-runner`, `sudo systemctl start gitlab-runn
 셋업 인계 시 개발 앱은 SSH·에이전트 세션이 끝나도 실행 중이어야 한다.
 위 지속 실행 계약에 따라 systemd 등 호스트 감독 서비스로 같은 체크아웃의 최소 실행 명령을 관리하고, 자동 시작·재시작과 로그를 준비한다.
 호스트별 서비스 파일은 저장소 밖에서 관리하고 실제 서비스 이름과 중지·재시작 명령을 인계한다.
+감독 서비스의 시작·재부팅·복구 후에는 [개발 접속 검사](docs/domains/release/installation-operations.md#development-access-checks)에 따라
+로컬 readiness와 실제 접속 구성에 맞는 smoke·브라우저 검사를 수행한다. HTTP 개발 접속과 HTTPS 공개 도메인의 검사 조건은 5절과 동일하다.
 
 **조직 최초 도입은 아래 조건을 모두 확인한 뒤 완료로 보고한다.**
 

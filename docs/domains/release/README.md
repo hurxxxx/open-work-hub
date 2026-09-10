@@ -1,6 +1,7 @@
 # Release Domain
 
 - First development install and setup recovery: [Development Installation](../../../INSTALL.md).
+- Environment-specific locale, browser, HTTPS, GitLab and Runner checks: [Installation operations](installation-operations.md).
 - Dev infra: `ops/compose/open-work-hub-dev.infra.yml`.
 - Prod infra: `ops/compose/open-work-hub-prod.infra.yml`.
 - Common entrypoint: `scripts/infra-stack.sh`.
@@ -107,7 +108,9 @@ Recovery stops only the production app Compose project without deleting volumes,
 
 ## Persistent development runtime
 
-`./dev.sh --with-worker` is a foreground development command: its children stop when its session exits. A continuously available development domain requires an independent host supervisor with restart-on-exit and persistent logs, using the same entrypoint and checkout. Manage that runtime through its supervisor instead of starting a second copy or stopping its children directly. Development workers use two concurrent processes to bound their memory use on a host shared with other environments. Keep host-specific service definitions outside the repository. Validate local listeners and the public domain with `pnpm dev:public-smoke` after startup or recovery.
+`dev.sh` is a foreground development command: its children stop when its session exits. A continuously available development address requires an independent host supervisor with restart-on-exit and persistent logs, using the same entrypoint, selected flags and checkout. For native minimal installation this is `./dev.sh --minimal-infra --no-infra`; use `./dev.sh --with-worker` when the selected configuration includes a worker. Manage that runtime through its supervisor instead of starting a second copy or stopping its children directly. Development workers use two concurrent processes to bound their memory use on a host shared with other environments. Keep host-specific service definitions outside the repository.
+
+After startup, reboot or recovery, follow the shared [development access checks](installation-operations.md#development-access-checks): verify local listeners and API readiness, then use `pnpm dev:login-smoke` plus browser login, screens and logout for HTTP development access. `pnpm dev:public-smoke` remains required for an HTTPS public-domain development origin; it rejects HTTP and IP-address origins, including HTTPS IP addresses. Remote-PC installations also require a separate client-path browser check. INSTALL uses the same conditions; a server checking its own address does not establish client reachability.
 
 ## Build and test storage
 
@@ -123,7 +126,7 @@ CI preparation links both ordinary `apps/{api,worker}/.venv` and focused `.runti
 
 The full release job bounds API pytest to two processes and Vitest/Playwright to one worker each through their supported environment settings. Test selection, full-suite routing and failure gates remain unchanged. This avoids unbounded CPU-count concurrency exhausting memory on a runner that shares resources with services. Do not overlap a production image build with the full release suites on a constrained runner.
 
-Release CI and the production web image build set Node's [V8 old-space limit](https://nodejs.org/download/release/v22.18.0/docs/api/cli.html#--max-old-space-sizesize-in-mib) to 3072 MiB. A 2048 MiB uncached build exhausted its heap; 3072 MiB completed. This is not a total process or container memory limit: native allocations, child processes and test services need additional capacity. Check the host's effective cgroup limit/events and available memory before resource-heavy validation; missing kernel journal access does not establish that no OOM occurred. On this shared host, temporarily pause development services during authorized release maintenance if needed, leave production serving, and restore development with public smoke afterwards. Do not rely on a larger per-job limit to reserve memory from other services.
+Release CI and the production web image build set Node's [V8 old-space limit](https://nodejs.org/download/release/v22.18.0/docs/api/cli.html#--max-old-space-sizesize-in-mib) to 3072 MiB. A 2048 MiB uncached build exhausted its heap; 3072 MiB completed. This is not a total process or container memory limit: native allocations, child processes and test services need additional capacity. Check the host's effective cgroup limit/events and available memory before resource-heavy validation; missing kernel journal access does not establish that no OOM occurred. On this shared host, temporarily pause development services during authorized release maintenance if needed, leave production serving, and restore development with the applicable [development access checks](installation-operations.md#development-access-checks) afterwards. Do not rely on a larger per-job limit to reserve memory from other services.
 
 Release CI preserves Playwright's existing failure traces, videos, and error context under `test-results/` together with the validation context artifact, restricted to maintainers and expiring after 14 days. These shell tests use synthetic API fixtures. Do not archive runtime `.env` files or production browser sessions. A browser process crash is a failed check; retain its evidence and reproduce with the same image and resource settings before changing UI assertions, timeouts, or retry policy.
 
