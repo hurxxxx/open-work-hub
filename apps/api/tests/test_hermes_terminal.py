@@ -10,6 +10,7 @@ import threading
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
@@ -944,11 +945,8 @@ def test_terminal_mcp_socket_is_rooted_independently_of_process_cwd() -> None:
     assert path.parts[-2:] == (".runtime", "hermes-terminal-test.sock")
 
 
-def test_terminal_mcp_socket_has_one_owner_and_safe_shared_shutdown(
-    tmp_path: Path,
-) -> None:
+def test_terminal_mcp_socket_has_one_owner_and_safe_shared_shutdown() -> None:
     async def exercise() -> None:
-        socket_path = tmp_path / "hermes-terminal.sock"
         settings = _settings(
             hermes_enabled=True,
             hermes_api_key="test-hermes-api-key",
@@ -976,7 +974,10 @@ def test_terminal_mcp_socket_has_one_owner_and_safe_shared_shutdown(
 
         assert not socket_path.exists()
 
-    asyncio.run(exercise())
+    # pytest's test-name/worker suffix can exceed AF_UNIX's path limit on macOS.
+    with TemporaryDirectory(prefix="owh-sock-") as directory:
+        socket_path = Path(directory) / "mcp.sock"
+        asyncio.run(exercise())
 
 
 def test_starting_session_adopts_a_runtime_after_an_ambiguous_create_response(

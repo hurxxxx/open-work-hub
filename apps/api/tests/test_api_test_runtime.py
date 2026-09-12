@@ -77,6 +77,36 @@ def test_database_reset_refuses_non_test_database() -> None:
         engine.dispose()
 
 
+def test_database_setup_failure_removes_only_the_created_database(
+    postgres_template_dsn: str, postgres_dsn: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    attempted_databases: list[str] = []
+
+    def unavailable_extension(dsn: str) -> None:
+        attempted_databases.append(conftest._database_from_dsn(dsn))
+        raise RuntimeError("test extension unavailable")
+
+    monkeypatch.setattr(conftest, "_ensure_pgvector_extension", unavailable_extension)
+    engine = create_engine(conftest._dsn_for_database(postgres_template_dsn, "postgres"))
+    try:
+        with engine.connect() as connection:
+            before = set(connection.scalars(text("SELECT datname FROM pg_database")))
+        with pytest.raises(RuntimeError, match="test extension unavailable"):
+            with conftest._native_test_database(postgres_template_dsn, role="setup_failure"):
+                pytest.fail("Failed database setup must never yield a usable fixture")
+        assert len(attempted_databases) == 1
+        with engine.connect() as connection:
+            after = set(connection.scalars(text("SELECT datname FROM pg_database")))
+        assert attempted_databases[0] not in after
+        # Other workers may create/drop databases concurrently. Preserve both the template
+        # and a different test database, not merely non-test databases.
+        template_name = conftest._database_from_dsn(postgres_template_dsn)
+        untouched_name = conftest._database_from_dsn(postgres_dsn)
+        assert {template_name, untouched_name} <= before & after
+    finally:
+        engine.dispose()
+
+
 def test_database_data_reset_preserves_schema_and_migration_revision(
     postgres_dsn: str,
 ) -> None:

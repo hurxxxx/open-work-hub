@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+import pytest
 from sqlalchemy import delete, select
 
 
@@ -20,14 +21,21 @@ def _seed_dev_accounts() -> None:
         configure_company_app_access(db)
 
 
-def test_seeded_dev_account_supports_id_password_login(client: TestClient) -> None:
+def test_seeded_dev_account_supports_configured_password_login(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from open_work_hub_api.core.settings import get_settings
+
+    password = "test-seeded-account-password"
+    monkeypatch.setenv("OPEN_WORK_HUB_API_DEV_LOGIN_PASSWORD", password)
+    get_settings.cache_clear()
     _seed_dev_accounts()
 
     response = client.post(
         "/api/v1/auth/login",
         json={
             "login_id": "administrator",
-            "password": "open-work-hub-dev-only",
+            "password": password,
         },
     )
 
@@ -37,6 +45,14 @@ def test_seeded_dev_account_supports_id_password_login(client: TestClient) -> No
     assert payload["user"]["email"] == "admin@open-work-hub.local"
     assert "platform_admin" in payload["user"]["system_roles"]
     assert payload["token"]
+    me = client.get("/api/v1/auth/me", headers=_auth_headers(payload["token"]))
+    assert me.status_code == 200, me.text
+    assert me.json()["id"] == payload["user"]["id"]
+    rejected = client.post(
+        "/api/v1/auth/login", json={"login_id": "administrator", "password": "wrong-password"}
+    )
+    assert rejected.status_code == 401, rejected.text
+    assert rejected.json()["code"] == "auth.invalid_credentials"
 
 
 def test_seed_preserves_user_created_space_membership(client: TestClient) -> None:
