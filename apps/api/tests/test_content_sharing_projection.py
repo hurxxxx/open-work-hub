@@ -100,7 +100,7 @@ def test_hub_marks_only_unshared_personal_content_private(
     source_id = {"doc_id" if app_id == "docs" else "whiteboard_id": source.id}
     share = None
     if sharing in {"group", "inactive_group"}:
-        group = Group(id="group", kind="manual", name="Project group", active=sharing == "group")
+        group = Group(id="group", source="local", name="Project group", active=sharing == "group")
         db.add(group)
         share_model = NativeDocGroupShare if app_id == "docs" else WhiteboardGroupShare
         share = share_model(

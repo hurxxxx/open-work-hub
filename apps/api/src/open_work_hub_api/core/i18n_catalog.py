@@ -77,12 +77,24 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en-US": "Group not found.",
     },
     "group.organization_managed": {
-        "ko-KR": "정규 조직 그룹은 조직과 임직원 소속에서 관리합니다.",
-        "en-US": "Organization groups are managed through the organization and employee directory.",
+        "ko-KR": "이 그룹의 구성원은 사용자 인사배치에서 변경해야 합니다.",
+        "en-US": "Change this group’s members through employee assignments.",
+    },
+    "group.hr_metadata_only": {
+        "ko-KR": "인사 정보는 인사배치로 관리하는 그룹에만 설정할 수 있습니다.",
+        "en-US": "HR information is only available for groups managed by employment assignments.",
+    },
+    "group.source_reference_exists": {
+        "ko-KR": "이미 사용 중인 인사 원본 식별자입니다.",
+        "en-US": "This HR source reference is already in use.",
     },
     "group.invalid_members": {
         "ko-KR": "그룹 구성원은 활성 사용자 중에서 지정해야 합니다.",
         "en-US": "Group members must be active users.",
+    },
+    "group.inactive_assignment": {
+        "ko-KR": "비활성 그룹에는 구성원을 추가할 수 없습니다. 그룹을 먼저 활성화해 주세요.",
+        "en-US": "Activate this group before adding members.",
     },
     "app.invalid_audience": {
         "ko-KR": "사용 허용 대상에 유효하지 않은 사용자나 그룹이 있습니다.",

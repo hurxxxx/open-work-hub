@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import User
-from open_work_hub_api.domains.organization.models import OrganizationUnit
+from open_work_hub_api.domains.groups.models import Group
 from open_work_hub_api.domains.retrieval.models import (
     RetrievalPartition,
     RetrievalPartitionCandidateScope,
@@ -73,7 +73,7 @@ def db() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            OrganizationUnit.__table__,
+            Group.__table__,
             User.__table__,
             RetrievalPartition.__table__,
         ],

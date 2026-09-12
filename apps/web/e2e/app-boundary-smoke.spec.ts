@@ -339,7 +339,7 @@ test.describe('AI-friendly app boundary smoke', () => {
     ).toBeVisible();
     await expect(
       page.getByRole('button', {
-        name: /수동 그룹 생성|Create manual group/,
+        name: /^(그룹 생성|Create group)$/,
       }),
     ).toBeVisible();
 

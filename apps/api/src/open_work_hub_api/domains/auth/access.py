@@ -54,7 +54,7 @@ from open_work_hub_api.domains.auth.security import (
 )
 from open_work_hub_api.domains.auth.session_lifecycle import revoke_active_impersonation_sessions
 from open_work_hub_api.domains.groups.service import current_group_ids, managed_organization_ids
-from open_work_hub_api.domains.organization.models import OrganizationUnit  # noqa: F401
+from open_work_hub_api.domains.groups.models import Group  # noqa: F401
 from open_work_hub_api.domains.pms.roles import (
     TEAM_ROLE_ALIASES as TEAM_ROLE_ALIASES,
 )

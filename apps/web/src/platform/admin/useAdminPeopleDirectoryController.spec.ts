@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
-import type { AdminUsersResponse, OrganizationUnitItem } from './admin-api';
+import type { AdminUsersResponse, HrGroupItem } from './admin-api';
 import { ADMIN_PEOPLE_DEFAULT_PAGE_SIZE } from './admin-shared';
 import {
   useAdminPeopleDirectoryController,
@@ -32,7 +32,7 @@ function user(): AuthUser {
   });
 }
 
-function organizationUnit(): OrganizationUnitItem {
+function organizationUnit(): HrGroupItem {
   return {
     id: 'organization-1',
     name: 'Research',
@@ -62,7 +62,7 @@ function client(
 ): AdminPeopleDirectoryClient {
   return {
     listUsers: vi.fn().mockResolvedValue(usersResponse()),
-    listOrganizationUnits: vi.fn().mockResolvedValue([organizationUnit()]),
+    listHrGroups: vi.fn().mockResolvedValue([organizationUnit()]),
     ...overrides,
   };
 }
@@ -73,7 +73,7 @@ function renderController(testClient = client()) {
       token: 'token-1',
       debounceMs: 0,
       messages: {
-        organizationListLoadFailed: 'organizations failed',
+        hrGroupListLoadFailed: 'organizations failed',
         userListLoadFailed: 'users failed',
       },
       client: testClient,
@@ -88,16 +88,14 @@ describe('useAdminPeopleDirectoryController', () => {
     const { result } = renderController(testClient);
 
     await waitFor(() => expect(result.current.state.users).toHaveLength(1));
-    await waitFor(() =>
-      expect(result.current.state.organizationUnits).toHaveLength(1),
-    );
+    await waitFor(() => expect(result.current.state.hrGroups).toHaveLength(1));
 
     expect(testClient.listUsers).toHaveBeenCalledWith('token-1', {
       page: 1,
       page_size: ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
       q: '',
     });
-    expect(testClient.listOrganizationUnits).toHaveBeenCalledWith('token-1');
+    expect(testClient.listHrGroups).toHaveBeenCalledWith('token-1');
   });
 
   it('applies mutually exclusive organization and unassigned filters', async () => {
@@ -106,7 +104,7 @@ describe('useAdminPeopleDirectoryController', () => {
     await waitFor(() => expect(testClient.listUsers).toHaveBeenCalledTimes(1));
 
     act(() => {
-      result.current.actions.organizationUnitChanged('organization-1');
+      result.current.actions.hrGroupChanged('organization-1');
     });
     await waitFor(() => {
       expect(testClient.listUsers).toHaveBeenLastCalledWith('token-1', {
@@ -129,7 +127,7 @@ describe('useAdminPeopleDirectoryController', () => {
         unassigned_only: true,
       });
     });
-    expect(result.current.state.organizationUnitId).toBe('');
+    expect(result.current.state.hrGroupId).toBe('');
   });
 
   it('resets pagination when search or page size changes', async () => {
@@ -202,7 +200,7 @@ describe('useAdminPeopleDirectoryController', () => {
   it('routes load failures to the controller error state', async () => {
     const testClient = client({
       listUsers: vi.fn().mockRejectedValue('no users'),
-      listOrganizationUnits: vi.fn().mockRejectedValue('no organizations'),
+      listHrGroups: vi.fn().mockRejectedValue('no organizations'),
     });
     const { result } = renderController(testClient);
 

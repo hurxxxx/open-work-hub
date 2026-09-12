@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-08
+- Amended: 2026-09-12 — unified groups with source-controlled membership and HR attributes.
 
 ## Decision
 
@@ -10,18 +11,20 @@ availability overrides, route selectors, and execution identities are removed.
 There is no replacement default workspace. Filesystem working directories,
 terminal sandboxes, and package-manager workspaces are unrelated and remain.
 
-The platform owns accounts, the organization directory, reusable groups, app
+The platform owns accounts, employment assignments, reusable groups, app
 admission, directory APIs, and selection components. Apps own their business
 containers, role definitions, ACL tables, and approval workflows. PMS spaces
 remain PMS resources; they are not platform groups.
 
-- Organization groups contain only users whose current primary organization is
-  that exact organization. Membership is derived, not copied. Descendants and
-  department heads are not implicitly included.
-- Manual groups contain explicitly assigned users. Organization changes never
-  rewrite manual membership. Both group kinds use one principal interface.
-- Each organization can name one head; one person can head several organizations.
-  This is directory information, not platform or business authorization.
+- Groups are one entity with an immutable source: HR information or local creation.
+  HR hierarchy, head and source reference are group attributes. Employment assignments
+  point directly at HR-source groups; no separate organization/group pair is stored.
+- HR-source group membership follows exact current primary assignments. Membership
+  is derived, not copied. Descendants and designated heads are not implicitly included.
+- Local-source groups contain explicitly assigned users. Employment changes never
+  rewrite these assignments. Both sources use one principal interface and admin surface.
+- Each HR-source group can name one head; one person can head several groups.
+  This is personnel information, not platform or business authorization.
 - App admission requires an active account, company enablement, feature/role
   requirements, and either an all-users audience or a matching user/group grant.
   Missing configuration and empty selected audiences deny. Platform admins may

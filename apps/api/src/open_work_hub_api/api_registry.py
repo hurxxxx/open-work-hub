@@ -62,9 +62,6 @@ from open_work_hub_api.domains.media.router import router as media_router
 from open_work_hub_api.domains.meeting.router import router as meeting_router
 from open_work_hub_api.domains.notifications.router import router as notifications_router
 from open_work_hub_api.domains.ocr.router import router as ocr_router
-from open_work_hub_api.domains.organization.admin_router import (
-    router as admin_organization_router,
-)
 from open_work_hub_api.domains.personal_widgets.router import router as personal_widgets_router
 from open_work_hub_api.domains.planner.router import router as planner_router
 from open_work_hub_api.domains.pms.group_bindings import router as pms_group_bindings_router
@@ -137,7 +134,6 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(admin_document_processing_router, "protected"),
         _RouterSpec(admin_model_runtime_status_router, "protected"),
         _RouterSpec(admin_hermes_router, "protected"),
-        _RouterSpec(admin_organization_router, "protected"),
         _RouterSpec(admin_groups_router, "protected"),
         _RouterSpec(directory_router, "protected"),
         _RouterSpec(admin_app_access_router, "protected"),

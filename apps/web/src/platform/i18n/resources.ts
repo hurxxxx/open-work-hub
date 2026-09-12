@@ -137,27 +137,73 @@ export const resources = {
         loadFailed: '앱 사용 권한을 불러오지 못했습니다.',
       },
       companyGroups: {
+        source: '생성 출처',
+        actions: '작업',
+        manage: '관리',
+        totalGroups: '그룹 {{count}}개',
+        emptyTitle: '아직 그룹이 없습니다.',
+        emptyHint:
+          '그룹을 만들고 구성원을 추가해 함께 사용할 대상을 설정하세요.',
+        emptyFilteredHint: '검색어나 생성 출처를 변경해 보세요.',
+        userGroups: '{{name}} · 그룹 관리',
+        assignedGroups: '소속 그룹',
+        noAssignedGroups: '아직 배정된 그룹이 없습니다.',
+        addToGroup: '그룹에 추가',
+        userGroupsHint:
+          '직접 생성한 그룹에 배정합니다. 인사배치 그룹은 사용자 편집에서 주 소속을 변경하세요.',
+        inactiveUserHint:
+          '활성 사용자만 그룹에 새로 추가할 수 있습니다. 기존 배정은 제거할 수 있습니다.',
+        alreadyAssigned: '배정됨',
+        addMember: '추가',
+        removeMember: '제거',
+        editAssignment: '인사배치 변경',
+        addMembers: '구성원 추가',
+        closePicker: '추가 창 닫기',
+        memberCount: '구성원 {{count}}명',
+        noMembers:
+          '구성원이 없습니다. 구성원 추가 버튼으로 사용자를 선택하세요.',
+        noHrMembers:
+          '인사배치된 활성 사용자가 없습니다. 사용자에서 주 소속 그룹을 지정하세요.',
+        searchMembers: '구성원 이름 또는 아이디 검색',
+        removeNamedMember: '{{name}} 구성원 제거',
+        memberAccessInactive: '현재 접근 불가',
+        inactiveGroupHint:
+          '구성원을 추가하려면 그룹을 활성화하고 정보를 저장하세요.',
+        allSources: '모든 출처',
+        hrSource: '인사 정보',
+        localSource: '직접 생성',
+        membershipMode: '구성원 관리',
+        hrAssignment: '인사배치 자동 반영',
+        manualAssignment: '직접 배정',
+        hrInformation: '인사 정보',
+        hrInformationHint: '계층, 책임자와 인사 원본의 식별자를 설정합니다.',
+        sourceReference: '원본 식별자',
+        slug: '식별자',
+        slugPlaceholder: '비워두면 이름에서 자동 생성',
+        unitType: '조직 유형',
+        parent: '상위 그룹',
+        noParent: '없음',
+        manageAssignments: '사용자 인사배치 관리',
+
         title: '그룹',
         policy:
-          '정규 조직 그룹은 현재 직접 소속된 사용자를 반영합니다. 수동 그룹은 인사 이동과 별개로 관리합니다. 두 종류의 그룹을 앱과 콘텐츠 권한에 함께 사용할 수 있습니다.',
-        create: '수동 그룹 생성',
-        created: '수동 그룹을 생성했습니다.',
+          '그룹을 앱 사용과 콘텐츠 공유 대상으로 관리합니다. 생성 출처에 따라 인사배치로 구성원을 자동 반영하거나 직접 배정합니다.',
+        create: '그룹 생성',
+        created: '그룹을 생성했습니다.',
         saveFailed: '그룹을 저장하지 못했습니다.',
         saved: '그룹 변경사항을 저장했습니다.',
         loadFailed: '그룹을 불러오지 못했습니다.',
         name: '그룹 이름',
-        kind: '종류',
         status: '상태',
-        organization: '정규 조직',
-        manual: '수동 그룹',
         active: '활성',
         inactive: '비활성',
         organizationRule:
-          '정규 조직 그룹의 이름과 구성원은 조직 및 사용자 소속에서 관리합니다. 하위 조직과 부서장은 자동으로 포함되지 않습니다.',
+          '이 그룹의 구성원은 사용자 인사배치에 따라 자동 반영됩니다. 하위 그룹 구성원과 책임자는 자동으로 포함되지 않습니다.',
         description: '설명',
         saveDetails: '그룹 정보 저장',
-        members: '구성원',
         saveMembers: '구성원 저장',
+        saveMembersHint:
+          '구성원 추가·제거 후 구성원 저장을 눌러 변경사항을 적용하세요.',
         revokeTitle: '그룹 접근 권한 변경',
         removeMembersNotice:
           '{{count}}명의 사용자가 이 그룹을 통해 얻은 앱 및 콘텐츠 권한을 즉시 잃습니다. 계속하시겠습니까?',
@@ -166,7 +212,7 @@ export const resources = {
         confirmRevocation: '접근 권한 변경',
         head: '부서장',
         headRule:
-          '조직마다 부서장 한 명을 지정할 수 있으며, 한 사람이 여러 조직을 담당할 수 있습니다. 이 지정만으로 그룹 가입이나 관리 권한이 부여되지는 않습니다.',
+          '그룹마다 인사 책임자 한 명을 지정할 수 있습니다. 책임자 지정은 구성원 추가나 관리자 권한 부여에 영향을 주지 않습니다.',
       },
       mobileNavigation: {
         close: '앱 전환 닫기',
@@ -546,7 +592,7 @@ export const resources = {
         Meetings: '회의',
         Messages: '메시지',
         Operations: '운영·모니터링',
-        Organization: '사용자·조직',
+        Organization: '사용자·그룹',
 
         '업무 앱': '업무 앱',
         '협업 앱': '협업 앱',
@@ -3467,8 +3513,17 @@ export const resources = {
           },
           people: {
             accountAccessSection: '계정 접근',
+            manageGroups: '그룹 관리',
+            userCreatedNotice: '사용자를 생성했습니다.',
+            passwordResetNotice: '임시 비밀번호를 재발급했습니다.',
+            resetPasswordConfirm:
+              '기존 로그인 세션이 종료되며 다음 로그인에서 비밀번호를 변경해야 합니다. 재발급할까요?',
+            credentialTitle: '로그인 정보 확인',
+            credentialHint:
+              '임시 비밀번호는 이 창에서 확인할 수 있습니다. 사용자에게 전달하고 첫 로그인에서 변경하도록 안내하세요.',
+            temporaryPassword: '임시 비밀번호',
             adminPrivilegesSection: '관리 권한',
-            allOrganizations: '모든 조직',
+            allHrGroups: '모든 주 소속 그룹',
             allUsers: '전체 사용자 ({{count}})',
             blockLogin: '로그인 차단',
             blockLoginDescription:
@@ -3478,7 +3533,6 @@ export const resources = {
               created: '생성일',
               email: '이메일',
               employeeCode: '사번',
-              enabledApps: '관리 앱',
               groups: '그룹',
               jobTitle: '직책',
               lastActive: '최근 활동',
@@ -3490,7 +3544,7 @@ export const resources = {
               user: '사용자',
             },
             createDescription:
-              '회사 계정을 만들고 조직 정보와 관리자 권한을 설정합니다.',
+              '회사 계정을 만들고 인사배치 정보와 관리자 권한을 설정합니다.',
             createUser: '사용자 생성',
             creating: '생성 중',
             deleteConfirm: '{{email}} 사용자를 삭제할까요?',
@@ -3508,11 +3562,8 @@ export const resources = {
             exportFailed: '사용자 목록을 내보내지 못했습니다.',
             exporting: '내보내는 중',
             fullName: '전체 이름',
-            includeDescendants: '하위 조직 포함',
-            inactiveOrganization: '비활성',
-            impersonateFailed: '해당 사용자로 로그인하지 못했습니다.',
-            impersonateUser: '사용자로 로그인',
-            impersonatingUser: '로그인 전환 중',
+            includeDescendants: '하위 그룹 포함',
+            inactiveGroup: '비활성',
             loginBlocked: '{{email}} 로그인을 차단했습니다.',
             loginBlockedBadge: '로그인 차단',
             loginBlockFailed: '로그인 차단 상태를 변경하지 못했습니다.',
@@ -3524,34 +3575,29 @@ export const resources = {
             loadingTitle: '사용자 목록을 불러오는 중입니다.',
             more: '더보기',
 
-            organizationFilter: '조직',
-            organizationListLoadFailed: '조직 디렉터리를 불러오지 못했습니다.',
-            organizationMetadataHint:
-              '주 소속은 디렉터리 메타데이터이며 접근 권한을 부여하지 않습니다.',
-            organizationMetadataSection: '조직 정보',
+            hrGroupFilter: '주 소속 그룹',
+            hrGroupListLoadFailed: '인사배치 그룹을 불러오지 못했습니다.',
+            hrAssignmentHint:
+              '주 소속을 변경하면 해당 인사배치 그룹의 구성원과 그룹을 통한 접근 권한이 변경됩니다.',
+            hrAssignmentSection: '인사배치 정보',
             pageSizeLabel: '표시',
             pageSizeOption: '{{count}}명',
-            passwordReset:
-              '임시 비밀번호를 재발급했습니다. 새 비밀번호: {{password}}',
             passwordResetFailed: '비밀번호를 재발급하지 못했습니다.',
             platformAdmin: '플랫폼 관리자',
             regularUser: '일반 사용자',
             platformAdminDescription:
               '전체 관리자 콘솔과 회사 전역 설정을 관리할 수 있습니다.',
             profileSection: '기본 정보',
-            primaryOrganization: '주 소속 조직',
+            primaryGroup: '주 소속 그룹',
             range: '{{from}}-{{to}} / {{total}}',
             resetPassword: '비밀번호 재발급',
             search: '사용자 검색',
             searchPlaceholder:
-              '이름, 아이디, 이메일, 사번, 직책 또는 조직 검색',
+              '이름, 아이디, 이메일, 사번, 직책 또는 주 소속 검색',
             unassigned: '소속 없음',
             unassignedOnly: '소속 없음만',
             unblockLogin: '로그인 차단 해제',
             userActions: '{{email}} 작업',
-            userCreated: '사용자를 생성했습니다. 임시 비밀번호: {{password}}',
-            userCreatedReloadFailed:
-              '사용자를 생성했지만 목록을 갱신하지 못했습니다. 임시 비밀번호: {{password}}',
             userCreateFailed: '사용자를 생성하지 못했습니다.',
             userDeleted: '{{email}} 사용자를 삭제했습니다.',
             userDeleteFailed: '사용자를 삭제하지 못했습니다.',
@@ -3559,46 +3605,6 @@ export const resources = {
             userSaved: '사용자 정보를 저장했습니다.',
 
             userSaveFailed: '사용자 정보를 저장하지 못했습니다.',
-          },
-          organization: {
-            boundaryTitle: '조직 정보의 범위',
-            boundaryDescription:
-              '정규 조직 그룹의 권한은 현재 주 소속에 따라 적용됩니다. 부서장 지정만으로 관리 권한이 생기지 않으며, 비정규 그룹은 별도로 관리합니다.',
-            count: '조직 단위 {{count}}개',
-            loadFailed: '조직 디렉터리를 불러오지 못했습니다.',
-            loadingTitle: '조직 디렉터리를 불러오는 중입니다.',
-            loadingDescription: '활성 및 비활성 조직 단위를 확인하고 있습니다.',
-            create: '조직 단위 추가',
-            emptyTitle: '등록된 조직 단위가 없습니다.',
-            emptyDescription:
-              '첫 조직 단위를 추가해 회사 디렉터리를 구성하세요.',
-            columns: {
-              name: '이름',
-              type: '유형',
-              slug: '식별자',
-              parent: '상위 조직',
-              status: '상태',
-              updated: '수정일',
-              actions: '작업',
-            },
-            unknownParent: '알 수 없는 상위 조직',
-            root: '최상위',
-            inactive: '비활성',
-            created: '조직 단위를 추가했습니다.',
-            updated: '조직 단위를 수정했습니다.',
-            saveFailed: '조직 단위를 저장하지 못했습니다.',
-            formDescription:
-              '계층 구조와 디렉터리 표시용 메타데이터를 입력합니다.',
-            createTitle: '조직 단위 추가',
-            editTitle: '조직 단위 편집',
-            slugPlaceholder: '비워두면 이름에서 자동 생성',
-            fields: {
-              name: '이름',
-              slug: '식별자',
-              type: '유형',
-              parent: '상위 조직',
-              active: '활성 조직 단위',
-            },
           },
           apiKeys: {
             boundaryTitle: '외부 연계 자격 증명',
@@ -3672,13 +3678,8 @@ export const resources = {
             },
             people: {
               description:
-                '회사 계정 상태, 조직 정보와 관리자 권한을 관리합니다.',
+                '사용자를 생성하고 계정 상태, 그룹 배정과 관리자 권한을 관리합니다.',
               title: '사용자 관리',
-            },
-            organization: {
-              description:
-                '조직 계층과 사용자 주 소속을 관리합니다. 연결된 정규 그룹에는 현재 소속 사용자가 반영됩니다.',
-              title: '조직 디렉터리',
             },
             apiIntegrations: {
               description:
@@ -6113,27 +6114,72 @@ export const resources = {
         loadFailed: 'Could not load app access.',
       },
       companyGroups: {
+        source: 'Source',
+        actions: 'Actions',
+        manage: 'Manage',
+        totalGroups: '{{count}} groups',
+        emptyTitle: 'No groups yet.',
+        emptyHint: 'Create a group and add members to manage shared access.',
+        emptyFilteredHint: 'Try a different search or source filter.',
+        userGroups: '{{name}} · Group management',
+        assignedGroups: 'Assigned groups',
+        noAssignedGroups: 'No groups assigned yet.',
+        addToGroup: 'Add to a group',
+        userGroupsHint:
+          'Assign locally created groups here. Edit the user’s primary group to change HR assignments.',
+        inactiveUserHint:
+          'Only active users can receive new assignments. Existing assignments can be removed.',
+        alreadyAssigned: 'Assigned',
+        addMember: 'Add',
+        removeMember: 'Remove',
+        editAssignment: 'Edit assignment',
+        addMembers: 'Add members',
+        closePicker: 'Close picker',
+        memberCount: '{{count}} members',
+        noMembers: 'No members yet. Select Add members to choose users.',
+        noHrMembers:
+          'No active users assigned. Set their primary group in user management.',
+        searchMembers: 'Search members by name or login ID',
+        removeNamedMember: 'Remove {{name}} from group',
+        memberAccessInactive: 'Access inactive',
+        inactiveGroupHint:
+          'Activate and save this group before adding members.',
+        allSources: 'All sources',
+        hrSource: 'HR information',
+        localSource: 'Created locally',
+        membershipMode: 'Membership management',
+        hrAssignment: 'Employee assignments',
+        manualAssignment: 'Direct assignment',
+        hrInformation: 'HR information',
+        hrInformationHint:
+          'Set the hierarchy, designated head, and HR source reference.',
+        sourceReference: 'Source reference',
+        slug: 'Identifier',
+        slugPlaceholder: 'Generated from the name when empty',
+        unitType: 'Unit type',
+        parent: 'Parent group',
+        noParent: 'None',
+        manageAssignments: 'Manage employee assignments',
+
         title: 'Groups',
         policy:
-          'Organization groups reflect current direct employment assignments. Manual groups are managed independently of organization transfers. Both group types can grant app and content access.',
-        create: 'Create manual group',
-        created: 'Manual group created.',
+          'Manage groups for app access and content sharing. Membership follows employee assignments or direct assignment according to the group source.',
+        create: 'Create group',
+        created: 'Group created.',
         saveFailed: 'Could not save the group.',
         saved: 'Group changes saved.',
         loadFailed: 'Could not load groups.',
         name: 'Group name',
-        kind: 'Type',
         status: 'Status',
-        organization: 'Organization',
-        manual: 'Manual group',
         active: 'Active',
         inactive: 'Inactive',
         organizationRule:
-          'Organization group names and members are managed through organizations and employee assignments. Child organizations and department heads are not automatically included.',
+          'Members follow employee assignments automatically. Child group members and designated heads are not automatically included.',
         description: 'Description',
         saveDetails: 'Save group details',
-        members: 'Members',
         saveMembers: 'Save members',
+        saveMembersHint:
+          'After adding or removing members, select Save members to apply your changes.',
         revokeTitle: 'Change group access',
         removeMembersNotice:
           '{{count}} users will immediately lose app and content access granted by this group. Continue?',
@@ -6142,7 +6188,7 @@ export const resources = {
         confirmRevocation: 'Change access',
         head: 'Department head',
         headRule:
-          'Each organization has at most one head; one person may head several organizations. This designation does not grant group membership or administration rights.',
+          'Each HR group can designate one head. This does not grant membership or administrator privileges.',
       },
       mobileNavigation: {
         close: 'Close app switcher',
@@ -6526,7 +6572,7 @@ export const resources = {
         Meetings: 'Meetings',
         Messages: 'Messages',
         Operations: 'Operations & Monitoring',
-        Organization: 'People & Organization',
+        Organization: 'People & Groups',
 
         '업무 앱': 'Business Apps',
         '협업 앱': 'Collaboration Apps',
@@ -9494,8 +9540,17 @@ export const resources = {
           },
           people: {
             accountAccessSection: 'Account access',
+            manageGroups: 'Manage groups',
+            userCreatedNotice: 'User created.',
+            passwordResetNotice: 'Temporary password issued.',
+            resetPasswordConfirm:
+              'Existing sessions will end and the user must change their password at next login. Reset the password?',
+            credentialTitle: 'Login credentials',
+            credentialHint:
+              'Copy the temporary password from this dialog and share it with the user. They must change it at first login.',
+            temporaryPassword: 'Temporary password',
             adminPrivilegesSection: 'Admin privileges',
-            allOrganizations: 'All organizations',
+            allHrGroups: 'All primary groups',
             allUsers: 'All users ({{count}})',
             blockLogin: 'Block login',
             blockLoginDescription:
@@ -9505,7 +9560,6 @@ export const resources = {
               created: 'Created',
               email: 'Email',
               employeeCode: 'Employee code',
-              enabledApps: 'Admin apps',
               jobTitle: 'Job title',
               lastActive: 'Last active',
               loginId: 'ID',
@@ -9517,7 +9571,7 @@ export const resources = {
               groups: 'Groups',
             },
             createDescription:
-              'Create a company account and configure organization details and administrator privileges.',
+              'Create a company account and configure HR assignments and administrator privileges.',
             createUser: 'Create user',
             creating: 'Creating',
             deleteConfirm: 'Delete user {{email}}?',
@@ -9534,11 +9588,8 @@ export const resources = {
             exportFailed: 'Could not export users.',
             exporting: 'Exporting',
             fullName: 'Full name',
-            includeDescendants: 'Include child units',
-            inactiveOrganization: 'Inactive',
-            impersonateFailed: 'Could not sign in as this user.',
-            impersonateUser: 'Sign in as user',
-            impersonatingUser: 'Switching sign-in',
+            includeDescendants: 'Include child groups',
+            inactiveGroup: 'Inactive',
             loginBlocked: 'Blocked login for {{email}}.',
             loginBlockedBadge: 'Login blocked',
             loginBlockFailed: 'Could not change the login block state.',
@@ -9550,23 +9601,21 @@ export const resources = {
             loadingTitle: 'Loading users.',
             more: 'More',
 
-            organizationFilter: 'Organization',
-            organizationListLoadFailed:
-              'Could not load the organization directory.',
-            organizationMetadataHint:
-              'The primary unit is directory metadata and does not grant access.',
-            organizationMetadataSection: 'Organization information',
+            hrGroupFilter: 'Primary group',
+            hrGroupListLoadFailed:
+              'Could not load employment assignment groups.',
+            hrAssignmentHint:
+              'Changing the primary assignment updates HR group membership and access through that group.',
+            hrAssignmentSection: 'HR assignment',
             pageSizeLabel: 'Rows',
             pageSizeOption: '{{count}} users',
-            passwordReset:
-              'Temporary password reset. New password: {{password}}',
             passwordResetFailed: 'Could not reset the password.',
             platformAdmin: 'Platform admin',
             regularUser: 'Regular user',
             platformAdminDescription:
               'Can manage the full admin console and company-wide settings.',
             profileSection: 'Profile',
-            primaryOrganization: 'Primary organization unit',
+            primaryGroup: 'Primary assignment group',
             range: '{{from}}-{{to}} of {{total}}',
             resetPassword: 'Reset password',
             search: 'Search users',
@@ -9576,9 +9625,6 @@ export const resources = {
             unassignedOnly: 'Unassigned only',
             unblockLogin: 'Unblock login',
             userActions: '{{email}} actions',
-            userCreated: 'User created. Temporary password: {{password}}',
-            userCreatedReloadFailed:
-              'The user was created, but the list could not refresh. Temporary password: {{password}}',
             userCreateFailed: 'Could not create the user.',
             userDeleted: 'Deleted user {{email}}.',
             userDeleteFailed: 'Could not delete the user.',
@@ -9586,46 +9632,6 @@ export const resources = {
             userSaved: 'User information saved.',
 
             userSaveFailed: 'Could not save user information.',
-          },
-          organization: {
-            boundaryTitle: 'Organization information boundary',
-            boundaryDescription:
-              'Organization group access follows current primary assignments. Department head designation grants no administrative privileges; manual groups are managed separately.',
-            count: '{{count}} organization units',
-            loadFailed: 'Could not load the organization directory.',
-            loadingTitle: 'Loading the organization directory.',
-            loadingDescription:
-              'Checking active and inactive organization units.',
-            create: 'Add organization unit',
-            emptyTitle: 'No organization units have been registered.',
-            emptyDescription:
-              'Add the first unit to build the company directory.',
-            columns: {
-              name: 'Name',
-              type: 'Type',
-              slug: 'Identifier',
-              parent: 'Parent',
-              status: 'Status',
-              updated: 'Updated',
-              actions: 'Actions',
-            },
-            unknownParent: 'Unknown parent',
-            root: 'Top level',
-            inactive: 'Inactive',
-            created: 'Organization unit added.',
-            updated: 'Organization unit updated.',
-            saveFailed: 'Could not save the organization unit.',
-            formDescription: 'Enter hierarchy and directory display metadata.',
-            createTitle: 'Add organization unit',
-            editTitle: 'Edit organization unit',
-            slugPlaceholder: 'Generated from the name if blank',
-            fields: {
-              name: 'Name',
-              slug: 'Identifier',
-              type: 'Type',
-              parent: 'Parent organization',
-              active: 'Active organization unit',
-            },
           },
           apiKeys: {
             boundaryTitle: 'External integration credentials',
@@ -9700,13 +9706,8 @@ export const resources = {
             },
             people: {
               description:
-                'Manage company account status, organization details and administrator privileges.',
+                'Create users and manage account status, group assignments and administrator privileges.',
               title: 'People management',
-            },
-            organization: {
-              description:
-                'Manage the organization hierarchy and primary assignments. Linked organization groups reflect current assignments.',
-              title: 'Organization directory',
             },
             apiIntegrations: {
               description:

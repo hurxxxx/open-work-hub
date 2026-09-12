@@ -134,12 +134,12 @@ from open_work_hub_api.domains.auth.security import (
     normalize_login_id,
 )
 from open_work_hub_api.domains.auth.session_lifecycle import revoke_active_user_sessions
-from open_work_hub_api.domains.organization.models import OrganizationUnit
-from open_work_hub_api.domains.organization.schemas import OrganizationUnitSummaryResponse
-from open_work_hub_api.domains.organization.service import (
-    OrganizationDirectoryError,
-    descendant_organization_unit_ids,
-    ensure_active_organization_unit,
+from open_work_hub_api.domains.groups.models import Group
+from open_work_hub_api.domains.groups.schemas import OrganizationUnitSummaryResponse
+from open_work_hub_api.domains.groups.hr import (
+    HrGroupError,
+    descendant_hr_group_ids,
+    ensure_active_hr_group,
 )
 from open_work_hub_api.domains.pms.space_models import Team, TeamMember
 from open_work_hub_api.domains.web_search.service import iter_web_search_external_app_profiles
@@ -1274,13 +1274,13 @@ def _make_unique_login_id(db: Session, base_login_id: str) -> str:
     return candidate
 
 
-def _ensure_active_organization_unit_or_http(
+def _ensure_active_hr_group_or_http(
     db: Session,
     organization_unit_id: str | None,
 ) -> None:
     try:
-        ensure_active_organization_unit(db, organization_unit_id)
-    except OrganizationDirectoryError as error:
+        ensure_active_hr_group(db, organization_unit_id)
+    except HrGroupError as error:
         status_code = 404 if error.code == "organization.unit_not_found" else 409
         raise localized_http_exception(status_code=status_code, code=error.code) from error
 
@@ -3916,11 +3916,11 @@ def list_users(
         count_query = count_query.where(User.primary_organization_unit_id.is_(None))
     elif organization_unit_id:
         try:
-            descendant_ids = descendant_organization_unit_ids(db, organization_unit_id)
+            descendant_ids = descendant_hr_group_ids(db, organization_unit_id)
             organization_unit_ids = (
                 descendant_ids if include_descendants else {organization_unit_id}
             )
-        except OrganizationDirectoryError as error:
+        except HrGroupError as error:
             raise localized_http_exception(status_code=404, code=error.code) from error
         user_query = user_query.where(User.primary_organization_unit_id.in_(organization_unit_ids))
         count_query = count_query.where(
@@ -3936,15 +3936,15 @@ def list_users(
             User.display_name.ilike(search_pattern),
             User.employee_code.ilike(search_pattern),
             User.job_title.ilike(search_pattern),
-            OrganizationUnit.name.ilike(search_pattern),
+            Group.name.ilike(search_pattern),
         )
         user_query = user_query.outerjoin(
-            OrganizationUnit,
-            User.primary_organization_unit_id == OrganizationUnit.id,
+            Group,
+            User.primary_organization_unit_id == Group.id,
         ).where(search_filter)
         count_query = count_query.outerjoin(
-            OrganizationUnit,
-            User.primary_organization_unit_id == OrganizationUnit.id,
+            Group,
+            User.primary_organization_unit_id == Group.id,
         ).where(search_filter)
 
     total = db.scalar(count_query) or 0
@@ -3981,7 +3981,7 @@ def create_user(
     login_id = payload.login_id or _make_unique_login_id(db, derive_login_id_from_email(email))
     if db.scalar(select(User).where(User.login_id == login_id)) is not None:
         raise localized_http_exception(status_code=409, code="auth.login_id_already_exists")
-    _ensure_active_organization_unit_or_http(db, payload.primary_organization_unit_id)
+    _ensure_active_hr_group_or_http(db, payload.primary_organization_unit_id)
     temporary_password = payload.temporary_password or _generate_temporary_password()
     user = User(
         id=new_id(),
@@ -4059,7 +4059,7 @@ def update_user(
     if "job_title" in payload.model_fields_set:
         user.job_title = payload.job_title.strip() if payload.job_title else None
     if "primary_organization_unit_id" in payload.model_fields_set:
-        _ensure_active_organization_unit_or_http(db, payload.primary_organization_unit_id)
+        _ensure_active_hr_group_or_http(db, payload.primary_organization_unit_id)
         user.primary_organization_unit_id = payload.primary_organization_unit_id
     if payload.status is not None:
         user.status = payload.status

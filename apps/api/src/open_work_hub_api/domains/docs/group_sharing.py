@@ -89,7 +89,7 @@ def list_group_shares(
     )
     result = []
     for share, group in rows:
-        entry = serialize_group(db, group)
+        entry = serialize_group(group)
         result.append(
             DocGroupShareResponse(
                 group_id=group.id,
@@ -114,7 +114,7 @@ def upsert_group_share(
     group = db.scalar(select(Group).where(Group.id == group_id, active_group_predicate()))
     if group is None:
         raise localized_http_exception(status_code=404, code="group.not_found")
-    entry = serialize_group(db, group)
+    entry = serialize_group(group)
     share = db.get(NativeDocGroupShare, (resource.id, group_id))
     before = share.access_level if share else None
     if share is None:

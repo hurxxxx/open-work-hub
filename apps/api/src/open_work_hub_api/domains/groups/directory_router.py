@@ -13,9 +13,6 @@ from open_work_hub_api.domains.groups.schemas import (
     GroupListResponse,
 )
 from open_work_hub_api.domains.groups.service import list_groups, managed_organization_ids
-from open_work_hub_api.domains.organization.models import OrganizationUnit
-from open_work_hub_api.domains.organization.schemas import OrganizationUnitResponse
-from open_work_hub_api.domains.organization.service import serialize_organization_unit
 
 router = APIRouter(
     prefix="/directory", tags=["directory"], dependencies=[Depends(require_current_user)]
@@ -71,15 +68,3 @@ def people(
             )
         )
     return CompanyDirectoryPeopleResponse(items=items, total=total, page=page, page_size=page_size)
-
-
-@router.get("/organization-units", response_model=list[OrganizationUnitResponse])
-def organizations(db: Session = Depends(get_db_session)) -> list[OrganizationUnitResponse]:
-    return [
-        OrganizationUnitResponse.model_validate(serialize_organization_unit(item))
-        for item in db.scalars(
-            select(OrganizationUnit)
-            .where(OrganizationUnit.active.is_(True))
-            .order_by(OrganizationUnit.name, OrganizationUnit.id)
-        )
-    ]

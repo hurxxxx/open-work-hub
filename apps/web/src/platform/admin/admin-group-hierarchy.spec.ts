@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { OrganizationUnitItem } from './admin-api';
-import { buildOrganizationUnitRows } from './admin-organization-section';
+import type { HrGroupItem } from './admin-api';
+import { buildHrGroupRows } from './admin-group-hierarchy';
 
 function unit(
   id: string,
   name: string,
   parentId: string | null = null,
-): OrganizationUnitItem {
+): HrGroupItem {
   return {
     id,
     name,
@@ -20,9 +20,9 @@ function unit(
   };
 }
 
-describe('buildOrganizationUnitRows', () => {
+describe('buildHrGroupRows', () => {
   it('sorts sibling names and preserves hierarchy depth', () => {
-    const rows = buildOrganizationUnitRows([
+    const rows = buildHrGroupRows([
       unit('child-b', 'Beta', 'root'),
       unit('root', 'Platform'),
       unit('child-a', 'Alpha', 'root'),
@@ -38,7 +38,7 @@ describe('buildOrganizationUnitRows', () => {
   });
 
   it('keeps orphaned or cyclic legacy rows visible once', () => {
-    const rows = buildOrganizationUnitRows([
+    const rows = buildHrGroupRows([
       unit('orphan', 'Orphan', 'missing'),
       unit('cycle-a', 'Cycle A', 'cycle-b'),
       unit('cycle-b', 'Cycle B', 'cycle-a'),
