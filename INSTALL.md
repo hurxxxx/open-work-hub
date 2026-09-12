@@ -748,6 +748,9 @@ agent-browser --session owh-setup close
 
 사설 GitLab 인증서는 2.2.1절의 CA 신뢰 설정을 적용하고 TLS 검증을 유지한다.
 
+API 자동 검증을 실행할 때 필요한 테스트 DB·서비스, 검사 그룹별 범위와 실제 동작 검증 기준은
+[API 테스트 안내](apps/api/README.md#tests)를 따른다. 최소 개발 서버의 로그인 성공과 전체 API 검증 통과는 별도로 확인한다.
+
 ### 4.2. 기존 Playwright 회귀검사가 필요한 경우
 
 기존 Playwright 로그인 회귀검사나 E2E를 실행하는 작업, 또는 변경 범위상 해당 검사가 필요한 작업에서만 다음 준비를 수행한다.

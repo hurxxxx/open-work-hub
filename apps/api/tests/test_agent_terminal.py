@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -489,7 +490,7 @@ def test_runtime_keeps_tmux_session_across_api_runtime_restart(tmp_path: Path) -
     settings = _settings(
         tmp_path,
         agent_terminal_codex_bin=str(fake_codex),
-        instance_id=f"agent-terminal-test-{tmp_path.name}",
+        instance_id=f"agent-terminal-test-{uuid4().hex}",
     )
     runtime = AgentTerminalRuntime(settings, sessionmaker())
     runtime._mark_started = lambda _session_id, _pid: None  # type: ignore[method-assign]
@@ -586,7 +587,18 @@ def test_runtime_keeps_tmux_session_across_api_runtime_restart(tmp_path: Path) -
         assert restarted_runtime.is_active("session-1") is False
         await restarted_runtime.shutdown()
 
-    asyncio.run(exercise())
+    try:
+        asyncio.run(exercise())
+    finally:
+        # shutdown intentionally preserves tmux sessions; even a failed assertion must
+        # remove this test's unique server so subsequent runs cannot attach to it.
+        subprocess.run(
+            runtime._tmux_prefix("kill-server"),
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
 
 
 def test_runtime_startup_marks_missing_tmux_sessions_failed(

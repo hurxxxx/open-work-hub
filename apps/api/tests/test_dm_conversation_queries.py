@@ -1,114 +1,78 @@
-from __future__ import annotations
-
-from datetime import datetime
-from types import SimpleNamespace
+from datetime import timedelta
 
 from fastapi import HTTPException
 import pytest
+from sqlalchemy.orm import Session
 
+from dm_query_fixture import JOINED_AT, dm_db as dm_db
+from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.dm import conversation_queries
+from open_work_hub_api.domains.dm.models import DmConversationParticipant, DmMessage
 
 
-NOW = datetime(2026, 5, 21, 12, 0, 0)
-
-
-class _FakeDb:
-    def __init__(self, *, scalar_result=None, scalars_result=None) -> None:
-        self.scalar_result = scalar_result
-        self.scalars_result = scalars_result or []
-
-    def scalar(self, query):  # noqa: ANN001
-        return self.scalar_result
-
-    def scalars(self, query):  # noqa: ANN001
-        return self.scalars_result
-
-
-def test_require_user_conversation_returns_active_member_conversation() -> None:
-    current_user = _user("current")
-    conversation = _conversation(participants=[_participant("current")])
-
-    result = conversation_queries.require_user_conversation(
-        _FakeDb(scalar_result=conversation),
-        current_user=current_user,
-        conversation_id="conversation-1",
+def test_require_user_conversation_loads_only_the_requested_active_membership(dm_db: Session):
+    conversation = conversation_queries.require_user_conversation(
+        dm_db, current_user=dm_db.get(User, "reader"), conversation_id="active"
     )
+    assert conversation.id == "active"
+    assert [p.user_id for p in conversation.participants] == ["reader"]
 
-    assert result is conversation
 
-
-def test_require_user_conversation_hides_missing_or_inactive_conversation() -> None:
-    current_user = _user("current")
-
-    with pytest.raises(HTTPException) as missing_exc:
+@pytest.mark.parametrize("conversation_id", ["missing", "left", "other"])
+def test_require_user_conversation_hides_missing_left_and_nonmember_history(
+    dm_db: Session, conversation_id: str
+):
+    with pytest.raises(HTTPException) as exc:
         conversation_queries.require_user_conversation(
-            _FakeDb(scalar_result=None),
-            current_user=current_user,
-            conversation_id="conversation-1",
+            dm_db, current_user=dm_db.get(User, "reader"), conversation_id=conversation_id
         )
-    assert missing_exc.value.status_code == 404
-
-    with pytest.raises(HTTPException) as inactive_exc:
-        conversation_queries.require_user_conversation(
-            _FakeDb(
-                scalar_result=_conversation(participants=[_participant("current", left_at=NOW)])
-            ),
-            current_user=current_user,
-            conversation_id="conversation-1",
-        )
-    assert inactive_exc.value.status_code == 404
+    assert exc.value.status_code == 404
+    assert exc.value.detail.code == "dm.thread_not_found"
 
 
-def test_list_user_conversations_returns_hydrated_query_results() -> None:
-    conversations = [
-        _conversation(conversation_id="conversation-1", participants=[_participant("current")]),
-        _conversation(conversation_id="conversation-2", participants=[_participant("current")]),
-    ]
-
-    assert (
-        conversation_queries.list_user_conversations(
-            _FakeDb(scalars_result=conversations),
-            current_user=_user("current"),
-        )
-        == conversations
+def test_list_user_conversations_filters_membership_orders_and_hydrates(dm_db: Session):
+    conversations = conversation_queries.list_user_conversations(
+        dm_db, current_user=dm_db.get(User, "reader")
     )
+    assert [c.id for c in conversations] == ["empty", "active"]
+    # Relationships promised by the reader must be usable after the query session closes.
+    dm_db.expunge_all()
+    active = conversations[1]
+    assert active.participants[0].user.full_name == "reader"
+    assert [m.body for m in active.messages] == [f"body-{i}" for i in range(1, 6)]
+    assert active.messages[-1].sender.id == "peer"
+    assert active.messages[-1].attachments == []
 
 
-def test_visible_messages_returns_oldest_first_after_desc_query() -> None:
-    newest = SimpleNamespace(id="message-2")
-    oldest = SimpleNamespace(id="message-1")
-
-    result = conversation_queries.visible_messages(
-        _FakeDb(scalars_result=[newest, oldest]),
-        conversation_id="conversation-1",
-        participant=_participant("current"),
-        limit=20,
-        before=NOW,
+@pytest.mark.parametrize(
+    "limit, before_seconds, expected",
+    [
+        (20, None, [2, 3, 4, 5]),
+        (2, None, [4, 5]),
+        (2, 4, [3, 4]),
+        (20, 0, []),
+    ],
+)
+def test_visible_messages_enforces_history_cursor_limit_and_order(
+    dm_db: Session, limit: int, before_seconds: int | None, expected: list[int]
+):
+    messages = conversation_queries.visible_messages(
+        dm_db,
+        conversation_id="active",
+        participant=dm_db.get(DmConversationParticipant, "active-participant"),
+        limit=limit,
+        before=JOINED_AT + timedelta(seconds=before_seconds)
+        if before_seconds is not None
+        else None,
     )
-
-    assert result == [oldest, newest]
-
-
-def test_latest_message_returns_scalar_result() -> None:
-    latest = SimpleNamespace(id="message-2")
-
-    assert (
-        conversation_queries.latest_message(_FakeDb(scalar_result=latest), "conversation-1")
-        is latest
-    )
+    assert [m.id for m in messages] == [f"message-{i}" for i in expected]
 
 
-def _conversation(
-    *,
-    participants: list[SimpleNamespace],
-    conversation_id: str = "conversation-1",
-) -> SimpleNamespace:
-    return SimpleNamespace(id=conversation_id, participants=participants)
-
-
-def _participant(user_id: str, *, left_at=None) -> SimpleNamespace:
-    return SimpleNamespace(user_id=user_id, joined_at=NOW, left_at=left_at)
-
-
-def _user(user_id: str) -> SimpleNamespace:
-    return SimpleNamespace(id=user_id)
+def test_latest_message_uses_conversation_and_sequence_and_handles_empty_history(dm_db: Session):
+    # Clock skew must not make an older sequence the latest message.
+    dm_db.get(DmMessage, "message-2").created_at = JOINED_AT + timedelta(days=1)
+    dm_db.commit()
+    latest = conversation_queries.latest_message(dm_db, "active")
+    assert latest.id == "message-5"
+    assert latest.body == "body-5"
+    assert conversation_queries.latest_message(dm_db, "empty") is None

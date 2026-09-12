@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 
+from minio.error import S3Error
 import pytest
 
 from integration_infra import IntegrationInfra, MinioTestTarget
@@ -38,6 +39,9 @@ def test_minio_file_storage_round_trip(
             size_bytes=len(payload),
             content_type="text/plain",
         )
+        metadata = get_minio_client().stat_object(minio_target.bucket, storage_key)
+        assert metadata.size == len(payload)
+        assert metadata.content_type == "text/plain"
         stored = open_file_object(storage_key)
         try:
             assert b"".join(stored.stream(8)) == payload
@@ -45,6 +49,9 @@ def test_minio_file_storage_round_trip(
             stored.close()
             stored.release_conn()
         remove_file_object(storage_key)
+        with pytest.raises(S3Error) as exc:
+            get_minio_client().stat_object(minio_target.bucket, storage_key)
+        assert exc.value.code == "NoSuchKey"
     finally:
         get_minio_client.cache_clear()
         get_settings.cache_clear()
