@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import Base
 from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.groups.models import Group
 from open_work_hub_api.domains.files import rag_projection, rag_sync
 from open_work_hub_api.domains.files.extraction_bootstrap import bootstrap_file_extraction_artifacts
 from open_work_hub_api.domains.files.models import (
@@ -20,7 +21,6 @@ from open_work_hub_api.domains.files.models import (
     FileManagerFileSourceMetadata,
     FileManagerFolder,
 )
-from open_work_hub_api.domains.organization.models import OrganizationUnit
 from open_work_hub_api.domains.rag.contracts import RagSyncOperation
 from open_work_hub_api.domains.rag.models import RagSyncJob
 from open_work_hub_api.domains.retrieval.models import (
@@ -68,7 +68,7 @@ def _session() -> Session:
     Base.metadata.create_all(
         engine,
         tables=[
-            OrganizationUnit.__table__,
+            Group.__table__,
             User.__table__,
             RetrievalPartition.__table__,
             FileManagerCorpus.__table__,

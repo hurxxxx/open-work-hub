@@ -20,7 +20,7 @@ Use `buildAppHref` / `build_app_href` and generated routes. A URL or app pin nev
 
 ## Core And App Authorization
 
-Core owns accounts, organization metadata, live company groups, app admission and directory selectors.
+Core owns accounts, employment assignments, live company groups with HR attributes, app admission and directory selectors.
 [Organization](../organization/README.md) owns group derivation and lifecycle. Apps own business
 containers, roles, sharing tables, approval and ownership transitions. PMS spaces and memberships
 are PMS resources; group binding delegates a PMS role without making the group a space.
@@ -48,7 +48,7 @@ checking app admission.
 
 An active, unblocked account must satisfy company app enablement, registered feature/system-role
 requirements, and the app audience. Policy is `all` or `selected`; selected direct users and live
-organization/manual groups are combined with OR. Missing configuration and an empty selected audience
+HR-source/local-source groups are combined with OR. Missing configuration and an empty selected audience
 deny ordinary users. Platform administrators bypass only audience selection; master disablement and
 feature requirements still apply. No resource share or public link bypasses this gate.
 

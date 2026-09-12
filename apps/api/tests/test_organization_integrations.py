@@ -31,11 +31,12 @@ def _create_organization_unit(
     parent_id: str | None = None,
 ) -> dict:
     response = client.post(
-        "/api/v1/admin/organization-units",
+        "/api/v1/admin/groups",
         headers=_auth_headers(token),
         json={
             "name": name,
             "unit_type": "department",
+            "source": "hr",
             "parent_id": parent_id,
             "active": True,
         },
@@ -56,7 +57,7 @@ def test_organization_hierarchy_user_metadata_and_filters(client: TestClient) ->
     )
 
     cycle_response = client.patch(
-        f"/api/v1/admin/organization-units/{root['id']}",
+        f"/api/v1/admin/groups/{root['id']}",
         headers=_auth_headers(token),
         json={"parent_id": child["id"]},
     )
@@ -64,12 +65,13 @@ def test_organization_hierarchy_user_metadata_and_filters(client: TestClient) ->
     assert cycle_response.json()["code"] == "organization.cycle_detected"
 
     duplicate_response = client.post(
-        "/api/v1/admin/organization-units",
+        "/api/v1/admin/groups",
         headers=_auth_headers(token),
         json={
             "name": "Duplicate",
             "slug": root["slug"],
             "unit_type": "department",
+            "source": "hr",
             "active": True,
         },
     )
@@ -77,9 +79,9 @@ def test_organization_hierarchy_user_metadata_and_filters(client: TestClient) ->
     assert duplicate_response.json()["code"] == "organization.slug_exists"
 
     blank_name_response = client.post(
-        "/api/v1/admin/organization-units",
+        "/api/v1/admin/groups",
         headers=_auth_headers(token),
-        json={"name": "  ", "unit_type": "department", "active": True},
+        json={"name": "  ", "unit_type": "department", "source": "hr", "active": True},
     )
     assert blank_name_response.status_code == 422
 
@@ -141,7 +143,7 @@ def test_organization_hierarchy_user_metadata_and_filters(client: TestClient) ->
     assert unknown_filter_response.json()["code"] == "organization.unit_not_found"
 
     deactivate_response = client.patch(
-        f"/api/v1/admin/organization-units/{child['id']}",
+        f"/api/v1/admin/groups/{child['id']}",
         headers=_auth_headers(token),
         json={"active": False},
     )
@@ -161,18 +163,18 @@ def test_organization_hierarchy_user_metadata_and_filters(client: TestClient) ->
     assert inactive_assignment_response.json()["code"] == "organization.unit_inactive"
 
     active_units_response = client.get(
-        "/api/v1/admin/organization-units",
+        "/api/v1/admin/groups",
         headers=_auth_headers(token),
     )
     assert active_units_response.status_code == 200
-    assert child["id"] not in {item["id"] for item in active_units_response.json()}
+    assert child["id"] not in {item["id"] for item in active_units_response.json()["items"]}
 
     all_units_response = client.get(
-        "/api/v1/admin/organization-units?include_inactive=true",
+        "/api/v1/admin/groups?include_inactive=true",
         headers=_auth_headers(token),
     )
     assert all_units_response.status_code == 200
-    assert child["id"] in {item["id"] for item in all_units_response.json()}
+    assert child["id"] in {item["id"] for item in all_units_response.json()["items"]}
 
 
 def test_scoped_platform_api_keys_are_revealable_audited_and_revocable(

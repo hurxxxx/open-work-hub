@@ -1600,41 +1600,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/organization-units": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Organization Units */
-        get: operations["admin_organization_list_organization_units_get"];
-        put?: never;
-        /** Create Organization Unit */
-        post: operations["admin_organization_create_organization_unit_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/organization-units/{organization_unit_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Update Organization Unit */
-        patch: operations["admin_organization_update_organization_unit_patch"];
-        trace?: never;
-    };
     "/api/v1/admin/groups": {
         parameters: {
             query?: never;
@@ -1688,6 +1653,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/groups/{group_id}/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Member */
+        put: operations["admin_groups_update_member_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/directory/groups": {
         parameters: {
             query?: never;
@@ -1714,23 +1696,6 @@ export interface paths {
         };
         /** People */
         get: operations["directory_people_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/directory/organization-units": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Organizations */
-        get: operations["directory_organizations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -10447,6 +10412,8 @@ export interface components {
         DirectoryOrganizationUnitResponse: {
             /** Id */
             id: string;
+            /** Source Reference */
+            source_reference: string | null;
             /** Name */
             name: string;
             /** Slug */
@@ -11649,6 +11616,27 @@ export interface components {
         };
         /** GroupCreateRequest */
         GroupCreateRequest: {
+            /**
+             * Source
+             * @default local
+             * @enum {string}
+             */
+            source: "local" | "hr";
+            /** Source Reference */
+            source_reference?: string | null;
+            /** Slug */
+            slug?: string | null;
+            /** Unit Type */
+            unit_type?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Head User Id */
+            head_user_id?: string | null;
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
             /** Name */
             name: string;
             /**
@@ -11668,6 +11656,24 @@ export interface components {
             /** Page Size */
             page_size: number;
         };
+        /** GroupMemberResponse */
+        GroupMemberResponse: {
+            /** Id */
+            id: string;
+            /** Display Name */
+            display_name: string;
+            /** Login Id */
+            login_id: string;
+            /** Status */
+            status: string;
+            /** Login Blocked */
+            login_blocked: boolean;
+        };
+        /** GroupMemberUpdateRequest */
+        GroupMemberUpdateRequest: {
+            /** Assigned */
+            assigned: boolean;
+        };
         /** GroupMembersRequest */
         GroupMembersRequest: {
             /** User Ids */
@@ -11679,22 +11685,37 @@ export interface components {
             group_id: string;
             /** User Ids */
             user_ids: string[];
+            /** Items */
+            items?: components["schemas"]["GroupMemberResponse"][];
         };
         /** GroupResponse */
         GroupResponse: {
             /** Id */
             id: string;
             /**
-             * Kind
+             * Source
              * @enum {string}
              */
-            kind: "manual" | "organization";
+            source: "local" | "hr";
+            /**
+             * Membership Mode
+             * @enum {string}
+             */
+            membership_mode: "manual" | "hr_assignment";
             /** Name */
             name: string;
             /** Description */
             description: string;
-            /** Organization Unit Id */
-            organization_unit_id: string | null;
+            /** Source Reference */
+            source_reference: string | null;
+            /** Slug */
+            slug: string | null;
+            /** Unit Type */
+            unit_type: string | null;
+            /** Parent Id */
+            parent_id: string | null;
+            /** Head User Id */
+            head_user_id: string | null;
             /** Active */
             active: boolean;
             /**
@@ -11716,6 +11737,16 @@ export interface components {
             description?: string | null;
             /** Active */
             active?: boolean | null;
+            /** Source Reference */
+            source_reference?: string | null;
+            /** Slug */
+            slug?: string | null;
+            /** Unit Type */
+            unit_type?: string | null;
+            /** Parent Id */
+            parent_id?: string | null;
+            /** Head User Id */
+            head_user_id?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -13193,54 +13224,6 @@ export interface components {
             /** Quality Policy */
             quality_policy: string;
         };
-        /** OrganizationUnitCreateRequest */
-        OrganizationUnitCreateRequest: {
-            /** Name */
-            name: string;
-            /** Slug */
-            slug?: string | null;
-            /**
-             * Unit Type
-             * @default department
-             */
-            unit_type: string;
-            /** Parent Id */
-            parent_id?: string | null;
-            /**
-             * Active
-             * @default true
-             */
-            active: boolean;
-            /** Head User Id */
-            head_user_id?: string | null;
-        };
-        /** OrganizationUnitResponse */
-        OrganizationUnitResponse: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Slug */
-            slug: string;
-            /** Unit Type */
-            unit_type: string;
-            /** Parent Id */
-            parent_id: string | null;
-            /** Active */
-            active: boolean;
-            /** Head User Id */
-            head_user_id?: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-        };
         /** OrganizationUnitSummaryResponse */
         OrganizationUnitSummaryResponse: {
             /** Id */
@@ -13253,21 +13236,6 @@ export interface components {
             unit_type: string;
             /** Active */
             active: boolean;
-            /** Head User Id */
-            head_user_id?: string | null;
-        };
-        /** OrganizationUnitUpdateRequest */
-        OrganizationUnitUpdateRequest: {
-            /** Name */
-            name?: string | null;
-            /** Slug */
-            slug?: string | null;
-            /** Unit Type */
-            unit_type?: string | null;
-            /** Parent Id */
-            parent_id?: string | null;
-            /** Active */
-            active?: boolean | null;
             /** Head User Id */
             head_user_id?: string | null;
         };
@@ -21130,159 +21098,6 @@ export interface operations {
             };
         };
     };
-    admin_organization_list_organization_units_get: {
-        parameters: {
-            query?: {
-                include_inactive?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrganizationUnitResponse"][];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_organization_create_organization_unit_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OrganizationUnitCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrganizationUnitResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    admin_organization_update_organization_unit_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                organization_unit_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OrganizationUnitUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrganizationUnitResponse"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     admin_groups_list_groups_get: {
         parameters: {
             query?: {
@@ -21290,6 +21105,8 @@ export interface operations {
                 page?: number;
                 page_size?: number;
                 include_inactive?: boolean;
+                source?: ("local" | "hr") | null;
+                member_user_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -21541,6 +21358,60 @@ export interface operations {
             };
         };
     };
+    admin_groups_update_member_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GroupMemberUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupMembersResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     directory_groups_get: {
         parameters: {
             query?: {
@@ -21642,44 +21513,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    directory_organizations_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrganizationUnitResponse"][];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

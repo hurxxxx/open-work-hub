@@ -70,3 +70,10 @@ tombstone, webhook과 exactly-once 전달은 현재 제공하지 않는다. 장�
   `apps/api/tests/test_organization_integrations.py`
 - OpenAPI/generated client: `pnpm generate:api-client`, `pnpm check:api-contract`
 - Migration graph: `pnpm check:alembic-graph`, `pnpm test:alembic-graph`
+
+## 인사 그룹 조회
+
+외부 `/integrations/directory/organization-units`와 `organization:read` 범위는 인사 정보 출처 그룹의
+읽기 전용 projection으로 유지한다. 직접 생성 그룹은 이 범위에 포함하지 않는다. 응답의 ID와
+상위 ID, 사용자 주 소속 ID는 그룹 ID이며 `source_reference`로 인사 원본 식별자를 제공한다.
+기존 조직 ID의 이전과 참조 갱신은 [사용자·그룹·인사배치 계약](../organization/README.md#마이그레이션과-검증)을 따른다.

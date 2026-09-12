@@ -108,7 +108,7 @@ def db() -> Session:
             ]
         )
         session.flush()
-        session.add(Group(id="source-group", name="Source audience", kind="manual"))
+        session.add(Group(id="source-group", name="Source audience", source="local"))
         session.flush()
         session.add(GroupMember(group_id="source-group", user_id=MEMBER_ID))
         session.add(

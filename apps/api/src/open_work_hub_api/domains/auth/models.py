@@ -19,7 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from open_work_hub_api.core.db import Base
 
 if TYPE_CHECKING:
-    from open_work_hub_api.domains.organization.models import OrganizationUnit
+    from open_work_hub_api.domains.groups.models import Group
 
 
 def utcnow_naive() -> datetime:
@@ -46,7 +46,7 @@ class User(Base):
     date_format: Mapped[str] = mapped_column(String(24), default="korean", nullable=False)
     app_bar_layout: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     primary_organization_unit_id: Mapped[str | None] = mapped_column(
-        ForeignKey("organization_units.id", ondelete="SET NULL"),
+        ForeignKey("groups.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -62,8 +62,8 @@ class User(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
-    primary_organization_unit: Mapped["OrganizationUnit | None"] = relationship(
-        "OrganizationUnit",
+    primary_organization_unit: Mapped["Group | None"] = relationship(
+        "Group",
         back_populates="users",
         foreign_keys=[primary_organization_unit_id],
     )

@@ -11,7 +11,6 @@ import { GroupsSection } from './admin-groups-section';
 import { AdminHermesToolsSection } from './admin-hermes-tools-section';
 import { AdminLlmManagementSection } from './admin-llm-management-section';
 import { AdminModelRuntimeStatusSection } from './admin-model-runtime-status-section';
-import { AdminOrganizationSection } from './admin-organization-section';
 import { PeopleSection } from './admin-people-section';
 import {
   hasAnyAdminReadPermission,
@@ -34,10 +33,6 @@ const sectionMeta: Record<
   people: {
     titleKey: 'admin.console.sections.people.title',
     descriptionKey: 'admin.console.sections.people.description',
-  },
-  organization: {
-    titleKey: 'admin.console.sections.organization.title',
-    descriptionKey: 'admin.console.sections.organization.description',
   },
   'api-integrations': {
     titleKey: 'admin.console.sections.apiIntegrations.title',
@@ -143,9 +138,6 @@ function GeneralSection() {
         <Link to="/admin/people" className="text-app-accent">
           {t('companyAccess.users')}
         </Link>
-        <Link to="/admin/organization" className="text-app-accent">
-          {t('companyGroups.organization')}
-        </Link>
         <Link to="/admin/groups" className="text-app-accent">
           {t('companyGroups.title')}
         </Link>
@@ -189,9 +181,6 @@ export function AdminConsoleView({
       break;
     case 'people':
       content = <PeopleSection token={token} />;
-      break;
-    case 'organization':
-      content = <AdminOrganizationSection token={token} />;
       break;
     case 'api-integrations':
       content = <AdminPlatformApiKeysSection token={token} />;

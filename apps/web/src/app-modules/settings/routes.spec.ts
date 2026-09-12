@@ -19,15 +19,18 @@ describe('settings admin app routes', () => {
       section: 'people',
     });
     expect(adminRedirectRoutes).toEqual([]);
+    expect(
+      adminSectionRoutes.some((route) => route.path === '/admin/organization'),
+    ).toBe(false);
   });
 
-  it('publishes organization and API integration administration', () => {
+  it('publishes unified groups and API integration administration', () => {
     expect(
       adminSectionRoutes
         .filter((route) =>
-          ['organization', 'api-integrations'].includes(route.section),
+          ['api-integrations', 'groups'].includes(route.section),
         )
         .map((route) => route.path),
-    ).toEqual(['/admin/organization', '/admin/api-integrations']);
+    ).toEqual(['/admin/api-integrations', '/admin/groups']);
   });
 });
