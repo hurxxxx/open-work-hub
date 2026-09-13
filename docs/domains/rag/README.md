@@ -13,6 +13,7 @@ Contract:
   [Source Access](../source-access/README.md).
 - Backend candidate partition/visibility metadata is not final auth.
 - Recheck source ACL before response, summary, citation, or external LLM payload.
+- The `rag.query` AI tool returns search evidence only; its calling agent synthesizes the answer. The retrieval app's grounded-answer endpoint still uses its registered workload through [Hermes](../ai/hermes.md).
 - Extraction/chunking/embedding/vector/keyword projection follow versioned outbox.
 - Model/index schema changes require staged generation, validation, then cutover.
 

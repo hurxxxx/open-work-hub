@@ -86,8 +86,8 @@ export function statusClassName(status: ToolCallBuffer['status']): string {
   if (status === 'ok') {
     return 'border-app-success-border bg-app-success-bg text-app-success-text';
   }
-  if (status === 'rejected') {
-    return 'border-slate-200 bg-slate-100 text-slate-700';
+  if (status === 'rejected' || status === 'unknown') {
+    return 'border-app-border bg-app-bg text-app-ink/60';
   }
   return 'border-app-danger-border bg-app-danger-bg text-app-danger-text';
 }

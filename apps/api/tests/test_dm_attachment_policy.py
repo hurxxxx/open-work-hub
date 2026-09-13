@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-import pytest
-
 from open_work_hub_api.domains.dm.attachment_policy import (
     DEFAULT_ATTACHMENT_CONTENT_TYPE,
     DM_MAX_ATTACHMENT_SIZE,
@@ -23,24 +18,11 @@ from open_work_hub_api.domains.dm.attachment_policy import (
 )
 
 
-@pytest.mark.slow
-def test_attachment_size_limit_matches_shared_dm_contract() -> None:
-    manifest_path = (
-        Path(__file__).resolve().parents[3]
-        / "apps"
-        / "open-work-hub-desktop"
-        / "desktop-dm-api.manifest.json"
-    )
-    if not manifest_path.exists():
-        pytest.skip("Open Work Hub desktop DM manifest is not present in this checkout.")
-
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-
-    assert DM_MAX_ATTACHMENT_SIZE == manifest["maxAttachmentBytes"]
-    assert dm_attachment_size_limit_mb() == 50
-
-
 def test_attachment_size_policy_checks_payload_and_request_sizes() -> None:
+    # The current public contract lives in packages/contracts/src/dm-routes.ts;
+    # its boundary behavior is independently checked by dm-routes.spec.ts.
+    assert DM_MAX_ATTACHMENT_SIZE == 50 * 1024 * 1024
+    assert dm_attachment_size_limit_mb() == 50
     assert is_dm_attachment_size_allowed(1) is True
     assert is_dm_attachment_size_allowed(DM_MAX_ATTACHMENT_SIZE) is True
     assert is_dm_attachment_size_allowed(0) is False

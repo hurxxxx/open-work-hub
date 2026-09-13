@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy import select
 
-from dev_accounts import auth_headers, content_headers, dev_login
+from dev_accounts import auth_headers, content_grant_headers, content_headers, dev_login
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.domains.auth.models import AuthSession, User
 from open_work_hub_api.domains.dm.models import DmConversationParticipant, DmMessageAttachment
@@ -52,10 +52,19 @@ def shared_attachment(client, in_memory_object_storage):
     }
 
 
-def test_dm_attachment_content_requires_authentication(shared_attachment, client):
-    response = client.get(shared_attachment["url"])
-    assert response.status_code in {401, 403}, response.text
-    assert response.content != PNG_BYTES
+def test_dm_attachment_content_requires_authentication(shared_attachment, client, monkeypatch):
+    from open_work_hub_api.domains.dm import attachment_storage
+
+    monkeypatch.setattr(
+        attachment_storage,
+        "get_minio_client",
+        lambda: pytest.fail("Unauthenticated content requests must not open storage"),
+    )
+    # Supply a valid grant so missing authentication is the only rejection reason.
+    url = shared_attachment["url"]
+    response = client.get(url, headers=content_grant_headers(url))
+    assert response.status_code == 403, response.text
+    assert response.json()["code"] == "content.grant_invalid"
 
 
 def test_dm_attachment_content_is_bound_to_issuer_user_and_session(shared_attachment, client):
@@ -78,7 +87,9 @@ def test_dm_attachment_content_is_bound_to_issuer_user_and_session(shared_attach
     "revocation",
     ["password_change", "blocked", "inactive", "session", "membership", "replacement"],
 )
-def test_dm_attachment_content_rechecks_current_authority(shared_attachment, client, revocation):
+def test_dm_attachment_content_rechecks_current_authority(
+    shared_attachment, client, revocation, monkeypatch
+):
     grant = shared_attachment
     recipient = grant["recipient"]
     headers = content_headers(recipient["token"], grant["url"])
@@ -109,9 +120,16 @@ def test_dm_attachment_content_rechecks_current_authority(shared_attachment, cli
             db.get(
                 DmMessageAttachment, grant["attachment_id"]
             ).storage_key = "dm/replaced-content.png"
+    from open_work_hub_api.domains.dm import attachment_storage
+
+    monkeypatch.setattr(
+        attachment_storage,
+        "get_minio_client",
+        lambda: pytest.fail("Revoked content grants must be rejected before storage is opened"),
+    )
     denied = client.get(grant["url"], headers=headers)
-    assert denied.status_code in {401, 403, 404}, denied.text
-    assert denied.content != PNG_BYTES
+    assert denied.status_code == 403, denied.text
+    assert denied.json()["code"] == "content.grant_invalid"
 
 
 def test_platform_admin_has_no_implicit_personal_message_or_attachment_access(

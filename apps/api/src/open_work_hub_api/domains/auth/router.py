@@ -59,7 +59,7 @@ from open_work_hub_api.domains.auth.security import (
     normalize_login_id,
     verify_password,
 )
-from open_work_hub_api.domains.organization.schemas import OrganizationUnitSummaryResponse
+from open_work_hub_api.domains.groups.schemas import OrganizationUnitSummaryResponse
 
 DESKTOP_SESSION_LINK_TTL_SECONDS = 5 * 60
 
@@ -360,8 +360,6 @@ def _issue_auth_response(
     db: Session,
     user: User,
     request: Request,
-    *,
-    impersonator_user_id: str | None = None,
 ) -> AuthSessionResponse:
     settings = get_settings()
     issued = issue_session_token(settings.session_ttl_hours)
@@ -369,7 +367,6 @@ def _issue_auth_response(
     session = AuthSession(
         id=new_id(),
         user_id=user.id,
-        impersonator_user_id=impersonator_user_id,
         token_hash=issued.token_hash,
         expires_at=issued.expires_at,
         last_seen_at=now,

@@ -7,6 +7,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ToolCallBuffer } from '../../api/agent-events';
 import {
@@ -92,11 +93,12 @@ function StatusPill({
   className: string;
   status: ToolCallBuffer['status'];
 }) {
+  const { t } = useTranslation('apps');
   return (
     <span
       className={`rounded-full border px-2 py-0.5 text-[12px] font-medium uppercase tracking-wide ${className}`}
     >
-      {status}
+      {t(`ai.toolCall.${status}`)}
     </span>
   );
 }

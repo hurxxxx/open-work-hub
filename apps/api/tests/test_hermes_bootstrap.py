@@ -39,91 +39,29 @@ def _load_bootstrap(monkeypatch, config: dict[str, Any]):
     return module, saved
 
 
-def test_bootstrap_uses_official_settings_to_replace_gemini_fallback(monkeypatch) -> None:
+def test_bootstrap_preserves_db_model_policy_and_configures_native_runtime(monkeypatch) -> None:
     config = {
-        "model": {"provider": "anthropic", "default": "claude"},
-        "fallback_providers": [{"provider": "openai-codex", "model": "gpt-codex"}],
-        "fallback_model": {"provider": "google", "model": "gemini"},
+        "model": {"provider": "custom:db-policy", "default": "admin-model"},
+        "providers": {"db-policy": {"key_env": "SCOPED_TEST_KEY"}},
+        "fallback_providers": [],
+        "auxiliary": {"compression": {"provider": "main"}},
+        "plugins": {"enabled": ["other-plugin"], "disabled": ["owh_runtime"]},
         "agent": {"environment_probe": False},
-        "compression": {"progress_notices": True},
-        "provider_routing": {"sort": "price", "only": ["stale-provider"]},
-        "auxiliary": {
-            "openrouter_model": "google/gemini-3.6-flash",
-            "approval": {
-                "provider": "google",
-                "model": "gemini",
-                "base_url": "https://unexpected.example.test",
-                "api_key": "unexpected-secret",
-                "fallback_chain": [{"provider": "nous", "model": "hermes"}],
-            },
-        },
-        "delegation": {
-            "provider": "openai-codex",
-            "model": "gpt-codex",
-            "api_mode": "codex_responses",
-        },
-        "moa": {
-            "presets": {
-                "custom": {
-                    "reference_models": [
-                        {"provider": "openai-codex", "model": "gpt-codex"},
-                        {"provider": "google", "model": "gemini"},
-                    ],
-                    "aggregator": {"provider": "anthropic", "model": "claude"},
-                }
-            }
-        },
     }
     bootstrap, saved = _load_bootstrap(monkeypatch, config)
-
-    assert bootstrap._reconcile_fixed_model_config("default") is True
-    assert len(saved) == 1
+    assert bootstrap._reconcile_runtime_config("default") is True
     reconciled = saved[0]
-    assert reconciled["model"] == {
-        "provider": "openrouter",
-        "default": "qwen/qwen3.8-flash",
-        "default_headers": {"X-OpenRouter-Metadata": "enabled"},
+    for key in ("model", "providers", "fallback_providers", "auxiliary"):
+        assert reconciled[key] == config[key]
+    assert reconciled["plugins"] == {"enabled": ["other-plugin", "owh_runtime"], "disabled": []}
+    assert reconciled["gateway"]["api_server"]["max_concurrent_runs"] == 0
+    assert reconciled["terminal"] == {
+        "backend": "owh_sandbox",
+        "container_persistent": False,
+        "cwd": "/workspace",
     }
-    assert reconciled["fallback_providers"] == [
-        {"provider": "openrouter", "model": "z-ai/glm-5.3-flash"}
-    ]
-    assert "fallback_model" not in reconciled
-    assert reconciled["agent"]["api_max_retries"] == 1
     assert reconciled["agent"]["environment_probe"] is False
-    assert "environment_hint" not in reconciled["agent"]
-    assert reconciled["compression"] == {
-        "progress_notices": True,
-        "enabled": True,
-        "threshold": 0.50,
-        "threshold_tokens": 100_000,
-        "target_ratio": 0.20,
-        "protect_last_n": 20,
-        "proactive_prune_tokens": 48_000,
-        "proactive_prune_min_result_chars": 8_000,
-        "proactive_prune_min_reclaim_tokens": 4_096,
-    }
-    assert reconciled["provider_routing"] == {
-        "sort": "throughput",
-        "require_parameters": True,
-    }
-    assert reconciled["auxiliary"]["openrouter_model"] == "qwen/qwen3.8-flash"
-    assert reconciled["auxiliary"]["free_only"] is False
-    assert reconciled["auxiliary"]["approval"] == {
-        "provider": "google",
-        "model": "gemini",
-        "base_url": "https://unexpected.example.test",
-        "api_key": "unexpected-secret",
-        "fallback_chain": [{"provider": "nous", "model": "hermes"}],
-    }
-    assert reconciled["delegation"] == {
-        "provider": "openai-codex",
-        "model": "gpt-codex",
-        "api_mode": "codex_responses",
-    }
-    preset = reconciled["moa"]["presets"]["custom"]
-    assert preset["reference_models"][0]["provider"] == "openai-codex"
-    assert preset["aggregator"] == {"provider": "anthropic", "model": "claude"}
-    assert bootstrap._apply_fixed_model_policy(reconciled) is False
+    assert bootstrap._apply_runtime_policy(reconciled) is False
 
 
 def test_bootstrap_does_not_pin_unmanaged_named_profiles(monkeypatch) -> None:
@@ -132,5 +70,5 @@ def test_bootstrap_does_not_pin_unmanaged_named_profiles(monkeypatch) -> None:
         {"model": {"provider": "ollama", "default": "local-model"}},
     )
 
-    assert bootstrap._reconcile_fixed_model_config("personal") is False
+    assert bootstrap._reconcile_runtime_config("personal") is False
     assert saved == []

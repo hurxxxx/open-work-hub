@@ -71,7 +71,7 @@ def test_group_creation_never_grants_direct_space_ownership(
     space = router.create_space(
         router.SpaceCreateRequest(name="Group project"), db=db, current_user=owner
     )
-    group = Group(id="working-group", kind="manual", name="Working group")
+    group = Group(id="working-group", source="local", name="Working group")
     membership = GroupMember(group_id=group.id, user_id=contributor.id)
     binding = SpaceGroupBinding(team_id=space.id, group_id=group.id, role=group_role)
     db.add_all([group, membership, binding])

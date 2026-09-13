@@ -47,6 +47,11 @@ def _install_mcp_stubs(
 ) -> list[str]:
     calls: list[str] = []
     constants_module = ModuleType("hermes_constants")
+    plugins_module = ModuleType("hermes_cli.plugins")
+    plugins_module.get_plugin_manager = lambda: SimpleNamespace(  # type: ignore[attr-defined]
+        list_plugins=lambda: [{"name": "owh_runtime", "enabled": True}]
+    )
+    monkeypatch.setitem(sys.modules, "hermes_cli.plugins", plugins_module)
     constants_module.get_hermes_home = lambda: Path("/profiles") / profile_name  # type: ignore[attr-defined]
     tools_module = ModuleType("tools")
     tools_module.__path__ = []  # type: ignore[attr-defined]

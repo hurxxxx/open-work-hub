@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+check_postgres=0
+case "${1:-}" in
+  '') ;;
+  --postgres) check_postgres=1 ;;
+  *) echo "usage: $0 [--postgres]" >&2; exit 2 ;;
+esac
+if (( $# > 1 )); then
+  echo "usage: $0 [--postgres]" >&2
+  exit 2
+fi
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 api_root="$repo_root/apps/api"
 worker_root="$repo_root/apps/worker"
@@ -83,6 +94,10 @@ worker_runtime="${OPEN_WORK_HUB_WORKER_IMAGE_VENV:-/opt/open-work-hub/venvs/work
 verify_identity "Node" "$node_marker" "$node_dependency_sha256"
 verify_identity "API" "$api_marker" "$api_dependency_sha256"
 verify_identity "worker" "$worker_marker" "$worker_dependency_sha256"
+if (( check_postgres )); then
+  "$api_runtime/bin/python" -I "$repo_root/scripts/ci/check-validation-postgres.py" \
+    --major-file "$(dirname "$api_marker")/postgres-major"
+fi
 link_runtime \
   "Node" \
   "$node_runtime" \

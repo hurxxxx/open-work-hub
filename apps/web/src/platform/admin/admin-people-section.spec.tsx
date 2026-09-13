@@ -10,9 +10,19 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 
-import { updateAdminUser } from './admin-api';
+import {
+  createAdminUser,
+  resetUserPassword,
+  updateAdminUser,
+} from './admin-api';
 import { PeopleSection } from './admin-people-section';
 import { useAdminPeopleDirectoryController } from './useAdminPeopleDirectoryController';
+
+const feedback = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  confirm: vi.fn(),
+}));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -31,6 +41,8 @@ vi.mock('@/src/platform/auth/auth-provider', () => ({
 
 vi.mock('@open-work-hub/ui', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@open-work-hub/ui')>()),
+  useFeedback: () => feedback,
+  useConfirm: () => ({ confirm: feedback.confirm, confirmDialog: null }),
   DropdownMenu: ({
     items,
   }: {
@@ -59,6 +71,8 @@ vi.mock('@open-work-hub/ui', async (importOriginal) => ({
 vi.mock('./admin-api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./admin-api')>()),
   updateAdminUser: vi.fn(),
+  createAdminUser: vi.fn(),
+  resetUserPassword: vi.fn(),
 }));
 
 vi.mock('./useAdminPeopleDirectoryController', () => ({
@@ -85,11 +99,12 @@ const member = createAuthUser({
 });
 
 beforeEach(() => {
+  vi.clearAllMocks();
   vi.mocked(updateAdminUser).mockReset();
   vi.mocked(updateAdminUser).mockResolvedValue(member);
   vi.mocked(useAdminPeopleDirectoryController).mockReturnValue({
     actions: {
-      organizationUnitChanged: vi.fn(),
+      hrGroupChanged: vi.fn(),
       reloadUsers: vi.fn().mockResolvedValue(undefined),
       searchChanged: vi.fn(),
       setIncludeDescendants: vi.fn(),
@@ -101,8 +116,8 @@ beforeEach(() => {
       error: null,
       includeDescendants: true,
       isLoadingUsers: false,
-      organizationUnitId: '',
-      organizationUnits: [],
+      hrGroupId: '',
+      hrGroups: [],
       page: 1,
       pageSize: 20,
       search: '',
@@ -114,6 +129,87 @@ beforeEach(() => {
 });
 
 describe('PeopleSection account editing', () => {
+  it('opens editing from the user name and aligns table headers with cells', async () => {
+    render(
+      <MemoryRouter>
+        <PeopleSection token="test-token" />
+      </MemoryRouter>,
+    );
+    const rows = screen.getAllByRole('row');
+    expect(within(rows[0]!).getAllByRole('columnheader')).toHaveLength(
+      within(rows[1]!).getAllByRole('cell').length,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Member' }));
+    expect(
+      await screen.findByRole('dialog', {
+        name: 'admin.console.people.editUser',
+      }),
+    ).toBeTruthy();
+  });
+  it('shows create failures inside the open form', async () => {
+    vi.mocked(createAdminUser).mockRejectedValueOnce(
+      new Error('Email already exists'),
+    );
+    render(
+      <MemoryRouter>
+        <PeopleSection token="test-token" />
+      </MemoryRouter>,
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'admin.console.people.createUser' }),
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: 'admin.console.people.createUser',
+    });
+    fireEvent.change(
+      within(dialog).getByLabelText('admin.console.people.email'),
+      { target: { value: 'new@example.test' } },
+    );
+    fireEvent.change(
+      within(dialog).getByLabelText('admin.console.people.fullName'),
+      { target: { value: 'New User' } },
+    );
+    fireEvent.submit(dialog.querySelector('form')!);
+    expect((await within(dialog).findByRole('alert')).textContent).toContain(
+      'Email already exists',
+    );
+  });
+  it('only resets a password after confirmation and keeps credentials out of feedback', async () => {
+    feedback.confirm.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    vi.mocked(resetUserPassword).mockResolvedValueOnce({
+      temporary_password: 'synthetic-password',
+    });
+    render(
+      <MemoryRouter>
+        <PeopleSection token="test-token" />
+      </MemoryRouter>,
+    );
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'admin.console.people.resetPassword',
+      }),
+    );
+    await waitFor(() => expect(feedback.confirm).toHaveBeenCalledOnce());
+    expect(resetUserPassword).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'admin.console.people.resetPassword',
+      }),
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: 'admin.console.people.credentialTitle',
+    });
+    expect(
+      (
+        within(dialog).getByLabelText(
+          'admin.console.people.temporaryPassword',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe('synthetic-password');
+    expect(feedback.success).toHaveBeenCalledWith(
+      'admin.console.people.passwordResetNotice',
+    );
+  });
   it('saves profile and account status in one authorized update', async () => {
     render(
       <MemoryRouter>

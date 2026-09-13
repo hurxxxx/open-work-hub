@@ -35,7 +35,6 @@ ALLOWED_PROVIDER_ADAPTER_FILES = {
     Path("domains/images/agent_runtime.py"),
     Path("domains/rag/providers/local.py"),
     Path("domains/rag/providers/openai_compatible.py"),
-    Path("domains/web_search/service.py"),
 }
 
 

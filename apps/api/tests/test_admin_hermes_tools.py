@@ -152,3 +152,53 @@ async def test_profile_inventory_includes_official_toolset_status(
 
     assert inventory.toolsets[0].name == "web"
     assert inventory.toolsets[0].enabled is True
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("route", ["local", "external"])
+async def test_model_reapplication_uses_admin_policy_and_preserves_route(monkeypatch, route):
+    from unittest.mock import AsyncMock, Mock
+    from fastapi import HTTPException
+    from open_work_hub_api.domains.hermes.model_policy import HermesModelPolicy
+
+    binding = SimpleNamespace(
+        id="binding-id",
+        user_id="user-id",
+        profile_name="owh-profile",
+        route=route,
+        status="active",
+        provider="old-provider",
+        model="old-model",
+        policy_revision=1,
+        last_error_code=None,
+    )
+    db = Mock()
+    db.get.return_value = binding
+    policy = HermesModelPolicy(
+        route="local",
+        provider="docker-model-runner",
+        model="administrator-model",
+        endpoint="http://model.test/v1",
+        api_key="",
+        max_tokens=2048,
+    )
+    synchronize = AsyncMock()
+    monkeypatch.setattr(admin_router, "resolve_model_policy", lambda _db: policy)
+    monkeypatch.setattr(admin_router, "synchronize_model_policy", synchronize)
+    monkeypatch.setattr(admin_router, "management_client", Mock())
+    if route != policy.route:
+        with pytest.raises(HTTPException) as caught:
+            await admin_router.enforce_hermes_profile_model(binding.id, db=db)
+        assert caught.value.status_code == 409
+        synchronize.assert_not_awaited()
+        db.commit.assert_not_called()
+        assert binding.model == "old-model"
+    else:
+        response = await admin_router.enforce_hermes_profile_model(binding.id, db=db)
+        assert synchronize.await_args.kwargs == {
+            "profile_name": binding.profile_name,
+            "policy": policy,
+        }
+        assert response.model == policy.model
+        assert response.provider == policy.provider
+        db.commit.assert_called_once()

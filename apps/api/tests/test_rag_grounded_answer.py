@@ -154,6 +154,10 @@ def test_llm_grounded_answer_uses_task_token_budget(monkeypatch) -> None:
         captured["kwargs"] = kwargs
         captured["db"] = db
         completion = SimpleNamespace(
+            structured_output={
+                "statements": [{"text": "복지제도 요약", "citation_indexes": [1]}],
+                "unsupported_claims": [],
+            },
             text='{"statements":[{"text":"복지제도 요약","citation_indexes":[1]}],'
             '"unsupported_claims":[]}',
             finish_reason="stop",
@@ -172,7 +176,7 @@ def test_llm_grounded_answer_uses_task_token_budget(monkeypatch) -> None:
     assert answer is not None
     assert answer.text == "복지제도 요약"
     assert captured["workload_id"] == "rag_grounded_answer"
-    assert captured["context"].app_id == "rag"
+    assert captured["context"].app_id == "retrieval-search"
     context_pack = captured["kwargs"]["context_pack"]
     assert context_pack.context_strategy == "rag_grounded_answer_evidence"
     assert context_pack.source_kinds == ("docs_native_doc",)
@@ -186,6 +190,10 @@ def test_llm_grounded_answer_rejects_truncated_completion(monkeypatch) -> None:
     def fake_execute_llm(workload_id, context, db, **kwargs):
         del workload_id, context, db, kwargs
         completion = SimpleNamespace(
+            structured_output={
+                "statements": [{"text": "복지제도 요약", "citation_indexes": [1]}],
+                "unsupported_claims": [],
+            },
             text='{"statements":[{"text":"잘린 답변","citation_indexes":[1]}]',
             finish_reason="length",
         )
