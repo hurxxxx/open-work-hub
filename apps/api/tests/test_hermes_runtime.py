@@ -1140,6 +1140,7 @@ async def test_upload_bounds_stream_and_rejects_cross_owner_before_reading(
     try:
         with Session(engine) as db:
             user, binding = seed(db)
+            admit_runtime_apps(db, user.id)
             session = session_for(db, binding)
             reads = []
 
@@ -1197,6 +1198,7 @@ def test_native_tool_budget_is_durable_and_atomic_per_run(application_postgres_d
     try:
         with Session(engine) as db:
             user, binding = seed(db)
+            admit_runtime_apps(db, user.id)
             owner_id, binding_id = user.id, binding.id
             run = stage(
                 db,
@@ -1366,8 +1368,8 @@ async def test_open_run_stream_stops_before_next_batch_after_app_revocation(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("operation", ["read", "write"])
-async def test_slow_mcp_file_transfer_keeps_other_requests_responsive(
+@pytest.mark.parametrize("operation", ["read", "write", "upload"])
+async def test_slow_file_transfer_keeps_other_requests_responsive(
     application_postgres_dsn, monkeypatch, operation
 ):
     import asyncio
@@ -1379,7 +1381,8 @@ async def test_slow_mcp_file_transfer_keeps_other_requests_responsive(
     from sqlalchemy.orm import sessionmaker
     from open_work_hub_api.core.db import get_db_session
     from open_work_hub_api.core.settings import get_settings
-    from open_work_hub_api.domains.hermes import mcp_router
+    from open_work_hub_api.domains.hermes import mcp_router, file_router
+    from open_work_hub_api.domains.auth.dependencies import require_current_user
     from open_work_hub_api.domains.hermes.service import mcp_profile_bearer_secret
 
     engine = create_engine(application_postgres_dsn)
@@ -1430,9 +1433,15 @@ async def test_slow_mcp_file_transfer_keeps_other_requests_responsive(
                 else {"path": "new.txt", "data": base64.b64encode(b"new").decode()}
             )
             profile = binding.profile_name
+            session_id, user_id = session.id, user.id
+            if operation == "upload":
+                run.status = "completed"
+                db.commit()
             token = mcp_profile_bearer_secret(settings, profile)
         app = FastAPI()
         app.include_router(mcp_router.router)
+        app.include_router(file_router.router)
+        app.dependency_overrides[require_current_user] = lambda: SimpleNamespace(id=user_id)
 
         def get_db():
             with factory() as db:
@@ -1445,6 +1454,12 @@ async def test_slow_mcp_file_transfer_keeps_other_requests_responsive(
             url = f"/internal/hermes/mcp?profile={profile}"
             transfer = asyncio.create_task(
                 client.post(
+                    f"/sessions/{session_id}/files",
+                    headers={"Content-Type": "application/octet-stream", "X-File-Name": "new.txt"},
+                    content=b"new",
+                )
+                if operation == "upload"
+                else client.post(
                     url,
                     headers=headers,
                     json={"id": 1, "method": f"owh/files/{operation}", "params": params},
@@ -1459,11 +1474,55 @@ async def test_slow_mcp_file_transfer_keeps_other_requests_responsive(
             finally:
                 release.set()
             response = await transfer
-            assert response.status_code == 200 and "error" not in response.json()
+            assert (
+                response.status_code == (201 if operation == "upload" else 200)
+                and "error" not in response.json()
+            )
+            if operation == "upload":
+                assert response.json()["relative_path"] == "new.txt"
+                return
             if operation == "read":
                 assert base64.b64decode(response.json()["result"]["data"]) == b"saved"
             else:
                 assert response.json()["result"]["relative_path"] == "new.txt"
     finally:
         release.set()
+        engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_upload_rechecks_app_admission_after_receiving_body(
+    application_postgres_dsn, monkeypatch
+):
+    from starlette.requests import Request
+    from open_work_hub_api.domains.auth.models import CompanyAppControl
+    from open_work_hub_api.domains.hermes import file_router
+
+    engine = create_engine(application_postgres_dsn)
+    monkeypatch.setattr(
+        file_router,
+        "save_file",
+        lambda *args, **kwargs: pytest.fail("Revoked upload reached storage"),
+    )
+    try:
+        with Session(engine) as db:
+            user, binding = seed(db)
+            admit_runtime_apps(db, user.id)
+            session = session_for(db, binding)
+            db.commit()
+
+            async def receive():
+                with Session(engine) as authority:
+                    authority.get(CompanyAppControl, "chatbot").enabled = False
+                    authority.commit()
+                return {"type": "http.request", "body": b"saved", "more_body": False}
+
+            request = Request(
+                {"type": "http", "headers": [(b"content-type", b"application/octet-stream")]},
+                receive,
+            )
+            with pytest.raises(HTTPException) as denied:
+                await file_router.upload_file(session.id, request, "saved.txt", db, user)
+            assert denied.value.status_code == 403
+    finally:
         engine.dispose()
