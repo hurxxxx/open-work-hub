@@ -600,6 +600,8 @@ uv sync --frozen --python 3.12 --directory apps/api
 uv sync --frozen --python 3.12 --directory apps/worker
 ```
 
+Hermes 구조화 작업의 기본 의존성은 API와 Worker 양쪽에 설치되어야 한다. 체크아웃을 갱신한 뒤에도 위 두 `uv sync`를 실행한다. 선택 ML 패키지는 필요하지 않으며, 기능별 설정은 [Hermes 설치 문서](docs/domains/ai/hermes.md#development-checkout)를 따른다.
+
 잠금 파일을 변경하거나 의존성을 업그레이드해서 설치 오류를 우회하지 않는다.
 실패한 패키지·인증·네트워크·빌드 도구 문제를 구분하여 해결한다.
 

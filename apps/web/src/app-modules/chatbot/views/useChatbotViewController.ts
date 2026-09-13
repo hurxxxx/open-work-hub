@@ -187,8 +187,10 @@ export function useChatbotViewController(
     conversationId: routeConversationId,
   });
   const recoveredRunIds = useRef(new Set<string>());
+  const recoverChat = chat.recover;
+  const chatStatus = chat.state.status;
   useEffect(() => {
-    if (!token || !routeConversationId || chat.state.status !== 'idle') return;
+    if (!token || !routeConversationId || chatStatus !== 'idle') return;
     let cancelled = false;
     void listHermesRuns(token, {
       sessionId: routeConversationId,
@@ -199,13 +201,13 @@ export function useChatbotViewController(
         const run = data[0];
         if (cancelled || !run || recoveredRunIds.current.has(run.id)) return;
         recoveredRunIds.current.add(run.id);
-        void chat.recover(routeConversationId, run.id);
+        void recoverChat(routeConversationId, run.id);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [token, routeConversationId, chat.state.status, chat.recover]);
+  }, [token, routeConversationId, chatStatus, recoverChat]);
   const pendingUserContentRef = useRef<string | null>(null);
   pendingUserContentRef.current =
     chat.state.status === 'streaming' ? chat.state.pendingUserContent : null;

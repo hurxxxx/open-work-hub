@@ -47,6 +47,13 @@ Configure a provider/model in administrator LLM settings and verify that its end
 
 ### Development checkout
 
+API and worker both require `jsonschema` in their default dependency groups for shared structured workloads; optional local-ML extras are not a runtime prerequisite. After updating the checkout, sync both locked Python environments before starting services:
+
+```bash
+uv sync --frozen --python 3.12 --directory apps/api
+uv sync --frozen --python 3.12 --directory apps/worker
+```
+
 1. Preserve existing ignored `.env`; add missing keys from `.env.example` without replacing credentials.
 2. Set `OPEN_WORK_HUB_HERMES_ENABLED=true` explicitly. Generation fails unavailable when Hermes is disabled; it does not silently use the old SDK. The historical dev script can derive enablement from an OpenRouter key only when this flag is absent, so explicit configuration is required for local providers.
 3. Configure distinct runtime, management and MCP control secrets. Keep declared URL/port pairs aligned.

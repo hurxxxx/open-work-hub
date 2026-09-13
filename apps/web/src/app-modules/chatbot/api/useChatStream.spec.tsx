@@ -104,7 +104,7 @@ describe('useChatStream', () => {
   it('runs two conversations in the same chatbot independently and stops only one', async () => {
     vi.mocked(streamAiChat).mockClear();
     vi.mocked(streamAiChat).mockImplementation(
-      async () => new Response(new ReadableStream<Uint8Array>({ start() {} })),
+      async () => new Response(new ReadableStream<Uint8Array>()),
     );
     const first = renderHook(() =>
       useChatStream('token', 'parallel-chatbot', { conversationId: 'a' }),
