@@ -49,3 +49,27 @@ def test_terminal_egress_extends_the_upstream_header_timeout(monkeypatch) -> Non
     terminal_egress._apply_managed_proxy_policy(config)
 
     assert config["proxy"]["upstream_response_header_timeout"] == "300s"
+
+
+def test_egress_starts_without_legacy_provider_secret(monkeypatch, tmp_path):
+    module = _load_terminal_egress(monkeypatch)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    cert = tmp_path / "source.crt"
+    cert.write_text("test certificate")
+    module._CLIENT_DIR = tmp_path / "client"
+    module._stop_requested = True
+    module.find_iron_proxy = lambda **kwargs: "iron-proxy-test"
+    module.ensure_ca_cert = lambda: (cert, tmp_path / "source.key")
+    module.discover_provider_mappings = lambda **kwargs: []
+    module.build_proxy_config = lambda **kwargs: {
+        "proxy": {},
+        "transforms": [{}, {"config": {"secrets": []}}],
+    }
+    module.get_status = lambda: type("Status", (), {"listening": True})()
+    calls = []
+    module.start_proxy = lambda **kwargs: calls.append(kwargs)
+    monkeypatch.setattr(module.signal, "signal", lambda *args: None)
+    module.main()
+    assert calls[0]["extra_env"] == {}
+    assert (module._CLIENT_DIR / "ca.crt").read_text() == "test certificate"
+    assert not (module._CLIENT_DIR / "openrouter.token").exists()

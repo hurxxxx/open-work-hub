@@ -800,6 +800,35 @@ export const resources = {
       },
     },
     apps: {
+      hermesWorkspace: {
+        title: '실행과 파일 · {{count}}개 진행 중',
+        untitled: '새 대화',
+        background: '앱에서 요청한 작업',
+        legacyLoadFailed: '이전 Terminal 파일 목록을 불러오지 못했습니다.',
+        continues:
+          '다른 대화로 이동하거나 브라우저를 닫아도 실행은 계속됩니다.',
+        loading: '불러오는 중…',
+        loadFailed:
+          '실행과 파일을 불러오지 못했습니다. 다시 연결하고 있습니다.',
+        operationFailed: '요청을 처리하지 못했습니다. 다시 시도해 주세요.',
+        fileTooLarge: '64 MB 이하의 파일을 선택해 주세요.',
+        uploaded: '대화에 파일을 첨부했습니다.',
+        run: '{{status}} · {{progress}}%',
+        stop: '중지',
+        attach: '파일 첨부',
+        noFiles: '이 대화에 저장된 파일이 없습니다.',
+        legacy: '이전 Terminal 파일',
+        selectSession: '이전 세션 선택',
+        parentFolder: '상위 폴더',
+        status: {
+          pending: '대기 중',
+          dispatching: '시작 중',
+          queued: '대기 중',
+          running: '실행 중',
+          awaiting_approval: '승인 대기',
+          stopping: '중지 중',
+        },
+      },
       videoChat: {
         activeRooms: '열린 방',
         backToRooms: '방 목록',
@@ -3879,7 +3908,7 @@ export const resources = {
         },
         agentControl: {
           title: 'Hermes 에이전트 제어',
-          runtime: 'Hermes · OpenRouter · Qwen 3.8 Flash',
+          runtime: 'Hermes · 관리자 LLM 설정 사용',
           refresh: '에이전트 상태 새로고침',
           recentRuns: '최근 실행',
           scheduledJobs: '예약 작업',
@@ -4026,6 +4055,7 @@ export const resources = {
           ok: '완료',
           rejected: '거절됨',
           running: '실행 중',
+          unknown: '결과 미확인',
         },
         htmlArtifact: {
           preview: '프리뷰',
@@ -6782,6 +6812,34 @@ export const resources = {
       },
     },
     apps: {
+      hermesWorkspace: {
+        title: 'Runs and files · {{count}} active',
+        untitled: 'New conversation',
+        background: 'Application task',
+        legacyLoadFailed: 'Unable to load previous Terminal files.',
+        continues:
+          'Runs continue when you switch conversations or close the browser.',
+        loading: 'Loading…',
+        loadFailed: 'Unable to load runs and files. Reconnecting.',
+        operationFailed: 'The request failed. Please try again.',
+        fileTooLarge: 'Choose a file no larger than 64 MB.',
+        uploaded: 'File attached to the conversation.',
+        run: '{{status}} · {{progress}}%',
+        stop: 'Stop',
+        attach: 'Attach file',
+        noFiles: 'No files saved in this conversation.',
+        legacy: 'Previous Terminal files',
+        selectSession: 'Select a previous session',
+        parentFolder: 'Parent folder',
+        status: {
+          pending: 'Pending',
+          dispatching: 'Starting',
+          queued: 'Queued',
+          running: 'Running',
+          awaiting_approval: 'Awaiting approval',
+          stopping: 'Stopping',
+        },
+      },
       videoChat: {
         activeRooms: 'Open rooms',
         backToRooms: 'Room list',
@@ -9908,7 +9966,7 @@ export const resources = {
         },
         agentControl: {
           title: 'Hermes agent controls',
-          runtime: 'Hermes · OpenRouter · Qwen 3.8 Flash',
+          runtime: 'Hermes · Administrator LLM settings',
           refresh: 'Refresh agent status',
           recentRuns: 'Recent runs',
           scheduledJobs: 'Scheduled jobs',
@@ -10059,6 +10117,7 @@ export const resources = {
           ok: 'Done',
           rejected: 'Rejected',
           running: 'Running',
+          unknown: 'Result unavailable',
         },
         htmlArtifact: {
           preview: 'Preview',

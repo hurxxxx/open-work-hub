@@ -48,10 +48,12 @@ def _migration_config(dsn: str | None = None) -> Config:
 def test_repository_starts_at_company_deployment_baseline() -> None:
     revisions = list(ScriptDirectory.from_config(_migration_config()).walk_revisions())
     assert [revision.revision for revision in revisions] == [
+        "hermes_runtime_20260912",
         "group_sources_20260912",
         "company_20260908",
     ]
-    assert revisions[0].down_revision == "company_20260908"
+    assert revisions[0].down_revision == "group_sources_20260912"
+    assert revisions[1].down_revision == "company_20260908"
     assert revisions[-1].down_revision is None
     assert "clean deployment baseline" in revisions[-1].doc
 
@@ -59,7 +61,7 @@ def test_repository_starts_at_company_deployment_baseline() -> None:
 @pytest.mark.migration
 def test_fresh_baseline_owns_company_identity_and_app_local_resources(postgres_dsn: str) -> None:
     config = _migration_config(postgres_dsn)
-    command.upgrade(config, "head")
+    command.upgrade(config, "group_sources_20260912")
     engine = sa.create_engine(postgres_dsn)
     try:
         inspector = sa.inspect(engine)
@@ -180,7 +182,7 @@ def test_group_unification_preserves_ids_assignments_grants_and_rollback(postgre
                     "INSERT INTO app_group_grants (app_id, group_id) VALUES ('community', 'stable-root')"
                 )
             )
-        command.upgrade(config, "head")
+        command.upgrade(config, "group_sources_20260912")
         with engine.connect() as conn:
             groups = {
                 row["id"]: row for row in conn.execute(sa.text("SELECT * FROM groups")).mappings()
@@ -237,7 +239,7 @@ def test_group_unification_preserves_ids_assignments_grants_and_rollback(postgre
                 )
                 == "stable-root"
             )
-        command.upgrade(config, "head")
+        command.upgrade(config, "group_sources_20260912")
         with engine.connect() as conn:
             assert (
                 conn.scalar(

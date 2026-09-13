@@ -21,9 +21,10 @@ from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.auth.models import AuditLog
 from open_work_hub_api.domains.meeting import conversation_scope as meeting_conversation_scope
 from test_meeting import _auth_headers, _bootstrap_admin_session, _create_meeting, _dev_login
+from hermes_route_stub import hermes_route_stub  # noqa: F401
 
 
-pytestmark = pytest.mark.usefixtures("configured_local_llm_control_plane")
+pytestmark = pytest.mark.usefixtures("configured_local_llm_control_plane", "hermes_route_stub")
 
 
 class FakeModels:

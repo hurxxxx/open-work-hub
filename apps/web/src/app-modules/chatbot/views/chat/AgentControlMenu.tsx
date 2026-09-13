@@ -133,19 +133,25 @@ export function AgentControlMenu({
   };
 
   const ready = Boolean(health?.ready) && !healthError;
+  const runtimeLabel = health?.local.model
+    ? `Hermes · ${health.local.model}`
+    : 'Hermes';
   return (
     <div ref={rootRef} className="relative">
       <button
         type="button"
         aria-expanded={open}
         aria-haspopup="dialog"
+        aria-label={runtimeLabel}
         onClick={() => setOpen((current) => !current)}
         className="app-text-control-sm flex h-8 items-center gap-2 rounded-full border border-app-border bg-app-surface px-3 text-app-ink transition-colors hover:border-app-accent"
       >
         <span
           className={`h-2 w-2 rounded-full ${ready ? 'bg-app-success' : 'bg-app-warning'}`}
         />
-        <span className="hidden sm:inline">Hermes · Qwen 3.8 Flash</span>
+        <span className="hidden max-w-64 truncate sm:inline">
+          {runtimeLabel}
+        </span>
         <Activity size={14} aria-hidden="true" />
       </button>
 

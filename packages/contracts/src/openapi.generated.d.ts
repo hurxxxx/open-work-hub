@@ -3473,6 +3473,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent/sessions/{session_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Session Files */
+        get: operations["hermes_agent_session_files_get"];
+        put?: never;
+        /** Upload File */
+        post: operations["hermes_agent_upload_file_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/files/{file_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download File */
+        get: operations["hermes_agent_download_file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agent/status": {
         parameters: {
             query?: never;
@@ -11784,6 +11819,29 @@ export interface components {
              */
             choice: "once" | "deny";
         };
+        /** HermesFileListResponse */
+        HermesFileListResponse: {
+            /** Data */
+            data: components["schemas"]["HermesFileResponse"][];
+        };
+        /** HermesFileResponse */
+        HermesFileResponse: {
+            /** Id */
+            id: string;
+            /** Relative Path */
+            relative_path: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Media Type */
+            media_type: string;
+            /** Sha256 */
+            sha256: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** HermesJobCreate */
         HermesJobCreate: {
             /** Name */
@@ -11864,6 +11922,14 @@ export interface components {
             current_activity?: string | null;
             /** Output Text */
             output_text?: string | null;
+            /** Output Payload */
+            output_payload?: {
+                [key: string]: unknown;
+            } | null;
+            /** Model Policy */
+            model_policy?: {
+                [key: string]: unknown;
+            };
             /** Usage */
             usage?: {
                 [key: string]: unknown;
@@ -28297,6 +28363,159 @@ export interface operations {
             };
         };
     };
+    hermes_agent_session_files_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HermesFileListResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hermes_agent_upload_file_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-File-Name": string;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HermesFileResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hermes_agent_download_file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     hermes_agent_get_agent_status_get: {
         parameters: {
             query?: never;
@@ -29228,6 +29447,7 @@ export interface operations {
             header?: {
                 authorization?: string | null;
                 "Mcp-Session-Id"?: string | null;
+                "X-Hermes-Run-Id"?: string | null;
             };
             path?: never;
             cookie?: never;

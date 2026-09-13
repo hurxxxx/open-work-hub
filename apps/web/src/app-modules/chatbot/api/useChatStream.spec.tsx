@@ -101,6 +101,43 @@ describe('useChatStream', () => {
     generalChat.unmount();
   });
 
+  it('runs two conversations in the same chatbot independently and stops only one', async () => {
+    vi.mocked(streamAiChat).mockClear();
+    vi.mocked(streamAiChat).mockImplementation(
+      async () => new Response(new ReadableStream<Uint8Array>({ start() {} })),
+    );
+    const first = renderHook(() =>
+      useChatStream('token', 'parallel-chatbot', { conversationId: 'a' }),
+    );
+    const second = renderHook(() =>
+      useChatStream('token', 'parallel-chatbot', { conversationId: 'b' }),
+    );
+    act(() => {
+      void first.result.current.send({
+        conversation_id: 'a',
+        messages: [{ role: 'user', content: 'First' }],
+      });
+      void second.result.current.send({
+        conversation_id: 'b',
+        messages: [{ role: 'user', content: 'Second' }],
+      });
+    });
+    await waitFor(() => {
+      expect(first.result.current.state.streamOpened).toBe(true);
+      expect(second.result.current.state.streamOpened).toBe(true);
+    });
+    const signals = vi
+      .mocked(streamAiChat)
+      .mock.calls.map(([args]) => args.signal);
+    act(() => first.result.current.abort());
+    expect(signals[0].reason).toBe('stop');
+    expect(signals[1].aborted).toBe(false);
+    expect(second.result.current.state.pendingUserContent).toBe('Second');
+    act(() => second.result.current.abort());
+    first.unmount();
+    second.unmount();
+  });
+
   it('fails a stream that reaches EOF without a terminal event', async () => {
     vi.mocked(streamAiChat).mockResolvedValue(
       new Response(

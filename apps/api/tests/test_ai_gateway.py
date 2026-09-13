@@ -124,6 +124,30 @@ def test_chatbot_task_is_registered_with_default_budgets() -> None:
         reset_ai_capability_registry()
 
 
+def test_common_completion_executes_hermes_instead_of_provider_sdk(monkeypatch):
+    from open_work_hub_api.domains.hermes import workloads
+
+    calls = []
+
+    def complete(context, execution, payload, **kwargs):
+        calls.append((context, execution, payload, kwargs))
+        return {
+            "choices": [{"message": {"content": "validated"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
+            "structured_output": {"answer": 42},
+        }
+
+    monkeypatch.setattr(workloads, "complete_workload", complete)
+    monkeypatch.setattr(gateway_module, "log_llm_call", lambda **kwargs: None)
+    request = _request("chatbot", output_schema={"type": "object"})
+    result = complete_gateway_chat(request, _FakePolicyDb("local"))
+    assert len(calls) == 1
+    assert calls[0][0].workload_id == "chatbot"
+    assert calls[0][1].pool == "local"
+    assert calls[0][3]["output_schema"] == {"type": "object"}
+    assert result.response["structured_output"] == {"answer": 42}
+
+
 def test_gateway_request_requires_app_id() -> None:
     with pytest.raises(ValueError, match="LLM app_id is required"):
         _request("chatbot", app=None)

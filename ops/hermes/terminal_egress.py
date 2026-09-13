@@ -31,7 +31,9 @@ from agent.proxy_sources.iron_proxy import (
 
 _TUNNEL_PORT = 19090
 _UPSTREAM_RESPONSE_HEADER_TIMEOUT = "300s"
-_CLIENT_DIR = Path(os.environ.get("OWH_HERMES_TERMINAL_EGRESS_CLIENT_DIR", "/opt/data/home/egress-client"))
+_CLIENT_DIR = Path(
+    os.environ.get("OWH_HERMES_TERMINAL_EGRESS_CLIENT_DIR", "/opt/data/home/egress-client")
+)
 _stop_requested = False
 
 
@@ -40,9 +42,9 @@ def _handle_stop(_signum: int, _frame: object) -> None:
     _stop_requested = True
 
 
-def _required_openrouter_key() -> str:
+def _optional_openrouter_key() -> str:
     value = os.environ.get("OPENROUTER_API_KEY", "").strip()
-    if len(value) < 16:
+    if value and len(value) < 16:
         raise RuntimeError("OPENROUTER_API_KEY is missing or too short")
     return value
 
@@ -66,7 +68,7 @@ def _apply_managed_proxy_policy(config: dict) -> None:
 
 
 def main() -> None:
-    _required_openrouter_key()
+    legacy_key = _optional_openrouter_key()
     binary = find_iron_proxy(install_if_missing=True)
     if binary is None:
         raise RuntimeError("Hermes could not install the pinned iron-proxy binary")
@@ -74,12 +76,12 @@ def main() -> None:
     discovered = [
         mapping
         for mapping in discover_provider_mappings(
-            available_env_names=["OPENROUTER_API_KEY"]
+            available_env_names=["OPENROUTER_API_KEY"] if legacy_key else []
         )
         if mapping.real_env_name == "OPENROUTER_API_KEY"
     ]
-    mappings = merge_mappings(existing=load_mappings(), discovered=discovered)
-    if len(mappings) != 1:
+    mappings = merge_mappings(existing=load_mappings(), discovered=discovered) if legacy_key else []
+    if legacy_key and len(mappings) != 1:
         raise RuntimeError("Hermes did not create the OpenRouter proxy-token mapping")
     write_mappings(mappings)
     audit_log = ca_cert.parent / "audit.log"
@@ -100,9 +102,13 @@ def main() -> None:
     )
     _apply_managed_proxy_policy(config)
     # v0.39 evaluates this setting on CONNECT before origin headers exist.
-    config["transforms"][1]["config"]["secrets"][0]["replace"]["require"] = False
+    for rule in config["transforms"][1]["config"]["secrets"]:
+        rule["replace"]["require"] = False
     config_path = write_proxy_config(config)
-    _write_client_file("openrouter.token", mappings[0].proxy_token + "\n", mode=0o600)
+    if mappings:
+        _write_client_file("openrouter.token", mappings[0].proxy_token + "\n", mode=0o600)
+    else:
+        (_CLIENT_DIR / "openrouter.token").unlink(missing_ok=True)
     _CLIENT_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ca_cert, _CLIENT_DIR / "ca.crt")
     (_CLIENT_DIR / "ca.crt").chmod(0o644)
@@ -110,7 +116,7 @@ def main() -> None:
     start_proxy(
         binary=binary,
         config_path=config_path,
-        extra_env={"OPENROUTER_API_KEY": _required_openrouter_key()},
+        extra_env={"OPENROUTER_API_KEY": legacy_key} if legacy_key else {},
         install_if_missing=False,
     )
     status = get_status()

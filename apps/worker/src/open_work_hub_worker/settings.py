@@ -359,6 +359,12 @@ class Settings(BaseSettings):
         le=3600,
         validation_alias="OPEN_WORK_HUB_HERMES_RUN_TIMEOUT_SECONDS",
     )
+    hermes_max_concurrent_runs: int = Field(
+        default=10,
+        ge=1,
+        le=1000,
+        validation_alias="OPEN_WORK_HUB_HERMES_MAX_CONCURRENT_RUNS",
+    )
     hermes_dispatch_lease_seconds: int = Field(
         default=300,
         ge=30,

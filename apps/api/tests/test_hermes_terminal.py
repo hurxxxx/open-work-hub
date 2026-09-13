@@ -32,7 +32,6 @@ from open_work_hub_api.core.settings import (
 from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.hermes.models import HermesProfileBinding
 from open_work_hub_api.domains.hermes.research_sources import DEFAULT_RESEARCH_SOURCE_POLICY
-from open_work_hub_api.domains.hermes_terminal.app_catalog import HERMES_TERMINAL_APP
 from open_work_hub_api.domains.hermes_terminal import (
     broker_app,
     lifecycle,
@@ -72,12 +71,10 @@ def _settings(**overrides: object) -> Settings:
         return Settings(_env_file=None, **values)  # type: ignore[arg-type]
 
 
-def test_catalog_exposes_personal_terminal_for_admitted_company_users() -> None:
-    assert HERMES_TERMINAL_APP.app_id == "hermes-terminal"
-    assert APP_CONTRACT_BY_ID["hermes-terminal"]["execution_context_kind"] == "personal"
-    assert APP_CONTRACT_BY_ID["hermes-terminal"]["resource_scope"] == "personal"
-    assert HERMES_TERMINAL_APP.required_system_roles == ()
-    assert HERMES_TERMINAL_APP.feature_flag == "hermes_enabled"
+def test_terminal_launcher_is_retired_and_chatbot_remains_personal() -> None:
+    assert "hermes-terminal" not in APP_CONTRACT_BY_ID
+    assert APP_CONTRACT_BY_ID["chatbot"]["execution_context_kind"] == "personal"
+    assert APP_CONTRACT_BY_ID["chatbot"]["resource_scope"] == "personal"
 
 
 def test_broker_image_packages_research_source_policy_module() -> None:

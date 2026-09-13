@@ -14,7 +14,6 @@ from open_work_hub_api.domains.conversations.app_catalog import CHATBOT_APP
 from open_work_hub_api.domains.diagrams.app_catalog import DIAGRAMS_APP
 from open_work_hub_api.domains.docs.app_catalog import DOCS_APP
 from open_work_hub_api.domains.files.app_catalog import FILES_APP
-from open_work_hub_api.domains.hermes_terminal.app_catalog import HERMES_TERMINAL_APP
 from open_work_hub_api.domains.mail.app_catalog import MAIL_APP
 from open_work_hub_api.domains.meeting.app_catalog import MEETING_APP
 from open_work_hub_api.domains.planner.app_catalog import PLANNER_APP
@@ -30,7 +29,6 @@ from .home_app_catalog import HOME_APP
 _APP_REGISTRATIONS = (
     HOME_APP,
     AGENT_TERMINAL_APP,
-    HERMES_TERMINAL_APP,
     CHATBOT_APP,
     *WEB_SEARCH_APPS,
     PMS_APP,

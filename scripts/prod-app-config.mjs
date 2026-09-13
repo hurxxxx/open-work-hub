@@ -332,7 +332,10 @@ export function assertProductionAppEnv(values) {
     );
   }
 
-  requireSecret(values, 'OPENROUTER_API_KEY', { minLength: 16 });
+  // Only needed to drain legacy Terminal runners; new runs use DB model policy.
+  if (values.get('OPENROUTER_API_KEY')?.trim()) {
+    requireSecret(values, 'OPENROUTER_API_KEY', { minLength: 16 });
+  }
   const hermesSecrets = [
     requireSecret(values, 'OPEN_WORK_HUB_HERMES_API_KEY'),
     requireSecret(values, 'OPEN_WORK_HUB_HERMES_MANAGEMENT_TOKEN'),

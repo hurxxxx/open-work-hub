@@ -15,6 +15,9 @@ from open_work_hub_api.core import llm as llm_core
 from open_work_hub_api.core.db import get_engine
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.auth.models import AuditLog
+from hermes_route_stub import hermes_route_stub  # noqa: F401
+
+pytestmark = pytest.mark.usefixtures("hermes_route_stub")
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:

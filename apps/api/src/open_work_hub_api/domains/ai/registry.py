@@ -107,6 +107,7 @@ class RegisteredLlmWorkload:
     label_key: str = ""
     description_key: str = ""
     external_data: bool = False
+    native_tools: tuple[str, ...] = ()
     local_max_output_tokens: int = DEFAULT_LOCAL_MAX_OUTPUT_TOKENS
     external_max_output_tokens: int = DEFAULT_EXTERNAL_MAX_OUTPUT_TOKENS
     management_surface: LlmManagementSurface = "llm_routing"
@@ -307,6 +308,10 @@ def _resolve_tool_registration_policy(
 class AiCapabilityRegistry:
     llm_tasks: dict[str, RegisteredLlmTask] = field(default_factory=dict)
     llm_workloads: dict[str, RegisteredLlmWorkload] = field(default_factory=dict)
+    _llm_output_validators: dict[str, Callable[[dict[str, Any], dict[str, Any]], None]] = field(
+        default_factory=dict,
+        repr=False,
+    )
     tools: dict[str, RegisteredToolDefinition] = field(default_factory=dict)
     descriptors: dict[str, AiCapabilityDescriptor] = field(default_factory=dict)
     gateway_tool_adapters: dict[tuple[str, str], GatewayToolAdapter] = field(default_factory=dict)
@@ -318,6 +323,22 @@ class AiCapabilityRegistry:
         init=False,
         repr=False,
     )
+
+    def register_llm_output_validator(
+        self,
+        workload_id: str,
+        validator: Callable[[dict[str, Any], dict[str, Any]], None],
+    ) -> None:
+        if workload_id not in self.llm_workloads or workload_id in self._llm_output_validators:
+            raise ValueError("Output validators require a unique registered workload")
+        self._llm_output_validators[workload_id] = validator
+
+    def validate_llm_output(
+        self, workload_id: str, result: dict[str, Any], schema: dict[str, Any]
+    ) -> None:
+        validator = self._llm_output_validators.get(workload_id)
+        if validator is not None:
+            validator(result, schema)
 
     def register_llm_task(
         self,
@@ -375,6 +396,7 @@ class AiCapabilityRegistry:
         label_key: str = "",
         description_key: str = "",
         external_data: bool = False,
+        native_tools: tuple[str, ...] = (),
         local_max_output_tokens: int = DEFAULT_LOCAL_MAX_OUTPUT_TOKENS,
         external_max_output_tokens: int = DEFAULT_EXTERNAL_MAX_OUTPUT_TOKENS,
         management_surface: LlmManagementSurface = "llm_routing",
@@ -382,6 +404,8 @@ class AiCapabilityRegistry:
         allowed_runtime_adapters: tuple[AgentRuntimeAdapterId, ...]
         | list[AgentRuntimeAdapterId] = ("chat_completion",),
     ) -> None:
+        if set(native_tools) - {"web_search", "web_extract"}:
+            raise ValueError("Workload native tools must have a read-only execution policy")
         normalized_workload_id = workload_id.strip().lower()
         normalized_task_kind = task_kind.strip().lower().replace("-", "_")
         normalized_owner = owner_domain.strip().lower()
@@ -485,6 +509,7 @@ class AiCapabilityRegistry:
             label_key=label_key.strip(),
             description_key=description_key.strip(),
             external_data=external_data,
+            native_tools=tuple(dict.fromkeys(native_tools)),
             local_max_output_tokens=local_max_output_tokens,
             external_max_output_tokens=external_max_output_tokens,
             management_surface=management_surface,

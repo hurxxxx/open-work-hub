@@ -117,6 +117,8 @@ class HermesRunResponse(BaseModel):
     progress_percent: int
     current_activity: str | None = None
     output_text: str | None = None
+    output_payload: dict[str, Any] | None = None
+    model_policy: dict[str, Any] = Field(default_factory=dict)
     usage: dict[str, Any] = Field(default_factory=dict)
     allowed_app_ids: list[str] | None = None
     pending_approval: dict[str, Any] | None = None
@@ -131,6 +133,20 @@ class HermesRunResponse(BaseModel):
 class HermesRunListResponse(BaseModel):
     data: list[HermesRunResponse]
     total: int
+
+
+class HermesFileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    relative_path: str
+    size_bytes: int
+    media_type: str
+    sha256: str
+    updated_at: datetime
+
+
+class HermesFileListResponse(BaseModel):
+    data: list[HermesFileResponse]
 
 
 class HermesSteerRequest(BaseModel):

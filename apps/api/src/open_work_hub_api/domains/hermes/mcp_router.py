@@ -1,29 +1,45 @@
 from __future__ import annotations
 
+from itertools import islice
+
 import hashlib
 import hmac
 import json
+import base64
 from datetime import timedelta
 from typing import Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
+from jsonschema import Draft202012Validator
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.principal import user_principal
-from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.core.settings import HERMES_IMAGE, get_settings
 from open_work_hub_api.domains.ai.mcp import AiMcpClient
+from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.auth.app_access import can_use_app
 from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.hermes.models import (
     HermesProfileBinding,
     HermesRunProjection,
+    HermesRunEvent,
+    HermesSessionBinding,
     HermesToolApproval,
 )
-from open_work_hub_api.domains.hermes.repository import ACTIVE_RUN_STATUSES
+from open_work_hub_api.domains.hermes.repository import (
+    ACTIVE_RUN_STATUSES,
+    MAX_RESULT_BYTES,
+    HermesRunRepository,
+)
+from open_work_hub_api.domains.hermes.files import MAX_FILE_BYTES, list_files, read_file, save_file
+from open_work_hub_api.domains.hermes.schemas import HermesFileResponse
+from open_work_hub_api.domains.hermes.research_settings import get_research_settings
+from open_work_hub_api.domains.hermes.research_sources import disabled_research_source_domains
 from open_work_hub_api.domains.hermes.service import (
     internal_mcp_server_name,
     mcp_profile_bearer_secret,
@@ -61,6 +77,7 @@ def _approval_matches_mcp_tool(
     *,
     profile_name: str,
     tool_name: str,
+    arguments: dict[str, Any],
 ) -> bool:
     payload = approval.request_payload
     if not isinstance(payload, dict):
@@ -78,6 +95,8 @@ def _approval_matches_mcp_tool(
         and pattern_key == "mcp_elicitation"
         and isinstance(pattern_keys, list)
         and "mcp_elicitation" in pattern_keys
+        and payload.get("description")
+        == f"Approve this call once. Arguments SHA-256: {_arguments_sha256(arguments)}"
     )
 
 
@@ -118,6 +137,7 @@ def _consume_external_tool_approval(
                 candidate,
                 profile_name=profile_name,
                 tool_name=tool_name,
+                arguments=arguments,
             )
         ),
         None,
@@ -165,12 +185,7 @@ def _resolve_mcp_identity(
     if binding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     user = db.get(User, binding.user_id)
-    if (
-        user is None
-        or user.status != "active"
-        or user.login_blocked
-        or not can_use_app(db, user_id=binding.user_id, app_id="chatbot")
-    ):
+    if user is None or user.status != "active" or user.login_blocked:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     return binding, user
 
@@ -181,23 +196,37 @@ def _available_tools(
     binding: HermesProfileBinding,
     user: User,
     apply_run_scope: bool = True,
+    hermes_run_id: str | None = None,
 ):
-    active_run = db.scalar(
-        select(HermesRunProjection)
-        .where(
-            HermesRunProjection.profile_binding_id == binding.id,
-            HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES),
-        )
-        .order_by(HermesRunProjection.created_at.desc())
-    )
-    if active_run is None:
-        # The profile credential identifies an owner, but only a staged run
-        # carries the caller-selected app scope. Never interpret a missing
-        # run as an unrestricted tool request.
+    if apply_run_scope and not hermes_run_id:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "hermes.active_run_required"},
         )
+    active_run = (
+        db.scalar(
+            select(HermesRunProjection).where(
+                HermesRunProjection.profile_binding_id == binding.id,
+                HermesRunProjection.hermes_run_id == hermes_run_id,
+                HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES - {"stopping"}),
+            )
+        )
+        if hermes_run_id
+        else None
+    )
+    if apply_run_scope and active_run is None:
+        # Only the trusted runtime transport can select a run. Profile-wide
+        # discovery is harmless; executing against a guessed latest run is not.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "hermes.active_run_required"},
+        )
+    if active_run is not None and not can_use_app(
+        db,
+        user_id=user.id,
+        app_id=active_run.owner_app_id,
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     principal = user_principal(
         user_id=user.id,
         source="hermes-mcp",
@@ -207,7 +236,7 @@ def _available_tools(
         AiMcpClient().list_tools(
             db,
             principal=principal,
-            app_ids=active_run.allowed_app_ids if apply_run_scope else None,
+            app_ids=active_run.allowed_app_ids if active_run is not None else None,
             include_meta=True,
             include_approval_required=True,
         ),
@@ -231,6 +260,7 @@ async def handle_mcp_request(
     profile: str = Query(min_length=1, max_length=63),
     authorization: str | None = Header(default=None),
     mcp_session_id: str | None = Header(default=None, alias="Mcp-Session-Id"),
+    hermes_run_id: str | None = Header(default=None, alias="X-Hermes-Run-Id"),
     db: Session = Depends(get_db_session),
 ) -> Response:
     binding, user = _resolve_mcp_identity(
@@ -239,7 +269,14 @@ async def handle_mcp_request(
         authorization=authorization,
     )
     try:
-        payload = await request.json()
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > MAX_FILE_BYTES * 4 // 3 + 65_536:
+                return JSONResponse(
+                    _rpc_error(None, -32600, "Request exceeds size limit"), status_code=413
+                )
+        payload = json.loads(raw)
     except Exception:
         return JSONResponse(_rpc_error(None, -32700, "Parse error"), status_code=400)
     if not isinstance(payload, dict):
@@ -266,12 +303,178 @@ async def handle_mcp_request(
     if method == "ping":
         return JSONResponse(_rpc_result(request_id, {}))
 
+    if method in {
+        "owh/context",
+        "owh/submit",
+        "owh/native_admit",
+        "owh/files/list",
+        "owh/files/read",
+        "owh/files/write",
+    }:
+        _principal, _tools, run = _available_tools(
+            db,
+            binding=binding,
+            user=user,
+            hermes_run_id=hermes_run_id,
+        )
+        workload = get_ai_capability_registry().get_llm_workload(run.workload_id or "")
+        native_tools = sorted(
+            set(run.runtime_options.get("native_tools", []))
+            & set(workload.native_tools if workload else ())
+        )
+        if method == "owh/native_admit":
+            repository = HermesRunRepository(db)
+            run = repository.get(run.id, for_update=True)
+            if (
+                run.status not in ACTIVE_RUN_STATUSES - {"stopping"}
+                or params.get("tool") not in native_tools
+            ):
+                return JSONResponse(_rpc_error(request_id, -32602, "Tool is not available"))
+            count = (
+                db.scalar(
+                    select(func.count())
+                    .select_from(HermesRunEvent)
+                    .where(
+                        HermesRunEvent.run_id == run.id,
+                        HermesRunEvent.event_type == "workload.tool_admitted",
+                    )
+                )
+                or 0
+            )
+            if count >= min(20, run.runtime_options.get("native_tool_limit", 0)):
+                return JSONResponse(_rpc_result(request_id, {"accepted": False}))
+            repository.append_event(
+                run.id, {"event": "workload.tool_admitted", "tool": params["tool"]}
+            )
+            db.commit()
+            return JSONResponse(_rpc_result(request_id, {"accepted": True}))
+        if method == "owh/context":
+            namespace = get_settings().hermes_terminal_resource_namespace
+            return JSONResponse(
+                _rpc_result(
+                    request_id,
+                    {
+                        "allow_native_tools": run.kind == "interactive",
+                        "native_tools": native_tools,
+                        "output_schema": run.output_schema,
+                        "sandbox": {
+                            "image": HERMES_IMAGE,
+                            "network": f"open-work-hub-{namespace}-hermes-terminal-sandbox",
+                            "ca_volume": f"open-work-hub-{namespace}-hermes-terminal-egress-client",
+                            "no_proxy": ",".join(
+                                [
+                                    "localhost",
+                                    "127.0.0.1",
+                                    "::1",
+                                    *disabled_research_source_domains(
+                                        get_research_settings(db).policy
+                                    ),
+                                ]
+                            ),
+                        },
+                    },
+                )
+            )
+        if method.startswith("owh/files/"):
+            session = (
+                db.get(HermesSessionBinding, run.session_binding_id)
+                if run.session_binding_id
+                else None
+            )
+            if session is None or run.kind != "interactive" or session.user_id != user.id:
+                return JSONResponse(
+                    _rpc_error(request_id, -32602, "Interactive session files required")
+                )
+            files = list_files(db, session_id=session.id)
+            if method == "owh/files/list":
+                return JSONResponse(
+                    _rpc_result(
+                        request_id,
+                        {
+                            "files": [
+                                HermesFileResponse.model_validate(row).model_dump(mode="json")
+                                for row in files
+                            ],
+                        },
+                    )
+                )
+            if method == "owh/files/read":
+                row = next((row for row in files if row.id == params.get("id")), None)
+                if row is None:
+                    return JSONResponse(_rpc_error(request_id, -32602, "File is not available"))
+                return JSONResponse(
+                    _rpc_result(request_id, {"data": base64.b64encode(read_file(row)).decode()})
+                )
+            try:
+                encoded = params.get("data")
+                if not isinstance(encoded, str) or len(encoded) > MAX_FILE_BYTES * 4 // 3 + 4:
+                    raise ValueError("Invalid file data")
+                row = save_file(
+                    db,
+                    session=session,
+                    path=params["path"],
+                    data=base64.b64decode(encoded, validate=True),
+                )
+            except (ValueError, KeyError, TypeError):
+                return JSONResponse(
+                    _rpc_error(request_id, -32602, "File path, data or size is invalid")
+                )
+            return JSONResponse(
+                _rpc_result(
+                    request_id, HermesFileResponse.model_validate(row).model_dump(mode="json")
+                )
+            )
+        if run.output_schema is None:
+            return JSONResponse(
+                _rpc_error(request_id, -32602, "No structured result was requested")
+            )
+        result = params.get("result")
+        if len(json.dumps(result, ensure_ascii=False).encode()) > MAX_RESULT_BYTES:
+            return JSONResponse(
+                _rpc_error(request_id, -32602, "Structured result exceeds size limit")
+            )
+        errors = list(islice(Draft202012Validator(run.output_schema).iter_errors(result), 20))
+        if errors:
+            # Paths and validator names suffice for correction without echoing
+            # supplied values or potentially sensitive source data into logs.
+            return JSONResponse(
+                _rpc_result(
+                    request_id,
+                    {
+                        "accepted": False,
+                        "errors": [
+                            {"path": list(error.path), "validator": error.validator}
+                            for error in errors
+                        ],
+                    },
+                )
+            )
+        try:
+            get_ai_capability_registry().validate_llm_output(
+                run.workload_id or "", result, run.output_schema
+            )
+        except (ValueError, TypeError, KeyError):
+            return JSONResponse(
+                _rpc_result(
+                    request_id,
+                    {
+                        "accepted": False,
+                        "errors": [{"validator": "workload_contract", "path": []}],
+                    },
+                )
+            )
+        run.output_payload = result
+        db.add(run)
+        db.commit()
+        return JSONResponse(_rpc_result(request_id, {"accepted": True}))
+
     if method == "tools/list":
         _principal, tools, _active_run = _available_tools(
             db,
             binding=binding,
             user=user,
-            apply_run_scope=False,
+            apply_run_scope=hermes_run_id is not None,
+            hermes_run_id=hermes_run_id,
         )
         return JSONResponse(
             _rpc_result(
@@ -294,6 +497,7 @@ async def handle_mcp_request(
         binding=binding,
         user=user,
         apply_run_scope=True,
+        hermes_run_id=hermes_run_id,
     )
     tool = next((item for item in tools if item.descriptor.name == tool_name), None)
     if tool is None:
@@ -336,7 +540,8 @@ async def handle_mcp_request(
                 )
             )
     try:
-        result = AiMcpClient().call_tool(
+        result = await run_in_threadpool(
+            AiMcpClient().call_tool,
             db,
             principal=principal,
             user=user,

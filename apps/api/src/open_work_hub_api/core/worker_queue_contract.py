@@ -80,7 +80,7 @@ WORKER_QUEUE_GROUP_CONCURRENCY: Mapping[str, int] = {
     "realtime": 2,
     "long": 1,
     "ai_graph": 1,
-    "hermes": 2,
+    "hermes": 10,
 }
 WORKER_BOOTSTRAP_GROUP_ALL = "all"
 WORKER_BOOTSTRAP_GROUP_BEAT = "beat"

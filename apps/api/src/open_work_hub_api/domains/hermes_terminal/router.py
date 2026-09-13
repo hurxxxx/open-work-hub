@@ -1,32 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-import binascii
 import json
-import secrets
 from datetime import timedelta
 from pathlib import PurePosixPath
-from time import monotonic
 from typing import Annotated
 from urllib.parse import quote
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket, status
 from fastapi.responses import StreamingResponse
-from minio.error import S3Error
-from sqlalchemy import func, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
-from starlette.websockets import WebSocketDisconnect
-from websockets.asyncio.client import connect as websocket_connect
-from websockets.exceptions import ConnectionClosed, WebSocketException
 
 from open_work_hub_api.core.db import get_db_session, get_session_factory
 from open_work_hub_api.core.settings import Settings, get_settings
 from open_work_hub_api.domains.auth.access import record_audit_log
 from open_work_hub_api.domains.auth.app_gate import (
-    allowed_app_ids,
     can_use_app,
     require_app_access,
 )
@@ -35,10 +24,6 @@ from open_work_hub_api.domains.auth.dependencies import (
     resolve_auth_context_from_token,
 )
 from open_work_hub_api.domains.auth.models import User, utcnow_naive
-from open_work_hub_api.domains.hermes.repository import get_or_create_profile_binding
-from open_work_hub_api.domains.hermes.research_settings import (
-    get_research_source_policy,
-)
 from open_work_hub_api.domains.hermes_terminal.broker_client import (
     HermesTerminalBrokerClient,
     HermesTerminalBrokerError,
@@ -67,10 +52,7 @@ from open_work_hub_api.domains.hermes_terminal.schemas import (
     HermesTerminalSessionResponse,
 )
 from open_work_hub_api.domains.hermes_terminal.security import (
-    broker_bearer_token,
     normalize_relative_path,
-    terminal_profile_name,
-    token_digest,
 )
 from open_work_hub_api.domains.hermes_terminal.storage import (
     open_object,
@@ -80,7 +62,7 @@ from open_work_hub_api.domains.hermes_terminal.storage import (
 router = APIRouter(prefix="/hermes-terminal", tags=["hermes-terminal"])
 ws_router = APIRouter(prefix="/hermes-terminal", tags=["hermes-terminal"])
 _require_app_enabled = require_app_access(
-    "hermes-terminal",
+    "chatbot",
     error_code="hermes_terminal.app_disabled",
 )
 _WS_ACCESS_RECHECK_SECONDS = 60
@@ -261,120 +243,7 @@ async def create_session(
     current_user: User = Depends(require_current_user),
     _app_enabled: None = Depends(_require_app_enabled),
 ) -> HermesTerminalSessionResponse:
-    if not settings.hermes_enabled:
-        raise _http_error("hermes_terminal.disabled", status.HTTP_503_SERVICE_UNAVAILABLE)
-    _lock_terminal_admission(db)
-    active_clause = HermesTerminalSession.status.in_(HERMES_TERMINAL_ACTIVE_STATUSES)
-    user_count = db.scalar(
-        select(func.count(HermesTerminalSession.id)).where(
-            HermesTerminalSession.user_id == current_user.id,
-            active_clause,
-        )
-    )
-    total_count = db.scalar(select(func.count(HermesTerminalSession.id)).where(active_clause))
-    if int(user_count or 0) >= settings.hermes_terminal_max_sessions_per_user:
-        raise _http_error("hermes_terminal.user_session_limit", status.HTTP_409_CONFLICT)
-    if int(total_count or 0) >= settings.hermes_terminal_max_sessions_total:
-        raise _http_error(
-            "hermes_terminal.global_session_limit", status.HTTP_503_SERVICE_UNAVAILABLE
-        )
-
-    binding = get_or_create_profile_binding(
-        db,
-        user=current_user,
-    )
-    profile_state = db.get(HermesTerminalProfileState, binding.id)
-    if profile_state is None:
-        profile_state = HermesTerminalProfileState(
-            profile_binding_id=binding.id,
-            profile_name=terminal_profile_name(binding.id),
-        )
-        db.add(profile_state)
-    now = utcnow_naive()
-    session_id = str(uuid4())
-    mcp_token = secrets.token_urlsafe(48)
-    row = HermesTerminalSession(
-        id=session_id,
-        profile_binding_id=binding.id,
-        user_id=current_user.id,
-        title=f"Hermes Terminal · {now:%Y-%m-%d %H:%M}",
-        mode=payload.mode,
-        status="starting",
-        allowed_app_ids=sorted(
-            allowed_app_ids(
-                db,
-                user_id=current_user.id,
-            )
-        ),
-        mcp_token_digest=token_digest(mcp_token),
-        cols=payload.cols,
-        rows=payload.rows,
-        last_activity_at=now,
-        idle_expires_at=now + timedelta(seconds=settings.hermes_terminal_idle_timeout_seconds),
-    )
-    db.add(row)
-    try:
-        db.commit()
-    except IntegrityError as error:
-        db.rollback()
-        raise _http_error("hermes_terminal.session_active", status.HTTP_409_CONFLICT) from error
-    db.refresh(row)
-
-    try:
-        profile_archive = await asyncio.to_thread(_load_profile_archive, profile_state)
-        broker_row = await HermesTerminalBrokerClient(settings).create_session(
-            session_id=session_id,
-            profile_key=profile_state.profile_name,
-            mode=payload.mode,
-            cols=payload.cols,
-            rows=payload.rows,
-            mcp_url=f"{settings.hermes_terminal_mcp_relay_url}/{session_id}",
-            mcp_token=mcp_token,
-            research_sources=get_research_source_policy(db),
-            profile_archive=profile_archive,
-        )
-    except (HermesTerminalBrokerError, S3Error, OSError) as error:
-        broker_result_is_ambiguous = (
-            isinstance(error, HermesTerminalBrokerError) and error.status_code is None
-        )
-        row.status = "starting" if broker_result_is_ambiguous else "failed"
-        row.failure_code = (
-            error.code
-            if isinstance(error, HermesTerminalBrokerError)
-            else "hermes_terminal.profile_restore_failed"
-        )
-        if not broker_result_is_ambiguous:
-            row.ended_at = utcnow_naive()
-        db.add(row)
-        db.commit()
-        if isinstance(error, HermesTerminalBrokerError):
-            raise _broker_error(error) from error
-        raise _http_error(
-            "hermes_terminal.profile_restore_failed",
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-        ) from error
-
-    row.status = "running"
-    row.runtime_handle = broker_row.runtime_handle
-    row.broker_instance_id = broker_row.broker_instance_id
-    row.started_at = utcnow_naive()
-    row.updated_at = row.started_at
-    db.add(row)
-    record_audit_log(
-        db,
-        actor_user_id=current_user.id,
-        action="hermes_terminal.session.start",
-        entity_kind="hermes_terminal_session",
-        entity_id=row.id,
-        summary="Started private Hermes terminal session",
-        payload={
-            "mode": row.mode,
-            "yolo_acknowledged": payload.mode == "yolo" and payload.risk_acknowledged,
-        },
-    )
-    db.commit()
-    db.refresh(row)
-    return _session_response(row)
+    raise _http_error("hermes_terminal.retired", status.HTTP_410_GONE)
 
 
 @router.get("/sessions/{session_id}", response_model=HermesTerminalSessionResponse)
@@ -751,170 +620,4 @@ def _touch_session(session_id: str, *, cols: int | None = None, rows: int | None
 
 @ws_router.websocket("/sessions/{session_id}/ws")
 async def terminal_websocket(websocket: WebSocket, session_id: str) -> None:
-    await websocket.accept()
-    try:
-        token = await _resolve_ws_token(websocket)
-        owner_id = await asyncio.to_thread(
-            _authorize_ws,
-            token,
-            session_id=session_id,
-        )
-    except (HTTPException, TimeoutError, ValueError, WebSocketDisconnect):
-        await websocket.close(code=4403)
-        return
-
-    settings = get_settings()
-    broker = HermesTerminalBrokerClient(settings)
-    try:
-        async with websocket_connect(
-            broker.websocket_url(session_id),
-            additional_headers={"Authorization": f"Bearer {broker_bearer_token(settings)}"},
-            proxy=None,
-            max_size=2 * 1024 * 1024,
-        ) as upstream:
-            exit_code: int | None = None
-            exit_status: str | None = None
-            exit_failure_code: str | None = None
-            saw_exit = False
-            last_activity_update = 0.0
-            last_resize_forwarded = 0.0
-
-            async def broker_to_browser() -> None:
-                nonlocal saw_exit, exit_code, exit_failure_code, exit_status, last_activity_update
-                async for message in upstream:
-                    if isinstance(message, bytes):
-                        await websocket.send_bytes(message)
-                        continue
-                    await websocket.send_text(message)
-                    try:
-                        payload = json.loads(message)
-                    except json.JSONDecodeError:
-                        continue
-                    if not isinstance(payload, dict):
-                        continue
-                    if payload.get("type") == "output":
-                        now = monotonic()
-                        if now - last_activity_update >= _WS_ACTIVITY_UPDATE_SECONDS:
-                            await asyncio.to_thread(_touch_session, session_id)
-                            last_activity_update = now
-                    elif payload.get("type") == "exit":
-                        saw_exit = True
-                        value = payload.get("exit_code")
-                        exit_code = value if isinstance(value, int) else None
-                        value = payload.get("status")
-                        exit_status = value if isinstance(value, str) else None
-                        value = payload.get("failure_code")
-                        exit_failure_code = value if isinstance(value, str) else None
-                        return
-
-            async def browser_to_broker() -> None:
-                nonlocal last_activity_update, last_resize_forwarded
-                while True:
-                    message = await websocket.receive_text()
-                    if len(message.encode("utf-8")) > 100_000:
-                        await websocket.close(code=4400)
-                        return
-                    try:
-                        payload = json.loads(message)
-                    except json.JSONDecodeError:
-                        await websocket.close(code=4400)
-                        return
-                    if not isinstance(payload, dict):
-                        await websocket.close(code=4400)
-                        return
-                    message_type = payload.get("type")
-                    if message_type == "input":
-                        encoded = payload.get("data")
-                        if not isinstance(encoded, str) or len(encoded) > 90_000:
-                            await websocket.close(code=4400)
-                            return
-                        try:
-                            decoded = base64.b64decode(encoded, validate=True)
-                        except (ValueError, binascii.Error):
-                            await websocket.close(code=4400)
-                            return
-                        if len(decoded) > 64 * 1024:
-                            await websocket.close(code=4400)
-                            return
-                    elif message_type == "resize":
-                        cols = payload.get("cols")
-                        rows = payload.get("rows")
-                        if (
-                            not isinstance(cols, int)
-                            or not isinstance(rows, int)
-                            or not 20 <= cols <= 500
-                            or not 5 <= rows <= 300
-                        ):
-                            await websocket.close(code=4400)
-                            return
-                        now = monotonic()
-                        if now - last_resize_forwarded < 0.1:
-                            continue
-                        last_resize_forwarded = now
-                    elif message_type != "ping":
-                        await websocket.close(code=4400)
-                        return
-                    await upstream.send(message)
-                    now = monotonic()
-                    if now - last_activity_update < _WS_ACTIVITY_UPDATE_SECONDS:
-                        continue
-                    if message_type not in {"input", "resize"}:
-                        continue
-                    cols = payload.get("cols") if message_type == "resize" else None
-                    rows = payload.get("rows") if message_type == "resize" else None
-                    if not isinstance(cols, int) or not isinstance(rows, int):
-                        cols = rows = None
-                    await asyncio.to_thread(
-                        _touch_session,
-                        session_id,
-                        cols=cols,
-                        rows=rows,
-                    )
-                    last_activity_update = now
-
-            async def monitor_access() -> None:
-                while True:
-                    await asyncio.sleep(_WS_ACCESS_RECHECK_SECONDS)
-                    current_owner = await asyncio.to_thread(
-                        _authorize_ws,
-                        token,
-                        session_id=session_id,
-                    )
-                    if current_owner != owner_id:
-                        raise RuntimeError("terminal owner changed")
-
-            tasks = {
-                asyncio.create_task(broker_to_browser()),
-                asyncio.create_task(browser_to_broker()),
-                asyncio.create_task(monitor_access()),
-            }
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            for task in pending:
-                task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
-            for task in done:
-                if not task.cancelled():
-                    task.result()
-            if saw_exit:
-                target_status = "failed" if exit_status == "failed" else "exited"
-                with get_session_factory()() as db:
-                    current = db.get(HermesTerminalSession, session_id)
-                    if current is not None and current.status == "stopping":
-                        target_status = "terminated"
-                await finalize_terminal_session(
-                    session_id,
-                    target_status=target_status,
-                    exit_code=exit_code,
-                    actor_user_id=owner_id,
-                    failure_code=exit_failure_code,
-                )
-    except ConnectionClosed as error:
-        try:
-            await websocket.close(code=error.code if 4000 <= error.code <= 4999 else 1013)
-        except RuntimeError:
-            pass
-    except (HTTPException, RuntimeError, WebSocketDisconnect, WebSocketException, OSError):
-        try:
-            await websocket.close(code=1013)
-        except RuntimeError:
-            pass
+    await websocket.close(code=4403)

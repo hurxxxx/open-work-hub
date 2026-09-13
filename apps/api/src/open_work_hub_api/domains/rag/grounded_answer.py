@@ -63,7 +63,7 @@ class LlmGroundedAnswerSynthesizer:
             LlmWorkloadContext(
                 source=self._source,
                 actor_user_id=self._actor_user_id,
-                app_id="rag",
+                app_id="retrieval-search",
                 principal_kind=self._principal_kind,  # type: ignore[arg-type]
                 principal_id=self._principal_id,
             ),
@@ -81,12 +81,15 @@ class LlmGroundedAnswerSynthesizer:
             timeout_seconds=self._assembler.timeout_seconds_from_ms(timeout_ms),
             agent_run_id=self._agent_run_id,
             conversation_id=self._conversation_id,
+            output_schema=self._assembler.output_schema(),
         ).completion
         if completion.finish_reason and completion.finish_reason != "stop":
             raise ValueError(
                 f"Grounded answer provider did not finish cleanly: {completion.finish_reason}"
             )
-        raw_content = completion.text.strip()
+        import json
+
+        raw_content = json.dumps(completion.structured_output, ensure_ascii=False)
         return self._assembler.assemble(raw_content=raw_content, hits=hits)
 
 

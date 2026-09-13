@@ -367,6 +367,9 @@ def _execute_query_rewrite_completion(
         ),
         db,
         messages=rewrite_messages,
+        output_schema=(
+            _QueryRelaxationPayload if rewrite_mode == "recall_fallback" else _QueryRewritePayload
+        ).model_json_schema(),
         temperature=0,
         reasoning_effort="none",
         context_pack=AiGatewayContextPack(
@@ -380,7 +383,7 @@ def _execute_query_rewrite_completion(
         ),
         conversation_id=conversation.id if conversation is not None else None,
     ).completion
-    return completion.text
+    return json.dumps(completion.structured_output, ensure_ascii=False)
 
 
 def _rewrite_history(messages: list[dict[str, Any]]) -> list[dict[str, str]]:

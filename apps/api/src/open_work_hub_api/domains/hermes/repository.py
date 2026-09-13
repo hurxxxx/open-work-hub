@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import HERMES_MODEL, HERMES_PROVIDER, get_settings
@@ -45,15 +45,18 @@ class HermesRunIdempotencyConflict(RuntimeError):
     pass
 
 
+MAX_RESULT_BYTES = 2_000_000
+
+
 def utcnow_naive() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def deterministic_profile_name(user_id: str) -> str:
+def deterministic_profile_name(user_id: str, route: str = "external") -> str:
     import hashlib
 
     digest = hashlib.sha256(f"{get_settings().environment}:{user_id}".encode()).hexdigest()[:32]
-    return f"owh-{digest}"
+    return f"owh-{digest}" if route == "external" else f"owh-{digest}-{route}"
 
 
 def _redact_event_value(value: Any, *, depth: int = 0) -> Any:
@@ -85,12 +88,35 @@ def sanitize_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
     sanitized = _redact_event_value(payload)
     if not isinstance(sanitized, dict):
         return {"value": sanitized}
+    # Token accounting is numeric telemetry, not a credential. Preserve only
+    # known counters; arbitrary token/key fields remain redacted.
+    usage = payload.get("usage")
+    if isinstance(usage, dict):
+        sanitized["usage"] = {
+            key: value
+            for key, value in usage.items()
+            if key
+            in {
+                "input_tokens",
+                "output_tokens",
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "cached_tokens",
+                "reasoning_tokens",
+                "cache_read_tokens",
+                "cache_write_tokens",
+            }
+            and type(value) is int
+            and 0 <= value < 2**63
+        }
     encoded = json.dumps(sanitized, ensure_ascii=False, default=str)
     if len(encoded.encode()) <= 65_536:
         return sanitized
     return {
         "event": str(payload.get("event") or "hermes.event")[:160],
         "run_id": str(payload.get("run_id") or "")[:80],
+        "usage": sanitized.get("usage", {}),
         "truncated": True,
     }
 
@@ -99,6 +125,7 @@ def get_or_create_profile_binding(
     db: Session,
     *,
     user: User,
+    route: str = "external",
 ) -> HermesProfileBinding:
     # Serialize the first binding creation for a user. Without this lock,
     # simultaneous status/session requests can both miss the unique row and
@@ -107,6 +134,7 @@ def get_or_create_profile_binding(
     binding = db.scalar(
         select(HermesProfileBinding).where(
             HermesProfileBinding.user_id == user.id,
+            HermesProfileBinding.route == route,
         )
     )
     if binding is not None:
@@ -114,7 +142,8 @@ def get_or_create_profile_binding(
     binding = HermesProfileBinding(
         id=str(uuid4()),
         user_id=user.id,
-        profile_name=deterministic_profile_name(user.id),
+        profile_name=deterministic_profile_name(user.id, route),
+        route=route,
         status="provisioning",
         provider=HERMES_PROVIDER,
         model=HERMES_MODEL,
@@ -203,14 +232,23 @@ class HermesRunRepository:
         workload_id: str | None = None,
         client_request_id: str | None = None,
         request_sha256: str | None = None,
+        owner_app_id: str = "chatbot",
+        runtime_options: dict[str, Any] | None = None,
+        output_schema: dict[str, Any] | None = None,
     ) -> HermesRunProjection:
-        # Serialize run admission per Hermes profile so the MCP tool scope can
-        # always be resolved to exactly one active Open Work Hub run.
+        # Serialize idempotency admission only. Execution scope is carried by
+        # the authenticated native run ID, so independent sessions can queue.
         self.db.execute(
             select(HermesProfileBinding.id)
             .where(HermesProfileBinding.id == binding.id)
             .with_for_update()
         ).scalar_one()
+        if session is not None:
+            self.db.execute(
+                select(HermesSessionBinding.id)
+                .where(HermesSessionBinding.id == session.id)
+                .with_for_update()
+            ).scalar_one()
         if client_request_id is not None:
             existing = self.db.scalar(
                 select(HermesRunProjection).where(
@@ -222,14 +260,6 @@ class HermesRunRepository:
                 if existing.request_sha256 == request_sha256:
                     return existing
                 raise HermesRunIdempotencyConflict(client_request_id)
-        active = self.db.scalar(
-            select(HermesRunProjection.id).where(
-                HermesRunProjection.profile_binding_id == binding.id,
-                HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES),
-            )
-        )
-        if active is not None:
-            raise HermesRunBusyError(binding.id)
         run_id = str(uuid4())
         run = HermesRunProjection(
             id=run_id,
@@ -238,6 +268,9 @@ class HermesRunRepository:
             user_id=binding.user_id,
             kind=kind,
             workload_id=workload_id,
+            owner_app_id=owner_app_id,
+            runtime_options=runtime_options or {},
+            output_schema=output_schema,
             client_request_id=client_request_id,
             request_sha256=request_sha256,
             status="pending",
@@ -281,7 +314,7 @@ class HermesRunRepository:
     def get(self, run_id: str, *, for_update: bool = False) -> HermesRunProjection | None:
         query = select(HermesRunProjection).where(HermesRunProjection.id == run_id)
         if for_update:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
         return self.db.scalar(query)
 
     def get_owned(
@@ -305,8 +338,13 @@ class HermesRunRepository:
         *,
         claim_token: str,
         lease_seconds: int,
+        max_concurrent_runs: int = 10,
     ) -> HermesExecutionClaim:
         now = utcnow_naive()
+        # A transaction lock serializes capacity decisions across all API and
+        # worker processes. The projections, not this lock, own durable state.
+        if self.db.get_bind().dialect.name == "postgresql":
+            self.db.execute(text("SELECT pg_advisory_xact_lock(hashtext('hermes_dispatch'))"))
         run = self.get(run_id, for_update=True)
         if run is None:
             raise HermesRunNotFoundError(run_id)
@@ -332,6 +370,37 @@ class HermesRunRepository:
                 },
             )
             return HermesExecutionClaim(False, "cancelled", "terminal")
+        if run.hermes_run_id is None and run.status == "pending":
+            if run.session_binding_id is not None:
+                predecessor = self.db.scalar(
+                    select(HermesRunProjection.id)
+                    .where(
+                        HermesRunProjection.session_binding_id == run.session_binding_id,
+                        HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES),
+                        HermesRunProjection.id != run.id,
+                        or_(
+                            HermesRunProjection.created_at < run.created_at,
+                            (HermesRunProjection.created_at == run.created_at)
+                            & (HermesRunProjection.id < run.id),
+                        ),
+                    )
+                    .limit(1)
+                )
+                if predecessor is not None:
+                    return HermesExecutionClaim(False, run.status, "session_busy")
+            running = (
+                self.db.scalar(
+                    select(func.count())
+                    .select_from(HermesRunProjection)
+                    .where(
+                        HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES - {"pending"}),
+                        HermesRunProjection.id != run.id,
+                    )
+                )
+                or 0
+            )
+            if running >= max_concurrent_runs:
+                return HermesExecutionClaim(False, run.status, "capacity")
         run.execution_claim_token = claim_token
         run.execution_claimed_at = now
         run.execution_claim_expires_at = now + timedelta(seconds=lease_seconds)
@@ -391,6 +460,16 @@ class HermesRunRepository:
         )
         sanitized = sanitize_event_payload(payload)
         event_type = str(sanitized.get("event") or "hermes.event")[:160]
+        projection_payload = dict(sanitized)
+        if event_type == "run.completed" and isinstance(payload.get("output"), str):
+            if len(payload["output"].encode()) > MAX_RESULT_BYTES:
+                event_type = "run.failed"
+                sanitized = {"event": event_type, "error_code": "hermes.output_too_large"}
+                projection_payload = sanitized
+            else:
+                # Event retention is bounded separately from the authoritative
+                # completed result. Never silently truncate a workload answer.
+                projection_payload["output"] = payload["output"]
         event = HermesRunEvent(
             id=str(uuid4()),
             run_id=run_id,
@@ -399,7 +478,7 @@ class HermesRunRepository:
             payload=sanitized,
         )
         self.db.add(event)
-        self._apply_event(run, event_type, sanitized, sequence=sequence)
+        self._apply_event(run, event_type, projection_payload, sequence=sequence)
         self.db.flush()
         return event
 
@@ -447,6 +526,29 @@ class HermesRunRepository:
             },
             claim_token=claim_token,
         )
+
+    def request_stop(self, run_id: str, *, user_id: str) -> HermesRunProjection:
+        run = self.get_owned(run_id, user_id=user_id, for_update=True)
+        if run is None:
+            raise HermesRunNotFoundError(run_id)
+        if run.status in TERMINAL_RUN_STATUSES:
+            return run
+        executing = run.hermes_run_id is not None or bool(
+            run.execution_claim_token
+            and (
+                run.execution_claim_expires_at is None
+                or run.execution_claim_expires_at > utcnow_naive()
+            )
+        )
+        self.append_event(
+            run.id,
+            {
+                "event": "run.stop_requested" if executing else "run.cancelled",
+                "status": "stopping" if executing else "cancelled",
+                "reason": "owner_requested",
+            },
+        )
+        return run
 
     def release_execution_claim(
         self,
@@ -560,10 +662,13 @@ class HermesRunRepository:
             run.current_activity = "Approval resolved; Hermes resumed."
             run.pending_approval = None
         elif event_type == "run.completed":
-            run.status = "completed"
-            run.stage = "run.completed"
+            valid = run.output_schema is None or run.output_payload is not None
+            run.status = "completed" if valid else "invalid_output"
+            run.stage = "run.completed" if valid else "run.invalid_output"
             run.progress_percent = 100
-            run.current_activity = "Completed."
+            run.current_activity = "Completed." if valid else "Structured result was not submitted."
+            if not valid:
+                run.error_code = "hermes.invalid_output"
             run.output_text = str(payload.get("output") or "")
             usage = payload.get("usage")
             run.usage = usage if isinstance(usage, dict) else {}
@@ -631,6 +736,21 @@ class HermesRunRepository:
 class HermesDispatchRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def defer(self, run_id: str, *, reason: str) -> None:
+        self.db.execute(
+            update(HermesDispatchOutbox)
+            .where(HermesDispatchOutbox.run_id == run_id)
+            .values(
+                status="pending",
+                available_at=utcnow_naive() + timedelta(seconds=30),
+                claim_token=None,
+                claim_expires_at=None,
+                dispatched_at=None,
+                celery_task_id=None,
+                last_error_code=f"dispatch.{reason}",
+            )
+        )
 
     def claim_due(
         self,

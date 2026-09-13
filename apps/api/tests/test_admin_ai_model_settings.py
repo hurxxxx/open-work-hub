@@ -117,11 +117,10 @@ def test_admin_ai_model_settings_projects_registry_and_default_catalog(
         for item in payload["workloads"]
         if item["workload_id"] == "bento.generate_presentation"
     )
-    assert bento_generate["default_runtime_adapter"] == "fixed_bento_pipeline"
-    assert bento_generate["effective_runtime_adapter"] == "fixed_bento_pipeline"
+    assert bento_generate["default_runtime_adapter"] == "hermes"
+    assert bento_generate["effective_runtime_adapter"] == "hermes"
     assert [item["adapter_id"] for item in bento_generate["runtime_adapters"]] == [
-        "fixed_bento_pipeline",
-        "codex_sdk",
+        "hermes",
     ]
 
     with get_session_factory()() as db:
