@@ -152,8 +152,19 @@ def test_completion_reloads_structured_submission_from_another_transaction(
 
 
 @pytest.mark.anyio
-async def test_model_snapshot_has_no_secret_and_auxiliary_follows_main():
-    policy = HermesModelPolicy("local", "openai", "local-test", "http://model:8000/v1", "", 8192)
+@pytest.mark.parametrize("temperature", [None, 0, 0.7])
+async def test_model_snapshot_has_no_secret_and_auxiliary_follows_main(temperature):
+    from dataclasses import replace
+
+    policy = HermesModelPolicy(
+        "local",
+        "openai",
+        "local-test",
+        "http://model:8000/v1",
+        "",
+        8192,
+        temperature=temperature,
+    )
     configs = []
 
     class Client:
@@ -171,6 +182,15 @@ async def test_model_snapshot_has_no_secret_and_auxiliary_follows_main():
         for task in config["auxiliary"].values()
     )
     assert config["providers"][policy.key]["max_output_tokens"] == 8192
+    provider = config["providers"][policy.key]
+    if temperature is None:
+        assert "extra_body" not in provider
+        assert "temperature" not in policy.run_options()["owh_policy"]
+    else:
+        assert provider["extra_body"] == {"temperature": temperature}
+        assert policy.run_options()["owh_policy"]["temperature"] == temperature
+        assert policy.key != replace(policy, temperature=None).key
+        assert policy.key != replace(policy, temperature=temperature + 0.1).key
     assert config["delegation"]["provider"] == "auto"
     assert policy.run_options()["provider"] == f"custom:{policy.key}"
     assert "api_key" not in policy.run_options()
@@ -199,9 +219,12 @@ def test_workspace_paths_reject_escape_and_control_characters(path):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("temperature", [None, 0, 0.7])
+@pytest.mark.parametrize("mode", ["sync", "stream"])
 async def test_workload_uses_durable_dispatch_and_validated_native_submission(
-    application_postgres_dsn, monkeypatch
+    application_postgres_dsn, monkeypatch, temperature, mode
 ):
+    import asyncio
     import json
     from pydantic import SecretStr
     from sqlalchemy import select
@@ -242,6 +265,7 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
         async def ensure(db, **kwargs):
             assert kwargs["user"].id == owner_id
             assert kwargs["model_policy"].route == "local"
+            assert kwargs["model_policy"].temperature == temperature
             return db.get(HermesProfileBinding, binding_id)
 
         monkeypatch.setattr(workloads, "ensure_profile_binding", ensure)
@@ -255,6 +279,7 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
             async def create_run(self, profile, **kwargs):
                 assert profile == profile_name
                 assert kwargs["runtime_options"]["owh_policy"]["model"] == "test-model"
+                assert kwargs["runtime_options"]["owh_policy"].get("temperature") == temperature
                 assert "owh_submit_result" in kwargs["instructions"]
                 attempts.append(kwargs["idempotency_key"])
                 return {"run_id": "run_native_fixture", "status": "running"}
@@ -316,10 +341,10 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
         resolved = ResolvedLlmExecution(
             "local", PolicyDecision("local_only", "local"), config, "test-model", 4096, "none"
         )
-        result = await workloads.run_workload(
-            context,
-            resolved,
-            {"messages": [{"role": "user", "content": "Return a validated value"}]},
+        payload = {"messages": [{"role": "user", "content": "Return a validated value"}]}
+        if temperature is not None:
+            payload["temperature"] = temperature
+        options = dict(
             timeout_seconds=10,
             output_schema={
                 "type": "object",
@@ -328,6 +353,16 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
                 "additionalProperties": False,
             },
         )
+        if mode == "sync":
+            result = await asyncio.to_thread(
+                workloads.complete_workload, context, resolved, payload, **options
+            )
+        else:
+            chunks = [
+                chunk
+                async for chunk in workloads.stream_workload(context, resolved, payload, **options)
+            ]
+            result = {"structured_output": chunks[-1].structured_output, "usage": chunks[-2].usage}
         assert result["structured_output"] == {"value": 42}
         assert result["usage"]["total_tokens"] == 10
         assert len(attempts) == 1

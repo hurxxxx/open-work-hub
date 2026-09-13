@@ -73,6 +73,7 @@ async def run_workload(
         execution.config,
         model=execution.chosen_model,
         max_tokens=execution.resolved_max_tokens,
+        temperature=payload.get("temperature"),
     )
     input_text, instructions, history = _messages(payload)
     if output_schema is not None:

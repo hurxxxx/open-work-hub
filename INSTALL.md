@@ -519,7 +519,7 @@ free -h
 | uv와 앱용 Python | [uv 설치 안내](https://docs.astral.sh/uv/getting-started/installation/)와 [Python 설치 안내](https://docs.astral.sh/uv/guides/install-python/)를 따른다. Python 범위는 [API](apps/api/pyproject.toml)·[Worker](apps/worker/pyproject.toml)의 `requires-python`이 기준이다. |
 | agent-browser | 최초 셋업과 에이전트의 화면 확인에 사용한다. CLI가 없을 때 `npm install --global agent-browser`로 설치하고 `agent-browser --version`으로 확인한다. 브라우저 준비와 검사는 4.1절을 따른다. |
 | PostgreSQL·Redis | 4절에 따라 호스트에 네이티브로 설치하고 systemd 서비스로 관리한다. |
-| Docker Engine와 Compose 플러그인 (선택) | Docker 기반 추가 서비스나 기존 Compose 방식을 사용할 때만 [Docker 공식 설치 안내](https://docs.docker.com/engine/install/)를 따른다. 네이티브 최소 구성에는 필요하지 않다. |
+| Docker Engine와 Compose·Buildx 플러그인 (선택) | Docker 기반 추가 서비스나 기존 Compose 방식을 사용할 때만 [Docker 공식 설치 안내](https://docs.docker.com/engine/install/)를 따른다. CI 검증 이미지 빌드는 Buildx도 필요하다. 네이티브 최소 구성에는 필요하지 않다. |
 
 Node/npm 설치 후 pnpm이 없거나 버전이 다르면 현재 Node 설치의 패키지 관리 방식에 맞춰
 아래의 프로젝트 지정 버전을 설치한다. 프로젝트 의존성 설치는 일반 개발 사용자로 진행한다.
@@ -544,6 +544,7 @@ Docker를 선택한 경우에만 다음 명령으로 데몬 연결과 사용 권
 
 ```bash
 docker compose version
+docker buildx version
 docker info --format '{{.ServerVersion}}'
 ```
 
