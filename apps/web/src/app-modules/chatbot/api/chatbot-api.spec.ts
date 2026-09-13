@@ -275,6 +275,97 @@ describe('Hermes chat session creation', () => {
     expect(hermesMocks.createHermesSession).not.toHaveBeenCalled();
   });
 
+  it.each(['running', 'completed', 'awaiting_approval'])(
+    'skips resolved approvals during recovery when the run is %s',
+    async (status) => {
+      hermesMocks.getHermesRun.mockResolvedValue({
+        id: 'run-1',
+        status,
+        pending_approval:
+          status === 'awaiting_approval' ? { request_id: 'current' } : null,
+      });
+      const events = [
+        { event: 'approval.request', request_id: 'resolved', tool: 'terminal' },
+        { event: 'approval.responded', request_id: 'resolved' },
+        { event: 'message.delta', delta: 'continued after approval' },
+        status === 'awaiting_approval'
+          ? {
+              event: 'approval.request',
+              request_id: 'current',
+              tool: 'terminal',
+            }
+          : { event: 'run.completed', output: 'continued after approval' },
+      ];
+      hermesMocks.streamHermesRunEvents.mockResolvedValue(
+        new Response(
+          events
+            .map(
+              (event, i) =>
+                `id: ${i + 1}\nevent: ${event.event}\ndata: ${JSON.stringify(event)}\n\n`,
+            )
+            .join(''),
+        ),
+      );
+      const response = await streamAiExistingRun(
+        'token',
+        'run-1',
+        'session-1',
+        new AbortController().signal,
+      );
+      const frames = (await response.text())
+        .trim()
+        .split('\n\n')
+        .map((frame) => JSON.parse(frame.slice('data: '.length)));
+      expect(frames.filter((frame) => frame.type === 'content_delta')).toEqual([
+        expect.objectContaining({ data: { text: 'continued after approval' } }),
+      ]);
+      const approvals = frames.filter(
+        (frame) => frame.type === 'approval_required',
+      );
+      expect(approvals).toHaveLength(status === 'awaiting_approval' ? 1 : 0);
+      if (status === 'awaiting_approval') {
+        expect(approvals[0].data.approval_id).toBe('hermes:run-1:4:current');
+      }
+      expect(frames.at(-1).data.finish_reason).toBe(
+        status === 'awaiting_approval' ? 'awaiting_approval' : 'stop',
+      );
+      expect(hermesMocks.createHermesRun).not.toHaveBeenCalled();
+    },
+  );
+
+  it('retries an approval event when its authoritative state could not be read', async () => {
+    vi.useFakeTimers();
+    hermesMocks.getHermesRun
+      .mockResolvedValueOnce({ id: 'run-1', status: 'running' })
+      .mockRejectedValueOnce(new HermesAgentApiError(503, 'unavailable'))
+      .mockResolvedValue({
+        id: 'run-1',
+        status: 'awaiting_approval',
+        pending_approval: { request_id: 'current' },
+      });
+    hermesMocks.streamHermesRunEvents.mockImplementation(
+      async () =>
+        new Response(
+          'id: 1\nevent: approval.request\ndata: {"event":"approval.request","request_id":"current","tool":"terminal"}\n\n',
+        ),
+    );
+    const response = await streamAiExistingRun(
+      'token',
+      'run-1',
+      'session-1',
+      new AbortController().signal,
+    );
+    const bodyPromise = response.text();
+    await vi.advanceTimersByTimeAsync(1000);
+    const body = await bodyPromise;
+    expect(hermesMocks.streamHermesRunEvents).toHaveBeenCalledTimes(2);
+    expect(
+      hermesMocks.streamHermesRunEvents.mock.calls[1]?.[2].afterSequence,
+    ).toBe(0);
+    expect(body).toContain('hermes:run-1:1:current');
+    expect(body).toContain('"finish_reason":"awaiting_approval"');
+  });
+
   it('preserves the name, duration and failure when only a native completion arrives', async () => {
     const events = [
       { event: 'tool.started', tool: 'read_file', timestamp: 1_789_257_600 },
