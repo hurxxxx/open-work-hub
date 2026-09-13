@@ -625,7 +625,9 @@ def test_run_scope_normalizes_app_ids_and_mcp_filters_with_it(monkeypatch) -> No
     monkeypatch.setattr(mcp_router, "can_use_app", lambda *_args, **_kwargs: True)
     db = SimpleNamespace(
         scalar=lambda _query: SimpleNamespace(
-            allowed_app_ids=body.allowed_app_ids, owner_app_id="chatbot"
+            allowed_app_ids=body.allowed_app_ids,
+            owner_app_id="chatbot",
+            session_binding_id=None,
         )
     )
     binding = SimpleNamespace(id="binding-1")
@@ -797,6 +799,7 @@ async def test_approval_is_committed_before_hermes_resumes(monkeypatch) -> None:
         id="run-1",
         hermes_run_id="hermes-run-1",
         profile_binding_id="profile-1",
+        owner_app_id="chatbot",
     )
     approval = SimpleNamespace(
         id="approval-1",
@@ -849,6 +852,7 @@ async def test_approval_is_committed_before_hermes_resumes(monkeypatch) -> None:
         return SimpleNamespace(profile_name="profile-1")
 
     monkeypatch.setattr(hermes_router, "HermesRunRepository", lambda _db: FakeRepository())
+    monkeypatch.setattr(hermes_router, "can_use_app", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         hermes_router,
         "_bound_profile",
@@ -876,7 +880,12 @@ async def test_approval_is_committed_before_hermes_resumes(monkeypatch) -> None:
 
 
 async def test_failed_hermes_resume_restores_unconsumed_approval(monkeypatch) -> None:
-    run = SimpleNamespace(id="run-1", hermes_run_id="hermes-run-1", profile_binding_id="profile-1")
+    run = SimpleNamespace(
+        id="run-1",
+        hermes_run_id="hermes-run-1",
+        profile_binding_id="profile-1",
+        owner_app_id="chatbot",
+    )
     approval = SimpleNamespace(
         id="approval-1",
         status="pending",
@@ -919,6 +928,7 @@ async def test_failed_hermes_resume_restores_unconsumed_approval(monkeypatch) ->
         return SimpleNamespace(profile_name="profile-1")
 
     monkeypatch.setattr(hermes_router, "HermesRunRepository", lambda _db: FakeRepository())
+    monkeypatch.setattr(hermes_router, "can_use_app", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         hermes_router,
         "_bound_profile",

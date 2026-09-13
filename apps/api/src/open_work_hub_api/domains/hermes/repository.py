@@ -260,6 +260,8 @@ class HermesRunRepository:
                 if existing.request_sha256 == request_sha256:
                     return existing
                 raise HermesRunIdempotencyConflict(client_request_id)
+        if session is not None:
+            session.updated_at = utcnow_naive()
         run_id = str(uuid4())
         run = HermesRunProjection(
             id=run_id,
@@ -400,6 +402,19 @@ class HermesRunRepository:
                 or 0
             )
             if running >= max_concurrent_runs:
+                if run.kind == "workload" and run.runtime_options.get("parent_run_id"):
+                    # The parent holds a slot while waiting for this tool.
+                    # Fail atomically instead of queuing a child behind its
+                    # parent; outbox recovery must not generate a late result.
+                    self.append_event(
+                        run.id,
+                        {
+                            "event": "run.failed",
+                            "error_code": "hermes.nested_capacity",
+                            "error": "No execution slot is available for nested generation.",
+                        },
+                    )
+                    return HermesExecutionClaim(False, "failed", "nested_capacity")
                 return HermesExecutionClaim(False, run.status, "capacity")
         run.execution_claim_token = claim_token
         run.execution_claimed_at = now

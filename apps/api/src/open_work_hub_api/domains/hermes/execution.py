@@ -304,7 +304,7 @@ async def execute_hermes_run(
         )
         db.commit()
         return "incomplete"
-    except Exception:
+    except (Exception, asyncio.CancelledError):
         db.rollback()
         current = repository.get(run_id)
         if current is not None and current.execution_claim_token == claim_token:

@@ -20,7 +20,6 @@ from open_work_hub_api.domains.auth.app_access_models import (
 from open_work_hub_api.domains.auth.models import CompanyAppControl, User, UserSystemRole
 from open_work_hub_api.domains.groups.models import Group, GroupMember
 from open_work_hub_api.domains.meeting.models import Meeting, MeetingAttendee
-from open_work_hub_api.domains.organization.models import OrganizationUnit
 
 
 @pytest.fixture
@@ -33,7 +32,6 @@ def company_db():
             for model in (
                 User,
                 UserSystemRole,
-                OrganizationUnit,
                 CompanyAppControl,
                 AppAccessPolicy,
                 AppGroupGrant,
@@ -55,7 +53,7 @@ def company_db():
                 password_hash="unused-test-hash",
             )
         )
-        db.add(Group(id="group-1", name="Allowed workers", kind="manual"))
+        db.add(Group(id="group-1", name="Allowed workers", source="local"))
         db.add(GroupMember(group_id="group-1", user_id="user-1"))
         for app_id in ("recording", "meeting", "docs"):
             db.add(CompanyAppControl(app_id=app_id, enabled=True))

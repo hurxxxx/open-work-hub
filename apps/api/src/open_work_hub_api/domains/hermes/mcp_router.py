@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from itertools import islice
+from collections.abc import AsyncIterator, Callable
+from functools import partial
+
+from anyio import CapacityLimiter, CancelScope, to_thread
+from anyio.lowlevel import RunVar
 
 import hashlib
 import hmac
@@ -12,12 +17,11 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from starlette.concurrency import run_in_threadpool
 from jsonschema import Draft202012Validator
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.core.db import get_db_session
+from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.principal import user_principal
 from open_work_hub_api.core.settings import HERMES_IMAGE, get_settings
 from open_work_hub_api.domains.ai.mcp import AiMcpClient
@@ -36,7 +40,13 @@ from open_work_hub_api.domains.hermes.repository import (
     MAX_RESULT_BYTES,
     HermesRunRepository,
 )
-from open_work_hub_api.domains.hermes.files import MAX_FILE_BYTES, list_files, read_file, save_file
+from open_work_hub_api.domains.hermes.files import (
+    MAX_FILE_BYTES,
+    list_files,
+    read_file,
+    save_file,
+    require_active_file_run,
+)
 from open_work_hub_api.domains.hermes.schemas import HermesFileResponse
 from open_work_hub_api.domains.hermes.research_settings import get_research_settings
 from open_work_hub_api.domains.hermes.research_sources import disabled_research_source_domains
@@ -47,6 +57,34 @@ from open_work_hub_api.domains.hermes.service import (
 
 router = APIRouter(prefix="/internal/hermes/mcp", tags=["hermes-mcp"])
 _APPROVAL_EVIDENCE_MAX_AGE = timedelta(minutes=5)
+
+
+_CONTROL_THREADS: RunVar[CapacityLimiter] = RunVar("hermes_callback_control_threads")
+_OPERATION_THREADS: RunVar[CapacityLimiter] = RunVar("hermes_callback_operation_threads")
+
+
+async def _run_callback(function, *args, operation: bool = False, **kwargs):
+    # Public synchronous callers can occupy the default ASGI pool while
+    # waiting for Hermes. Its callbacks must never borrow those same tokens.
+    # Long tools can themselves wait for nested results, so reserve separate
+    # capacity for control/result requests as well. RunVar follows AnyIO's
+    # event-loop lifecycle; this is only local resource admission, not run state.
+    variable = _OPERATION_THREADS if operation else _CONTROL_THREADS
+    try:
+        limiter = variable.get()
+    except LookupError:
+        limiter = CapacityLimiter(16 if operation else 8)
+        variable.set(limiter)
+    return await to_thread.run_sync(partial(function, *args, **kwargs), limiter=limiter)
+
+
+async def _callback_db_session() -> AsyncIterator[Session]:
+    db = get_session_factory()()
+    try:
+        yield db
+    finally:
+        with CancelScope(shield=True):
+            await _run_callback(db.close)
 
 
 def _rpc_error(request_id: Any, code: int, message: str, data: Any = None) -> dict[str, Any]:
@@ -176,15 +214,21 @@ def _resolve_mcp_identity(
         supplied = authorization[7:].strip()
     if not expected or not supplied or not hmac.compare_digest(expected, supplied):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return _current_mcp_identity(db, profile_name=profile_name)
+
+
+def _current_mcp_identity(db: Session, *, profile_name: str) -> tuple[HermesProfileBinding, User]:
     binding = db.scalar(
-        select(HermesProfileBinding).where(
+        select(HermesProfileBinding)
+        .where(
             HermesProfileBinding.profile_name == profile_name,
             HermesProfileBinding.status == "active",
         )
+        .execution_options(populate_existing=True)
     )
     if binding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    user = db.get(User, binding.user_id)
+    user = db.get(User, binding.user_id, populate_existing=True)
     if user is None or user.status != "active" or user.login_blocked:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     return binding, user
@@ -205,11 +249,14 @@ def _available_tools(
         )
     active_run = (
         db.scalar(
-            select(HermesRunProjection).where(
+            select(HermesRunProjection)
+            .where(
                 HermesRunProjection.profile_binding_id == binding.id,
+                HermesRunProjection.user_id == user.id,
                 HermesRunProjection.hermes_run_id == hermes_run_id,
                 HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES - {"stopping"}),
             )
+            .execution_options(populate_existing=True)
         )
         if hermes_run_id
         else None
@@ -227,6 +274,18 @@ def _available_tools(
         app_id=active_run.owner_app_id,
     ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    if active_run is not None and active_run.session_binding_id is not None:
+        if (
+            db.scalar(
+                select(HermesSessionBinding.id).where(
+                    HermesSessionBinding.id == active_run.session_binding_id,
+                    HermesSessionBinding.user_id == user.id,
+                    HermesSessionBinding.status != "deleted",
+                )
+            )
+            is None
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     principal = user_principal(
         user_id=user.id,
         source="hermes-mcp",
@@ -244,13 +303,76 @@ def _available_tools(
     )
 
 
+def _handle_file_request(
+    db: Session,
+    *,
+    run_id: str,
+    user_id: str,
+    request_id: Any,
+    method: str,
+    params: dict[str, Any],
+) -> JSONResponse:
+    # Keep session queries, object I/O, base64 and serialization on the same
+    # worker thread. The request never uses this Session concurrently.
+    try:
+        run = require_active_file_run(db, run_id=run_id, user_id=user_id)
+    except ValueError:
+        return JSONResponse(_rpc_error(request_id, -32602, "File execution is no longer available"))
+    session = db.get(HermesSessionBinding, run.session_binding_id, populate_existing=True)
+    if session is None or run.kind != "interactive" or session.user_id != user_id:
+        return JSONResponse(_rpc_error(request_id, -32602, "Interactive session files required"))
+    files = list_files(db, session_id=session.id)
+    if method == "owh/files/list":
+        return JSONResponse(
+            _rpc_result(
+                request_id,
+                {
+                    "files": [
+                        HermesFileResponse.model_validate(row).model_dump(mode="json")
+                        for row in files
+                    ],
+                },
+            )
+        )
+    if method == "owh/files/read":
+        row = next((row for row in files if row.id == params.get("id")), None)
+        if row is None:
+            return JSONResponse(_rpc_error(request_id, -32602, "File is not available"))
+        data = read_file(row)
+        try:
+            require_active_file_run(db, run_id=run_id, user_id=user_id, session_id=session.id)
+        except ValueError:
+            return JSONResponse(
+                _rpc_error(request_id, -32602, "File execution is no longer available")
+            )
+        return JSONResponse(_rpc_result(request_id, {"data": base64.b64encode(data).decode()}))
+    try:
+        encoded = params.get("data")
+        if not isinstance(encoded, str) or len(encoded) > MAX_FILE_BYTES * 4 // 3 + 4:
+            raise ValueError("Invalid file data")
+        row = save_file(
+            db,
+            session=session,
+            path=params["path"],
+            data=base64.b64decode(encoded, validate=True),
+            execution_run_id=run_id,
+        )
+    except (ValueError, KeyError, TypeError):
+        return JSONResponse(_rpc_error(request_id, -32602, "File path, data or size is invalid"))
+    return JSONResponse(
+        _rpc_result(request_id, HermesFileResponse.model_validate(row).model_dump(mode="json"))
+    )
+
+
 @router.get("")
-def reject_standalone_sse(
+async def reject_standalone_sse(
     profile: str = Query(min_length=1, max_length=63),
     authorization: str | None = Header(default=None),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(_callback_db_session),
 ) -> Response:
-    _resolve_mcp_identity(db, profile_name=profile, authorization=authorization)
+    await _run_callback(
+        _resolve_mcp_identity, db, profile_name=profile, authorization=authorization
+    )
     return Response(status_code=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
@@ -261,9 +383,10 @@ async def handle_mcp_request(
     authorization: str | None = Header(default=None),
     mcp_session_id: str | None = Header(default=None, alias="Mcp-Session-Id"),
     hermes_run_id: str | None = Header(default=None, alias="X-Hermes-Run-Id"),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(_callback_db_session),
 ) -> Response:
-    binding, user = _resolve_mcp_identity(
+    binding, user = await _run_callback(
+        _resolve_mcp_identity,
         db,
         profile_name=profile,
         authorization=authorization,
@@ -276,9 +399,34 @@ async def handle_mcp_request(
                 return JSONResponse(
                     _rpc_error(None, -32600, "Request exceeds size limit"), status_code=413
                 )
-        payload = json.loads(raw)
+        payload = await _run_callback(json.loads, raw)
     except Exception:
         return JSONResponse(_rpc_error(None, -32700, "Parse error"), status_code=400)
+    prepared = await _run_callback(
+        _prepare_mcp_response,
+        db,
+        binding=binding,
+        user=user,
+        payload=payload,
+        profile=profile,
+        mcp_session_id=mcp_session_id,
+        hermes_run_id=hermes_run_id,
+    )
+    if isinstance(prepared, Response):
+        return prepared
+    return await _run_callback(prepared, operation=True)
+
+
+def _prepare_mcp_response(
+    db: Session,
+    *,
+    binding: HermesProfileBinding,
+    user: User,
+    payload: Any,
+    profile: str,
+    mcp_session_id: str | None,
+    hermes_run_id: str | None,
+) -> Response | Callable[[], Response]:
     if not isinstance(payload, dict):
         return JSONResponse(_rpc_error(None, -32600, "Invalid Request"), status_code=400)
     request_id = payload.get("id")
@@ -376,53 +524,14 @@ async def handle_mcp_request(
                 )
             )
         if method.startswith("owh/files/"):
-            session = (
-                db.get(HermesSessionBinding, run.session_binding_id)
-                if run.session_binding_id
-                else None
-            )
-            if session is None or run.kind != "interactive" or session.user_id != user.id:
-                return JSONResponse(
-                    _rpc_error(request_id, -32602, "Interactive session files required")
-                )
-            files = list_files(db, session_id=session.id)
-            if method == "owh/files/list":
-                return JSONResponse(
-                    _rpc_result(
-                        request_id,
-                        {
-                            "files": [
-                                HermesFileResponse.model_validate(row).model_dump(mode="json")
-                                for row in files
-                            ],
-                        },
-                    )
-                )
-            if method == "owh/files/read":
-                row = next((row for row in files if row.id == params.get("id")), None)
-                if row is None:
-                    return JSONResponse(_rpc_error(request_id, -32602, "File is not available"))
-                return JSONResponse(
-                    _rpc_result(request_id, {"data": base64.b64encode(read_file(row)).decode()})
-                )
-            try:
-                encoded = params.get("data")
-                if not isinstance(encoded, str) or len(encoded) > MAX_FILE_BYTES * 4 // 3 + 4:
-                    raise ValueError("Invalid file data")
-                row = save_file(
-                    db,
-                    session=session,
-                    path=params["path"],
-                    data=base64.b64decode(encoded, validate=True),
-                )
-            except (ValueError, KeyError, TypeError):
-                return JSONResponse(
-                    _rpc_error(request_id, -32602, "File path, data or size is invalid")
-                )
-            return JSONResponse(
-                _rpc_result(
-                    request_id, HermesFileResponse.model_validate(row).model_dump(mode="json")
-                )
+            return partial(
+                _handle_file_request,
+                db,
+                run_id=run.id,
+                user_id=user.id,
+                request_id=request_id,
+                method=method,
+                params=params,
             )
         if run.output_schema is None:
             return JSONResponse(
@@ -492,6 +601,33 @@ async def handle_mcp_request(
             _rpc_error(request_id, -32602, "Invalid tool call parameters"),
             status_code=400,
         )
+    return partial(
+        _execute_mcp_tool,
+        db,
+        profile=profile,
+        binding_id=binding.id,
+        user_id=user.id,
+        hermes_run_id=hermes_run_id,
+        tool_name=tool_name,
+        arguments=arguments,
+        request_id=request_id,
+    )
+
+
+def _execute_mcp_tool(
+    db: Session,
+    *,
+    profile: str,
+    binding_id: str,
+    user_id: str,
+    hermes_run_id: str | None,
+    tool_name: str,
+    arguments: dict[str, Any],
+    request_id: Any,
+) -> Response:
+    binding, user = _current_mcp_identity(db, profile_name=profile)
+    if binding.id != binding_id or user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     principal, tools, active_run = _available_tools(
         db,
         binding=binding,
@@ -540,8 +676,7 @@ async def handle_mcp_request(
                 )
             )
     try:
-        result = await run_in_threadpool(
-            AiMcpClient().call_tool,
+        result = AiMcpClient().call_tool(
             db,
             principal=principal,
             user=user,

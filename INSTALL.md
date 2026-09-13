@@ -413,6 +413,7 @@ Runner 업데이트 후에는 [네트워크·테스트 DB 재검사와 복구](d
 Docker 작업 안의 `127.0.0.1`은 호스트 DB 주소가 아니므로 Runner의 실제 네트워크에서 접속 가능한 주소를 사용한다.
 CI 서버와 검증 이미지 클라이언트의 메이저 버전은 프로젝트 DB와 맞춘다. PostgreSQL 17 같은 특정 메이저 버전을 요구하지 않는다.
 같은 비운영 PostgreSQL 인스턴스에 별도 CI DB·계정을 둘 수 있으며, CI 계정은 개발 업무 DB를 소유하거나 접근하지 못하게 한다. 별도 CI 클러스터가 필요하면 같은 메이저 버전으로 만들고 별도 데이터 디렉터리·포트·계정을 사용한다.
+전용 CI 클러스터는 DB 관리자가 `template1`에 pgvector 확장을 먼저 설치하고, CI 계정으로 만든 임시 DB가 이를 상속하는지 확인한다. 원격 테스트 계정에 superuser를 부여하지 않는다. 명령과 공유 클러스터 제한은 [CI DB 준비 계약](docs/domains/release/README.md#validation-image-platform-and-database)을 따른다.
 릴리스 CI는 실제 DB 서버와 이미지의 `pg_dump`·`pg_restore`·`psql` 버전이 일치하는지 테스트 시작 전에 검사한다. 불일치 시 DB 연결 대상과 [검증 이미지 구성](docs/domains/release/README.md#validation-image-platform-and-database)을 바로잡고 재실행한다.
 Docker 전용 네트워크로 연결할 때는 해당 인터페이스와 CIDR에만 DB 수신·`pg_hba.conf` 접근을 허용하고,
 부팅 시 네트워크를 만드는 Docker 서비스가 DB보다 먼저 준비되도록 systemd 의존성을 설정한다.
@@ -518,7 +519,7 @@ free -h
 | uv와 앱용 Python | [uv 설치 안내](https://docs.astral.sh/uv/getting-started/installation/)와 [Python 설치 안내](https://docs.astral.sh/uv/guides/install-python/)를 따른다. Python 범위는 [API](apps/api/pyproject.toml)·[Worker](apps/worker/pyproject.toml)의 `requires-python`이 기준이다. |
 | agent-browser | 최초 셋업과 에이전트의 화면 확인에 사용한다. CLI가 없을 때 `npm install --global agent-browser`로 설치하고 `agent-browser --version`으로 확인한다. 브라우저 준비와 검사는 4.1절을 따른다. |
 | PostgreSQL·Redis | 4절에 따라 호스트에 네이티브로 설치하고 systemd 서비스로 관리한다. |
-| Docker Engine와 Compose 플러그인 (선택) | Docker 기반 추가 서비스나 기존 Compose 방식을 사용할 때만 [Docker 공식 설치 안내](https://docs.docker.com/engine/install/)를 따른다. 네이티브 최소 구성에는 필요하지 않다. |
+| Docker Engine와 Compose·Buildx 플러그인 (선택) | Docker 기반 추가 서비스나 기존 Compose 방식을 사용할 때만 [Docker 공식 설치 안내](https://docs.docker.com/engine/install/)를 따른다. CI 검증 이미지 빌드는 Buildx도 필요하다. 네이티브 최소 구성에는 필요하지 않다. |
 
 Node/npm 설치 후 pnpm이 없거나 버전이 다르면 현재 Node 설치의 패키지 관리 방식에 맞춰
 아래의 프로젝트 지정 버전을 설치한다. 프로젝트 의존성 설치는 일반 개발 사용자로 진행한다.
@@ -543,6 +544,7 @@ Docker를 선택한 경우에만 다음 명령으로 데몬 연결과 사용 권
 
 ```bash
 docker compose version
+docker buildx version
 docker info --format '{{.ServerVersion}}'
 ```
 
