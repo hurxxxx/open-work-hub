@@ -39,6 +39,16 @@ class HermesModelPolicy:
     extra_headers: dict[str, str] = field(default_factory=dict, repr=False)
     temperature: float | None = None
 
+    def __post_init__(self) -> None:
+        # v2026.8.31 only consumes provider extra_body on its OpenAI wire.
+        # Do not snapshot a sampling setting the Anthropic transport drops.
+        if self.api_mode == "anthropic_messages" and self.temperature is not None:
+            raise LlmProviderError(
+                "The pinned Hermes Anthropic transport does not support explicit temperature.",
+                pool=self.route,
+                provider=self.provider,
+            )
+
     @classmethod
     def from_pool(
         cls,
