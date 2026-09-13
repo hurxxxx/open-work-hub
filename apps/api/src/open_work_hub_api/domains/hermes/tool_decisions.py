@@ -7,6 +7,7 @@ action via owh_submit_result. This module never dispatches application tools.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 from uuid import uuid4
@@ -43,6 +44,14 @@ def prepare_tool_decision(
         names.add(name)
         parameters = function.get("parameters", {"type": "object"})
         Draft202012Validator.check_schema(parameters)
+        if not isinstance(parameters, dict):
+            raise LlmProviderError("Application tool parameters require an object schema.")
+        # Each function's local $defs/$ref belongs to that argument schema,
+        # not to the enclosing next-action schema.
+        parameters = {
+            **parameters,
+            "$id": "urn:owh:application-tool:" + hashlib.sha256(name.encode()).hexdigest(),
+        }
         if selected is not None and name != selected:
             continue
         calls.append(

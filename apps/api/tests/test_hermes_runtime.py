@@ -563,6 +563,20 @@ def test_application_action_schema_enforces_tool_choice_arguments_and_parallel_l
     assert decision_message({"content": "final"}, schema) == ({"content": "final"}, "stop")
     with pytest.raises(ValidationError):
         decision_message({"tool_calls": [call]}, schema)
+    payload["tool_choice"] = "auto"
+    payload["tools"][0]["function"]["parameters"] = {
+        "$defs": {"arg": {"type": "integer"}},
+        "type": "object",
+        "properties": {"id": {"$ref": "#/$defs/arg"}},
+        "required": ["id"],
+    }
+    _, schema = prepare_tool_decision(payload)
+    message, finish = decision_message(
+        {"tool_calls": [{"name": "first", "arguments": {"id": 1}}]}, schema
+    )
+    assert finish == "tool_calls" and message["tool_calls"][0]["function"]["name"] == "first"
+    with pytest.raises(ValidationError):
+        decision_message({"tool_calls": [{"name": "first", "arguments": {"id": "wrong"}}]}, schema)
     payload["tool_choice"] = {"type": "function", "function": {"name": "unavailable"}}
     with pytest.raises(LlmProviderError, match="unavailable"):
         prepare_tool_decision(payload)
