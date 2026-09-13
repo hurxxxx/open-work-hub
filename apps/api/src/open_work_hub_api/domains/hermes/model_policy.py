@@ -12,7 +12,10 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.core.llm import LlmPoolConfig
 from open_work_hub_api.core.llm_errors import LlmProviderError
 from open_work_hub_api.core.llm_provider_registry import llm_provider_descriptor
-from open_work_hub_api.domains.hermes.client import HermesManagementClient
+from open_work_hub_api.domains.hermes.client import (
+    HermesManagementClient,
+    managed_compression_policy,
+)
 
 
 def resolve_model_policy(db: Session, *, workload_id: str = "chatbot") -> "HermesModelPolicy":
@@ -159,6 +162,9 @@ async def synchronize_model_policy(
             },
             "fallback_providers": [],
             "fallback_model": None,
+            # Fresh profiles do not inherit bootstrap's compression config.
+            # Reapply it before admission, including for existing/job profiles.
+            "compression": managed_compression_policy(),
             "auxiliary": {
                 task: {
                     "provider": "main",

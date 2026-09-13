@@ -14,7 +14,7 @@ This is the single owner for Hermes installation, image/configuration, profiles,
 - Before admission, the management API installs an immutable named custom provider and a profile-local credential env key. The opaque provider key changes on policy or credential rotation. Each OWH run snapshots this selection, including non-secret display metadata. Native `/v1/runs` receives only its documented provider/model/model-options overrides.
 - OpenAI-compatible local/external providers (including the registered OpenRouter provider), Anthropic Messages and Gemini's official `/v1beta/openai` compatibility endpoint are supported. Custom headers use native provider `extra_headers`. Unsupported transports fail closed.
 - Native auxiliary tasks explicitly follow `main`, with empty fallback chains; delegation inherits the admitted main model. The root profile is never a credential fallback for a managed profile. `model.max_tokens` is unset so the immutable provider entry supplies the output cap. Bootstrap never rewrites administrator provider/model policy.
-- Compression keeps the existing threshold/target/pruning settings in `ops/hermes/bootstrap.py`. Native retries use the pinned supported configuration; no application output-repair loop calls a second provider.
+- Bootstrap and profile model-policy synchronization apply the same [conversation context policy](#conversation-context-policy), including profiles created after gateway startup. Native retries use the pinned supported configuration; no application output-repair loop calls a second provider.
 - OpenAI-wire workload temperatures, including zero, are preserved through the named provider's supported `extra_body` request overrides. The provider identity and run snapshot include the requested value so concurrent workloads cannot overwrite each other's sampling settings. The pinned Anthropic Messages request builder drops these overrides; an explicit temperature therefore fails with the common `LlmProviderError` before profile provisioning or run staging. Anthropic calls that omit temperature retain native defaults. Native `model_options` supports reasoning/service tier, not temperature. The public request middleware does not expose the immutable run's request overrides; do not infer sampling from a mutable profile default or silently change routes.
 - Gateway/dashboard and legacy broker use fixed loopback host ports. Hermes runtime UID/GID is `10000`; named volumes retain that ownership.
 - The official image supplies Hermes, Python, Node/npm, Chromium assets, `rg`, FFmpeg and build tools. Tool registration alone does not provision optional search/media services.
@@ -26,7 +26,7 @@ This is the single owner for Hermes installation, image/configuration, profiles,
 | Admin policy translation and immutable per-run snapshot      | `domains/hermes/model_policy.py`, `service.py`, AI model settings                        |
 | Common registered execution/results                          | `domains/ai/gateway.py`, `domains/hermes/workloads.py`                                   |
 | PostgreSQL dispatch, serialization, approvals, file metadata | `domains/hermes/models.py`, `repository.py`, `execution.py`, `mcp_router.py`, `files.py` |
-| Native config/bootstrap                                      | `ops/hermes/bootstrap.py`                                                                |
+| Native config/bootstrap and compression policy               | `ops/hermes/bootstrap.py`, `domains/hermes/client.py`, `domains/hermes/model_policy.py` |
 | Multiplex discovery and native admission cancellation       | `ops/hermes/gateway_entry.py`, `domains/hermes/client.py`                                 |
 | Run-bound tool transport and isolated execution              | `ops/hermes/plugins/owh_runtime/`                                                        |
 | Controlled public egress                                     | `ops/hermes/terminal_egress.py`                                                          |
@@ -36,6 +36,14 @@ This is the single owner for Hermes installation, image/configuration, profiles,
 
 Paths under `domains/` are relative to `apps/api/src/open_work_hub_api/`. Keep the pin in API constants, Compose, bootstrap and legacy broker aligned. Generate API/app contracts through repository commands.
 
+## Conversation context policy
+
+`managed_compression_policy()` supplies the native compression settings for profile synchronization and the retained legacy model-update path. `ops/hermes/bootstrap.py` applies the same settings at startup; `test_hermes_bootstrap.py` checks parity because bootstrap runs outside the API package. Fresh local/external profiles receive the policy before activation, and existing profiles and isolated scheduled-job profiles receive it on reconciliation. A rejected configuration update fails admission and is not cached as successful.
+
+The managed settings enable compression with `threshold=0.50`, `threshold_tokens=100000`, `target_ratio=0.20`, and `protect_last_n=20`. Proactive tool-result pruning starts at `48000` tokens, with `8000` minimum result characters and `4096` minimum reclaimed tokens. The token threshold triggers compaction; it is not a hard per-request input limit. Hermes owns token accounting, model-window adjustments, summary/tail selection and persistence. Auxiliary compression follows the admitted main model with no fallback chain. The `session_search` restriction under [identity, tools and approvals](#identity-tools-and-approvals) still applies.
+
+For a development update limited to this API/worker profile policy, load the updated application code with `./dev.sh --restart --with-worker --no-infra`. The next profile reconciliation applies the settings without gateway recreation or user-profile recreation. New profiles receive them immediately; existing profiles follow the reconciliation cache's normal expiry. Bootstrap/plugin/Compose changes instead follow [the gateway update procedure](#updating-an-existing-development-installation).
+
 ## Fresh environment setup
 
 ### Prerequisites
@@ -43,6 +51,8 @@ Paths under `domains/` are relative to `apps/api/src/open_work_hub_api/`. Keep t
 Follow [Development Installation](../../../INSTALL.md). Docker Engine/Compose must support named volumes, internal networks and `volume-subpath` mounts. On Docker Desktop, enable Settings → Resources → Network → **Enable host networking**, then Apply & Restart, as described in [Docker's host-network documentation](https://docs.docker.com/engine/network/drivers/host/). Verify the management health URL from the host: container-internal health alone does not prove that the API can connect. Do not install Hermes on the host.
 
 The trusted gateway now needs the Docker socket to create execution sandboxes. Set `OPEN_WORK_HUB_HERMES_DOCKER_GID` to the socket's numeric group (default `0`); on Linux inspect it with `stat -c '%g' /var/run/docker.sock`. Never make the socket world-writable. The gateway uses the image's Python entrypoint directly because the stock entrypoint resets supplemental groups; the official environment provider still owns sandbox lifecycle.
+
+Compose owns the physical sandbox network and public egress CA volume. Its `x-hermes-sandbox-resources` anchors supply the existing service-internal `OWH_HERMES_TERMINAL_SANDBOX_NETWORK` and `OWH_HERMES_TERMINAL_EGRESS_CLIENT_VOLUME` values to both the gateway and retained broker, and name the actual Docker resources. These are deployment wiring, not additional user `.env` settings. `OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE` identifies database/legacy-runner ownership; never derive physical egress resource names from it. Custom deployments must provide both internal resource values to the gateway and retain an internal network plus the CA file-only mount.
 
 Configure a provider/model in administrator LLM settings and verify that its endpoint is reachable from the host-network gateway. A local-only installation needs no OpenRouter key. Development startup accepts an enabled Hermes without that key; egress health requires the public CA and listening proxy, not a legacy token file. `OPENROUTER_API_KEY` is optional legacy egress configuration for draining existing Terminal sessions; if retained, it stays only in the trusted egress container. It is not the new model-policy source.
 
@@ -69,9 +79,35 @@ uv sync --frozen --python 3.12 --directory apps/worker
 
 6. Configure the active provider/model and workload routes in Admin LLM settings. Open the chatbot; its work/files panel exposes concurrent runs, stop, uploaded/generated files and owned legacy Terminal archives. A worker and the shared Beat scheduler are required for interactive queue recovery.
 
+7. Complete the [sandbox execution check](#sandbox-execution-check), including the terminal call in a new chatbot conversation. Gateway health and a completed conversation alone do not prove that a tool executed successfully.
+
 Before saving any provider credential, configure a private `OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY` for API and worker, preserving an existing key. For OpenRouter, include `openrouter` in the configured external provider allowlists, enable its administrator provider entry at `https://openrouter.ai/api/v1`, save the credential in that entry, discover and approve the selected model's capabilities, then select it for the external workload route. A legacy `OPENROUTER_API_KEY` alone does not configure the administrator model policy. Model selection is stored in PostgreSQL and is never a source-code default.
 
 Development ports: runtime `18642`, dashboard `19119`, legacy broker `18765`. Production: `8642`, `9119`, `8765`. The broker container always listens on `18765`. Never select an arbitrary fallback port when a declared port is occupied.
+
+### Updating an existing development installation
+
+Run these commands from the development checkout root after updating the gateway plugin or Compose sandbox resource wiring. Preserve the current configuration according to [resource ownership](#prerequisites); this update requires no new user `.env` keys.
+
+1. Finish or stop active development chatbot runs. Confirm that bootstrap has completed successfully and egress is healthy using the [development health checks](#operations-and-change-checklist). If the infrastructure is missing, first use `./scripts/dev-infra.sh up` from the fresh-install procedure; the targeted command below intentionally does not start dependencies.
+2. Recreate the gateway to load both the updated plugin and Compose-provided resource values. `--force-recreate` also covers plugin-only updates, whose bind-mounted source change does not change the container configuration. A Docker restart cannot add new container environment values.
+
+```bash
+(
+  source scripts/dev-env.sh
+  dev_docker compose --env-file "$(dev_compose_env_file)" \
+    -f "$(dev_compose_file)" \
+    up -d --no-deps --force-recreate --wait hermes-gateway
+)
+```
+
+3. After the gateway is healthy, restart the development web, API and worker to load the matching application code:
+
+```bash
+./dev.sh --restart --with-worker --no-infra
+```
+
+4. Run the [sandbox execution check](#sandbox-execution-check). If it fails, follow [sandbox startup recovery](#sandbox-startup-recovery) and repeat the check after recovery. Keep the gateway-before-API update order described in [pinned upstream gaps](#pinned-upstream-gaps).
 
 ### Production checkout
 
@@ -128,6 +164,8 @@ Run lists filter by current owning-app admission before counting and pagination;
 
 The shared gateway executes terminal, native file tools and `execute_code` in an isolated `/workspace` container via Hermes' official environment provider. Sandboxes have no host home/config/credential bind, no Docker socket, no provider credentials, a read-only root, UID/GID 10000, dropped capabilities, no new privileges, two CPUs, 2 GiB memory/no swap, 512 processes and bounded tmpfs. Workspace capacity is 256 MiB; `/tmp` is 256 MiB and home/`/opt/data` are 64 MiB each. The image's implicit `/opt/data` volume is explicitly replaced by tmpfs.
 
+Before container creation the provider verifies the deployment's network and CA volume, so a typo cannot silently create an empty volume. Invalid configuration, unavailable resources, missing CA files and startup failures use native `EnvironmentConnectionError` with a bounded, sanitized reason and administrator recovery hint. Hermes returns its structured degraded tool result and evicts the failed backend for a later retry. Raw Docker arguments, stderr and host paths are not returned. Recovery requires restoring the configured resources/CA or gateway Docker access; do not change the database namespace or create an unrestricted fallback network. A tool failure can be followed by an assistant explanation and a completed run; inspect the actual tool result when validating execution.
+
 Only the public egress CA file is mounted through a volume subpath, not the adjacent legacy proxy token. The internal sandbox network and iron-proxy are the only public egress path. Proxy loopback, private, link-local and metadata CIDR denial remains enabled; no host port is published. New model calls happen in the trusted gateway using administrator credentials. Provider-token replacement is retained only for old Terminal runners when a legacy key is supplied. The upstream response-header timeout is bounded at 300 seconds.
 
 User uploads are authenticated bounded binary bodies (`application/octet-stream`, percent-encoded `X-File-Name`), at most 64 MiB and sixty seconds. Same-conversation run admission serializes with uploads; uploads during an active run are rejected. Downloads recheck owner/session/admission and send attachment, no-store and nosniff headers. Public uploads recheck admission after receiving the body. Public uploads and internal MCP file transfers run their database work, object I/O, conversions and response serialization in the thread pool; slow storage does not block the API event loop or other run controls. Deferred file/tool operations recheck current run, owner/profile, session and app authority after thread admission. Reads recheck after object I/O; native saves lock and recheck their active run before publishing catalog metadata, and public uploads recheck app admission there. Rejected late uploads retain their durable object reservation for cleanup and preserve previously saved content. Tool approval consumption occurs after queue waiting and current tool admission.
@@ -151,7 +189,7 @@ Use official public surfaces first. The remaining adapters are version-bound to 
 - `gateway_entry.py`: multiplex API startup discovers only the launch profile's MCP servers. It invokes native idempotent discovery for the authenticated profile and rejects admission when discovery or the required plugin fails. Remove it when an official profile-discovery lifecycle hook covers this requirement.
 - `gateway_entry.py` cancellation route: native `/v1/runs` can resolve an idempotency key only by creating on a miss. The adapter reuses `RunIdempotencyStore.reserve`, native auth/profile scope and the pinned body/session-header fingerprint to atomically cancel missing admissions without an agent task. It requires durable storage and rejects unsupported request shapes. Pinned-image checks must cover both orderings of admission/cancellation, later native replay, conflicting inputs, profile isolation and unauthenticated requests. Remove this adapter when the public native API supports atomic cancellation by idempotency key. Deploy the updated gateway entry before API/worker changes; an older gateway returns 404 and leaves the OWH run stopping for recovery.
 - `owh_runtime` tool middleware: native HTTP MCP headers are profile-static. A separate request adds native run identity without mutating shared connections. Native middleware exceptions fall through, so this callback catches policy/import/transport failures and returns an error. Remove the forwarding adapter when official per-call authenticated headers support trusted run context.
-- `owh_runtime/sandbox.py`: native `DockerEnvironment` unconditionally mounts host credentials/skills/cache and has no supported off switch. The adapter implements only the public `BaseEnvironment` transport/provider contract with safe Docker arguments; Hermes retains wrapping, timeout/interrupt and environment lifecycle. Replace it when native Docker configuration can guarantee no host mounts plus file snapshot hooks.
+- `owh_runtime/sandbox.py`: native `DockerEnvironment` unconditionally mounts host credentials/skills/cache and has no supported off switch. The adapter implements the public `BaseEnvironment` transport/provider contract and `EnvironmentConnectionError` failure contract with safe Docker arguments; Hermes retains wrapping, timeout/interrupt and environment lifecycle. Compose supplies its physical resources independently of database namespaces. Deploy/recreate the updated gateway with both resource values before deploying the API context change that removes inferred network/volume names; the updated provider ignores those obsolete fields from older APIs. Replace it when native Docker configuration can guarantee no host mounts plus file snapshot hooks.
 - `terminal_egress.py`: the public egress setup CLI is interactive and cannot express these container listeners and deny policy. The adapter uses exported iron-proxy functions; replace it when the CLI exposes the needed unattended configuration.
 
 ## Operations and change checklist
@@ -164,16 +202,49 @@ Non-inference development checks:
 ./scripts/dev-infra.sh status
 curl --fail http://127.0.0.1:18765/healthz
 curl --fail http://127.0.0.1:19119/api/health
+docker inspect --format '{{.State.Status}} {{.State.ExitCode}}' open-work-hub-dev-hermes-bootstrap
 docker inspect --format '{{.State.Health.Status}}' open-work-hub-dev-hermes-gateway
 docker inspect --format '{{.State.Health.Status}}' open-work-hub-dev-hermes-terminal-egress
 ```
 
+Bootstrap must report `exited 0`; the gateway and egress must report `healthy`.
+
 Do not print container envs, profile config/credentials, prompts or sensitive runtime logs. [Release storage policy](../release/README.md#build-and-test-storage) must preserve current/previous images, container references, user profile volumes and archive objects.
+
+### Sandbox execution check
+
+Run this check after fresh installation or gateway recreation, from the development checkout root. It exercises the actual pinned provider without inference: it creates and removes two isolated sandboxes plus a replacement, verifies security limits and CA readability, and saves/restores a synthetic file through the real workspace transport. Only the file RPC uses test fixtures in the short-lived check process; this does not replace the PostgreSQL/object-storage tests or a chatbot end-to-end check.
+
+```bash
+docker exec -i open-work-hub-dev-hermes-gateway python - \
+  "$(docker inspect --format '{{.Image}}' open-work-hub-dev-hermes-gateway)" \
+  < ops/hermes/check_sandbox.py
+```
+
+The command must exit with code `0` and print `PASS: two isolated sandboxes, security limits, CA access, file save/restore`.
+
+Then open a new chatbot conversation and request a single terminal invocation of `printf OWH_SANDBOX_OK`. Verify that the actual tool result contains `OWH_SANDBOX_OK` and `exit_code: 0`. The assistant's explanation and the conversation's `completed` state are not sufficient acceptance evidence. This final check uses the configured chatbot workload and its normal model usage.
+
+### Sandbox startup recovery
+
+Use the structured tool error code to select the recovery step. Older gateways may expose only a long `docker run` command and exit status `127`; follow the [existing-installation update](#updating-an-existing-development-installation) before retrying.
+
+| Error code | Check and recovery |
+| --- | --- |
+| `sandbox.configuration_invalid` | The gateway resource values are missing or invalid. Recreate it from the matching Compose definition using the update procedure above; verify custom deployment wiring against [prerequisites](#prerequisites). |
+| `sandbox.network_unavailable`, `sandbox.volume_unavailable` | The gateway could not inspect the declared resource. Check gateway Docker access and that the Compose-declared network and CA volume exist; restore missing infrastructure through the normal development startup procedure. |
+| `sandbox.egress_ca_missing` | The client volume lacks `ca.crt`. Recover the egress service's certificate publication and verify its health before rerunning the sandbox check. |
+| `sandbox.docker_unavailable` | Check the pinned gateway image's Docker client, socket mount and supplemental Docker group described in [prerequisites](#prerequisites). |
+| `sandbox.start_timeout`, `sandbox.start_failed` | Check Docker daemon health, host capacity and the pinned image. The safe error identifies a startup failure; inspect only relevant, sanitized diagnostics before retrying. |
+
+Retain the existing database/runner namespace and profile/workspace volumes during this recovery. Do not rename resources to match a database namespace, manufacture an empty certificate volume, or use a global Docker prune. Once infrastructure is restored, retry the command; Hermes creates a fresh backend after the failed attempt.
+
+### Runtime change validation
 
 For every runtime change: inspect the pinned public surfaces and reassess each adapter, update the ownership map's affected files and INSTALL, verify credential/network/owner isolation, queue concurrency and same-conversation order, result correction, cancellation/recovery and workspace retention. Run focused checks first, then shared contracts:
 
 ```bash
-(cd apps/api && uv run --python 3.12 --group dev pytest tests/test_hermes_integration.py tests/test_hermes_runtime.py tests/test_hermes_deferred_io.py tests/test_hermes_plugin.py tests/test_hermes_bootstrap.py tests/test_hermes_gateway_entry.py tests/test_hermes_terminal.py tests/test_hermes_terminal_egress.py tests/test_admin_hermes_tools.py -q)
+(cd apps/api && uv run --python 3.12 --group dev pytest tests/test_hermes_integration.py tests/test_hermes_runtime.py tests/test_hermes_deferred_io.py tests/test_hermes_plugin.py tests/test_hermes_sandbox.py tests/test_hermes_bootstrap.py tests/test_hermes_gateway_entry.py tests/test_hermes_terminal.py tests/test_hermes_terminal_egress.py tests/test_admin_hermes_tools.py -q)
 (cd apps/api && uv run --python 3.12 --group dev pytest tests/test_hermes_migration.py tests/test_alembic_migrations.py -m migration -q)
 (cd apps/worker && uv run --python 3.12 --group dev pytest tests/test_worker_task_registration.py tests/test_app_execution_policy_workers.py tests/test_ai_graph_tasks.py -q)
 pnpm check:api-contract
