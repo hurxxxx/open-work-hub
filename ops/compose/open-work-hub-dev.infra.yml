@@ -1,5 +1,9 @@
 name: open-work-hub-dev
 
+x-hermes-sandbox-resources: &hermes-sandbox-resources
+  OWH_HERMES_TERMINAL_SANDBOX_NETWORK: &hermes-sandbox-network open-work-hub-dev-hermes-terminal-sandbox
+  OWH_HERMES_TERMINAL_EGRESS_CLIENT_VOLUME: &hermes-sandbox-ca-volume open-work-hub-dev-hermes-terminal-egress-client
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -197,6 +201,7 @@ services:
       hermes-terminal-egress:
         condition: service_healthy
     environment:
+      <<: *hermes-sandbox-resources
       API_SERVER_ENABLED: 'true'
       API_SERVER_HOST: 127.0.0.1
       API_SERVER_KEY: ${OPEN_WORK_HUB_HERMES_API_KEY:-}
@@ -349,16 +354,15 @@ services:
       hermes-terminal-egress:
         condition: service_healthy
     environment:
+      <<: *hermes-sandbox-resources
       OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET: ${OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET:-}
       OWH_HERMES_TERMINAL_BROKER_INSTANCE_ID: dev-broker
       OWH_HERMES_TERMINAL_EGRESS_CLIENT_DIR: /run/owh-hermes-terminal-egress
-      OWH_HERMES_TERMINAL_EGRESS_CLIENT_VOLUME: open-work-hub-dev-hermes-terminal-egress-client
       OWH_HERMES_TERMINAL_IMAGE: nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524
       OWH_HERMES_TERMINAL_MCP_RELAY_BASE_URL: http://hermes-terminal-broker:18765/mcp
       OWH_HERMES_TERMINAL_MCP_SOCKET_PATH: /run/open-work-hub/hermes-terminal-mcp.sock
       OWH_HERMES_TERMINAL_PROFILE_ARCHIVE_MAX_BYTES: ${OPEN_WORK_HUB_HERMES_TERMINAL_PROFILE_ARCHIVE_MAX_BYTES:-67108864}
       OWH_HERMES_TERMINAL_RESOURCE_NAMESPACE: ${OPEN_WORK_HUB_HERMES_TERMINAL_RESOURCE_NAMESPACE:-dev}
-      OWH_HERMES_TERMINAL_SANDBOX_NETWORK: open-work-hub-dev-hermes-terminal-sandbox
       OWH_HERMES_TERMINAL_WORKSPACE_ARCHIVE_MAX_BYTES: ${OPEN_WORK_HUB_HERMES_TERMINAL_WORKSPACE_ARCHIVE_MAX_BYTES:-268435456}
       OWH_HERMES_TERMINAL_WORKSPACE_LIVE_MAX_BYTES: ${OPEN_WORK_HUB_HERMES_TERMINAL_WORKSPACE_ARCHIVE_MAX_BYTES:-268435456}
     ports:
@@ -409,7 +413,7 @@ networks:
   open-work-hub-dev-infra:
     name: open-work-hub-dev-infra
   open-work-hub-hermes-terminal-sandbox:
-    name: open-work-hub-dev-hermes-terminal-sandbox
+    name: *hermes-sandbox-network
     internal: true
 
 volumes:
@@ -428,4 +432,4 @@ volumes:
   open-work-hub-dev-hermes-terminal-egress-data:
     name: open-work-hub-dev-hermes-terminal-egress-data
   open-work-hub-dev-hermes-terminal-egress-client:
-    name: open-work-hub-dev-hermes-terminal-egress-client
+    name: *hermes-sandbox-ca-volume

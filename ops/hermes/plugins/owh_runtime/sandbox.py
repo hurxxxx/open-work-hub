@@ -10,19 +10,42 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 from uuid import uuid4
 
 from agent.terminal_env_provider import TerminalEnvironmentProvider
-from tools.environments.base import BaseEnvironment
+from tools.environments.base import BaseEnvironment, EnvironmentConnectionError
 
 from .workspace import WORKSPACE_SCRIPT
+
+_RETRY_HINT = (
+    "Ask an administrator to check the gateway's sandbox resource configuration, "
+    "Docker access and egress certificate service, then retry the command."
+)
+
+
+def _infrastructure_error(reason: str) -> EnvironmentConnectionError:
+    return EnvironmentConnectionError(reason, retry_hint=_RETRY_HINT)
+
+
+def _deployment_resource(key: str) -> str:
+    value = os.environ.get(key, "").strip()
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,254}", value):
+        raise _infrastructure_error(
+            "Sandbox resources are not configured correctly (sandbox.configuration_invalid)."
+        )
+    return value
 
 
 class WorkspaceEnvironment(BaseEnvironment):
     def __init__(self, *, policy: dict, server: dict, run_id: str, timeout: int):
+        # Compose owns physical resources. A database/runner namespace is not
+        # a Docker network or volume name, including during database cutovers.
+        network = _deployment_resource("OWH_HERMES_TERMINAL_SANDBOX_NETWORK")
+        ca_volume = _deployment_resource("OWH_HERMES_TERMINAL_EGRESS_CLIENT_VOLUME")
         super().__init__(cwd="/workspace", timeout=min(timeout, 180))
         self._server, self._run_id = server, run_id
         self._synced_files = {}
@@ -32,6 +55,20 @@ class WorkspaceEnvironment(BaseEnvironment):
             "PATH": os.defpath,
             "DOCKER_HOST": "unix:///var/run/docker.sock",
         }
+        # docker run would silently create an empty volume on a name mismatch.
+        for kind, name in (("network", network), ("volume", ca_volume)):
+            try:
+                subprocess.run(
+                    [self._docker, kind, "inspect", name],
+                    check=True,
+                    capture_output=True,
+                    timeout=15,
+                    env=self._client_env,
+                )
+            except (subprocess.SubprocessError, OSError):
+                raise _infrastructure_error(
+                    f"Sandbox {kind} could not be verified (sandbox.{kind}_unavailable)."
+                ) from None
         ca_path = "/run/owh-egress-ca.crt"
         args = [
             self._docker,
@@ -53,13 +90,13 @@ class WorkspaceEnvironment(BaseEnvironment):
             "--user=10000:10000",
             "--workdir=/workspace",
             "--entrypoint=/bin/sleep",
-            f"--network={policy['network']}",
+            f"--network={network}",
             "--tmpfs=/workspace:rw,exec,nosuid,size=256m,mode=1777",
             "--tmpfs=/tmp:rw,exec,nosuid,size=256m,mode=1777",
             "--tmpfs=/opt/data:rw,exec,nosuid,size=64m,uid=10000,gid=10000",
             "--tmpfs=/home/hermes:rw,exec,nosuid,size=64m,uid=10000,gid=10000",
             "--mount",
-            f"type=volume,src={policy['ca_volume']},dst={ca_path},volume-subpath=ca.crt,readonly",
+            f"type=volume,src={ca_volume},dst={ca_path},volume-subpath=ca.crt,readonly",
         ]
         environment = {
             "HOME": "/home/hermes",
@@ -76,10 +113,41 @@ class WorkspaceEnvironment(BaseEnvironment):
         # A lost gateway cannot leave an unbounded orphan or background process.
         args.extend([policy["image"], "3600"])
         try:
-            subprocess.run(args, check=True, capture_output=True, timeout=120, env=self._client_env)
+            try:
+                subprocess.run(
+                    args,
+                    check=True,
+                    capture_output=True,
+                    timeout=120,
+                    env=self._client_env,
+                )
+            except subprocess.CalledProcessError as error:
+                # Return only known categories, never Docker argv/stderr or
+                # host paths. Native Hermes renders this as a degraded backend.
+                stderr = error.stderr or b""
+                if isinstance(stderr, bytes):
+                    stderr = stderr.decode("utf-8", errors="replace")
+                if "ca.crt" in stderr and "no such file or directory" in stderr.lower():
+                    reason = "Sandbox egress certificate is missing (sandbox.egress_ca_missing)."
+                else:
+                    reason = f"Sandbox could not start (sandbox.start_failed; Docker exit {error.returncode})."
+                raise _infrastructure_error(reason) from None
+            except subprocess.TimeoutExpired:
+                raise _infrastructure_error(
+                    "Sandbox startup timed out (sandbox.start_timeout)."
+                ) from None
+            except OSError:
+                raise _infrastructure_error(
+                    "Sandbox Docker client is unavailable (sandbox.docker_unavailable)."
+                ) from None
             self.restore_files()
         except Exception:
-            self.cleanup()
+            try:
+                self.cleanup()
+            except (subprocess.SubprocessError, OSError):
+                # Preserve the actionable original failure; the one-hour
+                # deadline still bounds a container if Docker is unreachable.
+                pass
             raise
 
     def _run_bash(self, cmd_string, *, login=False, timeout=120, stdin_data=None):
@@ -195,6 +263,7 @@ class WorkspaceEnvironment(BaseEnvironment):
                 capture_output=True,
                 timeout=30,
                 env=self._client_env,
+                check=False,
             )
             self._container = None
 
@@ -207,7 +276,9 @@ class OpenWorkHubSandbox(TerminalEnvironmentProvider):
     def is_available(self) -> bool:
         return shutil.which("docker") is not None
 
-    def create_environment(self, *, cwd, timeout, task_id, image=None, container_config=None):
+    def create_environment(
+        self, *, cwd, timeout, task_id, image=None, container_config=None
+    ):
         from . import _rpc, runtime_transport
 
         server, run_id = runtime_transport()
