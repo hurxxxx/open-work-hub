@@ -1387,6 +1387,7 @@ async def test_slow_file_transfer_keeps_other_requests_responsive(
 
     engine = create_engine(application_postgres_dsn)
     factory = sessionmaker(engine)
+    monkeypatch.setattr(mcp_router, "get_session_factory", lambda: factory)
     entered, release = threading.Event(), threading.Event()
     objects = {}
     armed = False
@@ -1525,4 +1526,96 @@ async def test_upload_rechecks_app_admission_after_receiving_body(
                 await file_router.upload_file(session.id, request, "saved.txt", db, user)
             assert denied.value.status_code == 403
     finally:
+        engine.dispose()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("saturation", ["default", "operations", "both"])
+async def test_structured_callback_completes_while_callers_exhaust_thread_capacity(
+    application_postgres_dsn, monkeypatch, saturation
+):
+    import asyncio
+    import threading
+    from anyio import CapacityLimiter, to_thread
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from pydantic import SecretStr
+    from sqlalchemy.orm import sessionmaker
+    from open_work_hub_api.core.settings import get_settings
+    from open_work_hub_api.domains.hermes import mcp_router
+    from open_work_hub_api.domains.hermes.service import mcp_profile_bearer_secret
+
+    engine = create_engine(application_postgres_dsn)
+    factory = sessionmaker(engine)
+    monkeypatch.setattr(mcp_router, "get_session_factory", lambda: factory)
+    settings = get_settings().model_copy(
+        update={"hermes_mcp_shared_secret": SecretStr("synthetic-capacity-secret")}
+    )
+    monkeypatch.setattr(mcp_router, "get_settings", lambda: settings)
+    default = to_thread.current_default_thread_limiter()
+    previous_tokens = default.total_tokens
+    default.total_tokens = 1
+    operation_token = mcp_router._OPERATION_THREADS.set(CapacityLimiter(1))
+    release = threading.Event()
+    waiters = []
+
+    def hold(entered):
+        entered.set()
+        assert release.wait(timeout=5), "Callback could not release waiting callers"
+
+    try:
+        with factory() as db:
+            user, binding = seed(db)
+            admit_runtime_apps(db, user.id)
+            run = stage(
+                db,
+                binding,
+                None,
+                kind="workload",
+                workload_id="chatbot",
+                output_schema={
+                    "type": "object",
+                    "properties": {"value": {"type": "integer"}},
+                    "required": ["value"],
+                    "additionalProperties": False,
+                },
+            )
+            run.hermes_run_id = "run_saturated_callback"
+            run.status = "running"
+            db.commit()
+            run_id, profile = run.id, binding.profile_name
+            token = mcp_profile_bearer_secret(settings, profile)
+        for kind in ("default", "operations") if saturation == "both" else (saturation,):
+            entered = threading.Event()
+            call = (
+                to_thread.run_sync(hold, entered)
+                if kind == "default"
+                else mcp_router._run_callback(hold, entered, operation=True)
+            )
+            waiters.append(asyncio.create_task(call))
+            assert await asyncio.to_thread(entered.wait, 1)
+        app = FastAPI()
+        app.include_router(mcp_router.router)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await asyncio.wait_for(
+                client.post(
+                    f"/internal/hermes/mcp?profile={profile}",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "X-Hermes-Run-Id": "run_saturated_callback",
+                    },
+                    json={"id": 1, "method": "owh/submit", "params": {"result": {"value": 42}}},
+                ),
+                timeout=2,
+            )
+            assert response.status_code == 200
+            assert response.json()["result"] == {"accepted": True}
+        with factory() as db:
+            assert db.get(HermesRunProjection, run_id).output_payload == {"value": 42}
+        assert all(not task.done() for task in waiters)
+    finally:
+        release.set()
+        await asyncio.gather(*waiters)
+        default.total_tokens = previous_tokens
+        mcp_router._OPERATION_THREADS.reset(operation_token)
         engine.dispose()

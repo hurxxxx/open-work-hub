@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from itertools import islice
+from collections.abc import AsyncIterator, Callable
+from functools import partial
+
+from anyio import CapacityLimiter, CancelScope, to_thread
+from anyio.lowlevel import RunVar
 
 import hashlib
 import hmac
@@ -12,12 +17,11 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from starlette.concurrency import run_in_threadpool
 from jsonschema import Draft202012Validator
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.core.db import get_db_session
+from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.principal import user_principal
 from open_work_hub_api.core.settings import HERMES_IMAGE, get_settings
 from open_work_hub_api.domains.ai.mcp import AiMcpClient
@@ -47,6 +51,34 @@ from open_work_hub_api.domains.hermes.service import (
 
 router = APIRouter(prefix="/internal/hermes/mcp", tags=["hermes-mcp"])
 _APPROVAL_EVIDENCE_MAX_AGE = timedelta(minutes=5)
+
+
+_CONTROL_THREADS: RunVar[CapacityLimiter] = RunVar("hermes_callback_control_threads")
+_OPERATION_THREADS: RunVar[CapacityLimiter] = RunVar("hermes_callback_operation_threads")
+
+
+async def _run_callback(function, *args, operation: bool = False, **kwargs):
+    # Public synchronous callers can occupy the default ASGI pool while
+    # waiting for Hermes. Its callbacks must never borrow those same tokens.
+    # Long tools can themselves wait for nested results, so reserve separate
+    # capacity for control/result requests as well. RunVar follows AnyIO's
+    # event-loop lifecycle; this is only local resource admission, not run state.
+    variable = _OPERATION_THREADS if operation else _CONTROL_THREADS
+    try:
+        limiter = variable.get()
+    except LookupError:
+        limiter = CapacityLimiter(16 if operation else 8)
+        variable.set(limiter)
+    return await to_thread.run_sync(partial(function, *args, **kwargs), limiter=limiter)
+
+
+async def _callback_db_session() -> AsyncIterator[Session]:
+    db = get_session_factory()()
+    try:
+        yield db
+    finally:
+        with CancelScope(shield=True):
+            await _run_callback(db.close)
 
 
 def _rpc_error(request_id: Any, code: int, message: str, data: Any = None) -> dict[str, Any]:
@@ -298,12 +330,14 @@ def _handle_file_request(
 
 
 @router.get("")
-def reject_standalone_sse(
+async def reject_standalone_sse(
     profile: str = Query(min_length=1, max_length=63),
     authorization: str | None = Header(default=None),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(_callback_db_session),
 ) -> Response:
-    _resolve_mcp_identity(db, profile_name=profile, authorization=authorization)
+    await _run_callback(
+        _resolve_mcp_identity, db, profile_name=profile, authorization=authorization
+    )
     return Response(status_code=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
@@ -314,9 +348,10 @@ async def handle_mcp_request(
     authorization: str | None = Header(default=None),
     mcp_session_id: str | None = Header(default=None, alias="Mcp-Session-Id"),
     hermes_run_id: str | None = Header(default=None, alias="X-Hermes-Run-Id"),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(_callback_db_session),
 ) -> Response:
-    binding, user = _resolve_mcp_identity(
+    binding, user = await _run_callback(
+        _resolve_mcp_identity,
         db,
         profile_name=profile,
         authorization=authorization,
@@ -329,9 +364,34 @@ async def handle_mcp_request(
                 return JSONResponse(
                     _rpc_error(None, -32600, "Request exceeds size limit"), status_code=413
                 )
-        payload = await run_in_threadpool(json.loads, raw)
+        payload = await _run_callback(json.loads, raw)
     except Exception:
         return JSONResponse(_rpc_error(None, -32700, "Parse error"), status_code=400)
+    prepared = await _run_callback(
+        _prepare_mcp_response,
+        db,
+        binding=binding,
+        user=user,
+        payload=payload,
+        profile=profile,
+        mcp_session_id=mcp_session_id,
+        hermes_run_id=hermes_run_id,
+    )
+    if isinstance(prepared, Response):
+        return prepared
+    return await _run_callback(prepared, operation=True)
+
+
+def _prepare_mcp_response(
+    db: Session,
+    *,
+    binding: HermesProfileBinding,
+    user: User,
+    payload: Any,
+    profile: str,
+    mcp_session_id: str | None,
+    hermes_run_id: str | None,
+) -> Response | Callable[[], Response]:
     if not isinstance(payload, dict):
         return JSONResponse(_rpc_error(None, -32600, "Invalid Request"), status_code=400)
     request_id = payload.get("id")
@@ -429,7 +489,7 @@ async def handle_mcp_request(
                 )
             )
         if method.startswith("owh/files/"):
-            return await run_in_threadpool(
+            return partial(
                 _handle_file_request,
                 db,
                 run=run,
@@ -553,9 +613,32 @@ async def handle_mcp_request(
                     },
                 )
             )
+    return partial(
+        _execute_mcp_tool,
+        db,
+        principal=principal,
+        user=user,
+        tool_name=tool_name,
+        arguments=arguments,
+        request_id=request_id,
+        active_run=active_run,
+        external_approval_id=external_approval_id,
+    )
+
+
+def _execute_mcp_tool(
+    db: Session,
+    *,
+    principal,
+    user: User,
+    tool_name: str,
+    arguments: dict[str, Any],
+    request_id: Any,
+    active_run: HermesRunProjection,
+    external_approval_id: str | None,
+) -> Response:
     try:
-        result = await run_in_threadpool(
-            AiMcpClient().call_tool,
+        result = AiMcpClient().call_tool(
             db,
             principal=principal,
             user=user,
