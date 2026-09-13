@@ -497,7 +497,6 @@ def _prepare_mcp_response(
             db.commit()
             return JSONResponse(_rpc_result(request_id, {"accepted": True}))
         if method == "owh/context":
-            namespace = get_settings().hermes_terminal_resource_namespace
             return JSONResponse(
                 _rpc_result(
                     request_id,
@@ -507,8 +506,6 @@ def _prepare_mcp_response(
                         "output_schema": run.output_schema,
                         "sandbox": {
                             "image": HERMES_IMAGE,
-                            "network": f"open-work-hub-{namespace}-hermes-terminal-sandbox",
-                            "ca_volume": f"open-work-hub-{namespace}-hermes-terminal-egress-client",
                             "no_proxy": ",".join(
                                 [
                                     "localhost",
