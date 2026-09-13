@@ -1249,3 +1249,116 @@ def test_native_tool_budget_is_durable_and_atomic_per_run(application_postgres_d
         assert admit("web_search")["result"]["accepted"] is False
     finally:
         engine.dispose()
+
+
+def admit_runtime_apps(db, user_id):
+    from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy, AppUserGrant
+    from open_work_hub_api.domains.auth.models import CompanyAppControl
+
+    for app_id in ("chatbot", "mail"):
+        db.merge(CompanyAppControl(app_id=app_id, enabled=True))
+        db.flush()
+        db.merge(AppAccessPolicy(app_id=app_id, audience="selected"))
+        db.flush()
+        db.merge(AppUserGrant(app_id=app_id, user_id=user_id))
+    db.flush()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("revocation", ["grant", "company", "user"])
+async def test_run_reads_and_controls_recheck_current_owner_app_admission(
+    application_postgres_dsn, revocation, monkeypatch
+):
+    from open_work_hub_api.domains.auth.app_access_models import AppUserGrant
+    from open_work_hub_api.domains.auth.models import CompanyAppControl
+    from open_work_hub_api.domains.hermes import router
+    from open_work_hub_api.domains.hermes.schemas import HermesApprovalDecision, HermesSteerRequest
+
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            user, binding = seed(db)
+            admit_runtime_apps(db, user.id)
+            chat = stage(db, binding, session_for(db, binding))
+            mail = stage(db, binding, None, kind="workload", owner_app_id="mail")
+            mail.output_payload = {"private_mail_result": "synthetic"}
+            mail.hermes_run_id = "native-mail-run"
+            db.commit()
+            assert (
+                router.get_run(mail.id, db=db, current_user=user).output_payload
+                == mail.output_payload
+            )
+            stream = router.stream_run_events(mail.id, last_event_id=None, db=db, current_user=user)
+            await stream.body_iterator.aclose()
+            before = router.list_runs(None, None, 100, 0, db, user)
+            assert before.total == 2
+            assert {row.id for row in before.data} == {chat.id, mail.id}
+            if revocation == "grant":
+                db.delete(db.get(AppUserGrant, ("mail", user.id)))
+            elif revocation == "company":
+                db.get(CompanyAppControl, "mail").enabled = False
+            else:
+                user.login_blocked = True
+            db.commit()
+            page = router.list_runs(None, None, 1, 0, db, user)
+            assert page.total == (0 if revocation == "user" else 1)
+            assert [row.id for row in page.data] == ([] if revocation == "user" else [chat.id])
+            assert router.list_runs(None, None, 1, 1, db, user).data == []
+            for read in (router.get_run, router.stream_run_events):
+                with pytest.raises(HTTPException) as denied:
+                    read(mail.id, db=db, current_user=user)
+                assert denied.value.status_code == 404
+            monkeypatch.setattr(
+                router, "runtime_client", lambda: pytest.fail("Denied control reached Hermes")
+            )
+            for control, kwargs in (
+                (router.stop_run, {}),
+                (router.steer_run, {"body": HermesSteerRequest(input="change")}),
+                (
+                    router.resolve_approval,
+                    {"body": HermesApprovalDecision(request_id="pending", choice="once")},
+                ),
+            ):
+                with pytest.raises(HTTPException) as denied:
+                    await control(mail.id, db=db, current_user=user, **kwargs)
+                assert denied.value.status_code == 404
+            db.refresh(mail)
+            assert mail.status == "pending"
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("revoked_app", ["mail", "chatbot"])
+async def test_open_run_stream_stops_before_next_batch_after_app_revocation(
+    application_postgres_dsn, monkeypatch, revoked_app
+):
+    from sqlalchemy.orm import sessionmaker
+    from open_work_hub_api.domains.auth.models import CompanyAppControl
+    from open_work_hub_api.domains.hermes import router
+
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            user, binding = seed(db)
+            admit_runtime_apps(db, user.id)
+            run = stage(db, binding, None, kind="workload", owner_app_id="mail")
+            repo = HermesRunRepository(db)
+            repo.append_event(run.id, {"event": "run.progress", "message": "before revocation"})
+            db.commit()
+            initial_events = repo.list_events_after(run.id, after_sequence=0)
+            monkeypatch.setattr(router, "get_session_factory", lambda: sessionmaker(engine))
+            stream = router._event_stream(run_id=run.id, user_id=user.id, after_sequence=0)
+            for event in initial_events:
+                assert f"id: {event.sequence}\n" in await anext(stream)
+            with Session(engine) as authority:
+                authority.get(CompanyAppControl, revoked_app).enabled = False
+                HermesRunRepository(authority).append_event(
+                    run.id, {"event": "run.progress", "message": "private result after revocation"}
+                )
+                authority.commit()
+            assert await anext(stream) == 'event: error\ndata: {"code":"hermes.access_revoked"}\n\n'
+            with pytest.raises(StopAsyncIteration):
+                await anext(stream)
+    finally:
+        engine.dispose()
