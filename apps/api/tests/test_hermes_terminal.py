@@ -10,6 +10,7 @@ import threading
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
@@ -31,7 +32,6 @@ from open_work_hub_api.core.settings import (
 from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.hermes.models import HermesProfileBinding
 from open_work_hub_api.domains.hermes.research_sources import DEFAULT_RESEARCH_SOURCE_POLICY
-from open_work_hub_api.domains.hermes_terminal.app_catalog import HERMES_TERMINAL_APP
 from open_work_hub_api.domains.hermes_terminal import (
     broker_app,
     lifecycle,
@@ -71,12 +71,10 @@ def _settings(**overrides: object) -> Settings:
         return Settings(_env_file=None, **values)  # type: ignore[arg-type]
 
 
-def test_catalog_exposes_personal_terminal_for_admitted_company_users() -> None:
-    assert HERMES_TERMINAL_APP.app_id == "hermes-terminal"
-    assert APP_CONTRACT_BY_ID["hermes-terminal"]["execution_context_kind"] == "personal"
-    assert APP_CONTRACT_BY_ID["hermes-terminal"]["resource_scope"] == "personal"
-    assert HERMES_TERMINAL_APP.required_system_roles == ()
-    assert HERMES_TERMINAL_APP.feature_flag == "hermes_enabled"
+def test_terminal_launcher_is_retired_and_chatbot_remains_personal() -> None:
+    assert "hermes-terminal" not in APP_CONTRACT_BY_ID
+    assert APP_CONTRACT_BY_ID["chatbot"]["execution_context_kind"] == "personal"
+    assert APP_CONTRACT_BY_ID["chatbot"]["resource_scope"] == "personal"
 
 
 def test_broker_image_packages_research_source_policy_module() -> None:
@@ -944,11 +942,8 @@ def test_terminal_mcp_socket_is_rooted_independently_of_process_cwd() -> None:
     assert path.parts[-2:] == (".runtime", "hermes-terminal-test.sock")
 
 
-def test_terminal_mcp_socket_has_one_owner_and_safe_shared_shutdown(
-    tmp_path: Path,
-) -> None:
+def test_terminal_mcp_socket_has_one_owner_and_safe_shared_shutdown() -> None:
     async def exercise() -> None:
-        socket_path = tmp_path / "hermes-terminal.sock"
         settings = _settings(
             hermes_enabled=True,
             hermes_api_key="test-hermes-api-key",
@@ -976,7 +971,10 @@ def test_terminal_mcp_socket_has_one_owner_and_safe_shared_shutdown(
 
         assert not socket_path.exists()
 
-    asyncio.run(exercise())
+    # pytest's test-name/worker suffix can exceed AF_UNIX's path limit on macOS.
+    with TemporaryDirectory(prefix="owh-sock-") as directory:
+        socket_path = Path(directory) / "mcp.sock"
+        asyncio.run(exercise())
 
 
 def test_starting_session_adopts_a_runtime_after_an_ambiguous_create_response(

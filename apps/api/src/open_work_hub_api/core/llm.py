@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Literal, Mapping
@@ -127,6 +127,8 @@ class LlmTaskContext:
     app_id: str
     workload_id: str | None = None
     actor_user_id: str | None = None
+    execution_user_id: str | None = None
+    native_tool_limit: int = 20
     principal_kind: Literal["user", "service_account", "system"] = "user"
     principal_id: str | None = None
 
@@ -196,6 +198,7 @@ class LlmCompletionResult:
     usage: Mapping[str, int] | None = None
     finish_reason: str | None = None
     tool_calls: tuple[LlmToolCall, ...] = ()
+    structured_output: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -876,6 +879,7 @@ def complete_chat(
     audit_privacy_filter_status: str | None = None,
     audit_privacy_filter_used: bool | None = None,
     audit_detected_values: list[dict[str, object]] | None = None,
+    completion_executor: Callable[[ResolvedLlmExecution, dict[str, Any], float], Any] | None = None,
 ) -> tuple[Any, PolicyDecision, LlmPoolConfig]:
     """Run a chat completion against the pool selected by policy + PII.
 
@@ -979,13 +983,17 @@ def complete_chat(
 
     started = time.monotonic()
     try:
-        adapter = select_llm_execution_adapter(config.pool, config.provider)
-        response = adapter.complete(
-            config,
-            payload,
-            timeout_seconds=timeout_seconds or config.long_generation_timeout_seconds,
-            sync_client_factory=lambda _pool, _provider: _new_pool_client(config),
-        )
+        timeout = timeout_seconds or config.long_generation_timeout_seconds
+        if completion_executor is not None:
+            response = completion_executor(execution, payload, timeout)
+        else:
+            adapter = select_llm_execution_adapter(config.pool, config.provider)
+            response = adapter.complete(
+                config,
+                payload,
+                timeout_seconds=timeout,
+                sync_client_factory=lambda _pool, _provider: _new_pool_client(config),
+            )
     except LlmProviderError as error:
         elapsed_ms = int((time.monotonic() - started) * 1000)
         log_llm_call(
@@ -1137,6 +1145,7 @@ def completion_result(response: Any) -> LlmCompletionResult:
         usage=_extract_usage(response),
         finish_reason=_first_choice_finish_reason(response),
         tool_calls=completion_tool_calls(response),
+        structured_output=response.get("structured_output") if isinstance(response, dict) else None,
     )
 
 
@@ -1397,6 +1406,8 @@ async def complete_chat_stream(
     audit_privacy_filter_status: str | None = None,
     audit_privacy_filter_used: bool | None = None,
     audit_detected_values: list[dict[str, object]] | None = None,
+    stream_executor: Callable[[ResolvedLlmExecution, dict[str, Any], float], AsyncIterator[Any]]
+    | None = None,
 ):
     """Streaming twin of :func:`complete_chat`.
 
@@ -1507,14 +1518,19 @@ async def complete_chat_stream(
     error_message: str | None = None
     accumulated_usage: dict[str, int] | None = None
     try:
-        adapter = select_llm_execution_adapter(config.pool, config.provider)
-        async for chunk in adapter.stream(
-            config,
-            payload,
-            timeout_seconds=timeout_seconds or config.long_generation_timeout_seconds,
-            sync_client_factory=lambda _pool, _provider: _new_pool_client(config),
-            async_client_factory=lambda _pool, _provider: _new_async_pool_client(config),
-        ):
+        timeout = timeout_seconds or config.long_generation_timeout_seconds
+        if stream_executor is not None:
+            source = stream_executor(execution, payload, timeout)
+        else:
+            adapter = select_llm_execution_adapter(config.pool, config.provider)
+            source = adapter.stream(
+                config,
+                payload,
+                timeout_seconds=timeout,
+                sync_client_factory=lambda _pool, _provider: _new_pool_client(config),
+                async_client_factory=lambda _pool, _provider: _new_async_pool_client(config),
+            )
+        async for chunk in source:
             if chunk.kind == "usage" and chunk.usage:
                 accumulated_usage = chunk.usage
             if chunk.kind == "done":

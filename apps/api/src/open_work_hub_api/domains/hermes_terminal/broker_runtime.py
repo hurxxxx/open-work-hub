@@ -421,9 +421,8 @@ class HermesTerminalBrokerRuntime:
             raise BrokerRuntimeError("hermes_terminal.runtime_dependency_missing") from exc
         except DockerException as exc:
             raise BrokerRuntimeError("hermes_terminal.docker_unavailable") from exc
-        token_path = os.path.join(self.egress_client_dir, "openrouter.token")
         ca_path = os.path.join(self.egress_client_dir, "ca.crt")
-        if not os.path.isfile(token_path) or not os.path.isfile(ca_path):
+        if not os.path.isfile(ca_path):
             raise BrokerRuntimeError("hermes_terminal.egress_not_ready")
 
     def healthcheck(self) -> dict[str, Any]:

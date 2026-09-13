@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -15,7 +13,11 @@ from open_work_hub_api.domains.ai.external_gateway import (
     AiExternalCapabilityRequest,
     begin_external_capability,
 )
-from open_work_hub_api.domains.ai.gateway import resolve_llm_workload_route
+from open_work_hub_api.domains.ai.gateway import (
+    resolve_llm_workload_route,
+    stream_llm,
+    LlmWorkloadContext,
+)
 from open_work_hub_api.domains.ai.model_settings_service import (
     AiModelSettingsError,
     ResolvedLlmWorkloadRoute,
@@ -23,16 +25,14 @@ from open_work_hub_api.domains.ai.model_settings_service import (
 from open_work_hub_api.domains.web_search import WEB_SEARCH_WORKLOAD_IDS
 from open_work_hub_api.domains.web_search.schemas import (
     WebSearchAnswerResponse,
-    WebSearchCitation,
     WebSearchUsage,
+    WebSearchResult,
 )
-
-WEB_SEARCH_TOOL_TYPE = "web_search_20250305"
 
 SYSTEM_PROMPT = """\
 You are a web search assistant for Open Work Hub.
 
-Use Anthropic's web_search tool whenever the user's request needs current,
+Use the Hermes web_search and web_extract tools whenever the user's request needs current,
 changing, or externally verifiable public information. Answer in the user's
 language. Be concise, but include enough context to make the answer useful.
 When search results support the answer, preserve source attribution through
@@ -92,9 +92,6 @@ WEB_SEARCH_EXTERNAL_APP_PROFILES: tuple[WebSearchExternalAppProfile, ...] = (
 
 def iter_web_search_external_app_profiles() -> tuple[WebSearchExternalAppProfile, ...]:
     return WEB_SEARCH_EXTERNAL_APP_PROFILES
-
-
-AnthropicClientFactory = Callable[[ResolvedLlmWorkloadRoute], Any]
 
 
 def prepare_web_search_execution(
@@ -160,62 +157,70 @@ async def stream_web_search_answer(
     question: str,
     max_uses: int = 5,
     profile_id: str = "general",
-    client_factory: AnthropicClientFactory | None = None,
     conversation_id: str | None = None,
     db: Session | None = None,
     prepared_execution: PreparedWebSearchExecution,
 ) -> AsyncIterator[WebSearchAnswerDelta | WebSearchAnswerComplete]:
-    del db  # The database route has already been resolved by prepare_web_search_execution.
-    _validate_web_search_route(prepared_execution.route)
-    resolved_settings = prepared_execution.settings
+    if db is None:
+        raise WebSearchConfigurationError(
+            "Registered Hermes execution requires a database session."
+        )
     gateway_execution = prepared_execution.external_execution
-    route = prepared_execution.route
-    client = (
-        client_factory(route)
-        if client_factory is not None
-        else _anthropic_client_for_route(route, settings=resolved_settings)
-    )
-    request = _anthropic_web_search_request(
-        question=prepared_execution.provider_question,
-        max_uses=max_uses,
-        profile_id=profile_id,
-        model=route.model_key,
-        max_tokens=route.max_output_tokens,
-    )
-    final_message: Any | None = None
+    identity = gateway_execution.request
+    output = None
+    usage = {}
+    model = prepared_execution.route.model_key
     try:
-        async with client.messages.stream(**request) as stream:
-            async for text in stream.text_stream:
-                if isinstance(text, str) and text:
-                    yield WebSearchAnswerDelta(text=text)
-            final_message = await _maybe_await(stream.get_final_message())
+        async for chunk, _decision, config in stream_llm(
+            prepared_execution.workload_id,
+            LlmWorkloadContext(
+                source=identity.source,
+                actor_user_id=identity.actor_user_id,
+                principal_kind=identity.principal_kind,
+                principal_id=identity.principal_id,
+                app_id=identity.app,
+                native_tool_limit=max_uses,
+            ),
+            db,
+            messages=[
+                {
+                    "role": "system",
+                    "content": _system_prompt_for_profile(profile_id)
+                    + "\nSearch/extract tool calls are bounded by the requested budget. Submit an answer with verified source URLs and citation markers.",
+                },
+                {"role": "user", "content": prepared_execution.provider_question},
+            ],
+            output_schema=WebSearchResult.model_json_schema(),
+            conversation_id=prepared_execution.conversation_id or conversation_id,
+        ):
+            model = config.default_model
+            if chunk.usage:
+                usage = chunk.usage
+            if chunk.structured_output is not None:
+                output = WebSearchResult.model_validate(chunk.structured_output)
+        if output is None:
+            raise WebSearchGenerationError("Hermes did not submit a valid web search result.")
         gateway_execution.record_success(
-            usage=_usage_dict(getattr(final_message, "usage", None)),
-            metadata={
-                "model": str(getattr(final_message, "model", "") or ""),
-                "workload_id": prepared_execution.workload_id,
-            },
+            usage=usage, metadata={"model": model, "workload_id": prepared_execution.workload_id}
         )
     except (asyncio.CancelledError, GeneratorExit):
         gateway_execution.record_cancelled()
         raise
-    except WebSearchConfigurationError:
-        raise
-    except Exception as exc:  # noqa: BLE001 - provider SDK errors vary by version
+    except Exception as exc:
         gateway_execution.record_error(exc)
-        raise WebSearchGenerationError(str(exc)) from exc
-    finally:
-        close = getattr(client, "close", None)
-        if callable(close):
-            await _maybe_await(close())
-
-    yield WebSearchAnswerComplete(
-        response=_response_from_message(
-            question=question,
-            message=final_message,
-            conversation_id=prepared_execution.conversation_id or conversation_id,
-        )
+        raise WebSearchGenerationError("Hermes web search failed.") from exc
+    response = WebSearchAnswerResponse(
+        query=question,
+        answer=output.answer,
+        citations=output.citations,
+        model=model,
+        usage=WebSearchUsage(
+            input_tokens=usage.get("prompt_tokens"), output_tokens=usage.get("completion_tokens")
+        ),
+        conversation_id=prepared_execution.conversation_id or conversation_id,
     )
+    yield WebSearchAnswerDelta(text=response.answer)
+    yield WebSearchAnswerComplete(response=response)
 
 
 def format_answer_for_history(response: WebSearchAnswerResponse) -> str:
@@ -234,18 +239,6 @@ def _escape_markdown(value: str) -> str:
     return value.replace("`", "\\`").replace("*", "\\*").replace("_", "\\_").replace("~", "\\~")
 
 
-def _usage_dict(usage: Any) -> dict[str, int] | None:
-    parsed = _parse_usage(usage)
-    if parsed is None:
-        return None
-    result = {
-        "input_tokens": parsed.input_tokens,
-        "output_tokens": parsed.output_tokens,
-        "web_search_requests": parsed.web_search_requests,
-    }
-    return {key: value for key, value in result.items() if isinstance(value, int)} or None
-
-
 def _validate_web_search_route(route: ResolvedLlmWorkloadRoute) -> None:
     if route.route != "external":
         raise WebSearchConfigurationError("Web search requires an external LLM route.")
@@ -260,131 +253,5 @@ def _validate_web_search_route(route: ResolvedLlmWorkloadRoute) -> None:
         raise WebSearchConfigurationError("Anthropic API key is not configured.")
 
 
-def _anthropic_client_for_route(
-    route: ResolvedLlmWorkloadRoute,
-    *,
-    settings: Settings,
-) -> Any:
-    try:
-        from anthropic import AsyncAnthropic
-    except ImportError as exc:  # pragma: no cover - dependency guard
-        raise WebSearchConfigurationError("anthropic package is required for web search.") from exc
-    api_key = route.api_key.get_secret_value() if route.api_key is not None else ""
-    if not api_key:
-        raise WebSearchConfigurationError("Anthropic API key is not configured.")
-    return AsyncAnthropic(
-        api_key=api_key,
-        base_url=route.endpoint_url.rstrip("/"),
-        timeout=settings.llm_external_long_generation_timeout_seconds,
-    )
-
-
-def _anthropic_web_search_request(
-    *,
-    question: str,
-    max_uses: int,
-    profile_id: str,
-    model: str,
-    max_tokens: int,
-) -> dict[str, Any]:
-    return {
-        "model": model,
-        "max_tokens": max_tokens,
-        "temperature": 0.2,
-        "system": _system_prompt_for_profile(profile_id),
-        "messages": [{"role": "user", "content": question}],
-        "tools": [
-            {
-                "type": WEB_SEARCH_TOOL_TYPE,
-                "name": "web_search",
-                "max_uses": max_uses,
-            }
-        ],
-    }
-
-
 def _system_prompt_for_profile(profile_id: str) -> str:
     return SYSTEM_PROMPTS_BY_PROFILE.get(profile_id, SYSTEM_PROMPT)
-
-
-async def _maybe_await(value: Any) -> Any:
-    if inspect.isawaitable(value):
-        return await value
-    return value
-
-
-def _response_from_message(
-    *,
-    question: str,
-    message: Any,
-    conversation_id: str | None = None,
-) -> WebSearchAnswerResponse:
-    answer_parts: list[str] = []
-    citations: list[WebSearchCitation] = []
-    citation_index: dict[tuple[str, str, str | None], int] = {}
-
-    for block in getattr(message, "content", None) or []:
-        text = getattr(block, "text", None)
-        if not isinstance(text, str) or not text:
-            continue
-        block_citation_numbers: list[int] = []
-        for citation in getattr(block, "citations", None) or []:
-            parsed = _parse_citation(citation)
-            if parsed is None:
-                continue
-            key = (parsed.url, parsed.title, parsed.cited_text)
-            number = citation_index.get(key)
-            if number is None:
-                citations.append(parsed)
-                number = len(citations)
-                citation_index[key] = number
-            if number not in block_citation_numbers:
-                block_citation_numbers.append(number)
-        if block_citation_numbers:
-            markers = "".join(f"[{number}]" for number in block_citation_numbers)
-            answer_parts.append(f"{text}{markers}")
-        else:
-            answer_parts.append(text)
-
-    answer = "".join(answer_parts).strip()
-    return WebSearchAnswerResponse(
-        query=question,
-        answer=answer,
-        citations=citations,
-        model=str(getattr(message, "model", "") or ""),
-        usage=_parse_usage(getattr(message, "usage", None)),
-        conversation_id=conversation_id,
-    )
-
-
-def _parse_citation(citation: Any) -> WebSearchCitation | None:
-    url = getattr(citation, "url", None)
-    title = getattr(citation, "title", None)
-    if not isinstance(url, str) or not url:
-        return None
-    if not isinstance(title, str) or not title:
-        title = url
-    cited_text = getattr(citation, "cited_text", None)
-    return WebSearchCitation(
-        url=url,
-        title=title,
-        cited_text=cited_text if isinstance(cited_text, str) and cited_text else None,
-    )
-
-
-def _parse_usage(usage: Any) -> WebSearchUsage | None:
-    if usage is None:
-        return None
-    server_tool_use = getattr(usage, "server_tool_use", None)
-    web_search_requests = getattr(server_tool_use, "web_search_requests", None)
-    input_tokens = getattr(usage, "input_tokens", None)
-    output_tokens = getattr(usage, "output_tokens", None)
-    if not any(
-        isinstance(value, int) for value in (input_tokens, output_tokens, web_search_requests)
-    ):
-        return None
-    return WebSearchUsage(
-        input_tokens=input_tokens if isinstance(input_tokens, int) else None,
-        output_tokens=output_tokens if isinstance(output_tokens, int) else None,
-        web_search_requests=web_search_requests if isinstance(web_search_requests, int) else None,
-    )

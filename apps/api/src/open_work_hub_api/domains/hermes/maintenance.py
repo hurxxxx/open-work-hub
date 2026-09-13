@@ -230,7 +230,7 @@ def _claim_revoked_runs(*, limit: int) -> list[tuple[str, str, str]]:
             last_examined_id = run.id
             if can_use_app(
                 db,
-                app_id="chatbot",
+                app_id=run.owner_app_id,
                 user_id=run.user_id,
             ):
                 continue

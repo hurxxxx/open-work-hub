@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from dev_accounts import dev_login
-from open_work_hub_api.core.llm import LlmCompletionResult, LlmToolCall
+from open_work_hub_api.core.llm import LlmCompletionResult
 from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.bento import (
     BENTO_EDIT_WORKLOAD_ID,
@@ -124,14 +124,8 @@ def _tool_completion(document_json: str) -> LlmCompletionResult:
     return LlmCompletionResult(
         text="",
         model="local/qwen",
-        finish_reason="tool_calls",
-        tool_calls=(
-            LlmToolCall(
-                id="call-1",
-                name="submit_bento_document",
-                arguments=json.dumps({"document_json": document_json}),
-            ),
-        ),
+        finish_reason="stop",
+        structured_output={"document_json": document_json},
     )
 
 
@@ -177,14 +171,8 @@ def _plan_tool_completion(plan_json: str) -> LlmCompletionResult:
     return LlmCompletionResult(
         text="",
         model="local/qwen",
-        finish_reason="tool_calls",
-        tool_calls=(
-            LlmToolCall(
-                id="plan-call-1",
-                name="submit_bento_plan",
-                arguments=json.dumps({"plan_json": plan_json}),
-            ),
-        ),
+        finish_reason="stop",
+        structured_output={"plan_json": plan_json},
     )
 
 
@@ -591,10 +579,7 @@ def test_bento_ai_generation_uses_registered_local_workload_and_persists_documen
                 "reasoning_effort": kwargs["reasoning_effort"],
                 "stream_reasoning": kwargs["stream_reasoning"],
                 "max_tokens": kwargs["max_tokens"],
-                "tools": kwargs["tools"],
-                "tool_choice": kwargs["tool_choice"],
-                "parallel_tool_calls": kwargs["parallel_tool_calls"],
-                "extra_body": kwargs["extra_body"],
+                "output_schema": kwargs["output_schema"],
             }
         )
         if workload_id == BENTO_PLAN_WORKLOAD_ID:
@@ -650,18 +635,16 @@ def test_bento_ai_generation_uses_registered_local_workload_and_persists_documen
     assert plan_call["stream_reasoning"] is True
     assert plan_call["max_tokens"] == 16_384
     assert plan_call["context"].source == "api.bento.generate.plan"
-    assert plan_call["tools"][0]["function"]["name"] == "submit_bento_plan"
-    assert plan_call["tool_choice"]["function"]["name"] == "submit_bento_plan"
+    assert plan_call["output_schema"]["required"] == ["plan_json"]
+    assert plan_call["output_schema"]["x-owh-slide-count"] == 4
     assert "topic-specific storyboard" in plan_call["messages"][0]["content"]
     assert render_call["temperature"] == 0.5
     assert render_call["reasoning_effort"] == "none"
     assert render_call["stream_reasoning"] is False
     assert render_call["max_tokens"] == 32_768
     assert render_call["context"].app_id == "bento"
-    assert render_call["tools"][0]["function"]["name"] == "submit_bento_document"
-    assert render_call["tool_choice"]["function"]["name"] == "submit_bento_document"
-    assert render_call["parallel_tool_calls"] is False
-    assert render_call["extra_body"] == {"response_format": {"type": "json_object"}}
+    assert render_call["output_schema"]["required"] == ["document_json"]
+    assert render_call["output_schema"]["x-owh-slide-count"] == 4
     system_message = render_call["messages"][0]
     assert "Morph is Bento's signature" in system_message["content"]
     assert "Two columns: x=96 and 656" in system_message["content"]
@@ -711,7 +694,7 @@ def test_bento_ai_generation_rejects_invalid_model_output_without_creating_docum
     )
     assert job["status"] == "failed"
     assert job["error_code"] == "bento.agent.BentoGenerationError"
-    assert model_calls == 3
+    assert model_calls == 2
     after = client.get(f"{base}/hub", headers=headers).json()["total"]
     assert after == before
 
@@ -757,14 +740,13 @@ def test_bento_ai_generation_rejects_invalid_plan_before_rendering(
 
 
 @pytest.mark.usefixtures("configured_local_llm_control_plane")
-def test_bento_ai_generation_repairs_invalid_model_output_once(
+def test_bento_ai_generation_accepts_hermes_corrected_result_without_app_repair(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _disable_bento_broker_publish(monkeypatch)
     model_responses = iter(
         [
-            "not JSON",
             _generated_document(title="Repaired deck", slide_count=3),
         ]
     )
@@ -777,7 +759,7 @@ def test_bento_ai_generation_repairs_invalid_model_output_once(
                 "workload_id": workload_id,
                 "context": context,
                 "messages": kwargs["messages"],
-                "tools": kwargs["tools"],
+                "output_schema": kwargs["output_schema"],
             }
         )
         if workload_id == BENTO_PLAN_WORKLOAD_ID:
@@ -808,14 +790,10 @@ def test_bento_ai_generation_repairs_invalid_model_output_once(
         headers=_auth_headers(session["token"]),
     ).json()
     assert created["title"] == "Repaired deck"
-    assert len(calls) == 3
+    assert len(calls) == 2
     assert calls[0]["workload_id"] == BENTO_PLAN_WORKLOAD_ID
     assert calls[1]["workload_id"] == BENTO_GENERATE_WORKLOAD_ID
-    assert calls[2]["workload_id"] == BENTO_GENERATE_WORKLOAD_ID
-    assert calls[2]["context"].source == "api.bento.generate.repair"
-    repair_payload = json.loads(calls[2]["messages"][1]["content"])
-    assert repair_payload["invalid_model_response"] == "not JSON"
-    assert repair_payload["required_slide_count"] == 3
+    assert calls[1]["output_schema"]["required"] == ["document_json"]
 
 
 @pytest.mark.usefixtures("configured_local_llm_control_plane")
@@ -834,9 +812,8 @@ def test_bento_ai_edit_preserves_document_identity_and_server_owned_fields(
             messages=kwargs["messages"],
         )
         return SimpleNamespace(
-            completion=LlmCompletionResult(
-                text=_generated_document(title="Revised launch plan", slide_count=1),
-                model="local/qwen",
+            completion=_tool_completion(
+                _generated_document(title="Revised launch plan", slide_count=1)
             )
         )
 
@@ -962,11 +939,8 @@ def test_bento_ai_workloads_are_registered_local_only(workload_id: str) -> None:
         assert workload.allowed_routes == ("local", "external")
         assert workload.allowed_providers == ("openai",)
         assert workload.execution_kind == "agent"
-        assert workload.default_runtime_adapter == "fixed_bento_pipeline"
-        assert workload.allowed_runtime_adapters == (
-            "fixed_bento_pipeline",
-            "codex_sdk",
-        )
+        assert workload.default_runtime_adapter == "hermes"
+        assert workload.allowed_runtime_adapters == ("hermes",)
     assert workload.local_max_output_tokens == (
         16_384 if workload_id == BENTO_PLAN_WORKLOAD_ID else 32_768
     )

@@ -19,7 +19,17 @@ export type AdminUsersResponse = Omit<
 > & {
   items: AuthUser[];
 };
-export type OrganizationUnitItem = ApiSchema<'OrganizationUnitResponse'>;
+export type HrGroupItem = Pick<
+  ApiSchema<'GroupResponse'>,
+  | 'id'
+  | 'name'
+  | 'slug'
+  | 'unit_type'
+  | 'parent_id'
+  | 'active'
+  | 'created_at'
+  | 'updated_at'
+> & { head_user_id?: string | null };
 export type PlatformApiKeyItem = ApiSchema<'PlatformApiKeyItemResponse'>;
 export type PlatformApiKeyListResponse =
   ApiSchema<'PlatformApiKeyListResponse'>;
@@ -511,52 +521,28 @@ export function deleteAdminUser(token: string, userId: string): Promise<void> {
   });
 }
 
-export function listOrganizationUnits(
+export async function listHrGroups(
   token: string,
-  options: { includeInactive?: boolean } = {},
-): Promise<OrganizationUnitItem[]> {
-  const suffix = options.includeInactive ? '?include_inactive=true' : '';
-  return request<OrganizationUnitItem[]>(
-    token,
-    `/api/v1/admin/organization-units${suffix}`,
-  );
-}
-
-export function createOrganizationUnit(
-  token: string,
-  payload: {
-    name: string;
-    slug?: string;
-    unit_type: string;
-    parent_id?: string | null;
-    head_user_id?: string | null;
-    active: boolean;
-  },
-): Promise<OrganizationUnitItem> {
-  return request<OrganizationUnitItem>(
-    token,
-    '/api/v1/admin/organization-units',
-    { method: 'POST', body: JSON.stringify(payload) },
-  );
-}
-
-export function updateOrganizationUnit(
-  token: string,
-  organizationUnitId: string,
-  payload: {
-    name?: string;
-    slug?: string;
-    unit_type?: string;
-    parent_id?: string | null;
-    head_user_id?: string | null;
-    active?: boolean;
-  },
-): Promise<OrganizationUnitItem> {
-  return request<OrganizationUnitItem>(
-    token,
-    `/api/v1/admin/organization-units/${encodeURIComponent(organizationUnitId)}`,
-    { method: 'PATCH', body: JSON.stringify(payload) },
-  );
+  options: { includeInactive?: boolean; signal?: AbortSignal } = {},
+): Promise<HrGroupItem[]> {
+  const items: HrGroupItem[] = [];
+  let page = 1;
+  for (;;) {
+    const params = new URLSearchParams({
+      source: 'hr',
+      page: String(page),
+      page_size: '200',
+      include_inactive: String(options.includeInactive ?? false),
+    });
+    const response = await request<ApiSchema<'GroupListResponse'>>(
+      token,
+      `/api/v1/admin/groups?${params}`,
+      { signal: options.signal },
+    );
+    items.push(...response.items);
+    if (page * response.page_size >= response.total) return items;
+    page += 1;
+  }
 }
 
 export function listPlatformApiKeys(

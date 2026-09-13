@@ -33,14 +33,50 @@ from integration_infra import (
 TEST_POSTGRES_DSN = (
     "postgresql+psycopg://open_work_hub_test:open_work_hub_test@127.0.0.1:5432/open_work_hub_test"
 )
+TEST_SETTINGS_ENV = {
+    "OPEN_WORK_HUB_POSTGRES_DSN": TEST_POSTGRES_DSN,
+    "OPEN_WORK_HUB_MAIL_CREDENTIAL_ENCRYPTION_KEY": "test-mail-credential-key",
+    "OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY": "test-ai-model-credential-key",
+    "OPEN_WORK_HUB_PLATFORM_API_KEY_ENCRYPTION_KEY": "test-platform-api-key-encryption-key",
+    "OPEN_WORK_HUB_WORKER_BROKER_URL": "memory://",
+    "OPEN_WORK_HUB_WORKER_RESULT_BACKEND": "cache+memory://",
+}
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    # Some registry modules construct settings during collection, before fixtures run.
+    # Collection must not depend on a developer's ignored credentials or running services.
+    settings_env = pytest.MonkeyPatch()
+    for key, value in TEST_SETTINGS_ENV.items():
+        settings_env.setenv(key, value)
+    config.add_cleanup(settings_env.undo)
     config.addinivalue_line(
         "markers",
         "fresh_api_app: tests that require function-scoped FastAPI route composition "
         "or startup settings",
     )
+
+
+@pytest.fixture(autouse=True)
+def _isolated_worker_publishers(_required_settings_env) -> Iterator[None]:
+    from open_work_hub_api.domains.mail.sync_jobs import get_celery_client as mail_publisher
+    from open_work_hub_api.domains.rag.outbox import get_celery_client as rag_publisher
+    from open_work_hub_api.domains.search.outbox import get_celery_client as search_publisher
+
+    factories = (mail_publisher, rag_publisher, search_publisher)
+    try:
+        yield
+    finally:
+        for factory in factories:
+            if factory.cache_info().currsize:
+                publisher = factory()
+                try:
+                    # Purge only this process's test transport, never an external broker.
+                    if publisher.conf.broker_url == "memory://":
+                        publisher.control.purge()
+                finally:
+                    publisher.close()
+                    factory.cache_clear()
 
 
 @pytest.fixture(autouse=True)
@@ -225,8 +261,13 @@ def _create_native_test_database(template_dsn: str, database: str) -> str:
             cursor.execute(
                 sql.SQL("ALTER DATABASE {} SET timezone TO 'UTC'").format(sql.Identifier(database))
             )
-    _wait_for_postgres(test_dsn)
-    _ensure_pgvector_extension(test_dsn)
+    try:
+        _wait_for_postgres(test_dsn)
+        _ensure_pgvector_extension(test_dsn)
+    except BaseException:
+        # The context manager has not yielded yet, so its teardown cannot own this database.
+        _drop_native_test_database(template_dsn, database)
+        raise
     return test_dsn
 
 
@@ -487,16 +528,8 @@ def _ensure_pgvector_extension_with_native_superuser(dsn: str) -> None:
 def _required_settings_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     from open_work_hub_api.core.settings import get_settings
 
-    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", TEST_POSTGRES_DSN)
-    monkeypatch.setenv("OPEN_WORK_HUB_MAIL_CREDENTIAL_ENCRYPTION_KEY", "test-mail-credential-key")
-    monkeypatch.setenv(
-        "OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY",
-        "test-ai-model-credential-key",
-    )
-    monkeypatch.setenv(
-        "OPEN_WORK_HUB_PLATFORM_API_KEY_ENCRYPTION_KEY",
-        "test-platform-api-key-encryption-key",
-    )
+    for key, value in TEST_SETTINGS_ENV.items():
+        monkeypatch.setenv(key, value)
     get_settings.cache_clear()
     try:
         yield
@@ -628,6 +661,7 @@ def _configure_test_application_environment(
     minio_bucket: str = "open-work-hub-test-unused",
 ) -> None:
     monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", postgres_dsn)
+    monkeypatch.setenv("OPEN_WORK_HUB_API_INSTANCE_ID", f"api-test-{uuid.uuid4().hex}")
     monkeypatch.setenv("OPEN_WORK_HUB_API_SESSION_TTL_HOURS", "1")
     monkeypatch.setenv("OPEN_WORK_HUB_API_ALLOW_DEV_ADMIN_LOGIN", "1")
     monkeypatch.setenv("OPEN_WORK_HUB_API_SEED_DEV_LOGIN_ACCOUNT", "0")

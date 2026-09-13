@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from open_work_hub_api.core.settings import HERMES_FALLBACK_MODEL, HERMES_MODEL, HERMES_PROVIDER
 from open_work_hub_api.domains.auth.models import User
+from open_work_hub_api.domains.hermes.model_policy import HermesModelPolicy
 from open_work_hub_api.domains.hermes import mcp_router
 from open_work_hub_api.domains.hermes import maintenance as hermes_maintenance
 from open_work_hub_api.domains.hermes import router as hermes_router
@@ -216,6 +217,7 @@ def test_revoked_run_scan_advances_past_authorized_windows(
         SimpleNamespace(
             id=f"00000000-0000-0000-0000-{index:012d}",
             user_id=f"allowed-{index}",
+            owner_app_id="chatbot",
             status="running",
             execution_claim_token=None,
             execution_claim_expires_at=None,
@@ -227,6 +229,7 @@ def test_revoked_run_scan_advances_past_authorized_windows(
     revoked = SimpleNamespace(
         id="00000000-0000-0000-0000-000000000006",
         user_id="revoked-user",
+        owner_app_id="chatbot",
         status="running",
         execution_claim_token=None,
         execution_claim_expires_at=None,
@@ -299,6 +302,7 @@ async def test_revoked_job_scan_advances_past_authorized_windows(
         SimpleNamespace(
             id=f"10000000-0000-0000-0000-{index:012d}",
             user_id=f"allowed-{index}",
+            owner_app_id="chatbot",
             status="active",
             profile_binding_id=f"profile-{index}",
             hermes_job_id=f"remote-job-{index}",
@@ -309,6 +313,7 @@ async def test_revoked_job_scan_advances_past_authorized_windows(
     revoked = SimpleNamespace(
         id="10000000-0000-0000-0000-000000000006",
         user_id="revoked-user",
+        owner_app_id="chatbot",
         status="active",
         profile_binding_id="profile-revoked",
         hermes_job_id="remote-job-revoked",
@@ -539,8 +544,6 @@ async def test_management_client_pins_openrouter_model_and_dashboard_token() -> 
         "name": "owh-profile",
         "clone_from": "default",
         "description": "isolated profile",
-        "provider": HERMES_PROVIDER,
-        "model": HERMES_MODEL,
         "mcp_servers": [{"name": "open-work-hub", "url": "http://api/mcp"}],
     }
 
@@ -619,8 +622,11 @@ def test_run_scope_normalizes_app_ids_and_mcp_filters_with_it(monkeypatch) -> No
             return []
 
     monkeypatch.setattr(mcp_router, "AiMcpClient", FakeMcpClient)
+    monkeypatch.setattr(mcp_router, "can_use_app", lambda *_args, **_kwargs: True)
     db = SimpleNamespace(
-        scalar=lambda _query: SimpleNamespace(allowed_app_ids=body.allowed_app_ids)
+        scalar=lambda _query: SimpleNamespace(
+            allowed_app_ids=body.allowed_app_ids, owner_app_id="chatbot"
+        )
     )
     binding = SimpleNamespace(id="binding-1")
     user = SimpleNamespace(id="user-1")
@@ -629,6 +635,7 @@ def test_run_scope_normalizes_app_ids_and_mcp_filters_with_it(monkeypatch) -> No
         db,
         binding=binding,
         user=user,
+        hermes_run_id="run_native_1",
     )
 
     assert tools == []
@@ -646,6 +653,7 @@ def test_mcp_discovery_surface_is_stable_across_run_app_scopes(monkeypatch) -> N
             return []
 
     monkeypatch.setattr(mcp_router, "AiMcpClient", FakeMcpClient)
+    monkeypatch.setattr(mcp_router, "can_use_app", lambda *_args, **_kwargs: True)
     active_run = SimpleNamespace(allowed_app_ids=["files"])
     db = SimpleNamespace(scalar=lambda _query: active_run)
 
@@ -657,7 +665,7 @@ def test_mcp_discovery_surface_is_stable_across_run_app_scopes(monkeypatch) -> N
     )
 
     assert tools == []
-    assert resolved_run is active_run
+    assert resolved_run is None
     assert captured["app_ids"] is None
 
 
@@ -680,7 +688,9 @@ def test_mcp_tool_surface_requires_an_active_scoped_run(monkeypatch) -> None:
     assert error.value.detail == {"code": "hermes.active_run_required"}
 
 
-def _mcp_approval_payload(profile_name: str, tool_name: str) -> dict[str, Any]:
+def _mcp_approval_payload(
+    profile_name: str, tool_name: str, arguments: dict | None = None
+) -> dict[str, Any]:
     return {
         "command": (
             f"MCP tool '{tool_name}' on UNTRUSTED server "
@@ -688,7 +698,7 @@ def _mcp_approval_payload(profile_name: str, tool_name: str) -> dict[str, Any]:
             "write-capable (no readOnlyHint=true annotation) and may modify external "
             "state."
         ),
-        "description": "Approve this tool once.",
+        "description": f"Approve this call once. Arguments SHA-256: {mcp_router._arguments_sha256(arguments or {})}",
         "pattern_key": "mcp_elicitation",
         "pattern_keys": ["mcp_elicitation"],
         "request_id": "approval-1",
@@ -703,11 +713,13 @@ def test_mcp_write_approval_matches_the_exact_hermes_trust_prompt() -> None:
         approval,
         profile_name=profile_name,
         tool_name="tasks.create",
+        arguments={},
     )
     assert not mcp_router._approval_matches_mcp_tool(
         approval,
         profile_name=profile_name,
         tool_name="tasks.delete",
+        arguments={},
     )
 
     approval.request_payload = {
@@ -721,13 +733,16 @@ def test_mcp_write_approval_matches_the_exact_hermes_trust_prompt() -> None:
         approval,
         profile_name=profile_name,
         tool_name="tasks.create",
+        arguments={},
     )
 
 
 def test_mcp_write_approval_is_consumed_once_and_bound_to_arguments() -> None:
     approval = SimpleNamespace(
         id="approval-row-1",
-        request_payload=_mcp_approval_payload("owh-profile-a", "tasks.create"),
+        request_payload=_mcp_approval_payload(
+            "owh-profile-a", "tasks.create", {"title": "Ship Hermes", "priority": 2}
+        ),
         consumed_at=None,
         consumed_tool_name=None,
         consumed_arguments_sha256=None,
@@ -781,6 +796,7 @@ async def test_approval_is_committed_before_hermes_resumes(monkeypatch) -> None:
     run = SimpleNamespace(
         id="run-1",
         hermes_run_id="hermes-run-1",
+        profile_binding_id="profile-1",
     )
     approval = SimpleNamespace(
         id="approval-1",
@@ -833,7 +849,11 @@ async def test_approval_is_committed_before_hermes_resumes(monkeypatch) -> None:
         return SimpleNamespace(profile_name="profile-1")
 
     monkeypatch.setattr(hermes_router, "HermesRunRepository", lambda _db: FakeRepository())
-    monkeypatch.setattr(hermes_router, "_profile_for_request", fake_profile_for_request)
+    monkeypatch.setattr(
+        hermes_router,
+        "_bound_profile",
+        lambda *_args, **_kwargs: SimpleNamespace(profile_name="profile-1"),
+    )
     monkeypatch.setattr(hermes_router, "runtime_client", lambda: FakeRuntimeClient())
     monkeypatch.setattr(hermes_router, "HermesRunResponse", FakeResponse)
 
@@ -856,7 +876,7 @@ async def test_approval_is_committed_before_hermes_resumes(monkeypatch) -> None:
 
 
 async def test_failed_hermes_resume_restores_unconsumed_approval(monkeypatch) -> None:
-    run = SimpleNamespace(id="run-1", hermes_run_id="hermes-run-1")
+    run = SimpleNamespace(id="run-1", hermes_run_id="hermes-run-1", profile_binding_id="profile-1")
     approval = SimpleNamespace(
         id="approval-1",
         status="pending",
@@ -899,7 +919,11 @@ async def test_failed_hermes_resume_restores_unconsumed_approval(monkeypatch) ->
         return SimpleNamespace(profile_name="profile-1")
 
     monkeypatch.setattr(hermes_router, "HermesRunRepository", lambda _db: FakeRepository())
-    monkeypatch.setattr(hermes_router, "_profile_for_request", fake_profile_for_request)
+    monkeypatch.setattr(
+        hermes_router,
+        "_bound_profile",
+        lambda *_args, **_kwargs: SimpleNamespace(profile_name="profile-1"),
+    )
     monkeypatch.setattr(hermes_router, "runtime_client", lambda: FailingRuntimeClient())
 
     with pytest.raises(HTTPException) as error:
@@ -958,6 +982,12 @@ async def test_scheduled_jobs_use_a_separate_profile_without_any_mcp() -> None:
     servers = {"open-work-hub", "third-party"}
 
     class FakeManagementClient:
+        async def update_profile_config(self, *_args, **_kwargs):
+            return {"ok": True}
+
+        async def update_profile_env(self, *_args, **_kwargs):
+            return {"ok": True}
+
         async def list_profiles(self):
             return {"profiles": [{"name": "owh-owner-profile-jobs"}]}
 
@@ -977,6 +1007,9 @@ async def test_scheduled_jobs_use_a_separate_profile_without_any_mcp() -> None:
     settings = SimpleNamespace(hermes_enabled=True)
     profile_name = await ensure_job_profile(
         binding,
+        model_policy=HermesModelPolicy(
+            "external", "openai", "test-model", "https://example.test/v1", "test-key", 1024
+        ),
         settings=settings,
         client=FakeManagementClient(),
     )
@@ -994,6 +1027,12 @@ async def test_scheduled_job_profile_clones_the_interactive_profile() -> None:
     create_calls: list[dict[str, Any]] = []
 
     class FakeManagementClient:
+        async def update_profile_config(self, *_args, **_kwargs):
+            return {"ok": True}
+
+        async def update_profile_env(self, *_args, **_kwargs):
+            return {"ok": True}
+
         async def list_profiles(self):
             return {"profiles": [{"name": name} for name in sorted(profiles)]}
 
@@ -1011,6 +1050,9 @@ async def test_scheduled_job_profile_clones_the_interactive_profile() -> None:
     settings = SimpleNamespace(hermes_enabled=True)
     await ensure_job_profile(
         binding,
+        model_policy=HermesModelPolicy(
+            "external", "openai", "test-model", "https://example.test/v1", "test-key", 1024
+        ),
         settings=settings,
         client=FakeManagementClient(),
     )
@@ -1063,6 +1105,12 @@ async def test_profile_reconciliation_replaces_stale_internal_mcp_url(
     added: list[dict[str, Any]] = []
 
     class FakeManagementClient:
+        async def update_profile_config(self, *_args, **_kwargs):
+            return {"ok": True}
+
+        async def update_profile_env(self, *_args, **_kwargs):
+            return {"ok": True}
+
         async def list_profiles(self):
             return {"profiles": [{"name": profile_name}]}
 
@@ -1110,14 +1158,20 @@ async def test_profile_reconciliation_replaces_stale_internal_mcp_url(
     settings = SimpleNamespace(
         hermes_enabled=True,
         hermes_profile_clone_source="default",
+        hermes_api_key=SimpleNamespace(get_secret_value=lambda: "test-api-server-key"),
         hermes_mcp_server_url=("http://127.0.0.1:8002/api/v1/internal/hermes/mcp"),
         hermes_mcp_shared_secret=SimpleNamespace(
             get_secret_value=lambda: "mcp-root-secret-00000000000000000001"
         ),
     )
 
+    from open_work_hub_api.domains.hermes.model_policy import HermesModelPolicy
+
     reconciled = await hermes_service.ensure_profile_binding(
         FakeDb(),
+        model_policy=HermesModelPolicy(
+            "external", "openai", "test-model", "https://example.test/v1", "test-key", 1024
+        ),
         user=SimpleNamespace(),
         settings=settings,
         client=FakeManagementClient(),

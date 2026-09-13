@@ -123,7 +123,8 @@ class HermesProfileBinding(Base):
     __table_args__ = (
         UniqueConstraint(
             "user_id",
-            name="uq_hermes_profile_bindings_user",
+            "route",
+            name="uq_hermes_profile_bindings_user_route",
         ),
         CheckConstraint(
             _sql_in_clause("status", HERMES_PROFILE_STATUSES),
@@ -147,6 +148,9 @@ class HermesProfileBinding(Base):
         index=True,
     )
     profile_name: Mapped[str] = mapped_column(String(63), nullable=False, unique=True)
+    route: Mapped[str] = mapped_column(
+        String(16), default="external", server_default=text("'external'"), nullable=False
+    )
     status: Mapped[str] = mapped_column(
         String(24),
         default="provisioning",
@@ -300,6 +304,19 @@ class HermesRunProjection(Base):
     request_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     kind: Mapped[str] = mapped_column(String(24), nullable=False)
     workload_id: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    owner_app_id: Mapped[str] = mapped_column(
+        String(80), default="chatbot", server_default=text("'chatbot'"), nullable=False
+    )
+    runtime_options: Mapped[dict[str, Any]] = mapped_column(
+        JSONB_COMPAT, default=dict, server_default=text("'{}'"), nullable=False
+    )
+    output_schema: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COMPAT, nullable=True)
+    output_payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB_COMPAT, nullable=True)
+
+    @property
+    def model_policy(self) -> dict[str, Any]:
+        return (self.runtime_options or {}).get("owh_policy", {})
+
     status: Mapped[str] = mapped_column(
         String(32),
         default="pending",
@@ -356,6 +373,27 @@ class HermesRunProjection(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
+
+
+class HermesSessionFile(Base):
+    __tablename__ = "hermes_session_files"
+    __table_args__ = (
+        UniqueConstraint("session_id", "relative_path", name="uq_hermes_session_files_path"),
+        CheckConstraint("size_bytes >= 0", name="ck_hermes_session_files_size"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("hermes_session_bindings.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    relative_path: Mapped[str] = mapped_column(String(1024))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    object_key: Mapped[str] = mapped_column(String(1024), unique=True)
+    media_type: Mapped[str] = mapped_column(String(255))
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
 
 class HermesRunInput(Base):
@@ -554,6 +592,15 @@ class HermesMaintenanceState(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
+
+
+class HermesFileObject(Base):
+    """Object reservation and durable deletion queue, independent of user deletion."""
+
+    __tablename__ = "hermes_file_objects"
+
+    object_key: Mapped[str] = mapped_column(String(1024), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
 
 
 class HermesJobBinding(Base):

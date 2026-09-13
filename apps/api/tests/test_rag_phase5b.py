@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-import pytest
 from dev_accounts import dev_login, create_company_user_session, auth_headers
 from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
 
@@ -13,7 +12,6 @@ from open_work_hub_api.domains.docs import service as docs_service
 from open_work_hub_api.domains.rag import application as rag_application
 from open_work_hub_api.domains.rag.default_source_adapters import registered_searchable_rag_app_ids
 from open_work_hub_api.domains.rag.docs_projection import load_native_doc_projection
-import open_work_hub_api.domains.rag.outbox as rag_outbox
 from open_work_hub_api.domains.rag.providers.fake import (
     FakeEmbeddingClient,
     FakeRerankClient,
@@ -25,20 +23,6 @@ from open_work_hub_api.domains.rag.runtime import (
     resolve_default_collection_name,
 )
 from open_work_hub_api.domains.rag.service import RagService
-
-
-@pytest.fixture(autouse=True)
-def _stub_rag_job_publish(monkeypatch) -> None:
-    class _FakeSignature:
-        def apply_async(self, *, queue: str, retry: bool) -> None:
-            del queue, retry
-
-    class _FakeCeleryClient:
-        def signature(self, task_name: str, args: list[str], immutable: bool):
-            del task_name, args, immutable
-            return _FakeSignature()
-
-    monkeypatch.setattr(rag_outbox, "get_celery_client", lambda: _FakeCeleryClient())
 
 
 def _create_user_session(client, admin_token, *, login_id, email, full_name, role="member"):
@@ -139,7 +123,6 @@ def test_rag_query_hides_other_users_personal_docs_even_from_platform_admin(
     assert all("workspace_id" not in hit for hit in payload["hits"])
 
 
-@pytest.mark.slow
 def test_company_rag_reindex_requires_admin(
     client: TestClient,
     monkeypatch,
@@ -198,7 +181,6 @@ def test_company_rag_reindex_enforces_cooldown(
     assert second.json()["code"] == "rag.reindex_cooldown_recent"
 
 
-@pytest.mark.slow
 def test_company_rag_query_validates_payload(
     client: TestClient,
     monkeypatch,
@@ -236,7 +218,6 @@ def test_company_rag_query_validates_payload(
     assert body["detail"] == "예약된 메타데이터 필터 key입니다: resource_id"
 
 
-@pytest.mark.slow
 def test_rag_query_rejects_user_without_admitted_sources(client, monkeypatch):
     monkeypatch.setenv("OPEN_WORK_HUB_RAG_ENABLED", "1")
     _reset_settings_and_registry()
@@ -259,7 +240,6 @@ def test_rag_query_rejects_user_without_admitted_sources(client, monkeypatch):
     assert response.json()["code"] == "rag.access_denied_not_enabled"
 
 
-@pytest.mark.slow
 def test_rag_ai_manifest_hides_tools_when_no_searchable_apps_enabled(
     client: TestClient,
     monkeypatch,

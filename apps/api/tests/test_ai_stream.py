@@ -33,6 +33,7 @@ from open_work_hub_api.domains.ai import agent as ai_agent
 from open_work_hub_api.domains.ai import approvals as ai_approvals
 from open_work_hub_api.domains.ai import router as ai_router
 from open_work_hub_api.domains.auth.models import AuditLog, User
+from hermes_route_stub import hermes_route_stub  # noqa: F401
 from open_work_hub_api.domains.conversations.scope_registry import (
     ConversationScopeArtifact,
     ConversationScopeTurnContext,
@@ -44,6 +45,8 @@ from test_meeting import (
     _dev_login,
     _login,
 )
+
+pytestmark = pytest.mark.usefixtures("hermes_route_stub")
 
 
 @pytest.fixture(autouse=True)

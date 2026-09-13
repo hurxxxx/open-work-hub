@@ -3,10 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 import {
   listAdminUsers,
-  listOrganizationUnits,
+  listHrGroups,
   type AdminUsersQuery,
   type AdminUsersResponse,
-  type OrganizationUnitItem,
+  type HrGroupItem,
 } from './admin-api';
 import {
   ADMIN_PEOPLE_DEFAULT_PAGE_SIZE,
@@ -15,11 +15,11 @@ import {
 
 export interface AdminPeopleDirectoryClient {
   listUsers(token: string, query: AdminUsersQuery): Promise<AdminUsersResponse>;
-  listOrganizationUnits(token: string): Promise<OrganizationUnitItem[]>;
+  listHrGroups(token: string): Promise<HrGroupItem[]>;
 }
 
 export interface AdminPeopleDirectoryMessages {
-  organizationListLoadFailed: string;
+  hrGroupListLoadFailed: string;
   userListLoadFailed: string;
 }
 
@@ -34,8 +34,8 @@ export interface AdminPeopleDirectoryController {
   state: {
     error: string | null;
     isLoadingUsers: boolean;
-    organizationUnitId: string;
-    organizationUnits: OrganizationUnitItem[];
+    hrGroupId: string;
+    hrGroups: HrGroupItem[];
     includeDescendants: boolean;
     unassignedOnly: boolean;
     page: number;
@@ -46,7 +46,7 @@ export interface AdminPeopleDirectoryController {
   };
   actions: {
     reloadUsers(nextPage: number): Promise<void>;
-    organizationUnitChanged(organizationUnitId: string): void;
+    hrGroupChanged(hrGroupId: string): void;
     setIncludeDescendants(includeDescendants: boolean): void;
     setUnassignedOnly(unassignedOnly: boolean): void;
     searchChanged(search: string): void;
@@ -59,14 +59,14 @@ function queryWithFilters({
   page,
   pageSize,
   search,
-  organizationUnitId,
+  hrGroupId,
   includeDescendants,
   unassignedOnly,
 }: {
   page: number;
   pageSize: number;
   search: string;
-  organizationUnitId: string;
+  hrGroupId: string;
   includeDescendants: boolean;
   unassignedOnly: boolean;
 }): AdminUsersQuery {
@@ -76,9 +76,9 @@ function queryWithFilters({
     q: search,
     ...(unassignedOnly
       ? { unassigned_only: true }
-      : organizationUnitId
+      : hrGroupId
         ? {
-            organization_unit_id: organizationUnitId,
+            organization_unit_id: hrGroupId,
             include_descendants: includeDescendants,
           }
         : {}),
@@ -87,8 +87,7 @@ function queryWithFilters({
 
 export const adminPeopleDirectoryClient: AdminPeopleDirectoryClient = {
   listUsers: listAdminUsers,
-  listOrganizationUnits: (token) =>
-    listOrganizationUnits(token, { includeInactive: true }),
+  listHrGroups: (token) => listHrGroups(token, { includeInactive: true }),
 };
 
 export function useAdminPeopleDirectoryController({
@@ -101,10 +100,8 @@ export function useAdminPeopleDirectoryController({
   const [totalUsers, setTotalUsers] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(ADMIN_PEOPLE_DEFAULT_PAGE_SIZE);
-  const [organizationUnits, setOrganizationUnits] = useState<
-    OrganizationUnitItem[]
-  >([]);
-  const [organizationUnitId, setOrganizationUnitId] = useState('');
+  const [hrGroups, setHrGroups] = useState<HrGroupItem[]>([]);
+  const [hrGroupId, setHrGroupId] = useState('');
   const [includeDescendants, setIncludeDescendants] = useState(true);
   const [unassignedOnly, setUnassignedOnly] = useState(false);
   const [search, setSearch] = useState('');
@@ -112,8 +109,8 @@ export function useAdminPeopleDirectoryController({
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const searchRef = useRef(search);
   searchRef.current = search;
-  const organizationUnitIdRef = useRef(organizationUnitId);
-  organizationUnitIdRef.current = organizationUnitId;
+  const hrGroupIdRef = useRef(hrGroupId);
+  hrGroupIdRef.current = hrGroupId;
   const includeDescendantsRef = useRef(includeDescendants);
   includeDescendantsRef.current = includeDescendants;
   const unassignedOnlyRef = useRef(unassignedOnly);
@@ -124,12 +121,12 @@ export function useAdminPeopleDirectoryController({
 
     async function load() {
       try {
-        const items = await client.listOrganizationUnits(token);
-        if (!cancelled) setOrganizationUnits(items);
+        const items = await client.listHrGroups(token);
+        if (!cancelled) setHrGroups(items);
       } catch (caughtError) {
         if (!cancelled) {
           setError(
-            getErrorMessage(caughtError, messages.organizationListLoadFailed),
+            getErrorMessage(caughtError, messages.hrGroupListLoadFailed),
           );
         }
       }
@@ -139,7 +136,7 @@ export function useAdminPeopleDirectoryController({
     return () => {
       cancelled = true;
     };
-  }, [client, messages.organizationListLoadFailed, token]);
+  }, [client, messages.hrGroupListLoadFailed, token]);
 
   const reloadUsers = useCallback(
     async (nextPage: number) => {
@@ -151,7 +148,7 @@ export function useAdminPeopleDirectoryController({
             page: nextPage,
             pageSize,
             search: searchRef.current,
-            organizationUnitId: organizationUnitIdRef.current,
+            hrGroupId: hrGroupIdRef.current,
             includeDescendants: includeDescendantsRef.current,
             unassignedOnly: unassignedOnlyRef.current,
           }),
@@ -180,7 +177,7 @@ export function useAdminPeopleDirectoryController({
               page,
               pageSize,
               search,
-              organizationUnitId,
+              hrGroupId,
               includeDescendants,
               unassignedOnly,
             }),
@@ -211,7 +208,7 @@ export function useAdminPeopleDirectoryController({
     client,
     debounceMs,
     messages.userListLoadFailed,
-    organizationUnitId,
+    hrGroupId,
     page,
     pageSize,
     search,
@@ -230,15 +227,15 @@ export function useAdminPeopleDirectoryController({
     setPage(1);
   }, []);
 
-  const organizationUnitChanged = useCallback((nextId: string) => {
-    setOrganizationUnitId(nextId);
+  const hrGroupChanged = useCallback((nextId: string) => {
+    setHrGroupId(nextId);
     if (nextId) setUnassignedOnly(false);
     setPage(1);
   }, []);
 
   const unassignedOnlyChanged = useCallback((nextValue: boolean) => {
     setUnassignedOnly(nextValue);
-    if (nextValue) setOrganizationUnitId('');
+    if (nextValue) setHrGroupId('');
     setPage(1);
   }, []);
 
@@ -251,8 +248,8 @@ export function useAdminPeopleDirectoryController({
     state: {
       error,
       isLoadingUsers,
-      organizationUnitId,
-      organizationUnits,
+      hrGroupId,
+      hrGroups,
       includeDescendants,
       unassignedOnly,
       page,
@@ -263,7 +260,7 @@ export function useAdminPeopleDirectoryController({
     },
     actions: {
       reloadUsers,
-      organizationUnitChanged,
+      hrGroupChanged,
       searchChanged,
       setIncludeDescendants: includeDescendantsChanged,
       setPage,

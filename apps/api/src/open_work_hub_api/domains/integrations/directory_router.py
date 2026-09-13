@@ -15,7 +15,7 @@ from open_work_hub_api.domains.integrations.platform_api_keys import (
     platform_api_scope_openapi,
     require_platform_api_scope,
 )
-from open_work_hub_api.domains.organization.models import OrganizationUnit
+from open_work_hub_api.domains.groups.models import Group
 
 router = APIRouter(prefix="/integrations/directory", tags=["directory-integrations"])
 require_organization_read = require_platform_api_scope("organization:read")
@@ -24,6 +24,7 @@ require_people_read = require_platform_api_scope("people:read")
 
 class DirectoryOrganizationUnitResponse(BaseModel):
     id: str
+    source_reference: str | None
     name: str
     slug: str
     unit_type: str
@@ -109,13 +110,15 @@ def list_directory_organization_units(
     db: Session = Depends(get_db_session),
 ) -> DirectoryOrganizationUnitsResponse:
     _set_no_store_headers(response)
-    filters = [] if include_inactive else [OrganizationUnit.active.is_(True)]
-    total = db.scalar(select(func.count()).select_from(OrganizationUnit).where(*filters)) or 0
+    filters = [Group.source == "hr"]
+    if not include_inactive:
+        filters.append(Group.active.is_(True))
+    total = db.scalar(select(func.count()).select_from(Group).where(*filters)) or 0
     items = list(
         db.scalars(
-            select(OrganizationUnit)
+            select(Group)
             .where(*filters)
-            .order_by(OrganizationUnit.name, OrganizationUnit.id)
+            .order_by(Group.name, Group.id)
             .offset((page - 1) * page_size)
             .limit(page_size)
         ).all()

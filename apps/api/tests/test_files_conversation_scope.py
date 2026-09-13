@@ -99,7 +99,9 @@ def test_files_conversation_scope_returns_closed_response_without_evidence(
     monkeypatch.setattr(
         conversation_scope,
         "execute_llm",
-        lambda *_args, **_kwargs: SimpleNamespace(completion=SimpleNamespace(text="not json")),
+        lambda *_args, **_kwargs: SimpleNamespace(
+            completion=SimpleNamespace(structured_output=None)
+        ),
     )
     monkeypatch.setattr(conversation_scope, "query_file_chat_evidence", _query)
 
@@ -136,7 +138,9 @@ def test_files_first_turn_retries_with_recall_optimized_query_after_no_evidence(
         captured_llm["context"] = context
         captured_llm.update(kwargs)
         return SimpleNamespace(
-            completion=SimpleNamespace(text='{"apply":true,"query":"접근 권한 오류 관련 문서"}')
+            completion=SimpleNamespace(
+                structured_output=json.loads('{"apply":true,"query":"접근 권한 오류 관련 문서"}')
+            )
         )
 
     def _query(_db, **kwargs):
@@ -179,7 +183,7 @@ def test_files_factual_question_does_not_apply_no_evidence_relaxation(
         "execute_llm",
         lambda *_args, **_kwargs: SimpleNamespace(
             completion=SimpleNamespace(
-                text='{"apply":false,"query":"해왕성의 위성 트리톤의 공전 주기는?"}'
+                structured_output={"apply": False, "query": "해왕성의 위성 트리톤의 공전 주기는?"}
             )
         ),
     )
@@ -211,7 +215,9 @@ def test_files_rejects_relaxation_that_does_not_preserve_query_anchors(
         conversation_scope,
         "execute_llm",
         lambda *_args, **_kwargs: SimpleNamespace(
-            completion=SimpleNamespace(text='{"apply":true,"query":"프로젝트 예산 관련 문서"}')
+            completion=SimpleNamespace(
+                structured_output=json.loads('{"apply":true,"query":"프로젝트 예산 관련 문서"}')
+            )
         ),
     )
     monkeypatch.setattr(
@@ -375,7 +381,9 @@ def test_files_follow_up_uses_registered_query_rewrite_workload(
         captured_llm["context"] = context
         captured_llm.update(kwargs)
         return SimpleNamespace(
-            completion=SimpleNamespace(text='{"query":"접근 권한 관리 기준의 적용 대상"}')
+            completion=SimpleNamespace(
+                structured_output=json.loads('{"query":"접근 권한 관리 기준의 적용 대상"}')
+            )
         )
 
     def _query(_db, **kwargs):
@@ -418,7 +426,9 @@ def test_files_invalid_rewrite_falls_back_but_gateway_failure_propagates(
     monkeypatch.setattr(
         conversation_scope,
         "execute_llm",
-        lambda *_args, **_kwargs: SimpleNamespace(completion=SimpleNamespace(text="not json")),
+        lambda *_args, **_kwargs: SimpleNamespace(
+            completion=SimpleNamespace(structured_output=None)
+        ),
     )
     monkeypatch.setattr(
         conversation_scope,

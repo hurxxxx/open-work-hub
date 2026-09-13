@@ -18,6 +18,7 @@ import {
   AiApiError,
   sendAiChat,
   streamAiChat,
+  streamAiExistingRun,
   streamAiChatResume,
   type AiChatStreamRequest,
   type ResumeAiChatRequest,
@@ -34,6 +35,7 @@ export interface UseChatStreamApi {
     payload: ResumeAiChatRequest,
     options?: { seedApproval?: PendingApproval | null },
   ) => Promise<void>;
+  recover: (conversationId: string, runId: string) => Promise<void>;
   abort: () => void;
   reset: (options?: {
     keepPendingApprovals?: boolean;
@@ -49,6 +51,7 @@ interface ChatStreamRuntime {
   abortController: AbortController | null;
   cleanupTimer: ReturnType<typeof setTimeout> | null;
   key: string;
+  scopeKey: string;
   listeners: Set<() => void>;
   ownerId: string | null;
   runId: number;
@@ -59,11 +62,15 @@ const chatStreamRuntimes = new Map<string, ChatStreamRuntime>();
 let chatStreamConsumerSequence = 0;
 const CHAT_STREAM_RUNTIME_RETENTION_MS = 30 * 60 * 1000;
 
-function createChatStreamRuntime(key: string): ChatStreamRuntime {
+function createChatStreamRuntime(
+  key: string,
+  scopeKey: string,
+): ChatStreamRuntime {
   return {
     abortController: null,
     cleanupTimer: null,
     key,
+    scopeKey,
     listeners: new Set(),
     ownerId: null,
     runId: 0,
@@ -71,12 +78,16 @@ function createChatStreamRuntime(key: string): ChatStreamRuntime {
   };
 }
 
-function getChatStreamRuntime(runtimeKey: string): ChatStreamRuntime {
+function getChatStreamRuntime(
+  scopeKey: string,
+  conversationId?: string | null,
+): ChatStreamRuntime {
+  const runtimeKey = `${scopeKey}#${conversationId ?? 'new'}`;
   const existing = chatStreamRuntimes.get(runtimeKey);
   if (existing) {
     return existing;
   }
-  const created = createChatStreamRuntime(runtimeKey);
+  const created = createChatStreamRuntime(runtimeKey, scopeKey);
   chatStreamRuntimes.set(runtimeKey, created);
   return created;
 }
@@ -110,6 +121,14 @@ function updateRuntimeState(
   next: ChatStreamState | ((prev: ChatStreamState) => ChatStreamState),
 ) {
   runtime.state = typeof next === 'function' ? next(runtime.state) : next;
+  if (runtime.state.conversationId) {
+    const key = `${runtime.scopeKey}#${runtime.state.conversationId}`;
+    if (key !== runtime.key) {
+      chatStreamRuntimes.delete(runtime.key);
+      runtime.key = key;
+      chatStreamRuntimes.set(key, runtime);
+    }
+  }
   for (const listener of runtime.listeners) {
     listener();
   }
@@ -121,7 +140,10 @@ function updateRuntimeState(
 export function useChatStream(
   token: string | null,
   runtimeKey?: string | null,
-  options: { disableSyncFallback?: boolean } = {},
+  options: {
+    disableSyncFallback?: boolean;
+    conversationId?: string | null;
+  } = {},
 ): UseChatStreamApi {
   const disableSyncFallback = options.disableSyncFallback ?? false;
   const consumerIdRef = useRef<string | null>(null);
@@ -135,8 +157,8 @@ export function useChatStream(
   }
   const resolvedRuntimeKey = runtimeKey || localRuntimeKeyRef.current;
   const runtime = useMemo(
-    () => getChatStreamRuntime(resolvedRuntimeKey),
-    [resolvedRuntimeKey],
+    () => getChatStreamRuntime(resolvedRuntimeKey, options.conversationId),
+    [resolvedRuntimeKey, options.conversationId],
   );
   const state = useSyncExternalStore(
     useCallback(
@@ -159,7 +181,7 @@ export function useChatStream(
     if (!controller) {
       return;
     }
-    controller.abort();
+    controller.abort('stop');
     if (runtime.state.status === 'streaming') {
       updateRuntimeState(runtime, cancelChatStreamState);
     }
@@ -218,7 +240,10 @@ export function useChatStream(
   );
 
   const send = useCallback(
-    async (payload: AiChatStreamRequest) => {
+    async (
+      payload: AiChatStreamRequest,
+      existing?: { conversationId: string; runId: string },
+    ) => {
       if (!token) {
         throw new AiApiError(401, i18n.t('auth:errors.noActiveSession'));
       }
@@ -230,7 +255,7 @@ export function useChatStream(
       const controller = new AbortController();
       runtime.abortController = controller;
 
-      if (!disableSyncFallback && !shouldUseStreamingTransport()) {
+      if (!existing && !disableSyncFallback && !shouldUseStreamingTransport()) {
         await sendViaSyncFallback({
           payload,
           token,
@@ -251,11 +276,14 @@ export function useChatStream(
       let streamOpened = false;
       const terminalState = { received: false };
       try {
-        const response = await streamAiChat({
-          payload,
-          token,
-          signal: controller.signal,
-        });
+        const response = existing
+          ? await streamAiExistingRun(
+              token,
+              existing.runId,
+              existing.conversationId,
+              controller.signal,
+            )
+          : await streamAiChat({ payload, token, signal: controller.signal });
         if (!response.body) {
           throw new AiApiError(0, i18n.t('apps:ai.errors.emptySseBody'));
         }
@@ -304,7 +332,7 @@ export function useChatStream(
         }
 
         if (!streamOpened) {
-          if (disableSyncFallback) {
+          if (disableSyncFallback || existing) {
             setStateForRun(runId, (prev) =>
               failChatStreamState(
                 prev,
@@ -345,6 +373,17 @@ export function useChatStream(
       }
     },
     [disableSyncFallback, runtime, setStateForRun, token],
+  );
+
+  const recover = useCallback(
+    async (conversationId: string, runId: string) => {
+      if (runtime.state.status === 'streaming') return;
+      await send(
+        { messages: [], backend_mode: 'local' },
+        { conversationId, runId },
+      );
+    },
+    [runtime, send],
   );
 
   const resume = useCallback(
@@ -449,6 +488,7 @@ export function useChatStream(
     send,
     resume,
     abort,
+    recover,
     reset,
     replacePendingApprovals,
     upsertPendingApproval,

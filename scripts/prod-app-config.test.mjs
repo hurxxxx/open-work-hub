@@ -420,7 +420,7 @@ test('requires a separate loopback privacy-filter origin', () => {
 
 test('requires isolated production Hermes credentials', () => {
   for (const [key, value] of [
-    ['OPENROUTER_API_KEY', ''],
+    ['OPENROUTER_API_KEY', 'short'],
     ['OPEN_WORK_HUB_HERMES_API_KEY', 'change-me'],
     ['OPEN_WORK_HUB_HERMES_MANAGEMENT_TOKEN', 'short'],
     ['OPEN_WORK_HUB_HERMES_MCP_SHARED_SECRET', 'dev-secret'],
@@ -436,6 +436,12 @@ test('requires isolated production Hermes credentials', () => {
         }),
       ),
     /must be distinct/,
+  );
+});
+
+test('accepts Hermes with administrator-managed providers and no legacy OpenRouter key', () => {
+  assert.doesNotThrow(() =>
+    assertProductionAppEnv(validEnv({ OPENROUTER_API_KEY: '' })),
   );
 });
 

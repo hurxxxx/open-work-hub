@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
+from starlette.concurrency import run_in_threadpool
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import (
@@ -1939,7 +1940,8 @@ async def _chat_stream_publisher(
     scope_context = ConversationScopeTurnContext()
 
     try:
-        scope_context = conversation_scope_turn_context(
+        scope_context = await run_in_threadpool(
+            conversation_scope_turn_context,
             db,
             principal=principal,
             user=current_user,

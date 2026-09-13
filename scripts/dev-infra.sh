@@ -43,10 +43,6 @@ case "$COMMAND" in
       services+=(livekit)
     fi
     if [[ "$(dev_lower "${OPEN_WORK_HUB_HERMES_ENABLED:-false}")" == "true" ]]; then
-      if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
-        echo "OPENROUTER_API_KEY is required when Hermes is enabled." >&2
-        exit 1
-      fi
       services+=(
         hermes-bootstrap
         hermes-gateway

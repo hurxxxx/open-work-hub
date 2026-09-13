@@ -35,7 +35,8 @@ def test_manual_group_starts_empty_without_implicit_creator_membership(client):
     admin = dev_login(client)
     headers = auth_headers(admin["token"])
     group = _group(client, headers)
-    assert group["kind"] == "manual"
+    assert group["source"] == "local"
+    assert group["membership_mode"] == "manual"
     assert group["active"]
     response = client.get(f"/api/v1/admin/groups/{group['id']}/members", headers=headers)
     assert response.status_code == 200, response.text

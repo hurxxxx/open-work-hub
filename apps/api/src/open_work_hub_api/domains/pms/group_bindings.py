@@ -49,7 +49,7 @@ def list_space_groups(
         .where(SpaceGroupBinding.team_id == space_id)
         .order_by(SpaceGroupBinding.group_id)
     ):
-        entry = serialize_group(db, group)
+        entry = serialize_group(group)
         result.append(
             SpaceGroupBindingResponse(
                 group_id=row.group_id, role=row.role, name=entry.name, active=entry.active
@@ -110,7 +110,7 @@ def put_space_group(
 ):
     _change_binding(db, user=current_user, space_id=space_id, group_id=group_id, role=payload.role)
     _commit_and_invalidate(db, request)
-    group = serialize_group(db, db.get(Group, group_id))
+    group = serialize_group(db.get(Group, group_id))
     return SpaceGroupBindingResponse(
         group_id=group_id, role=payload.role, name=group.name, active=group.active
     )

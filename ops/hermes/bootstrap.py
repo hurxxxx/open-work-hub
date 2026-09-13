@@ -9,10 +9,10 @@ fallback behavior is configured through Hermes' public config surface.
 
 from __future__ import annotations
 
-from copy import deepcopy
 import os
-from pathlib import Path
 import re
+from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 from hermes_cli.config import load_config, save_config, save_env_value
@@ -23,12 +23,7 @@ from hermes_constants import (
     set_hermes_home_override,
 )
 
-
-_MANAGED_PROFILE_PATTERN = re.compile(r"^owh-[0-9a-f]{32}(?:-jobs)?$")
-_FIXED_PROVIDER = "openrouter"
-_FIXED_MODEL = "qwen/qwen3.8-flash"
-_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
-_OPENROUTER_METADATA_HEADERS = {"X-OpenRouter-Metadata": "enabled"}
+_MANAGED_PROFILE_PATTERN = re.compile(r"^owh-[0-9a-f]{32}(?:-local)?(?:-jobs)?$")
 _COMPRESSION_POLICY = {
     "enabled": True,
     "threshold": 0.50,
@@ -42,69 +37,43 @@ _COMPRESSION_POLICY = {
 
 
 def _is_open_work_hub_profile(profile_name: str) -> bool:
-    return profile_name == "default" or bool(
-        _MANAGED_PROFILE_PATTERN.fullmatch(profile_name)
-    )
+    return profile_name == "default" or bool(_MANAGED_PROFILE_PATTERN.fullmatch(profile_name))
 
 
-def _apply_fixed_model_policy(config: dict[str, Any]) -> bool:
-    """Apply Open Work Hub's managed Hermes resilience policy.
-
-    Hermes auxiliary tasks have an independent built-in OpenRouter fallback
-    model. ``auxiliary.openrouter_model`` replaces that default without
-    patching Hermes' runtime. The primary chain uses Hermes' public fallback,
-    routing, retry, and compression settings. Research-source policy is owned
-    by the administrator setting and reconciled by the API per managed profile.
-    """
-
+def _apply_runtime_policy(config: dict[str, Any]) -> bool:
+    """Bootstrap transport/lifecycle only; administrator DB owns model selection."""
     before = deepcopy(config)
-    config["model"] = {
-        "provider": _FIXED_PROVIDER,
-        "default": _FIXED_MODEL,
-        "default_headers": dict(_OPENROUTER_METADATA_HEADERS),
+    plugins = config.setdefault("plugins", {})
+    plugins["enabled"] = sorted(set(plugins.get("enabled", [])) | {"owh_runtime"})
+    plugins["disabled"] = [name for name in plugins.get("disabled", []) if name != "owh_runtime"]
+    config.setdefault("gateway", {}).setdefault("api_server", {})["max_concurrent_runs"] = 0
+    config["terminal"] = {
+        "backend": "owh_sandbox",
+        "container_persistent": False,
+        "cwd": "/workspace",
     }
-    config["fallback_providers"] = [
-        {"provider": _FIXED_PROVIDER, "model": _FALLBACK_MODEL}
+    config.setdefault("platform_toolsets", {})["api_server"] = [
+        "web",
+        "terminal",
+        "file",
+        "skills",
+        "todo",
+        "memory",
+        "session_search",
+        "code_execution",
+        "delegation",
+        "owh_runtime",
     ]
-    config.pop("fallback_model", None)
-
-    agent = config.get("agent")
-    if not isinstance(agent, dict):
-        agent = {}
-        config["agent"] = agent
-    # In the pinned Hermes release, 1 means one total primary attempt before
-    # fallback. The primary OpenAI-compatible client already sets SDK retries
-    # to zero, so this remains the single retry/failover owner.
-    agent["api_max_retries"] = 1
-
-    config["compression"] = {
-        **(
-            config["compression"]
-            if isinstance(config.get("compression"), dict)
-            else {}
-        ),
-        **_COMPRESSION_POLICY,
-    }
-    config["provider_routing"] = {
-        "sort": "throughput",
-        "require_parameters": True,
-    }
-
-    auxiliary = config.get("auxiliary")
-    if not isinstance(auxiliary, dict):
-        auxiliary = {}
-        config["auxiliary"] = auxiliary
-    auxiliary["free_only"] = False
-    auxiliary["openrouter_model"] = _FIXED_MODEL
-
+    config["compression"] = {**config.get("compression", {}), **_COMPRESSION_POLICY}
+    config.setdefault("agent", {})["api_max_retries"] = 1
     return before != config
 
 
-def _reconcile_fixed_model_config(profile_name: str) -> bool:
+def _reconcile_runtime_config(profile_name: str) -> bool:
     if not _is_open_work_hub_profile(profile_name):
         return False
     config = load_config()
-    if not _apply_fixed_model_policy(config):
+    if not _apply_runtime_policy(config):
         return False
     save_config(config)
     return True
@@ -142,7 +111,7 @@ def _reconcile_profile(
     try:
         for name, value in secrets.items():
             save_env_value(name, value)
-        return _reconcile_fixed_model_config(profile_name)
+        return _reconcile_runtime_config(profile_name)
     finally:
         reset_hermes_home_override(token)
 
@@ -150,10 +119,6 @@ def _reconcile_profile(
 def main() -> None:
     secrets = {
         "API_SERVER_KEY": _required_secret("API_SERVER_KEY", minimum_length=16),
-        "OPENROUTER_API_KEY": _required_secret(
-            "OPENROUTER_API_KEY",
-            minimum_length=16,
-        ),
     }
     targets = _profile_targets(get_hermes_home())
     reconciled = 0

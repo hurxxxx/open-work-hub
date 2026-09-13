@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import status
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,7 +22,9 @@ class RagQueryToolArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str = Field(..., min_length=1, max_length=2000)
-    answer_mode: RagAnswerMode = RagAnswerMode.GROUNDED_ANSWER
+    # The calling agent synthesizes the answer from authorized evidence. A
+    # second generative run here can deadlock a fully occupied Hermes queue.
+    answer_mode: Literal[RagAnswerMode.SEARCH_ONLY] = RagAnswerMode.SEARCH_ONLY
     source_kinds: list[str] = Field(default_factory=list)
     filters: RagQueryFilters = Field(default_factory=RagQueryFilters)
     top_k: int = Field(default=8, ge=1, le=100)
@@ -134,6 +136,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         description=(
             "Search accessible official Docs sources when the user asks for "
             "internal document or knowledge evidence. "
+            "Returns search evidence for the calling agent to synthesize. "
             "Results are limited by the current user, app enablement, and ACL."
         ),
         owner_domain="rag",

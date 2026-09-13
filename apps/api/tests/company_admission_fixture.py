@@ -15,14 +15,12 @@ from open_work_hub_api.domains.auth.models import (
     UserSystemRole,
 )
 from open_work_hub_api.domains.groups.models import Group, GroupMember
-from open_work_hub_api.domains.organization.models import OrganizationUnit
 
 
 def company_authority_tables():
     return [
         model.__table__
         for model in (
-            OrganizationUnit,
             User,
             UserSystemRole,
             AuditLog,

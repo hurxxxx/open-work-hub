@@ -18,11 +18,19 @@ from open_work_hub_api.domains.hermes.client import (
     HermesRuntimeClient,
 )
 from open_work_hub_api.domains.hermes.models import HermesProfileBinding
+from open_work_hub_api.domains.hermes.model_policy import (
+    HermesModelPolicy,
+    resolve_model_policy,
+    synchronize_model_policy,
+)
 from open_work_hub_api.domains.hermes.repository import get_or_create_profile_binding
 from open_work_hub_api.domains.hermes.research_settings import (
     get_research_settings,
 )
-from open_work_hub_api.domains.hermes.research_sources import ResearchSourceId
+from open_work_hub_api.domains.hermes.research_sources import (
+    ResearchSourceId,
+    academic_research_environment_hint,
+)
 
 
 class HermesIntegrationDisabledError(RuntimeError):
@@ -196,6 +204,7 @@ async def ensure_job_profile(
     client: HermesManagementClient | None = None,
     research_sources: dict[ResearchSourceId, bool] | None = None,
     research_policy_revision: int = 0,
+    model_policy: HermesModelPolicy,
 ) -> str:
     """Provision the cron-only profile without any MCP servers.
 
@@ -205,7 +214,7 @@ async def ensure_job_profile(
     """
     resolved = require_hermes_enabled(settings)
     profile_name = job_profile_name(binding)
-    reconcile_key = f"{profile_name}:research:{research_policy_revision}"
+    reconcile_key = f"{profile_name}:model:{model_policy.key}:research:{research_policy_revision}"
     now = monotonic()
     if _reconcile_cache_hit(
         _job_profile_reconciled_until,
@@ -229,10 +238,7 @@ async def ensure_job_profile(
             profiles = await control.list_profiles()
             if profile_name not in _profile_names(profiles):
                 raise
-    await control.set_profile_model(
-        profile_name,
-        research_sources=research_sources,
-    )
+    await synchronize_model_policy(control, profile_name=profile_name, policy=model_policy)
     mcp_servers = await control.list_mcp_servers(profile_name)
     for server_name in sorted(_mcp_server_names(mcp_servers)):
         try:
@@ -260,9 +266,11 @@ async def ensure_profile_binding(
     client: HermesManagementClient | None = None,
     research_sources: dict[ResearchSourceId, bool] | None = None,
     research_policy_revision: int | None = None,
+    model_policy: HermesModelPolicy | None = None,
 ) -> HermesProfileBinding:
     resolved = require_hermes_enabled(settings)
-    binding = get_or_create_profile_binding(db, user=user)
+    policy = model_policy or resolve_model_policy(db)
+    binding = get_or_create_profile_binding(db, user=user, route=policy.route)
     db.commit()
     db.refresh(binding)
     if research_sources is None or research_policy_revision is None:
@@ -272,7 +280,9 @@ async def ensure_profile_binding(
     else:
         resolved_research_sources = research_sources
         resolved_research_policy_revision = research_policy_revision
-    reconcile_key = f"{binding.profile_name}:research:{resolved_research_policy_revision}"
+    reconcile_key = (
+        f"{binding.profile_name}:{policy.key}:research:{resolved_research_policy_revision}"
+    )
     cache_now = monotonic()
     if binding.status == "active" and _reconcile_cache_hit(
         _profile_reconciled_until,
@@ -288,7 +298,7 @@ async def ensure_profile_binding(
             try:
                 await control.create_profile(
                     profile_name=binding.profile_name,
-                    clone_from=resolved.hermes_profile_clone_source,
+                    clone_from=None,
                     description="Open Work Hub isolated user workspace agent profile",
                     mcp_servers=_mcp_profile_servers(resolved, binding),
                 )
@@ -301,9 +311,21 @@ async def ensure_profile_binding(
                 profiles = await control.list_profiles()
                 if binding.profile_name not in _profile_names(profiles):
                     raise
-        await control.set_profile_model(
+        await control.update_profile_env(
             binding.profile_name,
-            research_sources=resolved_research_sources,
+            "API_SERVER_KEY",
+            resolved.hermes_api_key.get_secret_value(),
+        )
+        await synchronize_model_policy(control, profile_name=binding.profile_name, policy=policy)
+        await control.update_profile_config(
+            binding.profile_name,
+            {
+                "agent": {
+                    "environment_hint": academic_research_environment_hint(
+                        resolved_research_sources
+                    )
+                },
+            },
         )
         mcp_servers = await control.list_mcp_servers(binding.profile_name)
         server_rows = _mcp_server_rows(mcp_servers)
@@ -382,6 +404,8 @@ async def ensure_profile_binding(
                 code="hermes.internal_mcp_missing",
                 message="The Hermes profile is missing its internal MCP server.",
             )
+        binding.provider = policy.provider
+        binding.model = policy.model
     except HermesClientError as error:
         binding.status = "error"
         binding.last_error_code = error.code[:160]

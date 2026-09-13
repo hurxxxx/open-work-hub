@@ -436,6 +436,7 @@ def extract_and_persist_meeting_insights(
         context = LlmTaskContext(
             source=source,
             actor_user_id=actor_user_id,
+            execution_user_id=actor_user_id or meeting.organizer_id,
             task_kind=_INSIGHT_TASK_KIND[insight_type],
             app_id="meeting",
             principal_kind="system" if actor_user_id is None else "user",

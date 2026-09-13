@@ -322,8 +322,14 @@ class HermesRuntimeClient:
         idempotency_key: str,
         instructions: str | None = None,
         conversation_history: list[dict[str, Any]] | None = None,
+        runtime_options: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
+            **{
+                key: value
+                for key, value in (runtime_options or {}).items()
+                if key in {"provider", "model", "model_options"}
+            },
             "input": input_text,
             "session_id": session_id,
         }
@@ -643,7 +649,7 @@ class HermesManagementClient:
         self,
         *,
         profile_name: str,
-        clone_from: str,
+        clone_from: str | None,
         description: str,
         mcp_servers: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
@@ -655,8 +661,6 @@ class HermesManagementClient:
                 "name": profile_name,
                 "clone_from": clone_from,
                 "description": description,
-                "provider": HERMES_PROVIDER,
-                "model": HERMES_MODEL,
                 "mcp_servers": mcp_servers or [],
             },
             expected=frozenset({200, 201}),
@@ -684,6 +688,24 @@ class HermesManagementClient:
             },
         )
         return result
+
+    async def update_profile_config(
+        self, profile_name: str, config: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        return await self._request(
+            "PUT",
+            "/api/config",
+            operation="update_profile_config",
+            body={"profile": profile_name, "config": dict(config)},
+        )
+
+    async def update_profile_env(self, profile_name: str, key: str, value: str) -> dict[str, Any]:
+        return await self._request(
+            "PUT",
+            "/api/env",
+            operation="update_profile_env",
+            body={"profile": profile_name, "key": key, "value": value},
+        )
 
     async def set_profile_mcp_trust(self, profile_name: str, server_name: str) -> dict[str, Any]:
         return await self._request(

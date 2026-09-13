@@ -1,4 +1,4 @@
-"""External Anthropic-backed web search assistants."""
+"""Registered Hermes web-search workload."""
 
 from __future__ import annotations
 
@@ -43,6 +43,7 @@ def register_ai_capabilities(registry: "AiCapabilityRegistry") -> None:
                 f"admin.console.aiSecurity.modelSettings.workloadCatalog.{catalog_key}.description"
             ),
             external_data=True,
+            native_tools=("web_search", "web_extract"),
         )
 
 

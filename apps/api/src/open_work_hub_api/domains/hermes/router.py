@@ -13,17 +13,21 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session, get_session_factory
+from open_work_hub_api.core.i18n import localized_http_exception
+from open_work_hub_api.core.llm_errors import LlmProviderError
+from open_work_hub_api.domains.ai.model_settings_service import AiModelSettingsError
 from open_work_hub_api.core.settings import (
-    HERMES_MODEL,
-    HERMES_PROVIDER,
     HERMES_RELEASE,
 )
 from open_work_hub_api.domains.auth.app_gate import (
     can_use_app,
+    require_app_access,
 )
 from open_work_hub_api.domains.auth.dependencies import require_current_user
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.client import HermesClientError
+from open_work_hub_api.domains.hermes.model_policy import resolve_model_policy
+from open_work_hub_api.domains.hermes.file_router import router as file_router
 from open_work_hub_api.domains.hermes.models import (
     HermesJobBinding,
     HermesProfileBinding,
@@ -33,6 +37,7 @@ from open_work_hub_api.domains.hermes.models import (
 )
 from open_work_hub_api.domains.hermes.publication import publish_pending_hermes_dispatches
 from open_work_hub_api.domains.hermes.repository import (
+    ACTIVE_RUN_STATUSES,
     TERMINAL_RUN_STATUSES,
     HermesRunBusyError,
     HermesRunIdempotencyConflict,
@@ -65,10 +70,19 @@ from open_work_hub_api.domains.hermes.service import (
     runtime_client,
 )
 
-router = APIRouter(prefix="/agent", tags=["hermes-agent"])
+router = APIRouter(
+    prefix="/agent",
+    tags=["hermes-agent"],
+    dependencies=[Depends(require_app_access("chatbot"))],
+)
+router.include_router(file_router)
 
 
 def _raise_integration_error(error: Exception) -> NoReturn:
+    if isinstance(error, AiModelSettingsError):
+        raise localized_http_exception(status_code=error.status_code, code=error.code) from error
+    if isinstance(error, LlmProviderError):
+        raise localized_http_exception(status_code=503, code="hermes.model_unavailable") from error
     if isinstance(error, HermesIntegrationDisabledError):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -130,6 +144,13 @@ def _job_response(binding: HermesJobBinding, row: dict) -> HermesJobResponse:
     )
 
 
+def _bound_profile(db: Session, *, binding_id: str, user_id: str) -> HermesProfileBinding:
+    profile = db.get(HermesProfileBinding, binding_id)
+    if profile is None or profile.user_id != user_id:
+        raise HTTPException(status_code=404, detail={"code": "hermes.session_not_found"})
+    return profile
+
+
 async def _profile_for_request(
     db: Session,
     *,
@@ -137,7 +158,12 @@ async def _profile_for_request(
 ):
     try:
         return await ensure_profile_binding(db, user=user)
-    except (HermesIntegrationDisabledError, HermesClientError) as error:
+    except (
+        HermesIntegrationDisabledError,
+        HermesClientError,
+        AiModelSettingsError,
+        LlmProviderError,
+    ) as error:
         _raise_integration_error(error)
 
 
@@ -151,10 +177,16 @@ async def _job_profile_for_request(
         research_settings = get_research_settings(db)
         return binding, await ensure_job_profile(
             binding,
+            model_policy=resolve_model_policy(db),
             research_sources=research_settings.policy,
             research_policy_revision=research_settings.revision,
         )
-    except (HermesIntegrationDisabledError, HermesClientError) as error:
+    except (
+        HermesIntegrationDisabledError,
+        HermesClientError,
+        AiModelSettingsError,
+        LlmProviderError,
+    ) as error:
         _raise_integration_error(error)
 
 
@@ -178,8 +210,8 @@ async def get_agent_status(
     return HermesAgentStatusResponse(
         enabled=True,
         release=HERMES_RELEASE,
-        provider=HERMES_PROVIDER,
-        model=HERMES_MODEL,
+        provider=binding.provider,
+        model=binding.model,
         profile_status=binding.status,
         runtime=runtime_payload,
         capabilities=capability_payload,
@@ -195,37 +227,41 @@ async def list_sessions(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> HermesSessionListResponse:
-    profile = await _profile_for_request(db, user=current_user)
-    try:
-        payload = await runtime_client().list_sessions(
-            profile.profile_name,
-            limit=limit,
-            offset=offset,
+    predicates = [
+        HermesSessionBinding.user_id == current_user.id,
+        HermesSessionBinding.status != "deleted",
+    ]
+    if scope_ref is not None:
+        predicates.append(HermesSessionBinding.scope_ref == scope_ref)
+    if scope_resource_id is not None:
+        predicates.append(HermesSessionBinding.scope_resource_id == scope_resource_id)
+    rows = list(
+        db.scalars(
+            select(HermesSessionBinding)
+            .where(*predicates)
+            .order_by(HermesSessionBinding.updated_at.desc())
+            .offset(offset)
+            .limit(limit + 1)
         )
-    except HermesClientError as error:
-        _raise_integration_error(error)
-    rows = payload.get("data") if isinstance(payload.get("data"), list) else []
-    response_rows: list[HermesSessionResponse] = []
-    for row in rows:
-        if not isinstance(row, dict) or not isinstance(row.get("id"), str):
-            continue
-        session = register_session(
-            db,
-            binding=profile,
-            hermes_session_id=row["id"],
-            title=row.get("title"),
-        )
-        if scope_ref is not None and session.scope_ref != scope_ref:
-            continue
-        if scope_resource_id is not None and session.scope_resource_id != scope_resource_id:
-            continue
-        response_rows.append(_session_response(session, row))
-    db.commit()
+    )
+    semaphore = asyncio.Semaphore(8)
+
+    async def session_response(row: HermesSessionBinding):
+        profile = _bound_profile(db, binding_id=row.profile_binding_id, user_id=current_user.id)
+        try:
+            async with semaphore:
+                payload = await runtime_client().get_session(
+                    profile.profile_name, row.hermes_session_id
+                )
+        except HermesClientError:
+            payload = {}
+        return _session_response(row, payload)
+
     return HermesSessionListResponse(
-        data=response_rows,
+        data=await asyncio.gather(*(session_response(row) for row in rows[:limit])),
         limit=limit,
         offset=offset,
-        has_more=bool(payload.get("has_more")),
+        has_more=len(rows) > limit,
     )
 
 
@@ -277,7 +313,7 @@ async def get_session(
     )
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "hermes.session_not_found"})
-    profile = await _profile_for_request(db, user=current_user)
+    profile = _bound_profile(db, binding_id=session.profile_binding_id, user_id=current_user.id)
     try:
         payload = await runtime_client().get_session(
             profile.profile_name,
@@ -303,7 +339,7 @@ async def update_session(
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "hermes.session_not_found"})
     changes = body.model_dump(exclude_none=True)
-    profile = await _profile_for_request(db, user=current_user)
+    profile = _bound_profile(db, binding_id=session.profile_binding_id, user_id=current_user.id)
     try:
         payload = await runtime_client().update_session(
             profile.profile_name,
@@ -334,7 +370,7 @@ async def delete_session(
     )
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "hermes.session_not_found"})
-    profile = await _profile_for_request(db, user=current_user)
+    profile = _bound_profile(db, binding_id=session.profile_binding_id, user_id=current_user.id)
     try:
         await runtime_client().delete_session(profile.profile_name, session.hermes_session_id)
     except HermesClientError as error:
@@ -364,7 +400,7 @@ async def get_session_messages(
     )
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "hermes.session_not_found"})
-    profile = await _profile_for_request(db, user=current_user)
+    profile = _bound_profile(db, binding_id=session.profile_binding_id, user_id=current_user.id)
     try:
         payload = await runtime_client().session_messages(
             profile.profile_name,
@@ -398,7 +434,16 @@ async def create_run(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> HermesRunResponse:
-    profile = await _profile_for_request(db, user=current_user)
+    try:
+        policy = resolve_model_policy(db)
+        profile = await ensure_profile_binding(db, user=current_user, model_policy=policy)
+    except (
+        HermesIntegrationDisabledError,
+        HermesClientError,
+        AiModelSettingsError,
+        LlmProviderError,
+    ) as error:
+        _raise_integration_error(error)
     session = get_owned_session(
         db,
         session_id=session_id,
@@ -406,6 +451,10 @@ async def create_run(
     )
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "hermes.session_not_found"})
+    if session.profile_binding_id != profile.id:
+        # Local/external policy changes must never silently transfer an old
+        # conversation's memory or transcript into another policy partition.
+        raise HTTPException(status_code=409, detail={"code": "hermes.session_policy_changed"})
     request_sha256 = None
     if idempotency_key is not None:
         idempotency_key = idempotency_key.strip()
@@ -434,6 +483,8 @@ async def create_run(
             allowed_app_ids=body.allowed_app_ids,
             client_request_id=idempotency_key,
             request_sha256=request_sha256,
+            workload_id="chatbot",
+            runtime_options=policy.run_options(),
         )
     except HermesRunBusyError as error:
         raise HTTPException(
@@ -464,7 +515,9 @@ def list_runs(
     predicates = [
         HermesRunProjection.user_id == current_user.id,
     ]
-    if run_status:
+    if run_status == "active":
+        predicates.append(HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES))
+    elif run_status:
         predicates.append(HermesRunProjection.status == run_status)
     if session_id:
         owned_session = get_owned_session(
@@ -482,7 +535,12 @@ def list_runs(
         db.scalars(
             select(HermesRunProjection)
             .where(*predicates)
-            .order_by(HermesRunProjection.created_at.desc())
+            .order_by(
+                HermesRunProjection.created_at.asc()
+                if run_status == "active"
+                else HermesRunProjection.created_at.desc(),
+                HermesRunProjection.id,
+            )
             .limit(limit)
             .offset(offset)
         )
@@ -629,7 +687,7 @@ async def stop_run(
         },
     )
     db.commit()
-    profile = await _profile_for_request(db, user=current_user)
+    profile = _bound_profile(db, binding_id=run.profile_binding_id, user_id=current_user.id)
     try:
         payload = await runtime_client().stop_run(profile.profile_name, hermes_run_id)
     except HermesClientError as error:
@@ -657,7 +715,7 @@ async def steer_run(
     )
     if run is None or not run.hermes_run_id:
         raise HTTPException(status_code=404, detail={"code": "hermes.run_not_found"})
-    profile = await _profile_for_request(db, user=current_user)
+    profile = _bound_profile(db, binding_id=run.profile_binding_id, user_id=current_user.id)
     try:
         payload = await runtime_client().steer_run(
             profile.profile_name,
@@ -686,7 +744,7 @@ async def resolve_approval(
     )
     if run is None or not run.hermes_run_id:
         raise HTTPException(status_code=404, detail={"code": "hermes.run_not_found"})
-    profile = await _profile_for_request(db, user=current_user)
+    profile = _bound_profile(db, binding_id=run.profile_binding_id, user_id=current_user.id)
     approval = db.scalar(
         select(HermesToolApproval)
         .where(

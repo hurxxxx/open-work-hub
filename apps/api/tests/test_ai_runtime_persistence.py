@@ -15,8 +15,6 @@ from open_work_hub_api.domains.ai import approvals as ai_approvals
 from open_work_hub_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from open_work_hub_api.domains.ai.runtime.persistence import (
     append_trace_event,
-    prepare_trace_payload,
-    scrub_trace_payload,
 )
 from open_work_hub_api.domains.ai.runtime.retention import scrub_completed_runtime_records
 from open_work_hub_api.domains.auth.models import User
@@ -298,45 +296,54 @@ def test_trace_events_are_uniquely_ordered_per_run(
             db.commit()
 
 
-def test_trace_payload_scrub_redacts_expanded_sensitive_keyset() -> None:
-    payload = scrub_trace_payload(
-        {
-            "prompt": "must-not-leak",
-            "messages": [{"role": "user", "content": "must-not-leak"}],
-            "arguments": {"summary": "must-not-leak"},
-            "args": {"nested": "must-not-leak"},
-            "result": "must-not-leak",
-            "output": "must-not-leak",
-            "content": "must-not-leak",
-            "provider_response": {"text": "must-not-leak"},
-            "safe": "Authorization: Bearer must-not-leak",
-        }
-    )
+@pytest.mark.parametrize("oversized", [False, True])
+def test_append_trace_event_persists_only_scrubbed_or_size_limited_payload(
+    runtime_session_factory: sessionmaker[Session],
+    monkeypatch: pytest.MonkeyPatch,
+    oversized: bool,
+) -> None:
+    from open_work_hub_api.core.settings import get_settings
 
-    assert payload == {
-        "prompt": "[redacted]",
-        "messages": "[redacted]",
-        "arguments": "[redacted]",
-        "args": "[redacted]",
-        "result": "[redacted]",
-        "output": "[redacted]",
-        "content": "[redacted]",
-        "provider_response": "[redacted]",
-        "safe": "[redacted]",
+    monkeypatch.setenv("OPEN_WORK_HUB_AI_RUNTIME_TRACE_PAYLOAD_MAX_BYTES", "1024")
+    get_settings.cache_clear()
+    payload = {
+        "prompt": "must-not-leak",
+        "nested": [{"token": "must-not-leak", "count": 2}],
+        "result_refs": ["artifact-1"],
     }
+    if oversized:
+        payload["large"] = "x" * 2048
+    with runtime_session_factory() as db:
+        user, conversation = _seed_scope(db)
+        run = _runtime_run(user=user, conversation=conversation)
+        db.add(run)
+        db.flush()
+        event = append_trace_event(
+            db,
+            agent_run_id=run.id,
+            conversation_id=conversation.id,
+            event_type="test_payload",
+            payload=payload,
+        )
+        event_id = event.id
+        db.commit()
 
-
-def test_prepare_trace_payload_replaces_oversized_payload_with_summary() -> None:
-    payload, truncated = prepare_trace_payload(
-        {"prompt": "must-not-leak", "safe": "x" * 128},
-        max_bytes=32,
-    )
-
-    assert truncated is True
-    assert payload["truncated"] is True
-    assert payload["reason"] == "payload_too_large"
-    assert payload["original_size_bytes"] > 32
-    assert "must-not-leak" not in str(payload)
+    # A new session prevents the SQLAlchemy identity map from standing in for persistence.
+    with runtime_session_factory() as db:
+        stored = db.get(AgentTraceEvent, event_id)
+        assert stored.event_seq == 0
+        assert "must-not-leak" not in str(stored.payload_json)
+        if oversized:
+            assert set(stored.payload_json) == {"truncated", "reason", "original_size_bytes"}
+            assert stored.payload_json["truncated"] is True
+            assert stored.payload_json["reason"] == "payload_too_large"
+            assert stored.payload_json["original_size_bytes"] > 1024
+        else:
+            assert stored.payload_json == {
+                "prompt": "[redacted]",
+                "nested": [{"token": "[redacted]", "count": 2}],
+                "result_refs": ["artifact-1"],
+            }
 
 
 def test_trace_event_append_serializes_concurrent_writers(

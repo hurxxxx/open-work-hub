@@ -6,13 +6,104 @@ from open_work_hub_api.domains.auth.app_access import can_use_app
 from open_work_hub_api.domains.groups.service import current_group_ids
 
 
+def test_individual_assignment_preserves_other_members_and_stored_inactive_groups(client):
+    headers, admin_id = _setup(client)
+    hr = _organization(client, headers, "Assignment HR")
+    user_id = _person(client, headers, hr["id"])
+    group = client.post(
+        "/api/v1/admin/groups", headers=headers, json={"name": "Assignment TF"}
+    ).json()
+    path = f"/api/v1/admin/groups/{group['id']}/members"
+    assert client.put(path, headers=headers, json={"user_ids": [admin_id]}).status_code == 200
+    for _ in range(2):
+        result = client.put(f"{path}/{user_id}", headers=headers, json={"assigned": True})
+        assert result.status_code == 200, result.text
+        assert set(result.json()["user_ids"]) == {admin_id, user_id}
+        assert {item["id"] for item in result.json()["items"]} == {admin_id, user_id}
+    assert (
+        client.patch(
+            f"/api/v1/admin/groups/{group['id']}", headers=headers, json={"active": False}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.patch(
+            f"/api/v1/admin/users/{user_id}", headers=headers, json={"login_blocked": True}
+        ).status_code
+        == 200
+    )
+    result = client.get(
+        "/api/v1/admin/groups",
+        headers=headers,
+        params={"member_user_id": user_id, "include_inactive": True},
+    )
+    assert result.status_code == 200
+    assert {item["id"] for item in result.json()["items"]} == {group["id"], hr["id"]}
+    result = client.put(f"{path}/{user_id}", headers=headers, json={"assigned": False})
+    assert result.status_code == 200
+    assert result.json()["user_ids"] == [admin_id]
+    assert (
+        client.put(f"{path}/{user_id}", headers=headers, json={"assigned": True}).status_code == 409
+    )
+    assert (
+        client.put(
+            f"/api/v1/admin/groups/{hr['id']}/members/{user_id}",
+            headers=headers,
+            json={"assigned": False},
+        ).status_code
+        == 409
+    )
+
+
+def test_individual_assignment_requires_admin_and_rejects_unavailable_users(client):
+    headers, admin_id = _setup(client)
+    group = client.post(
+        "/api/v1/admin/groups", headers=headers, json={"name": "Restricted TF"}
+    ).json()
+    path = f"/api/v1/admin/groups/{group['id']}/members"
+    assert client.put(f"{path}/{admin_id}", json={"assigned": True}).status_code == 401
+    created = client.post(
+        "/api/v1/admin/users",
+        headers=headers,
+        json={"email": "ordinary@example.test", "full_name": "Ordinary User"},
+    ).json()
+    user_id = created["user"]["id"]
+    client.patch(
+        f"/api/v1/admin/users/{user_id}", headers=headers, json={"must_change_password": False}
+    )
+    session = client.post(
+        "/api/v1/auth/login",
+        json={"login_id": created["user"]["login_id"], "password": created["temporary_password"]},
+    ).json()
+    member_headers = {"Authorization": f"Bearer {session['token']}"}
+    assert (
+        client.put(f"{path}/{user_id}", headers=member_headers, json={"assigned": True}).status_code
+        == 403
+    )
+    assert (
+        client.get(
+            "/api/v1/admin/groups", headers=member_headers, params={"member_user_id": user_id}
+        ).status_code
+        == 403
+    )
+    assert (
+        client.put(f"{path}/missing-user", headers=headers, json={"assigned": True}).status_code
+        == 400
+    )
+    client.patch(f"/api/v1/admin/users/{user_id}", headers=headers, json={"status": "suspended"})
+    assert (
+        client.put(f"{path}/{user_id}", headers=headers, json={"assigned": True}).status_code == 400
+    )
+    assert client.get(path, headers=headers).json()["user_ids"] == []
+
+
 def test_organization_events_only_refresh_changed_member_or_head_projections(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ):
     headers, admin_id = _setup(client)
     recipients: set[str] = set()
     monkeypatch.setattr(
-        "open_work_hub_api.domains.organization.admin_router.publish_principal_access_changed",
+        "open_work_hub_api.domains.groups.admin_router.publish_principal_access_changed",
         lambda _hub, user_ids: recipients.update(user_ids),
     )
     parent = _organization(client, headers, "Parent")
@@ -34,9 +125,7 @@ def test_organization_events_only_refresh_changed_member_or_head_projections(
         (child["id"], {"active": True}, {user_id}),
     ):
         recipients.clear()
-        response = client.patch(
-            f"/api/v1/admin/organization-units/{org_id}", headers=headers, json=payload
-        )
+        response = client.patch(f"/api/v1/admin/groups/{org_id}", headers=headers, json=payload)
         assert response.status_code == 200, response.text
         assert recipients == expected, payload
         if org_id == child["id"] and "active" in payload:
@@ -45,9 +134,9 @@ def test_organization_events_only_refresh_changed_member_or_head_projections(
 
     recipients.clear()
     response = client.post(
-        "/api/v1/admin/organization-units",
+        "/api/v1/admin/groups",
         headers=headers,
-        json={"name": "New headed organization", "head_user_id": admin_id},
+        json={"name": "New headed organization", "head_user_id": admin_id, "source": "hr"},
     )
     assert response.status_code == 201, response.text
     assert recipients == {admin_id}
@@ -122,9 +211,9 @@ def _setup(client: TestClient):
 
 def _organization(client, headers, name, parent_id=None):
     response = client.post(
-        "/api/v1/admin/organization-units",
+        "/api/v1/admin/groups",
         headers=headers,
-        json={"name": name, "parent_id": parent_id},
+        json={"name": name, "parent_id": parent_id, "source": "hr"},
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -165,11 +254,7 @@ def test_hr_membership_is_direct_and_manual_membership_survives_transfer(client:
     assert response.status_code == 200, response.text
     response = client.get("/api/v1/directory/groups", headers=headers)
     assert response.status_code == 200, response.text
-    formal = {
-        g["organization_unit_id"]: g["id"]
-        for g in response.json()["items"]
-        if g["kind"] == "organization"
-    }
+    formal = {g["id"]: g["id"] for g in response.json()["items"] if g["source"] == "hr"}
     with get_session_factory()() as db:
         assert current_group_ids(db, user_id) == {formal[child["id"]], manual["id"]}
     response = client.patch(
@@ -230,7 +315,7 @@ def test_department_head_can_manage_multiple_departments_without_joining_groups(
     second = _organization(client, headers, "Second Department")
     for org in (first, second):
         response = client.patch(
-            f"/api/v1/admin/organization-units/{org['id']}",
+            f"/api/v1/admin/groups/{org['id']}",
             headers=headers,
             json={"head_user_id": user_id},
         )
@@ -243,3 +328,53 @@ def test_department_head_can_manage_multiple_departments_without_joining_groups(
     assert "email" not in person and "system_roles" not in person
     with get_session_factory()() as db:
         assert not current_group_ids(db, user_id)
+
+
+def test_unified_groups_expose_source_and_enforce_assignment_authority(client: TestClient):
+    headers, _ = _setup(client)
+    hr = _organization(client, headers, "Engineering")
+    assert hr["source"] == "hr"
+    assert hr["membership_mode"] == "hr_assignment"
+    assert "organization_unit_id" not in hr and "kind" not in hr
+    local_response = client.post(
+        "/api/v1/admin/groups", headers=headers, json={"name": "Task force"}
+    )
+    assert local_response.status_code == 201
+    local = local_response.json()
+    assert local["source"] == "local" and local["membership_mode"] == "manual"
+    for source, expected in (("hr", hr["id"]), ("local", local["id"])):
+        response = client.get("/api/v1/admin/groups", headers=headers, params={"source": source})
+        assert response.status_code == 200
+        assert [item["id"] for item in response.json()["items"]] == [expected]
+    response = client.patch(
+        f"/api/v1/admin/groups/{hr['id']}",
+        headers=headers,
+        json={"name": "Engineering team", "source_reference": "HR-42"},
+    )
+    assert response.status_code == 200
+    assert response.json()["source_reference"] == "HR-42"
+    # Source and membership mode cannot be relabelled to bypass authoritative membership.
+    for payload in ({"source": "local"}, {"membership_mode": "manual"}):
+        response = client.patch(f"/api/v1/admin/groups/{hr['id']}", headers=headers, json=payload)
+        assert response.status_code == 422
+    user_id = _person(client, headers, hr["id"])
+    response = client.patch(
+        f"/api/v1/admin/users/{user_id}",
+        headers=headers,
+        json={"primary_organization_unit_id": local["id"]},
+    )
+    assert response.status_code == 404
+    response = client.patch(
+        f"/api/v1/admin/groups/{hr['id']}", headers=headers, json={"parent_id": local["id"]}
+    )
+    assert response.status_code == 404
+    response = client.patch(
+        f"/api/v1/admin/groups/{local['id']}", headers=headers, json={"head_user_id": user_id}
+    )
+    assert response.status_code == 400
+    response = client.post(
+        "/api/v1/admin/groups",
+        headers=headers,
+        json={"source": "hr", "name": "Duplicate reference", "source_reference": "HR-42"},
+    )
+    assert response.status_code == 409
