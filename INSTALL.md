@@ -600,6 +600,8 @@ uv sync --frozen --python 3.12 --directory apps/api
 uv sync --frozen --python 3.12 --directory apps/worker
 ```
 
+Hermes 구조화 작업의 기본 의존성은 API와 Worker 양쪽에 설치되어야 한다. 체크아웃을 갱신한 뒤에도 위 두 `uv sync`를 실행한다. 선택 ML 패키지는 필요하지 않으며, 기능별 설정은 [Hermes 설치 문서](docs/domains/ai/hermes.md#development-checkout)를 따른다.
+
 잠금 파일을 변경하거나 의존성을 업그레이드해서 설치 오류를 우회하지 않는다.
 실패한 패키지·인증·네트워크·빌드 도구 문제를 구분하여 해결한다.
 
@@ -826,7 +828,7 @@ Bento 등 별도 주소를 쓰는 기능은 사용 시 해당 기능 문서의 �
 | --- | --- |
 | PostgreSQL·Redis·파일 저장소·검색 | 네이티브 DB·Redis 연결은 유지하고 필요한 저장소·검색만 추가한다. 개발 DB, 큐, 버킷, 색인 연결이 실제 실행 대상과 일치하는지 확인한다. Docker 서비스 정의는 [개발 Compose](ops/compose/open-work-hub-dev.infra.yml), 앱 연결 설정은 [개발 환경 설정](scripts/dev-env.sh)을 따른다. |
 | 개인정보 필터 | `OPEN_WORK_HUB_OPF_SERVICE_BASE_URL`에 별도 서비스 주소가 있으면 해당 서비스를 먼저 준비한다. 아래 실행 예와 [서비스 구현](apps/api/src/open_work_hub_api/domains/ai/privacy_filter_service.py)을 따른다. |
-| 일반 챗봇·Hermes Terminal | 키·서비스 활성화·공급자 정책·검증은 [Hermes 설치 문서](docs/domains/ai/hermes.md#fresh-environment-setup)를 따른다. 호스트에 Hermes를 별도 설치하지 않는다. |
+| 모든 생성형 AI·챗봇 작업 파일 | 관리자 LLM 정책, 공급자 키 암호화 설정, Hermes 활성화, Docker 소켓 그룹·동시 실행 한도·마이그레이션·검증은 [Hermes 설치 문서](docs/domains/ai/hermes.md#fresh-environment-setup)를 따른다. 로컬 모델은 OpenRouter 키 없이 시작할 수 있다. 호스트에 Hermes를 별도 설치하지 않는다. |
 | 문서 AI·OCR·음성 인식 | 설정한 [Inference Gateway](docs/domains/inference-gateway/README.md)와 [RAG](docs/domains/rag/README.md) 연결을 준비한다. 개발 Compose가 외부 추론 서버까지 설치하지는 않는다. |
 | 슬라이드·다이어그램 | [Bento](docs/apps/bento/README.md)와 [Diagrams](docs/apps/diagrams/README.md)의 서버 주소·브라우저 연결을 확인한다. Bento의 별도 런타임 이미지와 Web bridge 프로토콜도 함께 맞춘다. |
 | 화상회의·녹음 | [Recording](docs/apps/recording/README.md)의 LiveKit·네트워크·추론 서비스 요구사항을 확인한다. |

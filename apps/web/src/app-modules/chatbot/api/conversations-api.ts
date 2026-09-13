@@ -67,6 +67,7 @@ export interface ConversationLivePendingApproval {
 
 export interface ConversationDetail extends ConversationSummary {
   livePendingApproval?: ConversationLivePendingApproval | null;
+  runError?: string | null;
   turns: ConversationTurn[];
 }
 
@@ -142,12 +143,24 @@ export async function getConversation(
         limit: 1,
       }),
     ]);
+    const toolResults = new Map(
+      messages.data
+        .filter((message) => message.role === 'tool' && message.tool_call_id)
+        .map((message) => [stringValue(message.tool_call_id), message]),
+    );
+    const latestRun = runs.data[0];
     return {
       ...sessionToSummary(session),
       turns: messages.data
-        .map((message, index) => messageToTurn(message, index, session.id))
+        .map((message, index) =>
+          messageToTurn(message, index, session.id, toolResults),
+        )
         .filter((turn): turn is ConversationTurn => turn !== null),
-      livePendingApproval: runToPendingApproval(runs.data[0]),
+      livePendingApproval: runToPendingApproval(latestRun),
+      runError:
+        latestRun?.status === 'failed' || latestRun?.status === 'invalid_output'
+          ? latestRun.error_message || i18n.t('apps:ai.errors.responseFailed')
+          : null,
     };
   } catch (error) {
     return mapError(error);
@@ -220,6 +233,7 @@ function messageToTurn(
   message: Record<string, unknown>,
   index: number,
   sessionId: string,
+  toolResults: Map<string, Record<string, unknown>>,
 ): ConversationTurn | null {
   const role = message.role;
   if (role !== 'user' && role !== 'assistant') return null;
@@ -234,15 +248,15 @@ function messageToTurn(
     reasoningStatus: reasoning ? 'done' : null,
     finishReason: stringValue(message.finish_reason) || null,
     responseStatus: role === 'assistant' ? 'done' : null,
-    provider: role === 'assistant' ? 'openrouter' : null,
+    provider: stringValue(message.provider) || null,
     policy: role === 'assistant' ? 'hermes' : null,
-    chosenPool: role === 'assistant' ? 'external' : null,
+    chosenPool: null,
     decisionReason: role === 'assistant' ? 'Hermes headless agent' : null,
     forcedLocal: false,
     piiHits: [],
     toolCalls:
       role === 'assistant'
-        ? mapStoredToolCalls(message.tool_calls, timestamp)
+        ? mapStoredToolCalls(message.tool_calls, timestamp, toolResults)
         : [],
     pendingApprovals: [],
     artifacts: [],
@@ -272,7 +286,11 @@ function timestampToIso(value: unknown): string {
   return new Date().toISOString();
 }
 
-function mapStoredToolCalls(value: unknown, timestamp: string) {
+function mapStoredToolCalls(
+  value: unknown,
+  timestamp: string,
+  toolResults: Map<string, Record<string, unknown>>,
+) {
   if (!Array.isArray(value)) return [];
   const startedAtMs = Date.parse(timestamp);
   return value.flatMap((entry, index) => {
@@ -284,19 +302,50 @@ function mapStoredToolCalls(value: unknown, timestamp: string) {
         : {};
     const name = stringValue(fn.name ?? row.name);
     if (!name) return [];
+    const callId = stringValue(row.id) || `stored-tool-${index}`;
+    const message = toolResults.get(callId);
+    const result = message ? storedToolResult(message) : null;
     return [
       {
-        call_id: stringValue(row.id) || `stored-tool-${index}`,
+        call_id: callId,
         name,
         args_preview: stringValue(fn.arguments ?? row.arguments) || null,
         argsBuffer: stringValue(fn.arguments ?? row.arguments),
         startedAtMs,
-        completedAtMs: startedAtMs,
-        status: 'ok',
-        result: null,
+        completedAtMs: message?.timestamp
+          ? Date.parse(timestampToIso(message.timestamp))
+          : null,
+        status: result?.status ?? 'unknown',
+        result,
       },
     ];
   });
+}
+
+function storedToolResult(message: Record<string, unknown>) {
+  const preview = stringValue(message.content);
+  let payload: Record<string, unknown> = message;
+  try {
+    const parsed: unknown = JSON.parse(preview);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      payload = parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Native tools may return plain text instead of JSON.
+  }
+  const failed =
+    message.is_error === true ||
+    payload.is_error === true ||
+    payload.isError === true ||
+    Boolean(payload.error) ||
+    (typeof payload.exit_code === 'number' && payload.exit_code !== 0);
+  return {
+    status: failed ? 'error' : 'ok',
+    preview: preview || null,
+    error: failed
+      ? stringValue(payload.error) || i18n.t('apps:ai.toolCall.error')
+      : null,
+  };
 }
 
 function runToPendingApproval(

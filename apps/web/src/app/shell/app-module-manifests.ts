@@ -5,7 +5,6 @@ import { communityModule } from '@/src/app-modules/community';
 import { diagramsModule } from '@/src/app-modules/diagrams';
 import { docsModule } from '@/src/app-modules/docs';
 import { filesModule } from '@/src/app-modules/files';
-import { hermesTerminalModule } from '@/src/app-modules/hermes-terminal';
 import { homeModule } from '@/src/app-modules/home';
 import { mailModule } from '@/src/app-modules/mail';
 import { meetingModule } from '@/src/app-modules/meeting';
@@ -26,7 +25,6 @@ import {
   diagramsManifest,
   docsManifest,
   filesManifest,
-  hermesTerminalManifest,
   homeManifest,
   mailManifest,
   meetingManifest,
@@ -50,7 +48,6 @@ export {
   diagramsManifest,
   docsManifest,
   filesManifest,
-  hermesTerminalManifest,
   homeManifest,
   mailManifest,
   meetingManifest,
@@ -68,7 +65,6 @@ export {
 export const DEFAULT_APP_MODULES = [
   homeModule,
   agentTerminalModule,
-  hermesTerminalModule,
   chatbotModule,
   webSearchModule,
   pmsModule,

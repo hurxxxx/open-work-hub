@@ -116,6 +116,8 @@ class AiGatewayRequest:
     source: str
     messages: list[dict[str, Any]] = field(default_factory=list)
     actor_user_id: str | None = None
+    execution_user_id: str | None = None
+    native_tool_limit: int = 20
     app: str | None = None
     workload_id: str | None = None
     workload_route: Literal["local", "external"] | None = field(
@@ -141,6 +143,7 @@ class AiGatewayRequest:
     tools: list[dict[str, Any]] | None = None
     tool_choice: str | dict[str, Any] | None = None
     parallel_tool_calls: bool | None = None
+    output_schema: dict[str, Any] | None = None
     context_pack: AiGatewayContextPack | None = None
     agent_run_id: str | None = None
     conversation_id: str | None = None
@@ -198,6 +201,8 @@ class AiGatewayRequest:
         return LlmTaskContext(
             source=self.source,
             actor_user_id=self.actor_user_id,
+            execution_user_id=self.execution_user_id,
+            native_tool_limit=self.native_tool_limit,
             task_kind=self.task_kind,
             app_id=self.app,
             workload_id=self.workload_id,
@@ -237,6 +242,8 @@ def ai_gateway_request_from_task_context(
         source=context.source,
         messages=list(messages or []),
         actor_user_id=context.actor_user_id,
+        execution_user_id=context.execution_user_id,
+        native_tool_limit=context.native_tool_limit,
         app=resolved_app,
         workload_id=context.workload_id,
         pool_hint=pool_hint,
@@ -481,6 +488,8 @@ class AiGatewayResponse:
 class LlmWorkloadContext:
     source: str
     actor_user_id: str | None = None
+    execution_user_id: str | None = None
+    native_tool_limit: int = 20
     principal_kind: Literal["user", "service_account", "system"] = "user"
     principal_id: str | None = None
     app_id: str | None = None
@@ -490,6 +499,8 @@ class LlmWorkloadContext:
         return cls(
             source=context.source,
             actor_user_id=context.actor_user_id,
+            execution_user_id=context.execution_user_id,
+            native_tool_limit=context.native_tool_limit,
             principal_kind=context.principal_kind,
             principal_id=context.principal_id,
             app_id=context.app_id,
@@ -534,6 +545,7 @@ def execute_llm(
     tools: list[dict[str, Any]] | None = None,
     tool_choice: str | dict[str, Any] | None = None,
     parallel_tool_calls: bool | None = None,
+    output_schema: dict[str, Any] | None = None,
     context_pack: AiGatewayContextPack | None = None,
     agent_run_id: str | None = None,
     conversation_id: str | None = None,
@@ -556,6 +568,7 @@ def execute_llm(
         tools=tools,
         tool_choice=tool_choice,
         parallel_tool_calls=parallel_tool_calls,
+        output_schema=output_schema,
         context_pack=context_pack,
         agent_run_id=agent_run_id,
         conversation_id=conversation_id,
@@ -584,6 +597,7 @@ async def stream_llm(
     tools: list[dict[str, Any]] | None = None,
     tool_choice: str | dict[str, Any] | None = None,
     parallel_tool_calls: bool | None = None,
+    output_schema: dict[str, Any] | None = None,
     context_pack: AiGatewayContextPack | None = None,
     agent_run_id: str | None = None,
     conversation_id: str | None = None,
@@ -606,6 +620,7 @@ async def stream_llm(
         tools=tools,
         tool_choice=tool_choice,
         parallel_tool_calls=parallel_tool_calls,
+        output_schema=output_schema,
         context_pack=context_pack,
         agent_run_id=agent_run_id,
         conversation_id=conversation_id,
@@ -650,6 +665,8 @@ def build_llm_workload_request(
         workload_external_max_output_tokens=route.external_max_output_tokens,
         source=context.source,
         actor_user_id=context.actor_user_id,
+        execution_user_id=context.execution_user_id,
+        native_tool_limit=context.native_tool_limit,
         app=app_id,
         principal_kind=context.principal_kind,
         principal_id=context.principal_id,
@@ -1066,6 +1083,7 @@ def complete_resolved_gateway_chat(
     response, _decision, config = _complete_chat(
         gateway_execution.llm_context,
         db,
+        completion_executor=_hermes_completion_executor(gateway_execution),
         messages=gateway_execution.messages,
         temperature=request.temperature,
         max_tokens=request.max_tokens,
@@ -1148,6 +1166,7 @@ def complete_resolved_gateway_chat_text(
     completion, _decision, config = _complete_chat_text(
         gateway_execution.llm_context,
         db,
+        completion_executor=_hermes_completion_executor(gateway_execution),
         messages=gateway_execution.messages,
         temperature=request.temperature,
         max_tokens=request.max_tokens,
@@ -1230,6 +1249,7 @@ async def complete_resolved_gateway_chat_stream(
     async for chunk, _decision, config in _complete_chat_stream(
         gateway_execution.llm_context,
         db,
+        stream_executor=_hermes_stream_executor(gateway_execution),
         messages=gateway_execution.messages,
         temperature=request.temperature,
         max_tokens=request.max_tokens,
@@ -1459,3 +1479,27 @@ __all__ = [
     "resolve_gateway_execution",
     "stream_llm",
 ]
+
+
+def _hermes_completion_executor(gateway_execution: AiGatewayExecution):
+    from open_work_hub_api.domains.hermes.workloads import complete_workload
+
+    return lambda execution, payload, timeout: complete_workload(
+        gateway_execution.llm_context,
+        execution,
+        payload,
+        timeout_seconds=timeout,
+        output_schema=gateway_execution.request.output_schema,
+    )
+
+
+def _hermes_stream_executor(gateway_execution: AiGatewayExecution):
+    from open_work_hub_api.domains.hermes.workloads import stream_workload
+
+    return lambda execution, payload, timeout: stream_workload(
+        gateway_execution.llm_context,
+        execution,
+        payload,
+        timeout_seconds=timeout,
+        output_schema=gateway_execution.request.output_schema,
+    )

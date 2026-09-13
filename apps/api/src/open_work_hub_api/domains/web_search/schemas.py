@@ -14,7 +14,7 @@ class WebSearchAskRequest(BaseModel):
 class WebSearchCitation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    url: str
+    url: str = Field(pattern=r"^https?://[^\s]+$")
     title: str
     cited_text: str | None = None
 
@@ -25,6 +25,12 @@ class WebSearchUsage(BaseModel):
     input_tokens: int | None = None
     output_tokens: int | None = None
     web_search_requests: int | None = None
+
+
+class WebSearchResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    answer: str = Field(min_length=1)
+    citations: list[WebSearchCitation] = Field(default_factory=list, max_length=100)
 
 
 class WebSearchAnswerResponse(BaseModel):

@@ -18,8 +18,6 @@ import {
 } from './hermes-agent-api';
 import { iterSseEvents } from './sse-parser';
 
-const HERMES_PROVIDER = 'openrouter';
-const HERMES_MODEL = 'qwen/qwen3.8-flash';
 const HERMES_POLICY = 'hermes';
 const TERMINAL_RUN_STATUSES = new Set([
   'completed',
@@ -174,19 +172,56 @@ export async function streamAiChat({
   try {
     const started = await startHermesRun(payload, token);
     const stopOnAbort = () => {
-      void stopHermesRun(token, started.run.id).catch(() => undefined);
+      if (signal.reason === 'stop')
+        void stopHermesRun(token, started.run.id).catch(() => undefined);
     };
     signal.addEventListener('abort', stopOnAbort, { once: true });
-    const response = await legacyEventStreamResponse({
-      afterSequence: 0,
-      conversationId: started.sessionId,
-      runId: started.run.id,
-      signal,
-      token,
-    });
-    return withAbortListenerCleanup(response, signal, stopOnAbort);
+    if (signal.aborted) stopOnAbort();
+    try {
+      const response = await legacyEventStreamResponse({
+        afterSequence: 0,
+        conversationId: started.sessionId,
+        runId: started.run.id,
+        signal,
+        token,
+      });
+      return withAbortListenerCleanup(response, signal, stopOnAbort);
+    } catch (error) {
+      signal.removeEventListener('abort', stopOnAbort);
+      throw error;
+    }
   } catch (error) {
     return raiseAiError(error);
+  }
+}
+
+export async function streamAiExistingRun(
+  token: string,
+  runId: string,
+  conversationId: string,
+  signal: AbortSignal,
+): Promise<Response> {
+  const stopOnAbort = () => {
+    if (signal.reason === 'stop')
+      void stopHermesRun(token, runId).catch(() => undefined);
+  };
+  signal.addEventListener('abort', stopOnAbort, { once: true });
+  if (signal.aborted) stopOnAbort();
+  try {
+    return withAbortListenerCleanup(
+      await legacyEventStreamResponse({
+        token,
+        runId,
+        conversationId,
+        signal,
+        afterSequence: 0,
+      }),
+      signal,
+      stopOnAbort,
+    );
+  } catch (error) {
+    signal.removeEventListener('abort', stopOnAbort);
+    throw error;
   }
 }
 
@@ -422,7 +457,7 @@ function runToChatResponse(
   requestedBackendMode: AiBackendMode | undefined,
 ): AiChatResponse {
   return {
-    model: HERMES_MODEL,
+    model: stringValue(run.model_policy?.model),
     content: run.output_text ?? '',
     usage: normalizeUsage(run.usage),
     finish_reason:
@@ -433,13 +468,13 @@ function runToChatResponse(
           : run.status === 'cancelled' || run.status === 'interrupted'
             ? 'cancelled'
             : 'error',
-    provider: HERMES_PROVIDER,
+    provider: stringValue(run.model_policy?.provider),
     backend: 'hermes',
     fallback_used: false,
-    canonical_model: HERMES_MODEL,
+    canonical_model: stringValue(run.model_policy?.model),
     requested_backend_mode: requestedBackendMode ?? 'local',
     policy: HERMES_POLICY,
-    chosen_pool: 'external',
+    chosen_pool: run.model_policy?.route === 'local' ? 'local' : 'external',
     decision_reason: 'Executed by Hermes headless runtime.',
     forced_local: false,
     pii_hits: [],
@@ -459,6 +494,7 @@ interface LegacyEventStreamArgs {
 async function legacyEventStreamResponse(
   args: LegacyEventStreamArgs,
 ): Promise<Response> {
+  const runPolicy = (await getHermesRun(args.token, args.runId)).model_policy;
   let sourceAbort: AbortController | null = null;
   let cancelled = false;
   const loopAbort = new AbortController();
@@ -475,7 +511,12 @@ async function legacyEventStreamResponse(
   let terminal = false;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const emit = (type: string, data: unknown, sequence?: number) => {
+      const emit = (
+        type: string,
+        data: unknown,
+        sequence?: number,
+        timestampMs = Date.now(),
+      ) => {
         if (cancelled) return;
         syntheticSequence = Math.max(syntheticSequence + 1, sequence ?? 0);
         controller.enqueue(
@@ -483,7 +524,7 @@ async function legacyEventStreamResponse(
             `data: ${JSON.stringify({
               type,
               seq: syntheticSequence,
-              timestamp_ms: Date.now(),
+              timestamp_ms: timestampMs,
               data,
             })}\n\n`,
           ),
@@ -558,7 +599,7 @@ async function legacyEventStreamResponse(
                 emit('done', {
                   finish_reason: 'error',
                   audit_id: null,
-                  meta: doneMeta(args.runId),
+                  meta: doneMeta(args.runId, runPolicy),
                 });
                 terminal = true;
                 break;
@@ -586,6 +627,7 @@ async function legacyEventStreamResponse(
                     args_preview: stringValue(payload.preview) || null,
                   },
                   resolvedSequence,
+                  eventTimestampMs(payload),
                 );
               } else if (
                 eventType === 'tool.completed' ||
@@ -593,14 +635,31 @@ async function legacyEventStreamResponse(
               ) {
                 const name =
                   stringValue(payload.tool ?? payload.name) || 'tool';
-                const matchingIndex = findOpenTool(openTools, name);
+                const callId = stringValue(payload.call_id);
+                const matchingIndex = findOpenTool(openTools, name, callId);
                 const call =
                   matchingIndex >= 0
                     ? openTools.splice(matchingIndex, 1)[0]
                     : {
-                        id: `hermes-tool-${args.runId}-${syntheticSequence + 1}`,
+                        id:
+                          callId ||
+                          `hermes-tool-${args.runId}-${syntheticSequence + 1}`,
                         name,
                       };
+                const completedAt = eventTimestampMs(payload);
+                if (matchingIndex < 0) {
+                  const durationMs =
+                    typeof payload.duration === 'number' &&
+                    Number.isFinite(payload.duration)
+                      ? Math.max(0, payload.duration * 1000)
+                      : 0;
+                  emit(
+                    'tool_call_started',
+                    { call_id: call.id, name: call.name, args_preview: null },
+                    resolvedSequence,
+                    completedAt - durationMs,
+                  );
+                }
                 const failed =
                   eventType === 'tool.failed' ||
                   Boolean(payload.error === true);
@@ -613,10 +672,11 @@ async function legacyEventStreamResponse(
                       stringValue(payload.preview ?? payload.result) || null,
                     error: failed
                       ? stringValue(payload.message ?? payload.error) ||
-                        'Tool failed.'
+                        i18n.t('apps:ai.toolCall.error')
                       : null,
                   },
                   resolvedSequence,
+                  completedAt,
                 );
               } else if (eventType === 'approval.request') {
                 const requestId = stringValue(payload.request_id);
@@ -648,7 +708,7 @@ async function legacyEventStreamResponse(
                 emit('done', {
                   finish_reason: 'awaiting_approval',
                   audit_id: null,
-                  meta: doneMeta(args.runId),
+                  meta: doneMeta(args.runId, runPolicy),
                 });
                 terminal = true;
                 break;
@@ -669,7 +729,7 @@ async function legacyEventStreamResponse(
                   emit('done', {
                     finish_reason: 'stop',
                     audit_id: null,
-                    meta: doneMeta(args.runId),
+                    meta: doneMeta(args.runId, runPolicy),
                   });
                   terminal = true;
                   break;
@@ -688,7 +748,7 @@ async function legacyEventStreamResponse(
                   emit('done', {
                     finish_reason: 'error',
                     audit_id: null,
-                    meta: doneMeta(args.runId),
+                    meta: doneMeta(args.runId, runPolicy),
                   });
                   terminal = true;
                   break;
@@ -700,7 +760,7 @@ async function legacyEventStreamResponse(
                   emit('done', {
                     finish_reason: 'cancelled',
                     audit_id: null,
-                    meta: doneMeta(args.runId),
+                    meta: doneMeta(args.runId, runPolicy),
                   });
                   terminal = true;
                   break;
@@ -715,7 +775,7 @@ async function legacyEventStreamResponse(
                 emit('done', {
                   finish_reason: 'stop',
                   audit_id: null,
-                  meta: doneMeta(args.runId),
+                  meta: doneMeta(args.runId, runPolicy),
                 });
                 terminal = true;
                 break;
@@ -730,7 +790,7 @@ async function legacyEventStreamResponse(
                 emit('done', {
                   finish_reason: 'error',
                   audit_id: null,
-                  meta: doneMeta(args.runId),
+                  meta: doneMeta(args.runId, runPolicy),
                 });
                 terminal = true;
                 break;
@@ -741,7 +801,7 @@ async function legacyEventStreamResponse(
                 emit('done', {
                   finish_reason: 'cancelled',
                   audit_id: null,
-                  meta: doneMeta(args.runId),
+                  meta: doneMeta(args.runId, runPolicy),
                 });
                 terminal = true;
                 break;
@@ -789,7 +849,7 @@ async function legacyEventStreamResponse(
           emit('done', {
             finish_reason: 'error',
             audit_id: null,
-            meta: doneMeta(args.runId),
+            meta: doneMeta(args.runId, runPolicy),
           });
         }
         if (!cancelled) controller.close();
@@ -815,7 +875,7 @@ async function legacyEventStreamResponse(
           emit('done', {
             finish_reason: 'error',
             audit_id: null,
-            meta: doneMeta(args.runId),
+            meta: doneMeta(args.runId, runPolicy),
           });
           controller.close();
         }
@@ -891,24 +951,24 @@ function withAbortListenerCleanup(
 function findOpenTool(
   tools: Array<{ id: string; name: string }>,
   name: string,
+  callId: string,
 ): number {
-  for (let index = tools.length - 1; index >= 0; index -= 1) {
-    if (tools[index]?.name === name) return index;
-  }
-  return tools.length - 1;
+  if (callId) return tools.findIndex((tool) => tool.id === callId);
+  return tools.findIndex((tool) => tool.name === name);
 }
 
-function doneMeta(runId: string) {
+function doneMeta(runId: string, policy: HermesRun['model_policy']) {
   return {
     policy: HERMES_POLICY,
-    chosen_pool: 'external' as const,
+    chosen_pool:
+      policy?.route === 'local' ? ('local' as const) : ('external' as const),
     decision_reason: 'Executed by Hermes headless runtime.',
     forced_local: false,
     pii_hits: [],
-    model: HERMES_MODEL,
-    chosen_model: HERMES_MODEL,
-    canonical_model: HERMES_MODEL,
-    provider: HERMES_PROVIDER,
+    model: stringValue(policy?.model),
+    chosen_model: stringValue(policy?.model),
+    canonical_model: stringValue(policy?.model),
+    provider: stringValue(policy?.provider),
     agent_run_id: runId,
   };
 }

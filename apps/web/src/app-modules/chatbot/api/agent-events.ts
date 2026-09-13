@@ -216,7 +216,7 @@ export interface ToolCallBuffer {
   argsBuffer: string;
   startedAtMs: number;
   completedAtMs: number | null;
-  status: 'running' | 'ok' | 'error' | 'rejected';
+  status: 'running' | 'ok' | 'error' | 'rejected' | 'unknown';
   result: {
     status: 'ok' | 'error' | 'rejected';
     preview: string | null;

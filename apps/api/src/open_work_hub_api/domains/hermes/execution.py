@@ -18,6 +18,7 @@ from open_work_hub_api.domains.hermes.models import (
 )
 from open_work_hub_api.domains.hermes.repository import (
     TERMINAL_RUN_STATUSES,
+    HermesDispatchRepository,
     HermesRunNotFoundError,
     HermesRunRepository,
 )
@@ -30,7 +31,7 @@ class HermesExecutionConfigurationError(RuntimeError):
 def hermes_run_access_allowed(db: Session, run: Any) -> bool:
     return can_use_app(
         db,
-        app_id="chatbot",
+        app_id=run.owner_app_id,
         user_id=run.user_id,
     )
 
@@ -59,6 +60,7 @@ async def execute_hermes_run(
     api_key: str,
     request_timeout_seconds: float,
     lease_seconds: int,
+    max_concurrent_runs: int = 10,
 ) -> str:
     repository = HermesRunRepository(db)
     claim_token = uuid4().hex
@@ -66,9 +68,13 @@ async def execute_hermes_run(
         run_id,
         claim_token=claim_token,
         lease_seconds=lease_seconds,
+        max_concurrent_runs=max_concurrent_runs,
     )
     db.commit()
     if not claim.acquired:
+        if claim.reason in {"capacity", "session_busy"}:
+            HermesDispatchRepository(db).defer(run_id, reason=claim.reason)
+            db.commit()
         return claim.reason or claim.status
 
     client = HermesRuntimeClient(
@@ -112,6 +118,7 @@ async def execute_hermes_run(
                 idempotency_key=run.id,
                 instructions=run_input.instructions,
                 conversation_history=run_input.conversation_history,
+                runtime_options=run.runtime_options,
             )
             hermes_run_id = accepted.get("run_id")
             if not isinstance(hermes_run_id, str) or not hermes_run_id:

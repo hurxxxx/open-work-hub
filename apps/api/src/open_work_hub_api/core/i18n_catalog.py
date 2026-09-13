@@ -56,6 +56,30 @@ MESSAGE_PARAM_VALUE_TRANSLATIONS: dict[tuple[str, str], str] = {
 
 
 MESSAGES: dict[str, dict[str, str]] = {
+    "hermes.model_unavailable": {
+        "ko-KR": "선택된 모델을 Hermes에서 사용할 수 없습니다. 관리자 모델 설정을 확인해 주세요.",
+        "en-US": "The selected model is unavailable in Hermes. Check the administrator model settings.",
+    },
+    "hermes.session_policy_changed": {
+        "ko-KR": "모델 실행 경로가 변경되었습니다. 새 대화를 시작해 주세요.",
+        "en-US": "The model route changed. Start a new conversation.",
+    },
+    "hermes.file_invalid": {
+        "ko-KR": "파일 경로 또는 크기가 올바르지 않습니다.",
+        "en-US": "The file path or size is invalid.",
+    },
+    "hermes.file_not_found": {
+        "ko-KR": "파일을 찾을 수 없습니다.",
+        "en-US": "The file was not found.",
+    },
+    "hermes.files_active_run": {
+        "ko-KR": "실행이 끝난 후 파일을 첨부해 주세요.",
+        "en-US": "Attach files after the current run finishes.",
+    },
+    "hermes_terminal.retired": {
+        "ko-KR": "Terminal이 챗봇에 통합되었습니다. 챗봇에서 새 대화를 시작해 주세요.",
+        "en-US": "Terminal has moved into the chatbot. Start a new conversation there.",
+    },
     "admin.last_active_admin_required": {
         "ko-KR": "활성 플랫폼 관리자가 최소 한 명 필요합니다.",
         "en-US": "At least one active platform administrator is required.",

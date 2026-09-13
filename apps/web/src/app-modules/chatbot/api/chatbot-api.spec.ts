@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { sendAiChat, streamAiChat, type AiChatRequest } from './chatbot-api';
+import {
+  sendAiChat,
+  streamAiChat,
+  streamAiExistingRun,
+  type AiChatRequest,
+} from './chatbot-api';
 import { HermesAgentApiError } from './hermes-agent-api';
 
 const hermesMocks = vi.hoisted(() => ({
@@ -26,6 +31,10 @@ describe('Hermes chat session creation', () => {
     hermesMocks.createHermesSession.mockReset();
     hermesMocks.getHermesRun.mockReset();
     hermesMocks.stopHermesRun.mockReset();
+    hermesMocks.stopHermesRun.mockResolvedValue({
+      id: 'run-1',
+      status: 'cancelled',
+    });
     hermesMocks.streamHermesRunEvents.mockReset();
     vi.useRealTimers();
     hermesMocks.createHermesRun.mockResolvedValue({ id: 'run-1' });
@@ -211,5 +220,115 @@ describe('Hermes chat session creation', () => {
     await vi.advanceTimersByTimeAsync(60_000);
 
     expect(hermesMocks.streamHermesRunEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['stop', 1],
+    ['navigation', 0],
+  ] as const)(
+    'handles an early %s without duplicate or unintended cancellation',
+    async (reason, expectedStops) => {
+      hermesMocks.createHermesSession.mockResolvedValue({
+        id: 'session-early',
+      });
+      const controller = new AbortController();
+      controller.abort(reason);
+      const response = await streamAiChat({
+        payload: {
+          conversation_id: null,
+          messages: [{ role: 'user', content: 'start' }],
+        },
+        token: 'token',
+        signal: controller.signal,
+      });
+      await response.text();
+      expect(hermesMocks.createHermesRun).toHaveBeenCalledTimes(1);
+      expect(hermesMocks.stopHermesRun).toHaveBeenCalledTimes(expectedStops);
+    },
+  );
+
+  it('recovers an existing run and reports its actual administrator model policy', async () => {
+    hermesMocks.getHermesRun.mockResolvedValue({
+      id: 'run-retained',
+      output_text: 'done',
+      status: 'completed',
+      usage: {},
+      model_policy: {
+        route: 'local',
+        provider: 'vllm',
+        model: 'selected-model',
+      },
+    });
+    hermesMocks.streamHermesRunEvents.mockResolvedValue(
+      new Response('event: stream.closed\ndata: {}\n\n'),
+    );
+    const response = await streamAiExistingRun(
+      'token',
+      'run-retained',
+      'session-retained',
+      new AbortController().signal,
+    );
+    const body = await response.text();
+    expect(body).toContain('"chosen_pool":"local"');
+    expect(body).toContain('"chosen_model":"selected-model"');
+    expect(hermesMocks.createHermesRun).not.toHaveBeenCalled();
+    expect(hermesMocks.createHermesSession).not.toHaveBeenCalled();
+  });
+
+  it('preserves the name, duration and failure when only a native completion arrives', async () => {
+    const events = [
+      { event: 'tool.started', tool: 'read_file', timestamp: 1_789_257_600 },
+      {
+        event: 'tool.completed',
+        tool: 'terminal',
+        timestamp: 1_789_257_612,
+        duration: 10,
+        error: true,
+      },
+      {
+        event: 'tool.completed',
+        tool: 'read_file',
+        timestamp: 1_789_257_614,
+        error: false,
+      },
+      { event: 'run.completed', output: 'done' },
+    ];
+    hermesMocks.streamHermesRunEvents.mockResolvedValue(
+      new Response(
+        events
+          .map(
+            (event, i) =>
+              `id: ${i + 1}\nevent: ${event.event}\ndata: ${JSON.stringify(event)}\n\n`,
+          )
+          .join(''),
+      ),
+    );
+    const response = await streamAiExistingRun(
+      'token',
+      'run-1',
+      'session-1',
+      new AbortController().signal,
+    );
+    const frames = (await response.text())
+      .trim()
+      .split('\n\n')
+      .map((frame) => JSON.parse(frame.slice('data: '.length)));
+    const started = frames.filter(
+      (frame) => frame.type === 'tool_call_started',
+    );
+    const results = frames.filter((frame) => frame.type === 'tool_result');
+    expect(started.map((frame) => frame.data.name)).toEqual([
+      'read_file',
+      'terminal',
+    ]);
+    expect(results[0].data).toMatchObject({
+      call_id: started[1].data.call_id,
+      status: 'error',
+    });
+    expect(results[1].data).toMatchObject({
+      call_id: started[0].data.call_id,
+      status: 'ok',
+    });
+    expect(results[0].timestamp_ms - started[1].timestamp_ms).toBe(10_000);
   });
 });

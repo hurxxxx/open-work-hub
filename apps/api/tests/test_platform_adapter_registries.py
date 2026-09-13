@@ -1782,6 +1782,7 @@ def test_default_external_llm_providers_reregister_after_reset() -> None:
         "anthropic",
         "gemini",
         "openai",
+        "openrouter",
     )
 
 
@@ -1795,6 +1796,7 @@ def test_default_llm_pool_config_resolvers_reregister_after_reset() -> None:
         "external:anthropic",
         "external:gemini",
         "external:openai",
+        "external:openrouter",
         "local:*",
     )
 
@@ -2066,6 +2068,7 @@ def test_default_llm_execution_adapters_reregister_after_reset() -> None:
         "external:anthropic",
         "external:gemini",
         "external:openai",
+        "external:openrouter",
         "local:*",
     )
     assert supports_tool_calling("external", "openai") is True
@@ -2084,6 +2087,7 @@ def test_default_llm_generation_profiles_reregister_after_reset() -> None:
         "external:anthropic",
         "external:gemini",
         "external:openai",
+        "external:openrouter",
         "local:*",
         "local:docker-model-runner",
         "local:vllm",

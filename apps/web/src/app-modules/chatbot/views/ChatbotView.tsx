@@ -9,6 +9,7 @@ import { EmptyState } from './chat/EmptyState';
 import { ToolCallCard } from './chat/ToolCallCard';
 import type { ChatbotExperienceConfig } from './chatbot-experience';
 import { resolveFailedPromptRestoreInput } from './chatbot-view-model';
+import { HermesWorkspacePanel } from './HermesWorkspacePanel';
 import { ChatbotConversationListPanel } from './ChatbotConversationListPanel';
 import {
   useChatbotViewController,
@@ -260,7 +261,7 @@ function ChatbotViewContent({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-app-surface lg:flex-row">
           <ChatbotConversationListPanel
             activeConversationId={currentConversationId}
-            navigationDisabled={isSending}
+            navigationDisabled={isSending && !currentConversationId}
             pendingConversationTitle={
               isSending ? chatState.pendingUserContent : null
             }
@@ -276,6 +277,12 @@ function ChatbotViewContent({
               title={experience.title}
               health={health}
               healthError={healthError}
+            />
+
+            <HermesWorkspacePanel
+              conversationId={currentConversationId}
+              scopeRef={experience.conversationScope?.ref}
+              scopeResourceId={experience.conversationScope?.resourceId}
             />
 
             {turns.length === 0 && !isRunInProgress ? (
