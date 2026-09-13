@@ -89,6 +89,7 @@ def test_admin_ai_model_settings_projects_registry_and_default_catalog(
         "local",
         "openai",
         "anthropic",
+        "openrouter",
         "gemini",
     ]
     assert all(
