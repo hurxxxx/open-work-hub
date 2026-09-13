@@ -8,6 +8,8 @@ from types import ModuleType
 from typing import Any
 from uuid import uuid4
 
+from open_work_hub_api.domains.hermes.client import managed_compression_policy
+
 
 def _load_bootstrap(monkeypatch, config: dict[str, Any]):
     saved: list[dict[str, Any]] = []
@@ -61,6 +63,7 @@ def test_bootstrap_preserves_db_model_policy_and_configures_native_runtime(monke
         "cwd": "/workspace",
     }
     assert reconciled["agent"]["environment_probe"] is False
+    assert reconciled["compression"] == managed_compression_policy()
     assert bootstrap._apply_runtime_policy(reconciled) is False
 
 
