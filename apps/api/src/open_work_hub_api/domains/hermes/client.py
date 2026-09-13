@@ -323,6 +323,7 @@ class HermesRuntimeClient:
         instructions: str | None = None,
         conversation_history: list[dict[str, Any]] | None = None,
         runtime_options: Mapping[str, Any] | None = None,
+        cancel_admission: bool = False,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             **{
@@ -340,8 +341,11 @@ class HermesRuntimeClient:
         return await self._request(
             "POST",
             profile_name=profile_name,
-            path="/v1/runs",
-            operation="create_run",
+            # A separate route fails closed against gateways without the
+            # cancellation adapter. Never replay creation to discover an ID
+            # after stop: that could start a run whose first request was lost.
+            path="/v1/owh/runs/cancel-admission" if cancel_admission else "/v1/runs",
+            operation="cancel_run_admission" if cancel_admission else "create_run",
             json_body=body,
             headers={
                 "Idempotency-Key": idempotency_key,
