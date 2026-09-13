@@ -359,10 +359,10 @@ class HermesRunRepository:
             and run.execution_claim_expires_at > now
         ):
             return HermesExecutionClaim(False, run.status, "active_lease")
-        if run.status == "stopping" and run.hermes_run_id is None:
-            # A stop arrived while a prior dispatch lease was active, but the
-            # lease has now expired without producing a Hermes run. Complete
-            # the cancellation locally instead of dispatching a new run.
+        if run.status == "stopping" and run.hermes_run_id is None and run.execution_attempts == 0:
+            # Only a never-claimed run is known not to have reached Hermes.
+            # A lost creation response must be reconciled even after its
+            # execution lease has been returned or expired.
             self.append_event(
                 run_id,
                 {
@@ -548,11 +548,15 @@ class HermesRunRepository:
             raise HermesRunNotFoundError(run_id)
         if run.status in TERMINAL_RUN_STATUSES:
             return run
-        executing = run.hermes_run_id is not None or bool(
-            run.execution_claim_token
-            and (
-                run.execution_claim_expires_at is None
-                or run.execution_claim_expires_at > utcnow_naive()
+        executing = (
+            run.hermes_run_id is not None
+            or run.execution_attempts > 0
+            or bool(
+                run.execution_claim_token
+                and (
+                    run.execution_claim_expires_at is None
+                    or run.execution_claim_expires_at > utcnow_naive()
+                )
             )
         )
         self.append_event(
@@ -877,7 +881,10 @@ class HermesDispatchRepository:
         self.db.add(row)
         if row.status == "dead_letter":
             run = self.db.get(HermesRunProjection, row.run_id)
-            if run is not None and run.status not in TERMINAL_RUN_STATUSES:
+            if run is not None and run.status == "stopping":
+                # Publication failures cannot confirm remote cancellation.
+                row.status = "pending"
+            elif run is not None and run.status not in TERMINAL_RUN_STATUSES:
                 HermesRunRepository(self.db).append_event(
                     run.id,
                     {

@@ -452,7 +452,8 @@ async def test_expired_approval_without_a_remote_run_fails_the_local_run(
         engine.dispose()
 
 
-async def test_runtime_client_uses_profile_route_auth_and_run_idempotency() -> None:
+@pytest.mark.parametrize("cancel_admission", [False, True])
+async def test_runtime_client_uses_profile_route_auth_and_run_idempotency(cancel_admission) -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -474,11 +475,13 @@ async def test_runtime_client_uses_profile_route_auth_and_run_idempotency() -> N
         idempotency_key="owh-run-1",
         instructions="Use the approved tools.",
         conversation_history=[{"role": "user", "content": "Earlier"}],
+        cancel_admission=cancel_admission,
     )
 
     assert result == {"run_id": "run-1", "status": "queued"}
     request = requests[0]
-    assert request.url.raw_path == b"/p/profile%2Fwith%20slash/v1/runs"
+    expected_path = b"/v1/owh/runs/cancel-admission" if cancel_admission else b"/v1/runs"
+    assert request.url.raw_path == b"/p/profile%2Fwith%20slash" + expected_path
     assert request.headers["authorization"] == "Bearer runtime-secret-0000000000000001"
     assert request.headers["idempotency-key"] == "owh-run-1"
     assert request.headers["x-hermes-session-id"] == "session-1"

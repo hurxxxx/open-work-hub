@@ -647,21 +647,7 @@ async def stop_run(
     if run.status in TERMINAL_RUN_STATUSES:
         return HermesRunResponse.model_validate(run)
     if not run.hermes_run_id:
-        now = utcnow_naive()
-        execution_active = bool(
-            run.execution_claim_token
-            and (run.execution_claim_expires_at is None or run.execution_claim_expires_at > now)
-        )
-        repository.append_event(
-            run.id,
-            {
-                "event": "run.stop_requested" if execution_active else "run.cancelled",
-                "status": "stopping" if execution_active else "cancelled",
-                "reason": "stopped_during_dispatch"
-                if execution_active
-                else "stopped_before_dispatch",
-            },
-        )
+        repository.request_stop(run.id, user_id=current_user.id)
         db.commit()
         db.refresh(run)
         return HermesRunResponse.model_validate(run)
