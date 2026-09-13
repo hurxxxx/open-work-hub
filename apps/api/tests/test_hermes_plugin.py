@@ -212,3 +212,110 @@ def test_rpc_resolves_native_profile_secret_references_and_rejects_unresolved(pl
     assert plugin.module._rpc(server, "run_test", "owh/context", {}) == {"accepted": True}
     assert seen == ["Bearer active-profile-secret"]
     assert server["headers"]["Authorization"] == "Bearer ${PROFILE_KEY}"
+
+
+@pytest.mark.slow
+def test_tool_rpc_waits_for_server_completion_beyond_thirty_seconds(plugin):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+    import time
+
+    completed = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_POST(self):
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            assert request["method"] == "tools/call"
+            assert self.headers["X-Hermes-Run-Id"] == "run_test"
+            time.sleep(31)
+            completed.append(request["id"])
+            body = json.dumps({"result": {"structuredContent": {"saved": True}}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = plugin.module._rpc(
+            {
+                "url": f"http://127.0.0.1:{server.server_port}",
+                "headers": {"Authorization": "Bearer synthetic"},
+            },
+            "run_test",
+            "tools/call",
+            {"name": "fixture.slow_save", "arguments": {}},
+        )
+        assert result == {"structuredContent": {"saved": True}}
+        assert len(completed) == 1
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.parametrize("method", ["tools/list", "owh/context", "tools/call"])
+def test_rpc_bounds_control_waits_and_never_retries_uncertain_calls(plugin, monkeypatch, method):
+    import httpx
+
+    real_client = httpx.Client
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        limits = request.extensions["timeout"]
+        assert limits["connect"] == limits["write"] == limits["pool"] == 30
+        assert limits["read"] == (3900 if method == "tools/call" else 30)
+        raise httpx.ReadTimeout("synthetic connection loss")
+
+    monkeypatch.setattr(
+        plugin.module.httpx,
+        "Client",
+        lambda **kwargs: real_client(
+            **kwargs,
+            transport=httpx.MockTransport(handler),
+        ),
+    )
+    with pytest.raises(httpx.ReadTimeout):
+        plugin.module._rpc(plugin.transport, "run_test", method, {})
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize("failure", ["timeout", "invalid_response"])
+def test_sent_tool_with_no_confirmation_reports_unknown_outcome_without_retry(
+    plugin, monkeypatch, failure
+):
+    import httpx
+
+    calls = []
+
+    def rpc(server, run, method, params):
+        if method == "owh/context":
+            return {"allow_native_tools": True}
+        if method == "tools/list":
+            return {"tools": [{"name": "fixture.save", "annotations": {"readOnlyHint": False}}]}
+        assert method == "tools/call"
+        calls.append(params)
+        if failure == "timeout":
+            raise httpx.ReadTimeout("synthetic connection loss")
+        raise ValueError("synthetic invalid response")
+
+    monkeypatch.setattr(plugin.module, "_rpc", rpc)
+    result = json.loads(
+        plugin.module.execute_tool(
+            tool_name=f"mcp__{plugin.server.replace('-', '_')}__fixture.save",
+            args={},
+            next_call=lambda: pytest.fail(
+                "Never repeat an uncertain call through the native handler"
+            ),
+        )
+    )
+    assert len(calls) == 1 and len(plugin.consent) == 1
+    assert "did not confirm" in result["error"] and "do not repeat" in result["error"]
+    assert "blocked" not in result["error"]

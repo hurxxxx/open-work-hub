@@ -56,7 +56,11 @@ def _rpc(server: dict, run_id: str, method: str, params: dict) -> dict:
     # A run may reach its first tool before the dispatcher has committed the
     # native run ID. Only discovery can retry; never replay a mutating call.
     deadline = time.monotonic() + 10
-    with httpx.Client(timeout=30, follow_redirects=False, trust_env=False) as client:
+    # This middleware owns its HTTP request; native MCP SDK timeouts do not
+    # cover it. Allow the bounded one-hour workload plus dispatch/cleanup
+    # overhead to finish, while keeping connection and control waits short.
+    timeout = httpx.Timeout(30, read=3900 if method == "tools/call" else 30)
+    with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
         while True:
             response = client.post(
                 server["url"],
@@ -86,6 +90,7 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
     # Check every OWH internal prefix, including another profile's tool names.
     # Returning an error is deliberate: native middleware falls through when
     # a callback raises. A transport/policy failure must never invoke next_call.
+    call_started = False
     try:
         from hermes_cli.config import load_config
         from hermes_constants import get_hermes_home
@@ -162,9 +167,15 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
             )
             if consent != "accept":
                 return _error("Tool approval was denied")
+        call_started = True
         result = _rpc(server, run_id, "tools/call", {"name": tool["name"], "arguments": args})
         return json.dumps(result.get("structuredContent", result), ensure_ascii=False)
     except Exception as error:
+        if call_started:
+            return _error(
+                "Open Work Hub did not confirm this tool's outcome. The server may still "
+                "complete the call; do not repeat it. Verify the result before continuing."
+            )
         return _error(
             f"Open Work Hub tool transport failed ({type(error).__name__}); execution was blocked"
         )
