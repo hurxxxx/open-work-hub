@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
+import json
 from pathlib import Path
 import sys
 from types import ModuleType, SimpleNamespace
@@ -24,6 +26,7 @@ def _load_gateway_entry(monkeypatch):
     platforms_module.__path__ = []  # type: ignore[attr-defined]
     runs_module = ModuleType("gateway.platforms.api_server_runs")
     runs_module._handle_runs = original_handler  # type: ignore[attr-defined]
+    runs_module._http_routes = lambda self: []  # type: ignore[attr-defined]
     platforms_module.api_server_runs = runs_module  # type: ignore[attr-defined]
 
     monkeypatch.setitem(sys.modules, "gateway", gateway_module)
@@ -117,3 +120,139 @@ async def test_gateway_discovers_before_delegating_run_admission(monkeypatch) ->
 
     assert response == {"ok": True}
     assert order == ["discover", "admit"]
+
+
+@pytest.fixture
+def cancellation_gateway(monkeypatch):
+    entry, runs = _load_gateway_entry(monkeypatch)
+    records = {}
+    state = SimpleNamespace(profile="owh-" + "a" * 32)
+
+    class Store:
+        durable = True
+
+        def reserve(self, scope, key, fingerprint, run_id, status, **kwargs):
+            previous = records.get((scope, key))
+            if previous:
+                return ("reused" if previous[0] == fingerprint else "conflict"), previous[1]
+            record = {"run_id": run_id, "status": status}
+            records[scope, key] = fingerprint, record
+            return "created", record
+
+    api = SimpleNamespace(
+        _api_request_profile=SimpleNamespace(get=lambda: state.profile),
+        _openai_error=lambda message, **kwargs: {"error": {"message": message, **kwargs}},
+        web=SimpleNamespace(
+            json_response=lambda body, status=200: SimpleNamespace(body=body, status=status)
+        ),
+    )
+    monkeypatch.setattr(sys.modules["gateway.platforms"], "api_server", api, raising=False)
+    adapter = SimpleNamespace(
+        _check_auth=lambda request: None,
+        _run_idempotency_store=Store(),
+        _run_idempotency_scope=lambda request: state.profile,
+        _parse_session_key_header=lambda request: (
+            request.headers.get("X-Hermes-Session-Key"),
+            None,
+        ),
+        _run_owner_pid=123,
+        _run_owner_started=456,
+    )
+    body = {
+        "input": "test",
+        "session_id": "session",
+        "provider": "custom:synthetic",
+        "model": "test",
+    }
+
+    async def request_json():
+        return body
+
+    request = SimpleNamespace(
+        headers={"Idempotency-Key": "owh-run", "X-Hermes-Session-Key": "conversation"},
+        json=request_json,
+    )
+    route = next(
+        row for row in runs._http_routes(adapter) if row[1] == "/v1/owh/runs/cancel-admission"
+    )
+    assert route[0] == "POST"
+    return SimpleNamespace(
+        handler=route[2],
+        request=request,
+        body=body,
+        adapter=adapter,
+        records=records,
+        state=state,
+    )
+
+
+async def test_cancel_admission_fences_a_late_creation_and_replays_exact_requests(
+    cancellation_gateway,
+):
+    state = cancellation_gateway
+    first = await state.handler(state.request)
+    assert first.status == 202 and first.body["status"] == "cancelled"
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {"body": state.body, "gateway_session_key": "conversation"},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    # Native admission uses this same store/fingerprint. Its late reserve must
+    # replay cancellation, so native _handle_runs never starts its background task.
+    outcome, record = state.adapter._run_idempotency_store.reserve(
+        state.state.profile, "owh-run", fingerprint, "late-native-id", {"status": "queued"}
+    )
+    assert outcome == "reused" and record["run_id"] == first.body["run_id"]
+    assert record["status"]["status"] == "cancelled"
+    replay = await state.handler(state.request)
+    assert replay.body == {**first.body, "replayed": True}
+    state.body["input"] = "different"
+    conflict = await state.handler(state.request)
+    assert conflict.status == 409 and len(state.records) == 1
+
+
+async def test_cancel_admission_recovers_existing_native_identity_in_its_profile(
+    cancellation_gateway,
+):
+    state = cancellation_gateway
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {"body": state.body, "gateway_session_key": "conversation"},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+    ).hexdigest()
+    state.adapter._run_idempotency_store.reserve(
+        state.state.profile, "owh-run", fingerprint, "run_existing", {"status": "running"}
+    )
+    response = await state.handler(state.request)
+    assert response.body == {"run_id": "run_existing", "status": "running", "replayed": True}
+    state.state.profile = "owh-" + "b" * 32
+    other = await state.handler(state.request)
+    assert other.body["status"] == "cancelled" and other.body["run_id"] != "run_existing"
+
+
+@pytest.mark.parametrize("invalid", ["auth", "profile", "key", "body", "storage", "outage"])
+async def test_cancel_admission_fails_closed(cancellation_gateway, invalid):
+    state = cancellation_gateway
+    if invalid == "auth":
+        state.adapter._check_auth = lambda request: SimpleNamespace(status=401)
+    elif invalid == "profile":
+        state.state.profile = "default"
+    elif invalid == "key":
+        state.request.headers.pop("Idempotency-Key")
+    elif invalid == "body":
+        state.body["hosted_room_dispatch"] = {}
+    elif invalid == "storage":
+        state.adapter._run_idempotency_store.durable = False
+    else:
+        state.adapter._run_idempotency_store.reserve = lambda *args, **kwargs: (
+            _ for _ in ()
+        ).throw(OSError("test"))
+    response = await state.handler(state.request)
+    assert response.status in {400, 401, 403, 503}
+    assert not state.records

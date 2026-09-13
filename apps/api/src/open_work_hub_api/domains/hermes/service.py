@@ -211,6 +211,9 @@ async def ensure_job_profile(
     Hermes API runs and cron jobs can execute concurrently. Keeping cron in a
     separate profile prevents a scheduled run from borrowing the app scope of
     an unrelated interactive run through a process-global MCP connection.
+    Jobs intentionally support model-only output: without an OWH run/sandbox
+    identity the managed middleware must deny native and MCP tools alike.
+    See the scheduled-job policy in docs/domains/ai/hermes.md.
     """
     resolved = require_hermes_enabled(settings)
     profile_name = job_profile_name(binding)

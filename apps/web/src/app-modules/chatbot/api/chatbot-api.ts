@@ -584,6 +584,23 @@ async function legacyEventStreamResponse(
               const resolvedSequence = Number.isFinite(sequence)
                 ? sequence
                 : undefined;
+              if (eventType === 'approval.request') {
+                // Replayed requests may already be resolved, including when a
+                // later request is pending. The server owns the current state.
+                // Resolve it before advancing the cursor so a failed read can
+                // retry this event without losing a pending approval.
+                const run = await getHermesRun(args.token, args.runId);
+                if (
+                  run.status !== 'awaiting_approval' ||
+                  !stringValue(payload.request_id) ||
+                  run.pending_approval?.request_id !== payload.request_id
+                ) {
+                  if (resolvedSequence != null) {
+                    afterSequence = Math.max(afterSequence, resolvedSequence);
+                  }
+                  continue;
+                }
+              }
               if (resolvedSequence != null) {
                 afterSequence = Math.max(afterSequence, resolvedSequence);
               }

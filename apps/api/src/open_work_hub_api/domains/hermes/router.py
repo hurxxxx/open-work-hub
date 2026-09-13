@@ -20,6 +20,7 @@ from open_work_hub_api.core.settings import (
     HERMES_RELEASE,
 )
 from open_work_hub_api.domains.auth.app_gate import (
+    allowed_app_ids,
     can_use_app,
     require_app_access,
 )
@@ -239,7 +240,7 @@ async def list_sessions(
         db.scalars(
             select(HermesSessionBinding)
             .where(*predicates)
-            .order_by(HermesSessionBinding.updated_at.desc())
+            .order_by(HermesSessionBinding.updated_at.desc(), HermesSessionBinding.id.desc())
             .offset(offset)
             .limit(limit + 1)
         )
@@ -514,6 +515,7 @@ def list_runs(
 ) -> HermesRunListResponse:
     predicates = [
         HermesRunProjection.user_id == current_user.id,
+        HermesRunProjection.owner_app_id.in_(allowed_app_ids(db, user_id=current_user.id)),
     ]
     if run_status == "active":
         predicates.append(HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES))
@@ -551,18 +553,22 @@ def list_runs(
     )
 
 
+def _accessible_run(
+    db: Session, *, run_id: str, user_id: str, for_update: bool = False
+) -> HermesRunProjection:
+    run = HermesRunRepository(db).get_owned(run_id, user_id=user_id, for_update=for_update)
+    if run is None or not can_use_app(db, app_id=run.owner_app_id, user_id=user_id):
+        raise HTTPException(status_code=404, detail={"code": "hermes.run_not_found"})
+    return run
+
+
 @router.get("/runs/{run_id}", response_model=HermesRunResponse)
 def get_run(
     run_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> HermesRunResponse:
-    run = HermesRunRepository(db).get_owned(
-        run_id,
-        user_id=current_user.id,
-    )
-    if run is None:
-        raise HTTPException(status_code=404, detail={"code": "hermes.run_not_found"})
+    run = _accessible_run(db, run_id=run_id, user_id=current_user.id)
     return HermesRunResponse.model_validate(run)
 
 
@@ -574,7 +580,6 @@ async def _event_stream(
 ) -> AsyncIterator[str]:
     next_sequence = after_sequence
     idle_ticks = 0
-    access_ticks = 0
     while True:
         with get_session_factory()() as db:
             repository = HermesRunRepository(db)
@@ -585,16 +590,10 @@ async def _event_stream(
             if run is None:
                 yield 'event: error\ndata: {"code":"hermes.run_not_found"}\n\n'
                 return
-            access_ticks += 1
-            if access_ticks >= 20:
-                access_ticks = 0
-                if not can_use_app(
-                    db,
-                    app_id="chatbot",
-                    user_id=user_id,
-                ):
-                    yield 'event: error\ndata: {"code":"hermes.access_revoked"}\n\n'
-                    return
+            admitted = allowed_app_ids(db, user_id=user_id)
+            if "chatbot" not in admitted or run.owner_app_id not in admitted:
+                yield 'event: error\ndata: {"code":"hermes.access_revoked"}\n\n'
+                return
             events = repository.list_events_after(run_id, after_sequence=next_sequence)
             terminal = run.status in TERMINAL_RUN_STATUSES
         if events:
@@ -621,12 +620,7 @@ def stream_run_events(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> StreamingResponse:
-    run = HermesRunRepository(db).get_owned(
-        run_id,
-        user_id=current_user.id,
-    )
-    if run is None:
-        raise HTTPException(status_code=404, detail={"code": "hermes.run_not_found"})
+    run = _accessible_run(db, run_id=run_id, user_id=current_user.id)
     try:
         after_sequence = max(0, int(last_event_id or 0))
     except ValueError:
@@ -649,31 +643,11 @@ async def stop_run(
     current_user: User = Depends(require_current_user),
 ) -> HermesRunResponse:
     repository = HermesRunRepository(db)
-    run = repository.get_owned(
-        run_id,
-        user_id=current_user.id,
-        for_update=True,
-    )
-    if run is None:
-        raise HTTPException(status_code=404, detail={"code": "hermes.run_not_found"})
+    run = _accessible_run(db, run_id=run_id, user_id=current_user.id, for_update=True)
     if run.status in TERMINAL_RUN_STATUSES:
         return HermesRunResponse.model_validate(run)
     if not run.hermes_run_id:
-        now = utcnow_naive()
-        execution_active = bool(
-            run.execution_claim_token
-            and (run.execution_claim_expires_at is None or run.execution_claim_expires_at > now)
-        )
-        repository.append_event(
-            run.id,
-            {
-                "event": "run.stop_requested" if execution_active else "run.cancelled",
-                "status": "stopping" if execution_active else "cancelled",
-                "reason": "stopped_during_dispatch"
-                if execution_active
-                else "stopped_before_dispatch",
-            },
-        )
+        repository.request_stop(run.id, user_id=current_user.id)
         db.commit()
         db.refresh(run)
         return HermesRunResponse.model_validate(run)
@@ -709,11 +683,8 @@ async def steer_run(
     current_user: User = Depends(require_current_user),
 ) -> HermesRunResponse:
     repository = HermesRunRepository(db)
-    run = repository.get_owned(
-        run_id,
-        user_id=current_user.id,
-    )
-    if run is None or not run.hermes_run_id:
+    run = _accessible_run(db, run_id=run_id, user_id=current_user.id)
+    if not run.hermes_run_id:
         raise HTTPException(status_code=404, detail={"code": "hermes.run_not_found"})
     profile = _bound_profile(db, binding_id=run.profile_binding_id, user_id=current_user.id)
     try:
@@ -738,11 +709,8 @@ async def resolve_approval(
     current_user: User = Depends(require_current_user),
 ) -> HermesRunResponse:
     repository = HermesRunRepository(db)
-    run = repository.get_owned(
-        run_id,
-        user_id=current_user.id,
-    )
-    if run is None or not run.hermes_run_id:
+    run = _accessible_run(db, run_id=run_id, user_id=current_user.id)
+    if not run.hermes_run_id:
         raise HTTPException(status_code=404, detail={"code": "hermes.run_not_found"})
     profile = _bound_profile(db, binding_id=run.profile_binding_id, user_id=current_user.id)
     approval = db.scalar(

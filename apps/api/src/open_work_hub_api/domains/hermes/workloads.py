@@ -20,12 +20,15 @@ from open_work_hub_api.core.llm_adapters import StreamChunk
 from open_work_hub_api.core.llm_errors import LlmProviderError
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
+from open_work_hub_api.domains.ai.tool_context import current_tool_execution_context
 from open_work_hub_api.domains.auth.app_gate import can_use_app
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.execution import execute_hermes_run
+from open_work_hub_api.domains.hermes.client import HermesClientError
 from open_work_hub_api.domains.hermes.model_policy import HermesModelPolicy
 from open_work_hub_api.domains.hermes.repository import HermesRunRepository, TERMINAL_RUN_STATUSES
 from open_work_hub_api.domains.hermes.service import ensure_profile_binding, runtime_client
+from open_work_hub_api.domains.hermes.tool_decisions import decision_message, prepare_tool_decision
 
 
 def _messages(payload: dict[str, Any]) -> tuple[str, str, list[dict[str, str]]]:
@@ -48,7 +51,7 @@ def _messages(payload: dict[str, Any]) -> tuple[str, str, list[dict[str, str]]]:
     return current, "\n\n".join(instructions), history
 
 
-async def run_workload(
+async def _run_workload(
     context: LlmTaskContext,
     execution: ResolvedLlmExecution,
     payload: dict[str, Any],
@@ -65,14 +68,18 @@ async def run_workload(
     workload = get_ai_capability_registry().resolve_llm_workload(context.workload_id)
     if type(context.native_tool_limit) is not int or not 1 <= context.native_tool_limit <= 20:
         raise LlmProviderError("Invalid native tool limit")
-    if payload.get("tools"):
-        raise LlmProviderError("Application tool-call results must use a structured output schema.")
+    tool_decision = prepare_tool_decision(payload)
+    if tool_decision is not None:
+        if output_schema is not None:
+            raise LlmProviderError("Application tools and an explicit result schema cannot mix.")
+        payload, output_schema = tool_decision
     if output_schema is not None:
         Draft202012Validator.check_schema(output_schema)
     policy = HermesModelPolicy.from_pool(
         execution.config,
         model=execution.chosen_model,
         max_tokens=execution.resolved_max_tokens,
+        temperature=payload.get("temperature"),
     )
     input_text, instructions, history = _messages(payload)
     if output_schema is not None:
@@ -82,6 +89,12 @@ async def run_workload(
             + "\nIf validation fails, correct the result and submit it again before finishing."
         )
     factory = get_session_factory()
+    tool_context = current_tool_execution_context()
+    parent_run_id = (
+        tool_context.agent_run_id
+        if tool_context is not None and tool_context.source == "hermes-mcp"
+        else None
+    )
     with factory() as db:
         user = db.get(User, owner_id)
         if (
@@ -110,6 +123,7 @@ async def run_workload(
                 **policy.run_options(reasoning_effort=execution.resolved_reasoning_effort),
                 "native_tools": list(workload.native_tools),
                 "native_tool_limit": context.native_tool_limit,
+                **({"parent_run_id": parent_run_id} if parent_run_id else {}),
             },
             output_schema=output_schema,
             client_request_id=str(uuid4()),
@@ -151,12 +165,15 @@ async def run_workload(
                     output_tokens = (
                         output_tokens if type(output_tokens) is int and output_tokens >= 0 else 0
                     )
+                    message, finish_reason = (
+                        decision_message(run.output_payload, output_schema)
+                        if tool_decision is not None
+                        else ({"content": run.output_text or ""}, "stop")
+                    )
                     return {
                         "id": run.id,
                         "model": execution.chosen_model,
-                        "choices": [
-                            {"message": {"content": run.output_text or ""}, "finish_reason": "stop"}
-                        ],
+                        "choices": [{"message": message, "finish_reason": finish_reason}],
                         "usage": {
                             "prompt_tokens": input_tokens,
                             "completion_tokens": output_tokens,
@@ -165,14 +182,56 @@ async def run_workload(
                         "structured_output": run.output_payload,
                     }
             await asyncio.sleep(0.5)
-    except TimeoutError as error:
+    except (TimeoutError, asyncio.CancelledError) as error:
         with factory() as db:
             run = HermesRunRepository(db).request_stop(run_id, user_id=owner_id)
             native_id = run.hermes_run_id
             db.commit()
         if native_id:
-            await runtime_client().stop_run(profile_name, native_id)
+            try:
+                stopped = await runtime_client().stop_run(profile_name, native_id)
+            except HermesClientError:
+                # The durable stop intent and returned execution lease let
+                # normal outbox recovery retry an unavailable native control API.
+                pass
+            else:
+                status = HermesRunRepository._normalize_status(str(stopped.get("status")))
+                if status in TERMINAL_RUN_STATUSES:
+                    with factory() as db:
+                        repository = HermesRunRepository(db)
+                        current = repository.get_owned(run_id, user_id=owner_id, for_update=True)
+                        if current is not None and current.status not in TERMINAL_RUN_STATUSES:
+                            repository.append_event(run_id, {**stopped, "event": f"run.{status}"})
+                            db.commit()
+        if isinstance(error, asyncio.CancelledError):
+            raise
         raise LlmProviderError("Hermes workload timed out.") from error
+
+
+async def run_workload(
+    context: LlmTaskContext,
+    execution: ResolvedLlmExecution,
+    payload: dict[str, Any],
+    *,
+    timeout_seconds: float,
+    output_schema: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    try:
+        return await _run_workload(
+            context,
+            execution,
+            payload,
+            timeout_seconds=timeout_seconds,
+            output_schema=output_schema,
+        )
+    except HermesClientError as error:
+        # Provisioning and dispatch use the same provider-neutral failure
+        # contract as generation, so callers retain localized errors and audit.
+        raise LlmProviderError(
+            "Hermes execution is unavailable.",
+            pool=execution.pool,
+            provider=execution.config.provider,
+        ) from error
 
 
 def complete_workload(
@@ -221,8 +280,20 @@ async def stream_workload(
     )
     # Application graphs consume completed stage output. Interactive chatbot
     # progress/approval/deltas use the durable /agent event projection directly.
-    yield StreamChunk(kind="content", text=result["choices"][0]["message"]["content"])
+    choice = result["choices"][0]
+    message = choice["message"]
+    if message.get("content"):
+        yield StreamChunk(kind="content", text=message["content"])
+    for call in message.get("tool_calls", []):
+        yield StreamChunk(
+            kind="tool_call_start", tool_call_id=call["id"], tool_name=call["function"]["name"]
+        )
+        yield StreamChunk(
+            kind="tool_call_args", tool_call_id=call["id"], args_delta=call["function"]["arguments"]
+        )
     yield StreamChunk(kind="usage", usage=result["usage"])
     yield StreamChunk(
-        kind="done", finish_reason="stop", structured_output=result["structured_output"]
+        kind="done",
+        finish_reason=choice["finish_reason"],
+        structured_output=result["structured_output"],
     )
