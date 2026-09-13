@@ -413,6 +413,7 @@ Runner 업데이트 후에는 [네트워크·테스트 DB 재검사와 복구](d
 Docker 작업 안의 `127.0.0.1`은 호스트 DB 주소가 아니므로 Runner의 실제 네트워크에서 접속 가능한 주소를 사용한다.
 CI 서버와 검증 이미지 클라이언트의 메이저 버전은 프로젝트 DB와 맞춘다. PostgreSQL 17 같은 특정 메이저 버전을 요구하지 않는다.
 같은 비운영 PostgreSQL 인스턴스에 별도 CI DB·계정을 둘 수 있으며, CI 계정은 개발 업무 DB를 소유하거나 접근하지 못하게 한다. 별도 CI 클러스터가 필요하면 같은 메이저 버전으로 만들고 별도 데이터 디렉터리·포트·계정을 사용한다.
+전용 CI 클러스터는 DB 관리자가 `template1`에 pgvector 확장을 먼저 설치하고, CI 계정으로 만든 임시 DB가 이를 상속하는지 확인한다. 원격 테스트 계정에 superuser를 부여하지 않는다. 명령과 공유 클러스터 제한은 [CI DB 준비 계약](docs/domains/release/README.md#validation-image-platform-and-database)을 따른다.
 릴리스 CI는 실제 DB 서버와 이미지의 `pg_dump`·`pg_restore`·`psql` 버전이 일치하는지 테스트 시작 전에 검사한다. 불일치 시 DB 연결 대상과 [검증 이미지 구성](docs/domains/release/README.md#validation-image-platform-and-database)을 바로잡고 재실행한다.
 Docker 전용 네트워크로 연결할 때는 해당 인터페이스와 CIDR에만 DB 수신·`pg_hba.conf` 접근을 허용하고,
 부팅 시 네트워크를 만드는 Docker 서비스가 DB보다 먼저 준비되도록 systemd 의존성을 설정한다.
