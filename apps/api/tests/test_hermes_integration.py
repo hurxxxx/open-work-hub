@@ -1080,6 +1080,99 @@ async def test_scheduled_job_profile_clones_the_interactive_profile() -> None:
     ]
 
 
+@pytest.mark.parametrize("route", ["local", "external"])
+@pytest.mark.parametrize("profile_exists", [False, True], ids=["fresh", "existing"])
+@pytest.mark.parametrize("reject_config", [False, True], ids=["applied", "rejected"])
+async def test_profile_reconciliation_enforces_compression_before_activation(
+    monkeypatch, route, profile_exists, reject_config,
+) -> None:
+    profile_name = f"owh-{uuid4().hex}" + ("-local" if route == "local" else "")
+    binding = SimpleNamespace(
+        profile_name=profile_name,
+        status="active" if profile_exists else "pending",
+        last_error_code=None,
+        last_reconciled_at=None,
+        provisioned_at=None,
+    )
+    monkeypatch.setattr(
+        hermes_service, "get_or_create_profile_binding", lambda _db, **_kwargs: binding,
+    )
+    reconciled_cache = {}
+    monkeypatch.setattr(hermes_service, "_profile_reconciled_until", reconciled_cache)
+    configs: list[dict[str, Any]] = []
+    created: list[dict[str, Any]] = []
+
+    class FakeManagementClient:
+        async def list_profiles(self):
+            return {"profiles": [{"name": profile_name}] if profile_exists else []}
+
+        async def create_profile(self, **kwargs):
+            created.append(kwargs)
+            return {"ok": True}
+
+        async def update_profile_env(self, *_args):
+            return {"ok": True}
+
+        async def update_profile_config(self, resolved_profile_name, config):
+            assert resolved_profile_name == profile_name
+            configs.append(config)
+            if reject_config:
+                raise HermesClientError(
+                    operation="update_profile_config", status_code=503,
+                    code="hermes.config_unavailable", message="Configuration unavailable.",
+                )
+            return {"ok": True}
+
+        async def list_mcp_servers(self, _profile_name):
+            return {"servers": []}
+
+    db = SimpleNamespace(
+        add=lambda _row: None, commit=lambda: None, refresh=lambda _row: None,
+    )
+    settings = SimpleNamespace(
+        hermes_enabled=True,
+        hermes_api_key=SimpleNamespace(get_secret_value=lambda: "test-api-server-key"),
+        hermes_mcp_server_url="",
+    )
+    kwargs = {
+        "model_policy": HermesModelPolicy(
+            route, "openai", "test-model", "http://model.test/v1", "test-key", 1024,
+        ),
+        "user": SimpleNamespace(),
+        "settings": settings,
+        "client": FakeManagementClient(),
+        "research_sources": dict(DEFAULT_RESEARCH_SOURCE_POLICY),
+        "research_policy_revision": 1,
+    }
+    if reject_config:
+        with pytest.raises(HermesClientError):
+            await hermes_service.ensure_profile_binding(db, **kwargs)
+        assert binding.status == "error"
+        assert not reconciled_cache
+    else:
+        assert await hermes_service.ensure_profile_binding(db, **kwargs) is binding
+        assert binding.status == "active"
+        assert reconciled_cache
+
+    assert len(created) == (0 if profile_exists else 1)
+    if created:
+        assert created[0]["clone_from"] is None
+    policy_config = configs[0]
+    assert policy_config["compression"] == {
+        "enabled": True,
+        "threshold": 0.50,
+        "threshold_tokens": 100_000,
+        "target_ratio": 0.20,
+        "protect_last_n": 20,
+        "proactive_prune_tokens": 48_000,
+        "proactive_prune_min_result_chars": 8_000,
+        "proactive_prune_min_reclaim_tokens": 4_096,
+    }
+    assert policy_config["auxiliary"]["compression"]["provider"] == "main"
+    assert policy_config["fallback_providers"] == []
+    assert "session_search" not in policy_config["platform_toolsets"]["api_server"]
+
+
 async def test_profile_reconciliation_replaces_stale_internal_mcp_url(
     monkeypatch,
 ) -> None:
