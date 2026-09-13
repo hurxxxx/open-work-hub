@@ -118,6 +118,8 @@ Provisioning and execution transport failures use the common `LlmProviderError` 
 
 OWH stop intent commits before native stop. Cancelling an application caller returns its execution lease and persists stop intent; a confirmed native terminal response frees capacity immediately, while a control outage retains the stop for normal outbox recovery. A claimed run with no returned native ID remains `stopping`, retains its original input and continues to occupy capacity. Recovery sends the original request/key to the runtime-key-authenticated, profile-scoped `/v1/owh/runs/cancel-admission` adapter. It atomically uses Hermes' durable idempotency reservation: an existing admission returns its native ID for stopping; an absent admission gets a cancelled reservation so a delayed creation request cannot start an agent. It never replays ordinary creation to find an ID. Unsupported gateways, unavailable durable storage and exhausted worker/publication retries leave cancellation recoverable with backoff. Cleanup remains permitted after profile/app revocation; new generation does not. Never-claimed runs cancel locally.
 
+Terminal admission/stop responses identify the run but do not carry its full result. The dispatcher polls the native durable status before finalizing completion, usage or failure details; a status outage retains the attached native ID and stop intent for recovery.
+
 The dispatcher rechecks current owning-app access after claim and during event consumption; revocation triggers native stop. Maintenance expires approvals, revokes jobs, cleans retained events/files and recovers stale dispatches under fenced database leases. Shared Beat health matters even when the API/gateway are healthy.
 
 Run lists filter by current owning-app admission before counting and pagination; individual reads and controls require that admission as well as ownership. SSE replay rechecks both Chatbot and owning-app admission before each event batch and closes immediately on revocation. The browser consumes OWH's replayable SSE projection. Changing conversations or closing a stream detaches the observer; explicit stop cancels the run. Returning to an active conversation reconnects without creating another run. Reconnects back off from one to thirty seconds within the one-hour bound; a closed event log resolves the durable run projection. Application-stage streaming currently emits completed stage output; interactive progress/tool/approval/text events stream live.
@@ -184,6 +186,15 @@ pnpm check:path-hardcoding
 pnpm test:prod-app
 pnpm check:skills
 git diff --check
+```
+
+Check the native admission/cancellation contract with actual pinned handlers and durable storage. This disposable offline check replaces only model task scheduling and uses no application data, credentials or Docker socket:
+
+```bash
+docker run --rm -i --network none --entrypoint python \
+  --mount "type=bind,src=$PWD/ops/hermes/gateway_entry.py,dst=/opt/owh_gateway_entry.py,readonly" \
+  nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524 \
+  - < ops/hermes/check_native_cancellation.py
 ```
 
 Use the repository's explicit non-production PostgreSQL test configuration for integration/migration tests. Verify actual pinned-image environment/plugin loading, two isolated sandboxes and file save/restore without a paid model call. A health check alone does not establish live provider quality or end-to-end UI behavior; report unavailable validation.

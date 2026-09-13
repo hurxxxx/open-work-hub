@@ -338,6 +338,9 @@ async def test_cancel_during_admission_recovers_without_starting_another_run(
             stops.append(native_id)
             return {"status": "cancelled"}
 
+        async def get_run(self, profile, native_id):
+            return {"run_id": native_id, "status": "cancelled", "last_event": "run.cancelled"}
+
     monkeypatch.setattr(execution, "HermesRuntimeClient", Runtime)
     monkeypatch.setattr(workloads, "runtime_client", Runtime)
     try:
@@ -464,6 +467,90 @@ async def test_cancel_during_admission_recovers_without_starting_another_run(
                 .acquired
             )
             db.rollback()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("terminal_at", ["admission", "stop"])
+@pytest.mark.parametrize("native_status", ["completed", "failed", "cancelled"])
+async def test_cancel_recovery_preserves_durable_terminal_details(
+    application_postgres_dsn, monkeypatch, terminal_at, native_status
+):
+    from open_work_hub_api.domains.hermes import execution
+    from open_work_hub_api.domains.hermes.client import HermesClientError
+
+    polls, stops = [], []
+
+    class Runtime:
+        def __init__(self, **kwargs):
+            pass
+
+        async def create_run(self, profile, **kwargs):
+            assert kwargs["cancel_admission"] is True
+            return {
+                "run_id": "run_existing",
+                "status": native_status if terminal_at == "admission" else "running",
+            }
+
+        async def stop_run(self, profile, native_id):
+            stops.append(native_id)
+            return {"run_id": native_id, "status": native_status}
+
+        async def get_run(self, profile, native_id):
+            polls.append(native_id)
+            if len(polls) == 1:
+                raise HermesClientError(
+                    operation="get_run",
+                    status_code=503,
+                    code="synthetic.unavailable",
+                    message="Synthetic status outage",
+                )
+            return {
+                "run_id": native_id,
+                "status": native_status,
+                "last_event": f"run.{native_status}",
+                "output": "Recovered answer",
+                "usage": {"input_tokens": 4, "output_tokens": 2, "total_tokens": 6},
+                "error": "Recovered failure",
+                "error_code": "synthetic.failure",
+            }
+
+    monkeypatch.setattr(execution, "HermesRuntimeClient", Runtime)
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine, expire_on_commit=False) as db:
+            _, binding = seed(db)
+            run = stage(db, binding, None)
+            repository = HermesRunRepository(db)
+            assert repository.claim_execution(run.id, claim_token="lost", lease_seconds=60).acquired
+            repository.release_execution_claim(run.id, claim_token="lost")
+            repository.request_stop(run.id, user_id=binding.user_id)
+            db.commit()
+
+            async def recover():
+                return await execution.execute_hermes_run(
+                    db,
+                    run_id=run.id,
+                    runtime_base_url="http://hermes.test",
+                    api_key="synthetic",
+                    request_timeout_seconds=1,
+                    lease_seconds=60,
+                )
+
+            with pytest.raises(HermesClientError):
+                await recover()
+            assert run.status == "stopping" and run.hermes_run_id == "run_existing"
+            assert run.finished_at is None and run.execution_claim_token is None
+            assert await recover() == native_status
+            assert polls == ["run_existing", "run_existing"]
+            assert stops == (["run_existing"] if terminal_at == "stop" else [])
+            if native_status == "completed":
+                assert run.output_text == "Recovered answer"
+                assert run.usage == {"input_tokens": 4, "output_tokens": 2, "total_tokens": 6}
+            elif native_status == "failed":
+                assert run.error_message == "Recovered failure"
+                assert run.error_code == "synthetic.failure"
     finally:
         engine.dispose()
 
