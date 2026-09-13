@@ -23,6 +23,7 @@ from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.auth.app_gate import can_use_app
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.execution import execute_hermes_run
+from open_work_hub_api.domains.hermes.client import HermesClientError
 from open_work_hub_api.domains.hermes.model_policy import HermesModelPolicy
 from open_work_hub_api.domains.hermes.repository import HermesRunRepository, TERMINAL_RUN_STATUSES
 from open_work_hub_api.domains.hermes.service import ensure_profile_binding, runtime_client
@@ -173,13 +174,29 @@ async def run_workload(
                         "structured_output": run.output_payload,
                     }
             await asyncio.sleep(0.5)
-    except TimeoutError as error:
+    except (TimeoutError, asyncio.CancelledError) as error:
         with factory() as db:
             run = HermesRunRepository(db).request_stop(run_id, user_id=owner_id)
             native_id = run.hermes_run_id
             db.commit()
         if native_id:
-            await runtime_client().stop_run(profile_name, native_id)
+            try:
+                stopped = await runtime_client().stop_run(profile_name, native_id)
+            except HermesClientError:
+                # The durable stop intent and returned execution lease let
+                # normal outbox recovery retry an unavailable native control API.
+                pass
+            else:
+                status = HermesRunRepository._normalize_status(str(stopped.get("status")))
+                if status in TERMINAL_RUN_STATUSES:
+                    with factory() as db:
+                        repository = HermesRunRepository(db)
+                        current = repository.get_owned(run_id, user_id=owner_id, for_update=True)
+                        if current is not None and current.status not in TERMINAL_RUN_STATUSES:
+                            repository.append_event(run_id, {**stopped, "event": f"run.{status}"})
+                            db.commit()
+        if isinstance(error, asyncio.CancelledError):
+            raise
         raise LlmProviderError("Hermes workload timed out.") from error
 
 

@@ -128,6 +128,29 @@ def test_workload_blocks_native_tools_but_can_correct_and_submit(plugin, monkeyp
     assert len(attempts) == 2
 
 
+@pytest.mark.parametrize("native_run_id", ["", "cron_job_fixture", "run_forged"])
+@pytest.mark.parametrize("tool", ["web_search", "read_file", "terminal", "owh_submit_result"])
+def test_jobs_profile_intentionally_denies_tools_without_an_owh_run(
+    plugin, monkeypatch, native_run_id, tool
+):
+    monkeypatch.setattr(
+        sys.modules["hermes_constants"],
+        "get_hermes_home",
+        lambda: Path("owh-" + "a" * 32 + "-jobs"),
+    )
+    monkeypatch.setattr(
+        sys.modules["hermes_cli.config"], "load_config", lambda: {"mcp_servers": {}}
+    )
+    monkeypatch.setattr(
+        plugin.module, "_rpc", lambda *args: pytest.fail("Jobs have no app transport")
+    )
+    plugin.run.set(native_run_id)
+    result = plugin.module.execute_tool(
+        tool_name=tool, args={}, next_call=lambda: pytest.fail("Unowned jobs cannot execute tools")
+    )
+    assert "error" in json.loads(result)
+
+
 def test_registered_native_tool_requires_admission_for_every_call(plugin, monkeypatch):
     admissions = []
     executions = []

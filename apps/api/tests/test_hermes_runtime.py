@@ -446,6 +446,129 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
         engine.dispose()
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("stop_unavailable", [False, True])
+async def test_cancelled_workload_returns_lease_and_recovers_durable_stop(
+    application_postgres_dsn, monkeypatch, stop_unavailable
+):
+    import asyncio
+    from sqlalchemy import select
+    from sqlalchemy.orm import sessionmaker
+    from open_work_hub_api.core.llm import (
+        LlmPoolConfig,
+        LlmTaskContext,
+        PolicyDecision,
+        ResolvedLlmExecution,
+    )
+    from open_work_hub_api.core.settings import get_settings
+    from open_work_hub_api.domains.auth.models import CompanyAppControl
+    from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
+    from open_work_hub_api.domains.hermes import execution, workloads
+    from open_work_hub_api.domains.hermes.client import HermesClientError
+
+    engine = create_engine(application_postgres_dsn)
+    factory = sessionmaker(engine, expire_on_commit=False)
+    settings = get_settings().model_copy(update={"hermes_enabled": True})
+    monkeypatch.setattr(workloads, "get_settings", lambda: settings)
+    monkeypatch.setattr(workloads, "get_session_factory", lambda: factory)
+    started = asyncio.Event()
+    stopped = []
+    try:
+        with factory() as db:
+            user, binding = seed(db)
+            owner_id, binding_id = user.id, binding.id
+            db.merge(CompanyAppControl(app_id="chatbot", enabled=True))
+            db.flush()
+            db.merge(AppAccessPolicy(app_id="chatbot", audience="all"))
+            db.commit()
+
+        async def ensure(db, **kwargs):
+            return db.get(HermesProfileBinding, binding_id)
+
+        class Runtime:
+            def __init__(self, **kwargs):
+                pass
+
+            async def create_run(self, profile, **kwargs):
+                return {"run_id": "cancel-native", "status": "running"}
+
+            async def iter_run_events(self, *args):
+                started.set()
+                await asyncio.Event().wait()
+                yield {}
+
+            async def stop_run(self, profile, native_id):
+                stopped.append(native_id)
+                if stop_unavailable:
+                    raise HermesClientError(
+                        operation="stop_run",
+                        status_code=503,
+                        code="test.unavailable",
+                        message="Synthetic outage",
+                    )
+                return {"status": "cancelled"}
+
+        monkeypatch.setattr(workloads, "ensure_profile_binding", ensure)
+        monkeypatch.setattr(workloads, "runtime_client", Runtime)
+        monkeypatch.setattr(execution, "HermesRuntimeClient", Runtime)
+        config = LlmPoolConfig(
+            "local",
+            "openai",
+            "http://model.test/v1",
+            "",
+            "test-model",
+            "test-model",
+            1,
+            30,
+            requires_credentials=False,
+        )
+        context = LlmTaskContext(
+            source="test",
+            task_kind="chatbot",
+            app_id="chatbot",
+            workload_id="chatbot",
+            actor_user_id=owner_id,
+        )
+        resolved = ResolvedLlmExecution(
+            "local", PolicyDecision("local_only", "local"), config, "test-model", 4096, "none"
+        )
+        task = asyncio.create_task(
+            workloads.run_workload(
+                context,
+                resolved,
+                {"messages": [{"role": "user", "content": "Wait"}]},
+                timeout_seconds=30,
+            )
+        )
+        await asyncio.wait_for(started.wait(), timeout=10)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, timeout=10)
+        assert stopped == ["cancel-native"]
+        with factory() as db:
+            run = db.scalar(
+                select(HermesRunProjection).where(HermesRunProjection.user_id == owner_id)
+            )
+            assert run.execution_claim_token is None and run.execution_claim_expires_at is None
+            repo = HermesRunRepository(db)
+            if stop_unavailable:
+                assert run.status == "stopping"
+                # Recovery may reclaim immediately, without waiting 3,900s.
+                assert repo.claim_execution(
+                    run.id, claim_token="recover", lease_seconds=60, max_concurrent_runs=1
+                ).acquired
+                repo.append_event(run.id, {"event": "run.cancelled"}, claim_token="recover")
+            else:
+                assert run.status == "cancelled"
+            next_run = stage(db, db.get(HermesProfileBinding, binding_id), None)
+            assert repo.claim_execution(
+                next_run.id, claim_token="next", lease_seconds=60, max_concurrent_runs=1
+            ).acquired
+            db.rollback()
+    finally:
+        engine.dispose()
+
+
 def test_files_preserve_cleanup_intent_and_owner_acl(application_postgres_dsn, monkeypatch):
     objects = {}
 
