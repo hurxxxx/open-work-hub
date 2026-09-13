@@ -491,6 +491,170 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("capacity, occupied", [(1, 1), (3, 3), (3, 2)])
+@pytest.mark.parametrize("mode", ["sync", "stream"])
+async def test_nested_generation_respects_capacity_without_waiting_for_its_parent(
+    application_postgres_dsn, monkeypatch, capacity, occupied, mode
+):
+    import asyncio
+    from sqlalchemy import select
+    from sqlalchemy.orm import sessionmaker
+    from open_work_hub_api.core.llm import (
+        LlmPoolConfig,
+        LlmTaskContext,
+        PolicyDecision,
+        ResolvedLlmExecution,
+    )
+    from open_work_hub_api.core.settings import get_settings
+    from open_work_hub_api.domains.ai.tool_context import (
+        ToolExecutionContext,
+        bind_tool_execution_context,
+    )
+    from open_work_hub_api.domains.auth.models import CompanyAppControl
+    from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
+    from open_work_hub_api.domains.hermes import workloads, execution
+
+    engine = create_engine(application_postgres_dsn)
+    factory = sessionmaker(engine, expire_on_commit=False)
+    settings = get_settings().model_copy(
+        update={
+            "hermes_enabled": True,
+            "hermes_max_concurrent_runs": capacity,
+        }
+    )
+    monkeypatch.setattr(workloads, "get_settings", lambda: settings)
+    monkeypatch.setattr(workloads, "get_session_factory", lambda: factory)
+    attempts = []
+    try:
+        with factory() as db:
+            user, binding = seed(db)
+            owner_id, binding_id = user.id, binding.id
+            db.merge(CompanyAppControl(app_id="chatbot", enabled=True))
+            db.flush()
+            db.merge(AppAccessPolicy(app_id="chatbot", audience="all"))
+            parents = [stage(db, binding, session_for(db, binding)) for _ in range(occupied)]
+            for parent in parents:
+                assert (
+                    HermesRunRepository(db)
+                    .claim_execution(
+                        parent.id,
+                        claim_token=parent.id,
+                        lease_seconds=60,
+                        max_concurrent_runs=capacity,
+                    )
+                    .acquired
+                )
+            parent_ids = [parent.id for parent in parents]
+            db.commit()
+
+        async def ensure(db, **kwargs):
+            return db.get(HermesProfileBinding, binding_id)
+
+        class NativeRuntime:
+            def __init__(self, **kwargs):
+                pass
+
+            async def create_run(self, profile, **kwargs):
+                attempts.append(kwargs["idempotency_key"])
+                return {"run_id": "native_nested", "status": "running"}
+
+            async def iter_run_events(self, profile, run_id):
+                yield {"event": "run.completed", "output": "nested result"}
+
+        monkeypatch.setattr(workloads, "ensure_profile_binding", ensure)
+        monkeypatch.setattr(execution, "HermesRuntimeClient", NativeRuntime)
+        context = LlmTaskContext(
+            source="test",
+            task_kind="chatbot",
+            app_id="chatbot",
+            workload_id="chatbot",
+            actor_user_id=owner_id,
+        )
+        config = LlmPoolConfig(
+            "local",
+            "openai",
+            "http://model.test/v1",
+            "",
+            "test-model",
+            "test-model",
+            1,
+            30,
+            requires_credentials=False,
+        )
+        resolved = ResolvedLlmExecution(
+            "local",
+            PolicyDecision("local_only", "local"),
+            config,
+            "test-model",
+            4096,
+            "none",
+        )
+
+        async def invoke():
+            payload = {"messages": [{"role": "user", "content": "Nested generation"}]}
+            if mode == "sync":
+                return await asyncio.to_thread(
+                    workloads.complete_workload,
+                    context,
+                    resolved,
+                    payload,
+                    timeout_seconds=10,
+                )
+            return [
+                chunk
+                async for chunk in workloads.stream_workload(
+                    context,
+                    resolved,
+                    payload,
+                    timeout_seconds=10,
+                )
+            ]
+
+        with bind_tool_execution_context(
+            ToolExecutionContext(
+                source="hermes-mcp",
+                tool_name="meeting.extract_actions",
+                agent_run_id=parent_ids[0],
+            )
+        ):
+            if occupied == capacity:
+                with pytest.raises(LlmProviderError, match="ended with failed"):
+                    await asyncio.wait_for(invoke(), timeout=3)
+            else:
+                await asyncio.wait_for(invoke(), timeout=3)
+        with factory() as db:
+            child = db.scalar(
+                select(HermesRunProjection).where(
+                    HermesRunProjection.user_id == owner_id,
+                    HermesRunProjection.kind == "workload",
+                )
+            )
+            assert child.runtime_options["parent_run_id"] == parent_ids[0]
+            assert child.execution_claim_token is None
+            if occupied == capacity:
+                assert child.status == "failed" and child.error_code == "hermes.nested_capacity"
+                assert attempts == []
+                for parent_id in parent_ids:
+                    parent = db.get(HermesRunProjection, parent_id)
+                    assert (
+                        parent.status == "dispatching" and parent.execution_claim_token == parent_id
+                    )
+                    HermesRunRepository(db).append_event(parent_id, {"event": "run.completed"})
+                db.commit()
+                claim = HermesRunRepository(db).claim_execution(
+                    child.id,
+                    claim_token="late-outbox",
+                    lease_seconds=60,
+                    max_concurrent_runs=capacity,
+                )
+                assert not claim.acquired and claim.reason == "terminal"
+            else:
+                assert child.status == "completed" and len(attempts) == 1
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("stop_unavailable", [False, True])
 async def test_cancelled_workload_returns_lease_and_recovers_durable_stop(
     application_postgres_dsn, monkeypatch, stop_unavailable

@@ -20,6 +20,7 @@ from open_work_hub_api.core.llm_adapters import StreamChunk
 from open_work_hub_api.core.llm_errors import LlmProviderError
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
+from open_work_hub_api.domains.ai.tool_context import current_tool_execution_context
 from open_work_hub_api.domains.auth.app_gate import can_use_app
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.execution import execute_hermes_run
@@ -88,6 +89,12 @@ async def _run_workload(
             + "\nIf validation fails, correct the result and submit it again before finishing."
         )
     factory = get_session_factory()
+    tool_context = current_tool_execution_context()
+    parent_run_id = (
+        tool_context.agent_run_id
+        if tool_context is not None and tool_context.source == "hermes-mcp"
+        else None
+    )
     with factory() as db:
         user = db.get(User, owner_id)
         if (
@@ -116,6 +123,7 @@ async def _run_workload(
                 **policy.run_options(reasoning_effort=execution.resolved_reasoning_effort),
                 "native_tools": list(workload.native_tools),
                 "native_tool_limit": context.native_tool_limit,
+                **({"parent_run_id": parent_run_id} if parent_run_id else {}),
             },
             output_schema=output_schema,
             client_request_id=str(uuid4()),
