@@ -162,6 +162,31 @@ def deferred_io(application_postgres_dsn, monkeypatch):
         engine.dispose()
 
 
+@pytest.mark.anyio
+async def test_context_does_not_infer_physical_resources_from_database_namespace(
+    deferred_io, monkeypatch
+):
+    state = deferred_io
+    settings = mcp_router.get_settings().model_copy(
+        update={"hermes_terminal_resource_namespace": "database-cutover-20260913"}
+    )
+    monkeypatch.setattr(mcp_router, "get_settings", lambda: settings)
+    async with AsyncClient(
+        transport=ASGITransport(app=state.app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            state.url,
+            headers=state.headers,
+            json={"jsonrpc": "2.0", "id": 1, "method": "owh/context", "params": {}},
+        )
+    assert response.status_code == 200
+    context = response.json()["result"]
+    assert context["allow_native_tools"] is True
+    assert set(context["sandbox"]) == {"image", "no_proxy"}
+    assert context["sandbox"]["image"] == mcp_router.HERMES_IMAGE
+    assert "localhost" in context["sandbox"]["no_proxy"].split(",")
+
+
 def payload(state, operation):
     params = (
         {"id": state.file_id}
