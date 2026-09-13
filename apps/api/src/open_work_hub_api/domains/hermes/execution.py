@@ -146,11 +146,13 @@ async def execute_hermes_run(
             # starting a model, or recover an already terminal remote run.
             accepted_status = repository._normalize_status(str(accepted.get("status")))
             if run.status == "stopping" and accepted_status in TERMINAL_RUN_STATUSES:
-                repository.append_event(
-                    run_id, {**accepted, "event": f"run.{accepted_status}"}, claim_token=claim_token
-                )
+                # Admission responses contain only identity/status. Fetch the
+                # durable result before projecting output, usage, or errors.
+                status_payload = await client.get_run(profile.profile_name, hermes_run_id)
+                repository.apply_status(run_id, status_payload, claim_token=claim_token)
                 db.commit()
-                return run.status
+                if run.status in TERMINAL_RUN_STATUSES:
+                    return run.status
         else:
             hermes_run_id = run.hermes_run_id
 
@@ -175,17 +177,17 @@ async def execute_hermes_run(
             stop_payload = await client.stop_run(profile.profile_name, hermes_run_id)
             stop_status = repository._normalize_status(str(stop_payload.get("status")))
             terminal_stop = stop_status in TERMINAL_RUN_STATUSES
-            repository.append_event(
-                run_id,
-                {
-                    **stop_payload,
-                    "event": f"run.{stop_status}" if terminal_stop else "run.stop_requested",
-                    "status": stop_status if terminal_stop else "stopping",
-                },
-                claim_token=claim_token,
-            )
-            db.commit()
             if terminal_stop:
+                status_payload = await client.get_run(profile.profile_name, hermes_run_id)
+                repository.apply_status(run_id, status_payload, claim_token=claim_token)
+            else:
+                repository.append_event(
+                    run_id,
+                    {**stop_payload, "event": "run.stop_requested", "status": "stopping"},
+                    claim_token=claim_token,
+                )
+            db.commit()
+            if current.status in TERMINAL_RUN_STATUSES:
                 return current.status
             stop_relayed = True
 
