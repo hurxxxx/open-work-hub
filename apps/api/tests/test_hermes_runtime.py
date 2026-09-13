@@ -220,6 +220,369 @@ def test_workspace_paths_reject_escape_and_control_characters(path):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("temperature", [0, 0.7])
+async def test_anthropic_temperature_fails_before_provisioning(monkeypatch, temperature):
+    from open_work_hub_api.core.llm import (
+        LlmPoolConfig,
+        LlmTaskContext,
+        PolicyDecision,
+        ResolvedLlmExecution,
+    )
+    from open_work_hub_api.core.settings import get_settings
+    from open_work_hub_api.domains.hermes import workloads
+
+    config = LlmPoolConfig(
+        "external",
+        "anthropic",
+        "https://api.anthropic.com",
+        "synthetic",
+        "test-model",
+        "test-model",
+        1,
+        30,
+    )
+    monkeypatch.setattr(
+        workloads,
+        "get_settings",
+        lambda: get_settings().model_copy(update={"hermes_enabled": True}),
+    )
+    monkeypatch.setattr(
+        workloads,
+        "get_session_factory",
+        lambda: pytest.fail(
+            "Unsupported sampling must fail before staging or profile provisioning"
+        ),
+    )
+    with pytest.raises(LlmProviderError, match="explicit temperature") as error:
+        await workloads.run_workload(
+            LlmTaskContext(
+                source="test",
+                task_kind="chatbot",
+                app_id="chatbot",
+                workload_id="chatbot",
+                actor_user_id="synthetic-owner",
+            ),
+            ResolvedLlmExecution(
+                "external",
+                PolicyDecision("external_allowed", "external"),
+                config,
+                "test-model",
+                4096,
+                "none",
+            ),
+            {"messages": [{"role": "user", "content": "test"}], "temperature": temperature},
+            timeout_seconds=10,
+        )
+    assert error.value.pool == "external" and error.value.provider == "anthropic"
+    default_policy = HermesModelPolicy.from_pool(config, model="test-model", max_tokens=4096)
+    assert default_policy.api_mode == "anthropic_messages"
+    assert "temperature" not in default_policy.run_options()["owh_policy"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("remote_accepted", [False, True])
+@pytest.mark.parametrize("termination", ["cancel", "timeout"])
+async def test_cancel_during_admission_recovers_without_starting_another_run(
+    application_postgres_dsn, monkeypatch, remote_accepted, termination
+):
+    import asyncio
+    from sqlalchemy import select
+    from sqlalchemy.orm import sessionmaker
+    from open_work_hub_api.core.llm import (
+        LlmPoolConfig,
+        LlmTaskContext,
+        PolicyDecision,
+        ResolvedLlmExecution,
+    )
+    from open_work_hub_api.core.settings import get_settings
+    from open_work_hub_api.domains.hermes import execution, workloads
+    from open_work_hub_api.domains.hermes.client import HermesClientError
+    from open_work_hub_api.domains.hermes.models import HermesDispatchOutbox, HermesRunInput
+    from open_work_hub_api.domains.hermes.repository import HermesDispatchRepository
+
+    engine = create_engine(application_postgres_dsn)
+    factory = sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(workloads, "get_session_factory", lambda: factory)
+    monkeypatch.setattr(
+        workloads,
+        "get_settings",
+        lambda: get_settings().model_copy(update={"hermes_enabled": True}),
+    )
+    entered = asyncio.Event()
+    admissions, stops = [], []
+    control_available = False
+
+    class Runtime:
+        def __init__(self, **kwargs):
+            pass
+
+        async def create_run(self, profile, **kwargs):
+            admissions.append(kwargs)
+            if kwargs.get("cancel_admission"):
+                if not control_available:
+                    raise HermesClientError(
+                        operation="cancel_run_admission",
+                        status_code=503,
+                        code="synthetic.unavailable",
+                        message="Synthetic control outage",
+                    )
+                return {
+                    "run_id": "run_accepted" if remote_accepted else "run_cancelled_reservation",
+                    "status": "running" if remote_accepted else "cancelled",
+                }
+            assert len(admissions) == 1, "Recovery must never invoke native creation again"
+            entered.set()
+            await asyncio.Event().wait()  # Acceptance response never reaches the caller.
+
+        async def stop_run(self, profile, native_id):
+            stops.append(native_id)
+            return {"status": "cancelled"}
+
+        async def get_run(self, profile, native_id):
+            return {"run_id": native_id, "status": "cancelled", "last_event": "run.cancelled"}
+
+    monkeypatch.setattr(execution, "HermesRuntimeClient", Runtime)
+    monkeypatch.setattr(workloads, "runtime_client", Runtime)
+    try:
+        with factory() as db:
+            user, binding = seed(db)
+            admit_runtime_apps(db, user.id)
+            owner_id, binding_id = user.id, binding.id
+            db.commit()
+
+        async def ensure(db, **kwargs):
+            return db.get(HermesProfileBinding, binding_id)
+
+        monkeypatch.setattr(workloads, "ensure_profile_binding", ensure)
+        config = LlmPoolConfig(
+            "local",
+            "openai",
+            "http://model.test/v1",
+            "",
+            "test-model",
+            "test-model",
+            1,
+            30,
+            requires_credentials=False,
+        )
+        task = asyncio.create_task(
+            workloads.run_workload(
+                LlmTaskContext(
+                    source="test",
+                    task_kind="chatbot",
+                    app_id="chatbot",
+                    workload_id="chatbot",
+                    actor_user_id=owner_id,
+                ),
+                ResolvedLlmExecution(
+                    "local",
+                    PolicyDecision("local_only", "local"),
+                    config,
+                    "test-model",
+                    4096,
+                    "none",
+                ),
+                {"messages": [{"role": "user", "content": "test"}]},
+                timeout_seconds=0.2 if termination == "timeout" else 30,
+            )
+        )
+        await asyncio.wait_for(entered.wait(), 5)
+        if termination == "cancel":
+            task.cancel()
+        with pytest.raises(asyncio.CancelledError if termination == "cancel" else LlmProviderError):
+            await asyncio.wait_for(task, 5)
+        assert stops == []
+        run_id = admissions[0]["idempotency_key"]
+        with factory() as db:
+            run = db.get(HermesRunProjection, run_id)
+            assert run.status == "stopping" and run.hermes_run_id is None
+            assert run.execution_claim_token is None
+            assert db.get(HermesRunInput, run_id) is not None
+            other = stage(db, db.get(HermesProfileBinding, binding_id), None)
+            other_id = other.id
+            assert (
+                HermesRunRepository(db)
+                .claim_execution(
+                    other_id, claim_token="other", lease_seconds=60, max_concurrent_runs=1
+                )
+                .reason
+                == "capacity"
+            )
+            db.commit()
+            # Retry exhaustion cannot turn an unconfirmed stop into success/failure.
+            execution.mark_hermes_run_terminal_failure(
+                db, run_id=run_id, error_code="synthetic.exhausted", error_message="test"
+            )
+            outbox = db.scalar(
+                select(HermesDispatchOutbox).where(HermesDispatchOutbox.run_id == run_id)
+            )
+            outbox.attempts, outbox.claim_token, outbox.status = 20, "publish", "claimed"
+            db.flush()
+            HermesDispatchRepository(db).mark_retry(
+                outbox.id,
+                claim_token="publish",
+                error_code="synthetic.exhausted",
+                retry_at=utcnow_naive(),
+            )
+            db.commit()
+            assert outbox.status == "pending" and run.status == "stopping"
+            # Cleanup remains possible after the execution profile is disabled.
+            db.get(HermesProfileBinding, binding_id).status = "disabled"
+            db.commit()
+
+        async def recover():
+            with factory() as db:
+                return await execution.execute_hermes_run(
+                    db,
+                    run_id=run_id,
+                    runtime_base_url="http://hermes.test",
+                    api_key="synthetic",
+                    request_timeout_seconds=1,
+                    lease_seconds=60,
+                    max_concurrent_runs=1,
+                )
+
+        with pytest.raises(HermesClientError):
+            await recover()
+        with factory() as db:
+            run = db.get(HermesRunProjection, run_id)
+            assert run.status == "stopping" and run.execution_claim_token is None
+            assert db.get(HermesRunInput, run_id) is not None
+        control_available = True
+        assert await recover() == "cancelled"
+        assert stops == (["run_accepted"] if remote_accepted else [])
+        assert len(admissions) == 3
+        assert all(
+            {k: v for k, v in attempt.items() if k != "cancel_admission"} == admissions[0]
+            for attempt in admissions[1:]
+        )
+        with factory() as db:
+            assert db.get(HermesRunProjection, run_id).status == "cancelled"
+            assert db.get(HermesRunInput, run_id) is None
+            assert (
+                HermesRunRepository(db)
+                .claim_execution(
+                    other_id, claim_token="other", lease_seconds=60, max_concurrent_runs=1
+                )
+                .acquired
+            )
+            db.rollback()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("terminal_at", ["admission", "stop"])
+@pytest.mark.parametrize("native_status", ["completed", "failed", "cancelled"])
+async def test_cancel_recovery_preserves_durable_terminal_details(
+    application_postgres_dsn, monkeypatch, terminal_at, native_status
+):
+    from open_work_hub_api.domains.hermes import execution
+    from open_work_hub_api.domains.hermes.client import HermesClientError
+
+    polls, stops = [], []
+
+    class Runtime:
+        def __init__(self, **kwargs):
+            pass
+
+        async def create_run(self, profile, **kwargs):
+            assert kwargs["cancel_admission"] is True
+            return {
+                "run_id": "run_existing",
+                "status": native_status if terminal_at == "admission" else "running",
+            }
+
+        async def stop_run(self, profile, native_id):
+            stops.append(native_id)
+            return {"run_id": native_id, "status": native_status}
+
+        async def get_run(self, profile, native_id):
+            polls.append(native_id)
+            if len(polls) == 1:
+                raise HermesClientError(
+                    operation="get_run",
+                    status_code=503,
+                    code="synthetic.unavailable",
+                    message="Synthetic status outage",
+                )
+            return {
+                "run_id": native_id,
+                "status": native_status,
+                "last_event": f"run.{native_status}",
+                "output": "Recovered answer",
+                "usage": {"input_tokens": 4, "output_tokens": 2, "total_tokens": 6},
+                "error": "Recovered failure",
+                "error_code": "synthetic.failure",
+            }
+
+    monkeypatch.setattr(execution, "HermesRuntimeClient", Runtime)
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine, expire_on_commit=False) as db:
+            _, binding = seed(db)
+            run = stage(db, binding, None)
+            repository = HermesRunRepository(db)
+            assert repository.claim_execution(run.id, claim_token="lost", lease_seconds=60).acquired
+            repository.release_execution_claim(run.id, claim_token="lost")
+            repository.request_stop(run.id, user_id=binding.user_id)
+            db.commit()
+
+            async def recover():
+                return await execution.execute_hermes_run(
+                    db,
+                    run_id=run.id,
+                    runtime_base_url="http://hermes.test",
+                    api_key="synthetic",
+                    request_timeout_seconds=1,
+                    lease_seconds=60,
+                )
+
+            with pytest.raises(HermesClientError):
+                await recover()
+            assert run.status == "stopping" and run.hermes_run_id == "run_existing"
+            assert run.finished_at is None and run.execution_claim_token is None
+            assert await recover() == native_status
+            assert polls == ["run_existing", "run_existing"]
+            assert stops == (["run_existing"] if terminal_at == "stop" else [])
+            if native_status == "completed":
+                assert run.output_text == "Recovered answer"
+                assert run.usage == {"input_tokens": 4, "output_tokens": 2, "total_tokens": 6}
+            elif native_status == "failed":
+                assert run.error_message == "Recovered failure"
+                assert run.error_code == "synthetic.failure"
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("claimed", [False, True])
+async def test_public_stop_keeps_a_lost_acceptance_recoverable(application_postgres_dsn, claimed):
+    from open_work_hub_api.domains.hermes.router import stop_run
+
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            user, binding = seed(db)
+            admit_runtime_apps(db, user.id)
+            run = stage(db, binding, session_for(db, binding))
+            repository = HermesRunRepository(db)
+            if claimed:
+                assert repository.claim_execution(
+                    run.id, claim_token="lost-response", lease_seconds=60
+                ).acquired
+                repository.release_execution_claim(run.id, claim_token="lost-response")
+            db.commit()
+            response = await stop_run(run.id, db=db, current_user=user)
+            assert response.status == ("stopping" if claimed else "cancelled")
+            recovery = repository.claim_execution(run.id, claim_token="recover", lease_seconds=60)
+            assert recovery.acquired is claimed
+            db.rollback()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("temperature", [None, 0, 0.7])
 @pytest.mark.parametrize("mode", ["sync", "stream"])
 @pytest.mark.parametrize(

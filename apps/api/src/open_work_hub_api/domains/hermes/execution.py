@@ -87,9 +87,9 @@ async def execute_hermes_run(
         if run is None:
             raise HermesRunNotFoundError(run_id)
         profile = db.get(HermesProfileBinding, run.profile_binding_id)
-        if profile is None or profile.status != "active":
+        if profile is None or (profile.status != "active" and run.status != "stopping"):
             raise HermesExecutionConfigurationError("Hermes profile is not active.")
-        if not hermes_run_access_allowed(db, run):
+        if run.status != "stopping" and not hermes_run_access_allowed(db, run):
             repository.mark_failure(
                 run.id,
                 claim_token=claim_token,
@@ -119,6 +119,7 @@ async def execute_hermes_run(
                 instructions=run_input.instructions,
                 conversation_history=run_input.conversation_history,
                 runtime_options=run.runtime_options,
+                **({"cancel_admission": True} if run.status == "stopping" else {}),
             )
             hermes_run_id = accepted.get("run_id")
             if not isinstance(hermes_run_id, str) or not hermes_run_id:
@@ -141,6 +142,17 @@ async def execute_hermes_run(
             )
             db.delete(run_input)
             db.commit()
+            # Cancellation can reserve a terminal native admission without
+            # starting a model, or recover an already terminal remote run.
+            accepted_status = repository._normalize_status(str(accepted.get("status")))
+            if run.status == "stopping" and accepted_status in TERMINAL_RUN_STATUSES:
+                # Admission responses contain only identity/status. Fetch the
+                # durable result before projecting output, usage, or errors.
+                status_payload = await client.get_run(profile.profile_name, hermes_run_id)
+                repository.apply_status(run_id, status_payload, claim_token=claim_token)
+                db.commit()
+                if run.status in TERMINAL_RUN_STATUSES:
+                    return run.status
         else:
             hermes_run_id = run.hermes_run_id
 
@@ -163,12 +175,20 @@ async def execute_hermes_run(
         current = repository.get(run_id)
         if current is not None and current.status == "stopping":
             stop_payload = await client.stop_run(profile.profile_name, hermes_run_id)
-            repository.append_event(
-                run_id,
-                {**stop_payload, "event": "run.stop_requested", "status": "stopping"},
-                claim_token=claim_token,
-            )
+            stop_status = repository._normalize_status(str(stop_payload.get("status")))
+            terminal_stop = stop_status in TERMINAL_RUN_STATUSES
+            if terminal_stop:
+                status_payload = await client.get_run(profile.profile_name, hermes_run_id)
+                repository.apply_status(run_id, status_payload, claim_token=claim_token)
+            else:
+                repository.append_event(
+                    run_id,
+                    {**stop_payload, "event": "run.stop_requested", "status": "stopping"},
+                    claim_token=claim_token,
+                )
             db.commit()
+            if current.status in TERMINAL_RUN_STATUSES:
+                return current.status
             stop_relayed = True
 
         event_queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue(maxsize=200)
@@ -332,6 +352,13 @@ def mark_hermes_run_terminal_failure(
         lease_seconds=60,
     )
     if not claim.acquired:
+        db.commit()
+        return
+    if claim.status == "stopping":
+        # An exhausted worker retry is not evidence that native work stopped.
+        # Keep compensation on the durable outbox, with its normal backoff.
+        repository.release_execution_claim(run_id, claim_token=claim_token, status="stopping")
+        HermesDispatchRepository(db).defer(run_id, reason="stop_unconfirmed")
         db.commit()
         return
     repository.mark_failure(
