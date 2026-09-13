@@ -185,7 +185,6 @@ async def synchronize_model_policy(
                     "skills",
                     "todo",
                     "memory",
-                    "session_search",
                     "code_execution",
                     "delegation",
                     "owh_runtime",

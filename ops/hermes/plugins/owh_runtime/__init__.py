@@ -111,6 +111,10 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
         execution = _rpc(server, run_id, "owh/context", {})
         if tool_name == "owh_submit_result":
             return json.dumps(_rpc(server, run_id, "owh/submit", args), ensure_ascii=False)
+        # Profile history includes app workloads. Native search has no trusted
+        # OWH app/resource ACL filter, including its direct session-read mode.
+        if tool_name == "session_search":
+            return _error("Native history search has no Open Work Hub source-access policy")
         if tool_name in execution.get("native_tools", []):
             if not _rpc(server, run_id, "owh/native_admit", {"tool": tool_name}).get("accepted"):
                 return _error("The workload tool limit was reached")
@@ -136,7 +140,6 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
                 "skill_manage",
                 "todo",
                 "memory",
-                "session_search",
                 "execute_code",
                 "delegate_task",
             }:

@@ -319,3 +319,111 @@ def test_sent_tool_with_no_confirmation_reports_unknown_outcome_without_retry(
     assert len(calls) == 1 and len(plugin.consent) == 1
     assert "did not confirm" in result["error"] and "do not repeat" in result["error"]
     assert "blocked" not in result["error"]
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {},
+        {"query": "mail"},
+        {"session_id": "saved"},
+        {"session_id": "saved", "around_message_id": 1},
+    ],
+)
+@pytest.mark.parametrize("native_tools", [[], ["session_search"]])
+def test_native_history_cannot_bypass_source_access_including_stale_profiles(
+    plugin, monkeypatch, arguments, native_tools
+):
+    monkeypatch.setattr(
+        plugin.module,
+        "_rpc",
+        lambda *_args: {"allow_native_tools": True, "native_tools": native_tools},
+    )
+    result = plugin.module.execute_tool(
+        tool_name="session_search",
+        args=arguments,
+        next_call=lambda: pytest.fail("Native profile history has no source ACL"),
+    )
+    assert "source-access policy" in json.loads(result)["error"]
+
+
+def test_revoked_app_workload_history_cannot_be_read_from_admitted_chatbot(
+    plugin, monkeypatch, application_postgres_dsn
+):
+    from uuid import uuid4
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from open_work_hub_api.domains.auth.app_access import can_use_app
+    from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
+    from open_work_hub_api.domains.auth.models import CompanyAppControl, User
+    from open_work_hub_api.domains.hermes.models import HermesProfileBinding
+    from open_work_hub_api.domains.hermes.repository import HermesRunRepository
+    from open_work_hub_api.domains.hermes.mcp_router import _available_tools
+
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            user = User(
+                id=str(uuid4()),
+                login_id=uuid4().hex,
+                email="history@example.test",
+                full_name="History test",
+                password_hash="not-used",
+            )
+            db.add(user)
+            db.flush()
+            binding = HermesProfileBinding(
+                id=str(uuid4()),
+                user_id=user.id,
+                profile_name="owh-" + "a" * 32,
+                status="active",
+                provider="openai",
+                model="test",
+            )
+            db.add(binding)
+            db.flush()
+            for app_id in ("chatbot", "mail"):
+                db.merge(CompanyAppControl(app_id=app_id, enabled=True))
+                db.flush()
+                db.merge(AppAccessPolicy(app_id=app_id, audience="all"))
+            repo = HermesRunRepository(db)
+            runs = [
+                repo.stage(
+                    binding=binding,
+                    session=None,
+                    input_text="synthetic",
+                    instructions=None,
+                    conversation_history=[],
+                    owner_app_id=app_id,
+                )
+                for app_id in ("chatbot", "mail")
+            ]
+            chat, mail = runs
+            chat.hermes_run_id = "run_test"
+            chat.status = "running"
+            mail.status = "completed"
+            mail.output_payload = {"private": "synthetic mail history"}
+            db.commit()
+            assert can_use_app(db, user_id=user.id, app_id="mail")
+            db.get(CompanyAppControl, "mail").enabled = False
+            db.commit()
+            assert not can_use_app(db, user_id=user.id, app_id="mail")
+
+            def rpc(_server, native_run_id, method, _params):
+                assert method == "owh/context"
+                _, _, active = _available_tools(
+                    db, binding=binding, user=user, hermes_run_id=native_run_id
+                )
+                assert active.id == chat.id
+                return {"allow_native_tools": True}
+
+            monkeypatch.setattr(plugin.module, "_rpc", rpc)
+            result = plugin.module.execute_tool(
+                tool_name="session_search",
+                args={"session_id": "saved-mail-session"},
+                next_call=lambda: pytest.fail("Revoked workload transcript reached native search"),
+            )
+            assert "source-access policy" in json.loads(result)["error"]
+            assert "synthetic mail history" not in result
+    finally:
+        engine.dispose()

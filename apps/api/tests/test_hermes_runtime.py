@@ -192,6 +192,7 @@ async def test_model_snapshot_has_no_secret_and_auxiliary_follows_main(temperatu
         assert policy.key != replace(policy, temperature=None).key
         assert policy.key != replace(policy, temperature=temperature + 0.1).key
     assert config["delegation"]["provider"] == "auto"
+    assert "session_search" not in config["platform_toolsets"]["api_server"]
     assert policy.run_options()["provider"] == f"custom:{policy.key}"
     assert "api_key" not in policy.run_options()
     rotated = HermesModelPolicy(
@@ -1361,4 +1362,108 @@ async def test_open_run_stream_stops_before_next_batch_after_app_revocation(
             with pytest.raises(StopAsyncIteration):
                 await anext(stream)
     finally:
+        engine.dispose()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("operation", ["read", "write"])
+async def test_slow_mcp_file_transfer_keeps_other_requests_responsive(
+    application_postgres_dsn, monkeypatch, operation
+):
+    import asyncio
+    import base64
+    import threading
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+    from pydantic import SecretStr
+    from sqlalchemy.orm import sessionmaker
+    from open_work_hub_api.core.db import get_db_session
+    from open_work_hub_api.core.settings import get_settings
+    from open_work_hub_api.domains.hermes import mcp_router
+    from open_work_hub_api.domains.hermes.service import mcp_profile_bearer_secret
+
+    engine = create_engine(application_postgres_dsn)
+    factory = sessionmaker(engine)
+    entered, release = threading.Event(), threading.Event()
+    objects = {}
+    armed = False
+    event_loop_thread = threading.get_ident()
+
+    def delay():
+        if armed:
+            assert threading.get_ident() != event_loop_thread
+            entered.set()
+            assert release.wait(timeout=5), "Other requests did not run during storage I/O"
+
+    class StoredBody(BytesIO):
+        def release_conn(self):
+            pass
+
+    class Store:
+        def put_object(self, _bucket, key, data, length, **kwargs):
+            delay()
+            objects[key] = data.read(length)
+
+        def get_object(self, _bucket, key):
+            delay()
+            return StoredBody(objects[key])
+
+    monkeypatch.setattr(files, "get_minio_client", lambda: Store())
+    monkeypatch.setattr(files, "ensure_bucket", lambda: None)
+    settings = get_settings().model_copy(
+        update={"hermes_mcp_shared_secret": SecretStr("synthetic-file-transfer-secret")}
+    )
+    monkeypatch.setattr(mcp_router, "get_settings", lambda: settings)
+    try:
+        with factory() as db:
+            user, binding = seed(db)
+            admit_runtime_apps(db, user.id)
+            session = session_for(db, binding)
+            run = stage(db, binding, session)
+            run.hermes_run_id = "run_file_transfer"
+            run.status = "running"
+            db.commit()
+            row = files.save_file(db, session=session, path="saved.txt", data=b"saved")
+            params = (
+                {"id": row.id}
+                if operation == "read"
+                else {"path": "new.txt", "data": base64.b64encode(b"new").decode()}
+            )
+            profile = binding.profile_name
+            token = mcp_profile_bearer_secret(settings, profile)
+        app = FastAPI()
+        app.include_router(mcp_router.router)
+
+        def get_db():
+            with factory() as db:
+                yield db
+
+        app.dependency_overrides[get_db_session] = get_db
+        headers = {"Authorization": f"Bearer {token}", "X-Hermes-Run-Id": "run_file_transfer"}
+        armed = True
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            url = f"/internal/hermes/mcp?profile={profile}"
+            transfer = asyncio.create_task(
+                client.post(
+                    url,
+                    headers=headers,
+                    json={"id": 1, "method": f"owh/files/{operation}", "params": params},
+                )
+            )
+            try:
+                assert await asyncio.to_thread(entered.wait, 2), "Storage transfer did not start"
+                ping = await asyncio.wait_for(
+                    client.post(url, headers=headers, json={"id": 2, "method": "ping"}), timeout=1
+                )
+                assert ping.status_code == 200 and ping.json()["result"] == {}
+            finally:
+                release.set()
+            response = await transfer
+            assert response.status_code == 200 and "error" not in response.json()
+            if operation == "read":
+                assert base64.b64decode(response.json()["result"]["data"]) == b"saved"
+            else:
+                assert response.json()["result"]["relative_path"] == "new.txt"
+    finally:
+        release.set()
         engine.dispose()

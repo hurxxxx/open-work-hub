@@ -244,6 +244,59 @@ def _available_tools(
     )
 
 
+def _handle_file_request(
+    db: Session,
+    *,
+    run: HermesRunProjection,
+    user_id: str,
+    request_id: Any,
+    method: str,
+    params: dict[str, Any],
+) -> JSONResponse:
+    # Keep session queries, object I/O, base64 and serialization on the same
+    # worker thread. The request never uses this Session concurrently.
+    session = (
+        db.get(HermesSessionBinding, run.session_binding_id) if run.session_binding_id else None
+    )
+    if session is None or run.kind != "interactive" or session.user_id != user_id:
+        return JSONResponse(_rpc_error(request_id, -32602, "Interactive session files required"))
+    files = list_files(db, session_id=session.id)
+    if method == "owh/files/list":
+        return JSONResponse(
+            _rpc_result(
+                request_id,
+                {
+                    "files": [
+                        HermesFileResponse.model_validate(row).model_dump(mode="json")
+                        for row in files
+                    ],
+                },
+            )
+        )
+    if method == "owh/files/read":
+        row = next((row for row in files if row.id == params.get("id")), None)
+        if row is None:
+            return JSONResponse(_rpc_error(request_id, -32602, "File is not available"))
+        return JSONResponse(
+            _rpc_result(request_id, {"data": base64.b64encode(read_file(row)).decode()})
+        )
+    try:
+        encoded = params.get("data")
+        if not isinstance(encoded, str) or len(encoded) > MAX_FILE_BYTES * 4 // 3 + 4:
+            raise ValueError("Invalid file data")
+        row = save_file(
+            db,
+            session=session,
+            path=params["path"],
+            data=base64.b64decode(encoded, validate=True),
+        )
+    except (ValueError, KeyError, TypeError):
+        return JSONResponse(_rpc_error(request_id, -32602, "File path, data or size is invalid"))
+    return JSONResponse(
+        _rpc_result(request_id, HermesFileResponse.model_validate(row).model_dump(mode="json"))
+    )
+
+
 @router.get("")
 def reject_standalone_sse(
     profile: str = Query(min_length=1, max_length=63),
@@ -276,7 +329,7 @@ async def handle_mcp_request(
                 return JSONResponse(
                     _rpc_error(None, -32600, "Request exceeds size limit"), status_code=413
                 )
-        payload = json.loads(raw)
+        payload = await run_in_threadpool(json.loads, raw)
     except Exception:
         return JSONResponse(_rpc_error(None, -32700, "Parse error"), status_code=400)
     if not isinstance(payload, dict):
@@ -376,53 +429,14 @@ async def handle_mcp_request(
                 )
             )
         if method.startswith("owh/files/"):
-            session = (
-                db.get(HermesSessionBinding, run.session_binding_id)
-                if run.session_binding_id
-                else None
-            )
-            if session is None or run.kind != "interactive" or session.user_id != user.id:
-                return JSONResponse(
-                    _rpc_error(request_id, -32602, "Interactive session files required")
-                )
-            files = list_files(db, session_id=session.id)
-            if method == "owh/files/list":
-                return JSONResponse(
-                    _rpc_result(
-                        request_id,
-                        {
-                            "files": [
-                                HermesFileResponse.model_validate(row).model_dump(mode="json")
-                                for row in files
-                            ],
-                        },
-                    )
-                )
-            if method == "owh/files/read":
-                row = next((row for row in files if row.id == params.get("id")), None)
-                if row is None:
-                    return JSONResponse(_rpc_error(request_id, -32602, "File is not available"))
-                return JSONResponse(
-                    _rpc_result(request_id, {"data": base64.b64encode(read_file(row)).decode()})
-                )
-            try:
-                encoded = params.get("data")
-                if not isinstance(encoded, str) or len(encoded) > MAX_FILE_BYTES * 4 // 3 + 4:
-                    raise ValueError("Invalid file data")
-                row = save_file(
-                    db,
-                    session=session,
-                    path=params["path"],
-                    data=base64.b64decode(encoded, validate=True),
-                )
-            except (ValueError, KeyError, TypeError):
-                return JSONResponse(
-                    _rpc_error(request_id, -32602, "File path, data or size is invalid")
-                )
-            return JSONResponse(
-                _rpc_result(
-                    request_id, HermesFileResponse.model_validate(row).model_dump(mode="json")
-                )
+            return await run_in_threadpool(
+                _handle_file_request,
+                db,
+                run=run,
+                user_id=user.id,
+                request_id=request_id,
+                method=method,
+                params=params,
             )
         if run.output_schema is None:
             return JSONResponse(
