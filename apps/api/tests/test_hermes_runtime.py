@@ -831,6 +831,95 @@ def test_files_preserve_cleanup_intent_and_owner_acl(application_postgres_dsn, m
         engine.dispose()
 
 
+@pytest.mark.parametrize("root", ["reports", "r_%"])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_saved_file_paths_reject_prefix_conflicts_and_remain_restorable(
+    application_postgres_dsn, monkeypatch, tmp_path, root, reverse
+):
+    objects = {}
+
+    def put_object(bucket, key, stream, size, **kwargs):
+        objects[key] = stream.read()
+
+    monkeypatch.setattr(files, "get_minio_client", lambda: SimpleNamespace(put_object=put_object))
+    monkeypatch.setattr(files, "ensure_bucket", lambda: None)
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            _, binding = seed(db)
+            session = session_for(db, binding)
+            paths = [root, root + "/nested/result.txt"]
+            if reverse:
+                paths.reverse()
+            files.save_file(db, session=session, path=paths[0], data=b"retained")
+            with pytest.raises(ValueError, match="path conflicts"):
+                files.save_file(db, session=session, path=paths[1], data=b"conflicting")
+            db.rollback()
+            assert len(objects) == 1
+            # Similar names, including SQL wildcard characters, are separate
+            # paths; rejecting an ancestor must not reject these neighbours.
+            files.save_file(db, session=session, path=root + "-other/result.txt", data=b"neighbour")
+            files.save_file(db, session=session, path=paths[0], data=b"replacement")
+            session_id = session.id
+        # Reopen the catalog and restore every retained path to a fresh
+        # filesystem, as a replacement sandbox does after restart.
+        with Session(engine) as db:
+            rows = files.list_files(db, session_id=session_id)
+            assert {row.relative_path for row in rows} == {paths[0], root + "-other/result.txt"}
+            for row in rows:
+                target = tmp_path / row.relative_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(objects[row.object_key])
+            assert (tmp_path / paths[0]).read_bytes() == b"replacement"
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("root", ["reports", "r_%"])
+def test_concurrent_prefix_uploads_keep_a_restorable_catalog(
+    application_postgres_dsn, monkeypatch, tmp_path, root
+):
+    objects = {}
+
+    def put_object(bucket, key, stream, size, **kwargs):
+        objects[key] = stream.read()
+
+    monkeypatch.setattr(files, "get_minio_client", lambda: SimpleNamespace(put_object=put_object))
+    monkeypatch.setattr(files, "ensure_bucket", lambda: None)
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            _, binding = seed(db)
+            session_id = session_for(db, binding).id
+            db.commit()
+        barrier = Barrier(2)
+
+        def upload(path):
+            with Session(engine) as db:
+                session = db.get(HermesSessionBinding, session_id)
+                barrier.wait(timeout=5)
+                try:
+                    files.save_file(db, session=session, path=path, data=b"concurrent")
+                except ValueError as error:
+                    assert "path conflicts" in str(error)
+                    db.rollback()
+                    return False
+                return True
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            accepted = list(pool.map(upload, [root, root + "/result.txt"]))
+        assert sum(accepted) == 1 and len(objects) == 1
+        with Session(engine) as db:
+            rows = files.list_files(db, session_id=session_id)
+            assert len(rows) == 1
+            target = tmp_path / rows[0].relative_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(objects[rows[0].object_key])
+            assert target.read_bytes() == b"concurrent"
+    finally:
+        engine.dispose()
+
+
 def test_workloads_preserve_messages_and_reject_application_tool_loops():
     assert _messages(
         {

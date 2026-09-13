@@ -7,7 +7,7 @@ from io import BytesIO
 from pathlib import PurePosixPath
 from uuid import uuid4
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import get_settings
@@ -89,6 +89,19 @@ def save_file(
             .limit(1)
         ):
             raise ValueError("Wait for the active run before uploading files")
+    ancestors = [str(parent) for parent in PurePosixPath(path).parents if str(parent) != "."]
+    if db.scalar(
+        select(HermesSessionFile.id)
+        .where(
+            HermesSessionFile.session_id == session.id,
+            or_(
+                HermesSessionFile.relative_path.in_(ancestors),
+                HermesSessionFile.relative_path.startswith(path + "/", autoescape=True),
+            ),
+        )
+        .limit(1)
+    ):
+        raise ValueError("Workspace file path conflicts with a saved file or directory")
     existing = db.scalar(
         select(HermesSessionFile).where(
             HermesSessionFile.session_id == session.id,
