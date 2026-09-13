@@ -26,6 +26,7 @@ from open_work_hub_api.domains.hermes.execution import execute_hermes_run
 from open_work_hub_api.domains.hermes.model_policy import HermesModelPolicy
 from open_work_hub_api.domains.hermes.repository import HermesRunRepository, TERMINAL_RUN_STATUSES
 from open_work_hub_api.domains.hermes.service import ensure_profile_binding, runtime_client
+from open_work_hub_api.domains.hermes.tool_decisions import decision_message, prepare_tool_decision
 
 
 def _messages(payload: dict[str, Any]) -> tuple[str, str, list[dict[str, str]]]:
@@ -65,8 +66,11 @@ async def run_workload(
     workload = get_ai_capability_registry().resolve_llm_workload(context.workload_id)
     if type(context.native_tool_limit) is not int or not 1 <= context.native_tool_limit <= 20:
         raise LlmProviderError("Invalid native tool limit")
-    if payload.get("tools"):
-        raise LlmProviderError("Application tool-call results must use a structured output schema.")
+    tool_decision = prepare_tool_decision(payload)
+    if tool_decision is not None:
+        if output_schema is not None:
+            raise LlmProviderError("Application tools and an explicit result schema cannot mix.")
+        payload, output_schema = tool_decision
     if output_schema is not None:
         Draft202012Validator.check_schema(output_schema)
     policy = HermesModelPolicy.from_pool(
@@ -152,12 +156,15 @@ async def run_workload(
                     output_tokens = (
                         output_tokens if type(output_tokens) is int and output_tokens >= 0 else 0
                     )
+                    message, finish_reason = (
+                        decision_message(run.output_payload, output_schema)
+                        if tool_decision is not None
+                        else ({"content": run.output_text or ""}, "stop")
+                    )
                     return {
                         "id": run.id,
                         "model": execution.chosen_model,
-                        "choices": [
-                            {"message": {"content": run.output_text or ""}, "finish_reason": "stop"}
-                        ],
+                        "choices": [{"message": message, "finish_reason": finish_reason}],
                         "usage": {
                             "prompt_tokens": input_tokens,
                             "completion_tokens": output_tokens,
@@ -222,8 +229,20 @@ async def stream_workload(
     )
     # Application graphs consume completed stage output. Interactive chatbot
     # progress/approval/deltas use the durable /agent event projection directly.
-    yield StreamChunk(kind="content", text=result["choices"][0]["message"]["content"])
+    choice = result["choices"][0]
+    message = choice["message"]
+    if message.get("content"):
+        yield StreamChunk(kind="content", text=message["content"])
+    for call in message.get("tool_calls", []):
+        yield StreamChunk(
+            kind="tool_call_start", tool_call_id=call["id"], tool_name=call["function"]["name"]
+        )
+        yield StreamChunk(
+            kind="tool_call_args", tool_call_id=call["id"], args_delta=call["function"]["arguments"]
+        )
     yield StreamChunk(kind="usage", usage=result["usage"])
     yield StreamChunk(
-        kind="done", finish_reason="stop", structured_output=result["structured_output"]
+        kind="done",
+        finish_reason=choice["finish_reason"],
+        structured_output=result["structured_output"],
     )

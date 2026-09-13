@@ -260,6 +260,8 @@ class HermesRunRepository:
                 if existing.request_sha256 == request_sha256:
                     return existing
                 raise HermesRunIdempotencyConflict(client_request_id)
+        if session is not None:
+            session.updated_at = utcnow_naive()
         run_id = str(uuid4())
         run = HermesRunProjection(
             id=run_id,

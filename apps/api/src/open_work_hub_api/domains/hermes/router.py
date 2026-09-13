@@ -239,7 +239,7 @@ async def list_sessions(
         db.scalars(
             select(HermesSessionBinding)
             .where(*predicates)
-            .order_by(HermesSessionBinding.updated_at.desc())
+            .order_by(HermesSessionBinding.updated_at.desc(), HermesSessionBinding.id.desc())
             .offset(offset)
             .limit(limit + 1)
         )

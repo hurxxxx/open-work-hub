@@ -221,8 +221,9 @@ def test_workspace_paths_reject_escape_and_control_characters(path):
 @pytest.mark.anyio
 @pytest.mark.parametrize("temperature", [None, 0, 0.7])
 @pytest.mark.parametrize("mode", ["sync", "stream"])
+@pytest.mark.parametrize("contract", ["structured", "tool_request", "tool_result", "forced_final"])
 async def test_workload_uses_durable_dispatch_and_validated_native_submission(
-    application_postgres_dsn, monkeypatch, temperature, mode
+    application_postgres_dsn, monkeypatch, temperature, mode, contract
 ):
     import asyncio
     import json
@@ -253,6 +254,13 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
     monkeypatch.setattr(workloads, "get_settings", lambda: settings)
     monkeypatch.setattr(mcp_router, "get_settings", lambda: settings)
     monkeypatch.setattr(workloads, "get_session_factory", lambda: factory)
+    expected_result = (
+        {"value": 42}
+        if contract == "structured"
+        else {"content": "Application result received"}
+        if contract in {"tool_result", "forced_final"}
+        else {"tool_calls": [{"name": "fixture.lookup", "arguments": {"value": 42}}]}
+    )
     try:
         with factory() as db:
             user, binding = seed(db)
@@ -281,11 +289,14 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
                 assert kwargs["runtime_options"]["owh_policy"]["model"] == "test-model"
                 assert kwargs["runtime_options"]["owh_policy"].get("temperature") == temperature
                 assert "owh_submit_result" in kwargs["instructions"]
+                if contract in {"tool_result", "forced_final"}:
+                    assert '"role": "tool"' in kwargs["input_text"]
+                    assert "Application evidence" in kwargs["input_text"]
                 attempts.append(kwargs["idempotency_key"])
                 return {"run_id": "run_native_fixture", "status": "running"}
 
             async def iter_run_events(self, profile, run_id):
-                for result in ({"value": "wrong type"}, {"value": 42}):
+                for result in ({"value": "wrong type"}, expected_result):
                     body = json.dumps(
                         {
                             "jsonrpc": "2.0",
@@ -353,6 +364,48 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
                 "additionalProperties": False,
             },
         )
+        if contract != "structured":
+            options.pop("output_schema")
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "fixture.lookup",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"value": {"type": "integer"}},
+                            "required": ["value"],
+                            "additionalProperties": False,
+                        },
+                    },
+                }
+            ]
+            if contract in {"tool_result", "forced_final"}:
+                payload["messages"].extend(
+                    [
+                        {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "prior-call",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "fixture.lookup",
+                                        "arguments": '{"value":42}',
+                                    },
+                                }
+                            ],
+                        },
+                        {
+                            "role": "tool",
+                            "tool_call_id": "prior-call",
+                            "content": "Application evidence",
+                        },
+                    ]
+                )
+            if contract == "forced_final":
+                payload.pop("tools")
         if mode == "sync":
             result = await asyncio.to_thread(
                 workloads.complete_workload, context, resolved, payload, **options
@@ -363,7 +416,22 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
                 async for chunk in workloads.stream_workload(context, resolved, payload, **options)
             ]
             result = {"structured_output": chunks[-1].structured_output, "usage": chunks[-2].usage}
-        assert result["structured_output"] == {"value": 42}
+            if contract == "tool_request":
+                assert chunks[0].kind == "tool_call_start"
+                assert chunks[0].tool_name == "fixture.lookup"
+                assert chunks[1].tool_call_id == chunks[0].tool_call_id
+                assert json.loads(chunks[1].args_delta) == {"value": 42}
+                assert chunks[-1].finish_reason == "tool_calls"
+            elif contract in {"tool_result", "forced_final"}:
+                assert chunks[0].text == "Application result received"
+                assert chunks[-1].finish_reason == "stop"
+        if mode == "sync" and contract == "tool_request":
+            assert result["choices"][0]["finish_reason"] == "tool_calls"
+            assert (
+                result["choices"][0]["message"]["tool_calls"][0]["function"]["name"]
+                == "fixture.lookup"
+            )
+        assert result["structured_output"] == expected_result
         assert result["usage"]["total_tokens"] == 10
         assert len(attempts) == 1
         assert [item["accepted"] for item in submissions] == [False, True]
@@ -449,6 +517,105 @@ def test_workloads_preserve_messages_and_reject_application_tool_loops():
     )
     with pytest.raises(LlmProviderError):
         _messages({"messages": [{"role": "tool", "content": "raw SDK tool result"}]})
+
+
+def test_application_action_schema_enforces_tool_choice_arguments_and_parallel_limit():
+    from jsonschema import Draft202012Validator, ValidationError
+    from open_work_hub_api.domains.hermes.tool_decisions import (
+        decision_message,
+        prepare_tool_decision,
+    )
+
+    payload = {
+        "messages": [{"role": "user", "content": "Choose an action"}],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"id": {"type": "integer"}},
+                        "required": ["id"],
+                        "additionalProperties": False,
+                    },
+                },
+            }
+            for name in ("first", "second")
+        ],
+        "tool_choice": {"type": "function", "function": {"name": "second"}},
+        "parallel_tool_calls": False,
+    }
+    _, schema = prepare_tool_decision(payload)
+    call = {"name": "second", "arguments": {"id": 1}}
+    Draft202012Validator(schema).validate({"tool_calls": [call]})
+    for invalid in (
+        None,
+        {"content": "bypass required tool"},
+        {"tool_calls": [{"name": "first", "arguments": {"id": 1}}]},
+        {"tool_calls": [{"name": "second", "arguments": {"id": "wrong"}}]},
+        {"tool_calls": [call, call]},
+    ):
+        with pytest.raises(ValidationError):
+            decision_message(invalid, schema)
+    payload["tool_choice"] = "none"
+    _, schema = prepare_tool_decision(payload)
+    assert decision_message({"content": "final"}, schema) == ({"content": "final"}, "stop")
+    with pytest.raises(ValidationError):
+        decision_message({"tool_calls": [call]}, schema)
+    payload["tool_choice"] = {"type": "function", "function": {"name": "unavailable"}}
+    with pytest.raises(LlmProviderError, match="unavailable"):
+        prepare_tool_decision(payload)
+
+
+@pytest.mark.anyio
+async def test_session_activity_moves_across_pagination_without_read_or_replay_bumps(
+    application_postgres_dsn, monkeypatch
+):
+    from open_work_hub_api.domains.hermes import router
+
+    class Runtime:
+        async def get_session(self, *args):
+            return {}
+
+    monkeypatch.setattr(router, "runtime_client", Runtime)
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            user, binding = seed(db)
+            old = session_for(db, binding)
+            old.updated_at = utcnow_naive() - timedelta(days=2)
+            recent = session_for(db, binding)
+            recent.updated_at = utcnow_naive() - timedelta(days=1)
+            _, other_binding = seed(db)
+            other = session_for(db, other_binding)
+            db.commit()
+
+            async def page(offset=0):
+                return await router.list_sessions(
+                    limit=1,
+                    offset=offset,
+                    scope_ref=None,
+                    scope_resource_id=None,
+                    db=db,
+                    current_user=user,
+                )
+
+            assert (await page()).data[0].id == recent.id
+            run = stage(db, binding, old, client_request_id="activity", request_sha256="same")
+            db.commit()
+            accepted_at = old.updated_at
+            first = await page()
+            assert first.data[0].id == old.id and first.has_more
+            assert (await page(1)).data[0].id == recent.id
+            assert all(row.id != other.id for row in first.data)
+            replay = stage(db, binding, old, client_request_id="activity", request_sha256="same")
+            assert replay.id == run.id
+            db.commit()
+            db.refresh(old)
+            assert old.updated_at == accepted_at
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.anyio
