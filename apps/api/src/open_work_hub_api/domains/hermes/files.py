@@ -7,14 +7,16 @@ from io import BytesIO
 from pathlib import PurePosixPath
 from uuid import uuid4
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.core.storage import ensure_bucket, get_minio_client
 from open_work_hub_api.domains.auth.models import utcnow_naive
+from open_work_hub_api.domains.auth.app_access import can_use_app
 from open_work_hub_api.domains.hermes.models import (
     HermesFileObject,
+    HermesProfileBinding,
     HermesRunProjection,
     HermesSessionBinding,
     HermesSessionFile,
@@ -52,6 +54,58 @@ def list_files(db: Session, *, session_id: str) -> list[HermesSessionFile]:
     )
 
 
+def require_active_file_run(
+    db: Session,
+    *,
+    run_id: str,
+    user_id: str,
+    session_id: str | None = None,
+    for_update: bool = False,
+) -> HermesRunProjection:
+    from open_work_hub_api.domains.hermes.repository import ACTIVE_RUN_STATUSES
+
+    query = (
+        select(HermesRunProjection)
+        .join(
+            HermesSessionBinding, HermesSessionBinding.id == HermesRunProjection.session_binding_id
+        )
+        .join(
+            HermesProfileBinding, HermesProfileBinding.id == HermesRunProjection.profile_binding_id
+        )
+        .where(
+            HermesRunProjection.id == run_id,
+            HermesRunProjection.user_id == user_id,
+            HermesRunProjection.kind == "interactive",
+            HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES - {"stopping"}),
+            HermesSessionBinding.user_id == user_id,
+            HermesSessionBinding.status != "deleted",
+            HermesSessionBinding.profile_binding_id == HermesProfileBinding.id,
+            HermesProfileBinding.user_id == user_id,
+            HermesProfileBinding.status == "active",
+        )
+        .execution_options(populate_existing=True)
+    )
+    if session_id is not None:
+        query = query.where(HermesSessionBinding.id == session_id)
+    if for_update:
+        query = query.with_for_update(of=HermesRunProjection)
+    run = db.scalar(query)
+    if run is None or not can_use_app(db, user_id=user_id, app_id=run.owner_app_id):
+        raise ValueError("File execution is no longer available")
+    return run
+
+
+def _require_upload_access(db: Session, session: HermesSessionBinding) -> None:
+    if db.scalar(
+        select(HermesSessionBinding.id).where(
+            HermesSessionBinding.id == session.id,
+            HermesSessionBinding.user_id == session.user_id,
+            HermesSessionBinding.status != "deleted",
+        )
+    ) is None or not can_use_app(db, user_id=session.user_id, app_id="chatbot"):
+        raise ValueError("File upload is no longer authorized")
+
+
 def save_file(
     db: Session,
     *,
@@ -59,6 +113,7 @@ def save_file(
     path: str,
     data: bytes,
     reject_active_run: bool = False,
+    execution_run_id: str | None = None,
 ) -> HermesSessionFile:
     path = normalize_path(path)
     if len(data) > MAX_FILE_BYTES:
@@ -77,7 +132,12 @@ def save_file(
         )
         .with_for_update()
     ).scalar_one()
+    if execution_run_id is not None:
+        require_active_file_run(
+            db, run_id=execution_run_id, user_id=session.user_id, session_id=session.id
+        )
     if reject_active_run:
+        _require_upload_access(db, session)
         from open_work_hub_api.domains.hermes.repository import ACTIVE_RUN_STATUSES
 
         if db.scalar(
@@ -89,6 +149,19 @@ def save_file(
             .limit(1)
         ):
             raise ValueError("Wait for the active run before uploading files")
+    ancestors = [str(parent) for parent in PurePosixPath(path).parents if str(parent) != "."]
+    if db.scalar(
+        select(HermesSessionFile.id)
+        .where(
+            HermesSessionFile.session_id == session.id,
+            or_(
+                HermesSessionFile.relative_path.in_(ancestors),
+                HermesSessionFile.relative_path.startswith(path + "/", autoescape=True),
+            ),
+        )
+        .limit(1)
+    ):
+        raise ValueError("Workspace file path conflicts with a saved file or directory")
     existing = db.scalar(
         select(HermesSessionFile).where(
             HermesSessionFile.session_id == session.id,
@@ -112,6 +185,23 @@ def save_file(
     ensure_bucket()
     client = get_minio_client()
     client.put_object(settings.minio_bucket, key, BytesIO(data), len(data), content_type=media_type)
+    # Object upload is outside the final catalog decision. A stopped/revoked
+    # execution cannot publish late bytes. The committed reservation remains
+    # available to normal cleanup if this check rejects the uploaded object.
+    try:
+        if execution_run_id is not None:
+            require_active_file_run(
+                db,
+                run_id=execution_run_id,
+                user_id=session.user_id,
+                session_id=session.id,
+                for_update=True,
+            )
+        if reject_active_run:
+            _require_upload_access(db, session)
+    except Exception:
+        db.rollback()
+        raise
     old_key = existing.object_key if existing is not None else None
     row = existing or HermesSessionFile(id=file_id, user_id=session.user_id, session_id=session.id)
     row.relative_path, row.size_bytes, row.sha256 = path, len(data), digest

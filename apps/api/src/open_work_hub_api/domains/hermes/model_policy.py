@@ -37,9 +37,27 @@ class HermesModelPolicy:
     max_tokens: int
     api_mode: str = "chat_completions"
     extra_headers: dict[str, str] = field(default_factory=dict, repr=False)
+    temperature: float | None = None
+
+    def __post_init__(self) -> None:
+        # v2026.8.31 only consumes provider extra_body on its OpenAI wire.
+        # Do not snapshot a sampling setting the Anthropic transport drops.
+        if self.api_mode == "anthropic_messages" and self.temperature is not None:
+            raise LlmProviderError(
+                "The pinned Hermes Anthropic transport does not support explicit temperature.",
+                pool=self.route,
+                provider=self.provider,
+            )
 
     @classmethod
-    def from_pool(cls, config: LlmPoolConfig, *, model: str, max_tokens: int):
+    def from_pool(
+        cls,
+        config: LlmPoolConfig,
+        *,
+        model: str,
+        max_tokens: int,
+        temperature: float | None = None,
+    ):
         descriptor = llm_provider_descriptor(config.provider)
         if config.pool != "local" and not (
             descriptor
@@ -64,6 +82,7 @@ class HermesModelPolicy:
             max_tokens=max_tokens,
             api_mode="anthropic_messages" if config.provider == "anthropic" else "chat_completions",
             extra_headers=dict(config.default_headers or {}),
+            temperature=temperature,
         )
 
     @property
@@ -80,6 +99,8 @@ class HermesModelPolicy:
             self.api_mode,
             sorted(self.extra_headers.items()),
         ]
+        if self.temperature is not None:
+            payload.append(self.temperature)
         digest = hashlib.sha256(json.dumps(payload).encode()).hexdigest()[:32]
         return f"owh-{digest}"
 
@@ -93,6 +114,7 @@ class HermesModelPolicy:
                 "provider": self.provider,
                 "model": self.model,
                 "max_output_tokens": self.max_tokens,
+                **({"temperature": self.temperature} if self.temperature is not None else {}),
             },
         }
 
@@ -117,6 +139,13 @@ async def synchronize_model_policy(
                     "transport": policy.api_mode,
                     "max_output_tokens": policy.max_tokens,
                     "extra_headers": policy.extra_headers,
+                    # Pinned native run model_options only supports reasoning/tier.
+                    # Named providers officially propagate extra_body as request overrides.
+                    **(
+                        {"extra_body": {"temperature": policy.temperature}}
+                        if policy.temperature is not None
+                        else {}
+                    ),
                 }
             },
             "model": {
@@ -166,7 +195,6 @@ async def synchronize_model_policy(
                     "skills",
                     "todo",
                     "memory",
-                    "session_search",
                     "code_execution",
                     "delegation",
                     "owh_runtime",

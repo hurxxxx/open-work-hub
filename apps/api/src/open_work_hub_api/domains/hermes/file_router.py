@@ -4,11 +4,13 @@ import asyncio
 from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.domains.auth.dependencies import require_current_user
+from open_work_hub_api.domains.auth.app_gate import require_app_access
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.files import MAX_FILE_BYTES, list_files, read_file, save_file
 from open_work_hub_api.domains.hermes.models import (
@@ -47,6 +49,36 @@ def session_files(
     )
 
 
+def _persist_upload(
+    db: Session, *, session_id: str, user: User, file_name: str, data: bytearray
+) -> HermesFileResponse:
+    # Recheck authority after body reception and keep DB/object work together.
+    require_app_access("chatbot")(db=db, user=user)
+    session = _owned_session(db, session_id, user)
+    db.execute(
+        select(HermesSessionBinding.id)
+        .where(HermesSessionBinding.id == session.id)
+        .with_for_update()
+    ).scalar_one()
+    if db.scalar(
+        select(HermesRunProjection.id)
+        .where(
+            HermesRunProjection.session_binding_id == session.id,
+            HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES),
+        )
+        .limit(1)
+    ):
+        raise HTTPException(status_code=409, detail={"code": "hermes.files_active_run"})
+    row = save_file(
+        db,
+        session=session,
+        path=unquote(file_name, errors="strict"),
+        data=bytes(data),
+        reject_active_run=True,
+    )
+    return HermesFileResponse.model_validate(row)
+
+
 @router.post(
     "/sessions/{session_id}/files",
     response_model=HermesFileResponse,
@@ -67,7 +99,7 @@ async def upload_file(
     db: Session = Depends(get_db_session),
     user: User = Depends(require_current_user),
 ):
-    session = _owned_session(db, session_id, user)
+    await run_in_threadpool(_owned_session, db, session_id, user)
     try:
         if request.headers.get("content-type", "").split(";", 1)[0] != "application/octet-stream":
             raise ValueError("Binary upload required")
@@ -80,30 +112,16 @@ async def upload_file(
                 if len(data) + len(chunk) > MAX_FILE_BYTES:
                     raise ValueError("File exceeds size limit")
                 data.extend(chunk)
-        db.execute(
-            select(HermesSessionBinding.id)
-            .where(HermesSessionBinding.id == session.id)
-            .with_for_update()
-        ).scalar_one()
-        if db.scalar(
-            select(HermesRunProjection.id)
-            .where(
-                HermesRunProjection.session_binding_id == session.id,
-                HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES),
-            )
-            .limit(1)
-        ):
-            raise HTTPException(status_code=409, detail={"code": "hermes.files_active_run"})
-        row = save_file(
+        return await run_in_threadpool(
+            _persist_upload,
             db,
-            session=session,
-            path=unquote(file_name, errors="strict"),
-            data=bytes(data),
-            reject_active_run=True,
+            session_id=session_id,
+            user=user,
+            file_name=file_name,
+            data=data,
         )
     except (ValueError, TimeoutError) as error:
         raise HTTPException(status_code=422, detail={"code": "hermes.file_invalid"}) from error
-    return HermesFileResponse.model_validate(row)
 
 
 @router.get("/files/{file_id}/content")

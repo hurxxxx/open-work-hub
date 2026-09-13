@@ -128,6 +128,29 @@ def test_workload_blocks_native_tools_but_can_correct_and_submit(plugin, monkeyp
     assert len(attempts) == 2
 
 
+@pytest.mark.parametrize("native_run_id", ["", "cron_job_fixture", "run_forged"])
+@pytest.mark.parametrize("tool", ["web_search", "read_file", "terminal", "owh_submit_result"])
+def test_jobs_profile_intentionally_denies_tools_without_an_owh_run(
+    plugin, monkeypatch, native_run_id, tool
+):
+    monkeypatch.setattr(
+        sys.modules["hermes_constants"],
+        "get_hermes_home",
+        lambda: Path("owh-" + "a" * 32 + "-jobs"),
+    )
+    monkeypatch.setattr(
+        sys.modules["hermes_cli.config"], "load_config", lambda: {"mcp_servers": {}}
+    )
+    monkeypatch.setattr(
+        plugin.module, "_rpc", lambda *args: pytest.fail("Jobs have no app transport")
+    )
+    plugin.run.set(native_run_id)
+    result = plugin.module.execute_tool(
+        tool_name=tool, args={}, next_call=lambda: pytest.fail("Unowned jobs cannot execute tools")
+    )
+    assert "error" in json.loads(result)
+
+
 def test_registered_native_tool_requires_admission_for_every_call(plugin, monkeypatch):
     admissions = []
     executions = []
@@ -189,3 +212,218 @@ def test_rpc_resolves_native_profile_secret_references_and_rejects_unresolved(pl
     assert plugin.module._rpc(server, "run_test", "owh/context", {}) == {"accepted": True}
     assert seen == ["Bearer active-profile-secret"]
     assert server["headers"]["Authorization"] == "Bearer ${PROFILE_KEY}"
+
+
+@pytest.mark.slow
+def test_tool_rpc_waits_for_server_completion_beyond_thirty_seconds(plugin):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+    import time
+
+    completed = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_POST(self):
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            assert request["method"] == "tools/call"
+            assert self.headers["X-Hermes-Run-Id"] == "run_test"
+            time.sleep(31)
+            completed.append(request["id"])
+            body = json.dumps({"result": {"structuredContent": {"saved": True}}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        result = plugin.module._rpc(
+            {
+                "url": f"http://127.0.0.1:{server.server_port}",
+                "headers": {"Authorization": "Bearer synthetic"},
+            },
+            "run_test",
+            "tools/call",
+            {"name": "fixture.slow_save", "arguments": {}},
+        )
+        assert result == {"structuredContent": {"saved": True}}
+        assert len(completed) == 1
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.parametrize("method", ["tools/list", "owh/context", "tools/call"])
+def test_rpc_bounds_control_waits_and_never_retries_uncertain_calls(plugin, monkeypatch, method):
+    import httpx
+
+    real_client = httpx.Client
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        limits = request.extensions["timeout"]
+        assert limits["connect"] == limits["write"] == limits["pool"] == 30
+        assert limits["read"] == (3900 if method == "tools/call" else 30)
+        raise httpx.ReadTimeout("synthetic connection loss")
+
+    monkeypatch.setattr(
+        plugin.module.httpx,
+        "Client",
+        lambda **kwargs: real_client(
+            **kwargs,
+            transport=httpx.MockTransport(handler),
+        ),
+    )
+    with pytest.raises(httpx.ReadTimeout):
+        plugin.module._rpc(plugin.transport, "run_test", method, {})
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize("failure", ["timeout", "invalid_response"])
+def test_sent_tool_with_no_confirmation_reports_unknown_outcome_without_retry(
+    plugin, monkeypatch, failure
+):
+    import httpx
+
+    calls = []
+
+    def rpc(server, run, method, params):
+        if method == "owh/context":
+            return {"allow_native_tools": True}
+        if method == "tools/list":
+            return {"tools": [{"name": "fixture.save", "annotations": {"readOnlyHint": False}}]}
+        assert method == "tools/call"
+        calls.append(params)
+        if failure == "timeout":
+            raise httpx.ReadTimeout("synthetic connection loss")
+        raise ValueError("synthetic invalid response")
+
+    monkeypatch.setattr(plugin.module, "_rpc", rpc)
+    result = json.loads(
+        plugin.module.execute_tool(
+            tool_name=f"mcp__{plugin.server.replace('-', '_')}__fixture.save",
+            args={},
+            next_call=lambda: pytest.fail(
+                "Never repeat an uncertain call through the native handler"
+            ),
+        )
+    )
+    assert len(calls) == 1 and len(plugin.consent) == 1
+    assert "did not confirm" in result["error"] and "do not repeat" in result["error"]
+    assert "blocked" not in result["error"]
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {},
+        {"query": "mail"},
+        {"session_id": "saved"},
+        {"session_id": "saved", "around_message_id": 1},
+    ],
+)
+@pytest.mark.parametrize("native_tools", [[], ["session_search"]])
+def test_native_history_cannot_bypass_source_access_including_stale_profiles(
+    plugin, monkeypatch, arguments, native_tools
+):
+    monkeypatch.setattr(
+        plugin.module,
+        "_rpc",
+        lambda *_args: {"allow_native_tools": True, "native_tools": native_tools},
+    )
+    result = plugin.module.execute_tool(
+        tool_name="session_search",
+        args=arguments,
+        next_call=lambda: pytest.fail("Native profile history has no source ACL"),
+    )
+    assert "source-access policy" in json.loads(result)["error"]
+
+
+def test_revoked_app_workload_history_cannot_be_read_from_admitted_chatbot(
+    plugin, monkeypatch, application_postgres_dsn
+):
+    from uuid import uuid4
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from open_work_hub_api.domains.auth.app_access import can_use_app
+    from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
+    from open_work_hub_api.domains.auth.models import CompanyAppControl, User
+    from open_work_hub_api.domains.hermes.models import HermesProfileBinding
+    from open_work_hub_api.domains.hermes.repository import HermesRunRepository
+    from open_work_hub_api.domains.hermes.mcp_router import _available_tools
+
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            user = User(
+                id=str(uuid4()),
+                login_id=uuid4().hex,
+                email="history@example.test",
+                full_name="History test",
+                password_hash="not-used",
+            )
+            db.add(user)
+            db.flush()
+            binding = HermesProfileBinding(
+                id=str(uuid4()),
+                user_id=user.id,
+                profile_name="owh-" + "a" * 32,
+                status="active",
+                provider="openai",
+                model="test",
+            )
+            db.add(binding)
+            db.flush()
+            for app_id in ("chatbot", "mail"):
+                db.merge(CompanyAppControl(app_id=app_id, enabled=True))
+                db.flush()
+                db.merge(AppAccessPolicy(app_id=app_id, audience="all"))
+            repo = HermesRunRepository(db)
+            runs = [
+                repo.stage(
+                    binding=binding,
+                    session=None,
+                    input_text="synthetic",
+                    instructions=None,
+                    conversation_history=[],
+                    owner_app_id=app_id,
+                )
+                for app_id in ("chatbot", "mail")
+            ]
+            chat, mail = runs
+            chat.hermes_run_id = "run_test"
+            chat.status = "running"
+            mail.status = "completed"
+            mail.output_payload = {"private": "synthetic mail history"}
+            db.commit()
+            assert can_use_app(db, user_id=user.id, app_id="mail")
+            db.get(CompanyAppControl, "mail").enabled = False
+            db.commit()
+            assert not can_use_app(db, user_id=user.id, app_id="mail")
+
+            def rpc(_server, native_run_id, method, _params):
+                assert method == "owh/context"
+                _, _, active = _available_tools(
+                    db, binding=binding, user=user, hermes_run_id=native_run_id
+                )
+                assert active.id == chat.id
+                return {"allow_native_tools": True}
+
+            monkeypatch.setattr(plugin.module, "_rpc", rpc)
+            result = plugin.module.execute_tool(
+                tool_name="session_search",
+                args={"session_id": "saved-mail-session"},
+                next_call=lambda: pytest.fail("Revoked workload transcript reached native search"),
+            )
+            assert "source-access policy" in json.loads(result)["error"]
+            assert "synthetic mail history" not in result
+    finally:
+        engine.dispose()

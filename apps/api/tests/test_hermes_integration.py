@@ -452,7 +452,8 @@ async def test_expired_approval_without_a_remote_run_fails_the_local_run(
         engine.dispose()
 
 
-async def test_runtime_client_uses_profile_route_auth_and_run_idempotency() -> None:
+@pytest.mark.parametrize("cancel_admission", [False, True])
+async def test_runtime_client_uses_profile_route_auth_and_run_idempotency(cancel_admission) -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -474,11 +475,13 @@ async def test_runtime_client_uses_profile_route_auth_and_run_idempotency() -> N
         idempotency_key="owh-run-1",
         instructions="Use the approved tools.",
         conversation_history=[{"role": "user", "content": "Earlier"}],
+        cancel_admission=cancel_admission,
     )
 
     assert result == {"run_id": "run-1", "status": "queued"}
     request = requests[0]
-    assert request.url.raw_path == b"/p/profile%2Fwith%20slash/v1/runs"
+    expected_path = b"/v1/owh/runs/cancel-admission" if cancel_admission else b"/v1/runs"
+    assert request.url.raw_path == b"/p/profile%2Fwith%20slash" + expected_path
     assert request.headers["authorization"] == "Bearer runtime-secret-0000000000000001"
     assert request.headers["idempotency-key"] == "owh-run-1"
     assert request.headers["x-hermes-session-id"] == "session-1"
@@ -625,7 +628,9 @@ def test_run_scope_normalizes_app_ids_and_mcp_filters_with_it(monkeypatch) -> No
     monkeypatch.setattr(mcp_router, "can_use_app", lambda *_args, **_kwargs: True)
     db = SimpleNamespace(
         scalar=lambda _query: SimpleNamespace(
-            allowed_app_ids=body.allowed_app_ids, owner_app_id="chatbot"
+            allowed_app_ids=body.allowed_app_ids,
+            owner_app_id="chatbot",
+            session_binding_id=None,
         )
     )
     binding = SimpleNamespace(id="binding-1")
@@ -797,6 +802,7 @@ async def test_approval_is_committed_before_hermes_resumes(monkeypatch) -> None:
         id="run-1",
         hermes_run_id="hermes-run-1",
         profile_binding_id="profile-1",
+        owner_app_id="chatbot",
     )
     approval = SimpleNamespace(
         id="approval-1",
@@ -849,6 +855,7 @@ async def test_approval_is_committed_before_hermes_resumes(monkeypatch) -> None:
         return SimpleNamespace(profile_name="profile-1")
 
     monkeypatch.setattr(hermes_router, "HermesRunRepository", lambda _db: FakeRepository())
+    monkeypatch.setattr(hermes_router, "can_use_app", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         hermes_router,
         "_bound_profile",
@@ -876,7 +883,12 @@ async def test_approval_is_committed_before_hermes_resumes(monkeypatch) -> None:
 
 
 async def test_failed_hermes_resume_restores_unconsumed_approval(monkeypatch) -> None:
-    run = SimpleNamespace(id="run-1", hermes_run_id="hermes-run-1", profile_binding_id="profile-1")
+    run = SimpleNamespace(
+        id="run-1",
+        hermes_run_id="hermes-run-1",
+        profile_binding_id="profile-1",
+        owner_app_id="chatbot",
+    )
     approval = SimpleNamespace(
         id="approval-1",
         status="pending",
@@ -919,6 +931,7 @@ async def test_failed_hermes_resume_restores_unconsumed_approval(monkeypatch) ->
         return SimpleNamespace(profile_name="profile-1")
 
     monkeypatch.setattr(hermes_router, "HermesRunRepository", lambda _db: FakeRepository())
+    monkeypatch.setattr(hermes_router, "can_use_app", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         hermes_router,
         "_bound_profile",
