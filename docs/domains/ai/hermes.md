@@ -14,7 +14,7 @@ This is the single owner for Hermes installation, image/configuration, profiles,
 - Before admission, the management API installs an immutable named custom provider and a profile-local credential env key. The opaque provider key changes on policy or credential rotation. Each OWH run snapshots this selection, including non-secret display metadata. Native `/v1/runs` receives only its documented provider/model/model-options overrides.
 - OpenAI-compatible local/external providers (including the registered OpenRouter provider), Anthropic Messages and Gemini's official `/v1beta/openai` compatibility endpoint are supported. Custom headers use native provider `extra_headers`. Unsupported transports fail closed.
 - Native auxiliary tasks explicitly follow `main`, with empty fallback chains; delegation inherits the admitted main model. The root profile is never a credential fallback for a managed profile. `model.max_tokens` is unset so the immutable provider entry supplies the output cap. Bootstrap never rewrites administrator provider/model policy.
-- Compression keeps the existing threshold/target/pruning settings in `ops/hermes/bootstrap.py`. Native retries use the pinned supported configuration; no application output-repair loop calls a second provider.
+- Bootstrap and profile model-policy synchronization apply the same [conversation context policy](#conversation-context-policy), including profiles created after gateway startup. Native retries use the pinned supported configuration; no application output-repair loop calls a second provider.
 - OpenAI-wire workload temperatures, including zero, are preserved through the named provider's supported `extra_body` request overrides. The provider identity and run snapshot include the requested value so concurrent workloads cannot overwrite each other's sampling settings. The pinned Anthropic Messages request builder drops these overrides; an explicit temperature therefore fails with the common `LlmProviderError` before profile provisioning or run staging. Anthropic calls that omit temperature retain native defaults. Native `model_options` supports reasoning/service tier, not temperature. The public request middleware does not expose the immutable run's request overrides; do not infer sampling from a mutable profile default or silently change routes.
 - Gateway/dashboard and legacy broker use fixed loopback host ports. Hermes runtime UID/GID is `10000`; named volumes retain that ownership.
 - The official image supplies Hermes, Python, Node/npm, Chromium assets, `rg`, FFmpeg and build tools. Tool registration alone does not provision optional search/media services.
@@ -26,7 +26,7 @@ This is the single owner for Hermes installation, image/configuration, profiles,
 | Admin policy translation and immutable per-run snapshot      | `domains/hermes/model_policy.py`, `service.py`, AI model settings                        |
 | Common registered execution/results                          | `domains/ai/gateway.py`, `domains/hermes/workloads.py`                                   |
 | PostgreSQL dispatch, serialization, approvals, file metadata | `domains/hermes/models.py`, `repository.py`, `execution.py`, `mcp_router.py`, `files.py` |
-| Native config/bootstrap                                      | `ops/hermes/bootstrap.py`                                                                |
+| Native config/bootstrap and compression policy               | `ops/hermes/bootstrap.py`, `domains/hermes/client.py`, `domains/hermes/model_policy.py` |
 | Multiplex discovery and native admission cancellation       | `ops/hermes/gateway_entry.py`, `domains/hermes/client.py`                                 |
 | Run-bound tool transport and isolated execution              | `ops/hermes/plugins/owh_runtime/`                                                        |
 | Controlled public egress                                     | `ops/hermes/terminal_egress.py`                                                          |
@@ -35,6 +35,14 @@ This is the single owner for Hermes installation, image/configuration, profiles,
 | Chat controls/files/reconnection                             | `apps/web/src/app-modules/chatbot/`                                                      |
 
 Paths under `domains/` are relative to `apps/api/src/open_work_hub_api/`. Keep the pin in API constants, Compose, bootstrap and legacy broker aligned. Generate API/app contracts through repository commands.
+
+## Conversation context policy
+
+`managed_compression_policy()` supplies the native compression settings for profile synchronization and the retained legacy model-update path. `ops/hermes/bootstrap.py` applies the same settings at startup; `test_hermes_bootstrap.py` checks parity because bootstrap runs outside the API package. Fresh local/external profiles receive the policy before activation, and existing profiles and isolated scheduled-job profiles receive it on reconciliation. A rejected configuration update fails admission and is not cached as successful.
+
+The managed settings enable compression with `threshold=0.50`, `threshold_tokens=100000`, `target_ratio=0.20`, and `protect_last_n=20`. Proactive tool-result pruning starts at `48000` tokens, with `8000` minimum result characters and `4096` minimum reclaimed tokens. The token threshold triggers compaction; it is not a hard per-request input limit. Hermes owns token accounting, model-window adjustments, summary/tail selection and persistence. Auxiliary compression follows the admitted main model with no fallback chain. The `session_search` restriction under [identity, tools and approvals](#identity-tools-and-approvals) still applies.
+
+For a development update limited to this API/worker profile policy, load the updated application code with `./dev.sh --restart --with-worker --no-infra`. The next profile reconciliation applies the settings without gateway recreation or user-profile recreation. New profiles receive them immediately; existing profiles follow the reconciliation cache's normal expiry. Bootstrap/plugin/Compose changes instead follow [the gateway update procedure](#updating-an-existing-development-installation).
 
 ## Fresh environment setup
 
