@@ -50,7 +50,7 @@ def _messages(payload: dict[str, Any]) -> tuple[str, str, list[dict[str, str]]]:
     return current, "\n\n".join(instructions), history
 
 
-async def run_workload(
+async def _run_workload(
     context: LlmTaskContext,
     execution: ResolvedLlmExecution,
     payload: dict[str, Any],
@@ -198,6 +198,32 @@ async def run_workload(
         if isinstance(error, asyncio.CancelledError):
             raise
         raise LlmProviderError("Hermes workload timed out.") from error
+
+
+async def run_workload(
+    context: LlmTaskContext,
+    execution: ResolvedLlmExecution,
+    payload: dict[str, Any],
+    *,
+    timeout_seconds: float,
+    output_schema: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    try:
+        return await _run_workload(
+            context,
+            execution,
+            payload,
+            timeout_seconds=timeout_seconds,
+            output_schema=output_schema,
+        )
+    except HermesClientError as error:
+        # Provisioning and dispatch use the same provider-neutral failure
+        # contract as generation, so callers retain localized errors and audit.
+        raise LlmProviderError(
+            "Hermes execution is unavailable.",
+            pool=execution.pool,
+            provider=execution.config.provider,
+        ) from error
 
 
 def complete_workload(

@@ -221,7 +221,17 @@ def test_workspace_paths_reject_escape_and_control_characters(path):
 @pytest.mark.anyio
 @pytest.mark.parametrize("temperature", [None, 0, 0.7])
 @pytest.mark.parametrize("mode", ["sync", "stream"])
-@pytest.mark.parametrize("contract", ["structured", "tool_request", "tool_result", "forced_final"])
+@pytest.mark.parametrize(
+    "contract",
+    [
+        "structured",
+        "tool_request",
+        "tool_result",
+        "forced_final",
+        "provision_failure",
+        "execution_failure",
+    ],
+)
 async def test_workload_uses_durable_dispatch_and_validated_native_submission(
     application_postgres_dsn, monkeypatch, temperature, mode, contract
 ):
@@ -242,6 +252,15 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
     from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
     from open_work_hub_api.domains.hermes import workloads, execution, mcp_router
     from open_work_hub_api.domains.hermes.service import mcp_profile_bearer_secret
+    from open_work_hub_api.domains.hermes.client import HermesClientError
+
+    def unavailable():
+        raise HermesClientError(
+            operation="fixture",
+            status_code=503,
+            code="fixture.unavailable",
+            message="Synthetic control API outage",
+        )
 
     engine = create_engine(application_postgres_dsn)
     factory = sessionmaker(engine, expire_on_commit=False)
@@ -271,6 +290,8 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
             db.commit()
 
         async def ensure(db, **kwargs):
+            if contract == "provision_failure":
+                unavailable()
             assert kwargs["user"].id == owner_id
             assert kwargs["model_policy"].route == "local"
             assert kwargs["model_policy"].temperature == temperature
@@ -293,6 +314,8 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
                     assert '"role": "tool"' in kwargs["input_text"]
                     assert "Application evidence" in kwargs["input_text"]
                 attempts.append(kwargs["idempotency_key"])
+                if contract == "execution_failure":
+                    unavailable()
                 return {"run_id": "run_native_fixture", "status": "running"}
 
             async def iter_run_events(self, profile, run_id):
@@ -406,6 +429,27 @@ async def test_workload_uses_durable_dispatch_and_validated_native_submission(
                 )
             if contract == "forced_final":
                 payload.pop("tools")
+        if contract.endswith("_failure"):
+            with pytest.raises(LlmProviderError) as error:
+                if mode == "sync":
+                    await asyncio.to_thread(
+                        workloads.complete_workload, context, resolved, payload, **options
+                    )
+                else:
+                    async for _ in workloads.stream_workload(context, resolved, payload, **options):
+                        pytest.fail("An unavailable provider cannot return successful output")
+            assert isinstance(error.value.__cause__, HermesClientError)
+            assert error.value.pool == "local" and error.value.provider == "openai"
+            assert "Synthetic" not in str(error.value)
+            with factory() as db:
+                runs = list(
+                    db.scalars(
+                        select(HermesRunProjection).where(HermesRunProjection.user_id == owner_id)
+                    )
+                )
+                assert len(runs) == (1 if contract == "execution_failure" else 0)
+                assert all(run.execution_claim_token is None for run in runs)
+            return
         if mode == "sync":
             result = await asyncio.to_thread(
                 workloads.complete_workload, context, resolved, payload, **options
