@@ -19,6 +19,24 @@ from open_work_hub_api.domains.hermes.research_sources import (
 _OPENROUTER_METADATA_HEADERS = {"X-OpenRouter-Metadata": "enabled"}
 
 
+def managed_compression_policy() -> dict[str, Any]:
+    """Native compression settings shared by managed profile update paths.
+
+    Bootstrap runs outside the API package; test_hermes_bootstrap keeps its
+    standalone policy aligned with this configuration.
+    """
+    return {
+        "enabled": True,
+        "threshold": 0.50,
+        "threshold_tokens": 100_000,
+        "target_ratio": 0.20,
+        "protect_last_n": 20,
+        "proactive_prune_tokens": 48_000,
+        "proactive_prune_min_result_chars": 8_000,
+        "proactive_prune_min_reclaim_tokens": 4_096,
+    }
+
+
 def fixed_model_runtime_policy(
     research_sources: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
@@ -33,16 +51,7 @@ def fixed_model_runtime_policy(
             "api_max_retries": 1,
             "environment_hint": academic_research_environment_hint(research_sources),
         },
-        "compression": {
-            "enabled": True,
-            "threshold": 0.50,
-            "threshold_tokens": 100_000,
-            "target_ratio": 0.20,
-            "protect_last_n": 20,
-            "proactive_prune_tokens": 48_000,
-            "proactive_prune_min_result_chars": 8_000,
-            "proactive_prune_min_reclaim_tokens": 4_096,
-        },
+        "compression": managed_compression_policy(),
         "provider_routing": {
             "sort": "throughput",
             "require_parameters": True,
