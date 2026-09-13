@@ -625,7 +625,9 @@ def test_run_scope_normalizes_app_ids_and_mcp_filters_with_it(monkeypatch) -> No
     monkeypatch.setattr(mcp_router, "can_use_app", lambda *_args, **_kwargs: True)
     db = SimpleNamespace(
         scalar=lambda _query: SimpleNamespace(
-            allowed_app_ids=body.allowed_app_ids, owner_app_id="chatbot"
+            allowed_app_ids=body.allowed_app_ids,
+            owner_app_id="chatbot",
+            session_binding_id=None,
         )
     )
     binding = SimpleNamespace(id="binding-1")

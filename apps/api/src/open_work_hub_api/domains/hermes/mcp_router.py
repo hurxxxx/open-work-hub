@@ -40,7 +40,13 @@ from open_work_hub_api.domains.hermes.repository import (
     MAX_RESULT_BYTES,
     HermesRunRepository,
 )
-from open_work_hub_api.domains.hermes.files import MAX_FILE_BYTES, list_files, read_file, save_file
+from open_work_hub_api.domains.hermes.files import (
+    MAX_FILE_BYTES,
+    list_files,
+    read_file,
+    save_file,
+    require_active_file_run,
+)
 from open_work_hub_api.domains.hermes.schemas import HermesFileResponse
 from open_work_hub_api.domains.hermes.research_settings import get_research_settings
 from open_work_hub_api.domains.hermes.research_sources import disabled_research_source_domains
@@ -208,15 +214,21 @@ def _resolve_mcp_identity(
         supplied = authorization[7:].strip()
     if not expected or not supplied or not hmac.compare_digest(expected, supplied):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return _current_mcp_identity(db, profile_name=profile_name)
+
+
+def _current_mcp_identity(db: Session, *, profile_name: str) -> tuple[HermesProfileBinding, User]:
     binding = db.scalar(
-        select(HermesProfileBinding).where(
+        select(HermesProfileBinding)
+        .where(
             HermesProfileBinding.profile_name == profile_name,
             HermesProfileBinding.status == "active",
         )
+        .execution_options(populate_existing=True)
     )
     if binding is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    user = db.get(User, binding.user_id)
+    user = db.get(User, binding.user_id, populate_existing=True)
     if user is None or user.status != "active" or user.login_blocked:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     return binding, user
@@ -237,11 +249,14 @@ def _available_tools(
         )
     active_run = (
         db.scalar(
-            select(HermesRunProjection).where(
+            select(HermesRunProjection)
+            .where(
                 HermesRunProjection.profile_binding_id == binding.id,
+                HermesRunProjection.user_id == user.id,
                 HermesRunProjection.hermes_run_id == hermes_run_id,
                 HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES - {"stopping"}),
             )
+            .execution_options(populate_existing=True)
         )
         if hermes_run_id
         else None
@@ -259,6 +274,18 @@ def _available_tools(
         app_id=active_run.owner_app_id,
     ):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    if active_run is not None and active_run.session_binding_id is not None:
+        if (
+            db.scalar(
+                select(HermesSessionBinding.id).where(
+                    HermesSessionBinding.id == active_run.session_binding_id,
+                    HermesSessionBinding.user_id == user.id,
+                    HermesSessionBinding.status != "deleted",
+                )
+            )
+            is None
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     principal = user_principal(
         user_id=user.id,
         source="hermes-mcp",
@@ -279,7 +306,7 @@ def _available_tools(
 def _handle_file_request(
     db: Session,
     *,
-    run: HermesRunProjection,
+    run_id: str,
     user_id: str,
     request_id: Any,
     method: str,
@@ -287,9 +314,11 @@ def _handle_file_request(
 ) -> JSONResponse:
     # Keep session queries, object I/O, base64 and serialization on the same
     # worker thread. The request never uses this Session concurrently.
-    session = (
-        db.get(HermesSessionBinding, run.session_binding_id) if run.session_binding_id else None
-    )
+    try:
+        run = require_active_file_run(db, run_id=run_id, user_id=user_id)
+    except ValueError:
+        return JSONResponse(_rpc_error(request_id, -32602, "File execution is no longer available"))
+    session = db.get(HermesSessionBinding, run.session_binding_id, populate_existing=True)
     if session is None or run.kind != "interactive" or session.user_id != user_id:
         return JSONResponse(_rpc_error(request_id, -32602, "Interactive session files required"))
     files = list_files(db, session_id=session.id)
@@ -309,9 +338,14 @@ def _handle_file_request(
         row = next((row for row in files if row.id == params.get("id")), None)
         if row is None:
             return JSONResponse(_rpc_error(request_id, -32602, "File is not available"))
-        return JSONResponse(
-            _rpc_result(request_id, {"data": base64.b64encode(read_file(row)).decode()})
-        )
+        data = read_file(row)
+        try:
+            require_active_file_run(db, run_id=run_id, user_id=user_id, session_id=session.id)
+        except ValueError:
+            return JSONResponse(
+                _rpc_error(request_id, -32602, "File execution is no longer available")
+            )
+        return JSONResponse(_rpc_result(request_id, {"data": base64.b64encode(data).decode()}))
     try:
         encoded = params.get("data")
         if not isinstance(encoded, str) or len(encoded) > MAX_FILE_BYTES * 4 // 3 + 4:
@@ -321,6 +355,7 @@ def _handle_file_request(
             session=session,
             path=params["path"],
             data=base64.b64decode(encoded, validate=True),
+            execution_run_id=run_id,
         )
     except (ValueError, KeyError, TypeError):
         return JSONResponse(_rpc_error(request_id, -32602, "File path, data or size is invalid"))
@@ -492,7 +527,7 @@ def _prepare_mcp_response(
             return partial(
                 _handle_file_request,
                 db,
-                run=run,
+                run_id=run.id,
                 user_id=user.id,
                 request_id=request_id,
                 method=method,
@@ -566,6 +601,33 @@ def _prepare_mcp_response(
             _rpc_error(request_id, -32602, "Invalid tool call parameters"),
             status_code=400,
         )
+    return partial(
+        _execute_mcp_tool,
+        db,
+        profile=profile,
+        binding_id=binding.id,
+        user_id=user.id,
+        hermes_run_id=hermes_run_id,
+        tool_name=tool_name,
+        arguments=arguments,
+        request_id=request_id,
+    )
+
+
+def _execute_mcp_tool(
+    db: Session,
+    *,
+    profile: str,
+    binding_id: str,
+    user_id: str,
+    hermes_run_id: str | None,
+    tool_name: str,
+    arguments: dict[str, Any],
+    request_id: Any,
+) -> Response:
+    binding, user = _current_mcp_identity(db, profile_name=profile)
+    if binding.id != binding_id or user.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
     principal, tools, active_run = _available_tools(
         db,
         binding=binding,
@@ -613,30 +675,6 @@ def _prepare_mcp_response(
                     },
                 )
             )
-    return partial(
-        _execute_mcp_tool,
-        db,
-        principal=principal,
-        user=user,
-        tool_name=tool_name,
-        arguments=arguments,
-        request_id=request_id,
-        active_run=active_run,
-        external_approval_id=external_approval_id,
-    )
-
-
-def _execute_mcp_tool(
-    db: Session,
-    *,
-    principal,
-    user: User,
-    tool_name: str,
-    arguments: dict[str, Any],
-    request_id: Any,
-    active_run: HermesRunProjection,
-    external_approval_id: str | None,
-) -> Response:
     try:
         result = AiMcpClient().call_tool(
             db,
