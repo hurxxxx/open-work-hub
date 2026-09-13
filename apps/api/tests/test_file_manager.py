@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from zipfile import ZipFile
 
 from fastapi.testclient import TestClient
+from minio.error import S3Error
 import pytest
 from sqlalchemy import delete, select
 
@@ -18,6 +19,7 @@ from dev_accounts import (
 
 from open_work_hub_api.core.db import get_session_factory
 from open_work_hub_api.core.settings import get_settings
+from open_work_hub_api.core.storage import get_minio_client
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.auth.app_access_models import AppAccessPolicy
 from open_work_hub_api.domains.files import (
@@ -165,6 +167,15 @@ def test_file_manager_upload_download_and_delete_with_rag_job(
         row = db.get(FileManagerFile, file["id"])
         assert row is not None
         assert row.deleted_at is not None
+        storage_key = row.storage_key
+
+    # A soft-delete flag alone does not prove the byte grant and physical object are gone.
+    revoked = client.get(download_url, headers=content_headers(session["token"], download_url))
+    assert revoked.status_code == 403, revoked.text
+    assert revoked.json()["code"] == "content.grant_invalid"
+    with pytest.raises(S3Error) as exc:
+        get_minio_client().stat_object(get_settings().minio_bucket, storage_key)
+    assert exc.value.code == "NoSuchKey"
 
 
 def test_file_manager_reports_rag_status_until_both_indexes_are_ready(

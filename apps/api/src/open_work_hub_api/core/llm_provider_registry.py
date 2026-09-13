@@ -105,6 +105,14 @@ def ensure_default_llm_providers_registered() -> None:
             aliases=("claude",),
         ),
         LlmProviderDescriptor(
+            "openrouter",
+            display_name="OpenRouter",
+            default_endpoint_url="https://openrouter.ai/api/v1",
+            discovery_adapter_id="openai_compatible",
+            execution_adapter_id="openai_compatible",
+            openai_compatible=True,
+        ),
+        LlmProviderDescriptor(
             "gemini",
             display_name="Gemini",
             default_endpoint_url="https://generativelanguage.googleapis.com",

@@ -17,8 +17,7 @@ BENTO_MAX_OUTPUT_TOKENS = 32_768
 BENTO_PLAN_WORKLOAD_ID = "bento.plan_presentation"
 BENTO_PLAN_TASK_KIND = "bento_plan_presentation"
 BENTO_PLAN_MAX_OUTPUT_TOKENS = 16_384
-BENTO_FIXED_RUNTIME_ADAPTER_ID = "fixed_bento_pipeline"
-BENTO_CODEX_RUNTIME_ADAPTER_ID = "codex_sdk"
+BENTO_RUNTIME_ADAPTER_ID = "hermes"
 
 
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
@@ -37,11 +36,8 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         external_data=True,
         local_max_output_tokens=BENTO_MAX_OUTPUT_TOKENS,
         external_max_output_tokens=BENTO_MAX_OUTPUT_TOKENS,
-        default_runtime_adapter=BENTO_FIXED_RUNTIME_ADAPTER_ID,
-        allowed_runtime_adapters=(
-            BENTO_FIXED_RUNTIME_ADAPTER_ID,
-            BENTO_CODEX_RUNTIME_ADAPTER_ID,
-        ),
+        default_runtime_adapter=BENTO_RUNTIME_ADAPTER_ID,
+        allowed_runtime_adapters=(BENTO_RUNTIME_ADAPTER_ID,),
     )
     registry.register_llm_workload(
         workload_id=BENTO_GENERATE_WORKLOAD_ID,
@@ -58,11 +54,8 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         external_data=True,
         local_max_output_tokens=BENTO_MAX_OUTPUT_TOKENS,
         external_max_output_tokens=BENTO_MAX_OUTPUT_TOKENS,
-        default_runtime_adapter=BENTO_FIXED_RUNTIME_ADAPTER_ID,
-        allowed_runtime_adapters=(
-            BENTO_FIXED_RUNTIME_ADAPTER_ID,
-            BENTO_CODEX_RUNTIME_ADAPTER_ID,
-        ),
+        default_runtime_adapter=BENTO_RUNTIME_ADAPTER_ID,
+        allowed_runtime_adapters=(BENTO_RUNTIME_ADAPTER_ID,),
     )
     registry.register_llm_workload(
         workload_id=BENTO_PLAN_WORKLOAD_ID,
@@ -81,6 +74,15 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         local_max_output_tokens=BENTO_PLAN_MAX_OUTPUT_TOKENS,
         external_max_output_tokens=BENTO_PLAN_MAX_OUTPUT_TOKENS,
     )
+
+    for workload_id in (BENTO_PLAN_WORKLOAD_ID, BENTO_GENERATE_WORKLOAD_ID, BENTO_EDIT_WORKLOAD_ID):
+        registry.register_llm_output_validator(workload_id, _validate_output)
+
+
+def _validate_output(result: dict, schema: dict) -> None:
+    from open_work_hub_api.domains.bento.generation import validate_hermes_result
+
+    validate_hermes_result(result, schema)
 
 
 __all__ = [

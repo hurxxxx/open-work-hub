@@ -371,3 +371,26 @@ export function deleteHermesJob(token: string, jobId: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+export type HermesFile = ApiSchema<'HermesFileResponse'>;
+export function listHermesFiles(token: string, sessionId: string) {
+  return request<ApiSchema<'HermesFileListResponse'>>(
+    `/api/v1/agent/sessions/${encodeURIComponent(sessionId)}/files`,
+    token,
+    undefined,
+  );
+}
+export function uploadHermesFile(token: string, sessionId: string, file: File) {
+  return request<HermesFile>(
+    `/api/v1/agent/sessions/${encodeURIComponent(sessionId)}/files`,
+    token,
+    {
+      method: 'POST',
+      body: file,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-File-Name': encodeURIComponent(file.name),
+      },
+    },
+  );
+}

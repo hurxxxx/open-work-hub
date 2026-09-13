@@ -26,6 +26,7 @@ DEFAULT_FRONTEND_DIST_DIR = str(WORKSPACE_ROOT / "dist" / "apps" / "web")
 DEFAULT_CONTENT_GRANT_SIGNING_KEY = "dev-content-grant-signing-key"
 DEFAULT_OPF_CHECKPOINT = "openai/privacy-filter"
 HERMES_RELEASE = "v2026.8.31"
+HERMES_IMAGE = "nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524"
 HERMES_PROVIDER = "openrouter"
 HERMES_MODEL = "qwen/qwen3.8-flash"
 HERMES_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
@@ -497,6 +498,17 @@ class Settings(BaseSettings):
     hermes_enabled: bool = Field(
         default=False,
         validation_alias="OPEN_WORK_HUB_HERMES_ENABLED",
+    )
+    hermes_max_concurrent_runs: int = Field(
+        default=10,
+        ge=1,
+        le=1000,
+        validation_alias="OPEN_WORK_HUB_HERMES_MAX_CONCURRENT_RUNS",
+    )
+    hermes_docker_gid: int = Field(
+        default=0,
+        ge=0,
+        validation_alias="OPEN_WORK_HUB_HERMES_DOCKER_GID",
     )
     hermes_runtime_base_url: str = Field(
         default="http://127.0.0.1:8642",

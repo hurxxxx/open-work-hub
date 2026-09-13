@@ -65,4 +65,7 @@ secrets/
 .secure
 
 # Local handover credential inventory (contains secrets)
+/.auth_info
+/.auth_info.*
+/.auth_info~
 docs/final/access-credentials.local.*

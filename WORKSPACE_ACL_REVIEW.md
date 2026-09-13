@@ -3,12 +3,12 @@
 기준일: 2026-09-08 UTC. 기존 라우트·데이터 호환을 유지하지 않는 전면 재설계다.
 전역 워크스페이스는 제거하고 회사 계정, 사용자·그룹, 회사 앱 사용 정책, 앱별 자원 ACL로 구분한다.
 
-**릴리스 상태:** 이전 재설계는 운영 `2ac0f8da56eae7e74f439d164f6707d240728a3c`에 배포됐다.
-후속 잔재·서버 권한 보완은 `8c21d2c8d445f3ddd701ae115dcfbc9ffdd92f4c`로 커밋·푸시했다.
-이번 실제 사용자 테스트에서 찾은 추가 UI·실시간 세션·Bento 격리 수정은
-[릴리스 MR 23](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/merge_requests/23)의 후속 검증 대상이다.
-이 문서 작성 시점에는 최신 후속 소스의 전체 CI와 운영 적용을 진행 중이다.
-아래 과거 CI 성공을 최신 변경의 배포 증거로 사용하지 않는다.
+**릴리스 상태:** 잔재·서버 권한 보완 `8c21d2c8`와 실제 사용자 테스트에서 찾은 추가
+UI·실시간 세션·Bento 격리 수정 `59ea8780`을 커밋·푸시했다.
+최신 전체 CI 56을 통과한 [릴리스 MR 23](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/merge_requests/23)을
+병합하고 운영 `2f1aa0a49a99292e561eece1d8a33934e6fde384`로 배포했다.
+2026-09-08 17:23 UTC까지 운영 앱·Bento와 개발 서비스 복구 후 공개 검증을 완료했다.
+아래 실제 업무 UAT는 개발 환경의 증거이며 인증된 운영 업무 UAT를 대체하지 않는다.
 
 ## 설계 평가
 
@@ -99,13 +99,21 @@ Recording 정상 ASR 및 명시적/중복 Docs 게시 성공은 외부 추론 �
 
 ## 자동 검증과 환경 한계
 
+- [최신 전체 CI 56 / job 87](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/jobs/87)는
+  `59ea878064a2fea7bfe210415e8e0ee3c070e29b` 소스, target `2ac0f8da56eae7e74f439d164f6707d240728a3c`,
+  merge tree `5648da0114c73233a956fb01a45f1d0dbf190ebe`에서 2026-09-08 17:13 UTC에 성공했다.
+  maintainer 전용 `release-validation-context.md` artifact의 `Selected: full`, `Status: passed`와
+  실제 병합 커밋 `2f1aa0a49a99292e561eece1d8a33934e6fde384`의 tree 일치를 확인했다.
+  `pnpm ci:all`: API 2,421 통과·기존 skip 1, Web 1,433(300 files), 계약 60, core-web 31,
+  브라우저 E2E 19 통과. 환경·구조·i18n·lint·typecheck·OpenAPI·빌드도 포함하며 생략한 suite는 없다.
+  기존 skip은 이 checkout에 desktop DM manifest가 없는 크기 계약 비교 1개다.
 - [전체 CI 54 / job 85](https://gitlab.1punicorn.com/lumejs/open-work-hub/-/pipelines/54)는
   `8c21d2c8` 소스, target `2ac0f8da`, merge tree `0fcb20d106cbaeb925f36612df03695747315cd0`에서 성공했다.
   `pnpm ci:all`: API 2,421 통과·기존 skip 1, Web 1,400, 계약 60, core-web 31, 브라우저 19,
   앱 구조·i18n·lint·typecheck·OpenAPI·환경 계약·빌드 포함. 후속 UI/bridge 수정 이전 증거다.
 - 후속 집중 검사: 게시/정렬/picker/편집 protocol 58개, 이후 수정한 bridge·실시간 계정 경계·auth
   검사 30개, 최종 bridge/실시간/PMS 늦은 응답 검사 32개 통과. 중복 실행 수치를 합산하지 않는다.
-  테스트 타입 검사도 통과했다. 최신 전체 CI 결과는 릴리스 완료 시 갱신한다.
+  테스트 타입 검사도 통과했다. 최종 소스 전체 결과는 위 CI 56 증거를 기준으로 한다.
 - CI 초기 실패는 runner의 canonical validation image 부재였다. 정식 build script를 재실행해
   `open-work-hub-validation:node22-python312` 이미지
   `sha256:e4fa4ccf8cfce4fb93947befccca1a62f33d5f6ef886f06d413e3a3a02f64041`을 복원했다.
@@ -114,6 +122,7 @@ Recording 정상 ASR 및 명시적/중복 Docs 게시 성공은 외부 추론 �
 - 이 호스트의 GitLab·Java 서비스와 브라우저/빌드가 메모리를 공유한다. 이번 브라우저 실행 중
   cgroup oom_kill이 118→122로 증가했고 중단된 관측은 PASS로 기록하지 않았다. 무거운 편집기는
   한 브라우저씩 확인하고, 전체 CI/운영 빌드 전에는 자체 브라우저와 개발 supervisor를 중지한다.
+  최신 전체 CI부터 운영 빌드·공개 브라우저 검증까지는 122로 유지됐다.
 - 기존 Starlette deprecation 및 y_py 다른 스레드 종료 경고, 큰 Web chunk 안내는 별도 잔여다.
   테스트 통과가 모든 보안 취약점의 부재를 증명하지는 않는다.
 
@@ -139,6 +148,35 @@ bridge hash를 확인해야 한다. app deploy/rollback 명령은 Bento를 자�
 이전 Bento 이미지 ID를 보존하고 프로토콜 복구 시 두 이미지를 함께 맞춘다.
 상세 단일 절차는 [Bento](docs/apps/bento/README.md)와
 [Release 복구 계약](docs/domains/release/README.md#incompatible-database-and-configuration-cutovers)에 있다.
+
+### 이번 배포의 실제 증거
+
+- 보호된 `dev`와 최신 소스/대상/tree를 확인한 뒤 MR 23을 17:15 UTC에 병합했다.
+  squash와 소스 브랜치 삭제를 사용하지 않았고, 깨끗한 `prod/main`을 fast-forward했다.
+- 정식 `pnpm app:prod:deploy`가 종료 코드 0으로 완료됐다. 새 API·Worker는 17:21:15 UTC에
+  시작했고 API·Worker·Scheduler 모두 healthy다. 실제 공통 이미지
+  `sha256:908372592dc7a4e285f8e95fceb60d23293f055bb1b945b0f178c14dd0839b85`의 revision은
+  `2f1aa0a49a99292e561eece1d8a33934e6fde384`다. 로컬·공개 health/readiness/revision/bootstrap/login
+  smoke를 모두 통과했다. 새 마이그레이션 없는 현재 DB에서 정식 migration gate도 실행했다.
+- 별도 infra의 `bento` 서비스만 `docker compose --env-file .env -f ops/compose/open-work-hub-prod.infra.yml
+  up -d --no-deps --build bento`로 갱신했다. 17:21:54 UTC 시작, healthy 및 `nginx -t` 통과.
+  새 이미지 ID는 `sha256:f366ecb8631874372b009e423eea52c9ce772039d91f376f6086f2ff4451adb8`이다.
+  소스·컨테이너·공개 HTTP의 bridge SHA-256이 모두
+  `f24ccadafe29c1b3790ef7a20cb6a0e25c3bdda8e0de294d50a54b8b87bbcdf0`로 일치한다.
+  해당 소스의 protocol은 v2이며 공개 bridge/health가 200과 `Clear-Site-Data: "storage"`를 반환했다.
+- 이전 앱 `sha256:878426eec1d3d69cc869a1e4fa4d7f93b8733cdfd6e1da595a5c62823cd6ac89`는
+  `open-work-hub-app:prod-previous`로, 이전 Bento
+  `sha256:d9cc6362d348921e3b378380ab8738f4d67c3386c27c5102704d058c8cb5ba4b`는
+  `open-work-hub-bento:pre-59ea8780`로 보존했다. 복구 준비를 확인했으며 실제 rollback은 실행하지 않았다.
+- 실제 운영 `agent-browser`에서 데스크톱 로그인 입력 요소, 개발 seed 로그인 버튼 미노출,
+  PMS 직접 진입 시 로그인 경계를 확인했다. 비로그인 auth/me·admin/users·pms/spaces는 모두 401.
+  390×844 로그인 화면은 가로 넘침 없음, Tab 첫 포커스는 아이디, axe WCAG A/AA 위반 0·미완결 0·
+  통과 21이며 해당 세션 uncaught error는 없었다. 인증된 운영 문서의 bridge handshake/저장은 NOT RUN이다.
+- 개발 supervisor를 복구했다. 시작 직후 첫 smoke는 아직 Web이 뜨지 않아 실패했고, 실제 Web/API
+  listener가 열린 뒤 `pnpm dev:public-smoke` 재실행이 성공했다. 공개 root/login/health/readiness/bootstrap과
+  로컬·공개 개발 런타임 일치를 확인했다. 실제 seed 관리자 로그인 후 회사/개인 앱 런처 표시와
+  auth/me 200도 확인했다. 개발 Bento도 healthy이며 bridge hash가 위 배포 소스와 일치한다.
+  기존 앱 정책과 시험 계정 차단 상태는 유지했다.
 
 ## 테스트 자료 정리와 잔여
 

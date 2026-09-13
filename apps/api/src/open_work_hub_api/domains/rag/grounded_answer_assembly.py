@@ -38,6 +38,9 @@ class _GroundedAnswerEnvelope(BaseModel):
 
 
 class GroundedAnswerAssembler:
+    def output_schema(self) -> dict:
+        return _GroundedAnswerEnvelope.model_json_schema()
+
     def __init__(self, policy: GroundedAnswerAssemblyPolicy | None = None) -> None:
         self._policy = policy or GroundedAnswerAssemblyPolicy()
 

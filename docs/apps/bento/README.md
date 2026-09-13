@@ -71,22 +71,18 @@ docker compose --env-file .env.example -f ops/compose/open-work-hub-dev.infra.ym
 
 - Workloads: `bento.plan_presentation`, `bento.generate_presentation`, `bento.edit_presentation`.
 - App never selects provider/model. Admin LLM Routing owns runtime/route/provider/model.
-- Defaults route local. Generation/edit allow `fixed_bento_pipeline` and `codex_sdk` agent runtime.
+- Defaults route local. Generation/edit use the registered `hermes` adapter through the common gateway.
 - Create/edit requests return `202 Accepted` background work on `ai-graph` worker.
 - Edit saves latest iframe state before generation; result writes next version only if start version still matches.
 - Stored output must validate `bento/slides` v1 JSON, slide count, editable text/shape/chart/table elements, safe inline HTML, IDs, links, 1280x720 bounds.
 - Generated `docId`/`modified` are server-owned. Drop model-created collaboration keys, external assets, executable content.
 - Prompt/raw model response are not stored in operations logs or interaction ledger.
-- Validation failure gets one automatic correction through same local workload, then full validation again.
+- Structured submission validates schema and Bento semantics inside the same Hermes correction loop; the app validates once more before storage.
 - Edit input omits collaboration keys, assets, layout, comments, unknown extensions; unsupported image/SVG/media docs are rejected.
 
-## Codex SDK Runtime
+## Hermes Runtime
 
-- Requires admin-approved OpenAI provider/model and external route.
-- Runs in isolated temp workspace containing `document.json`, user brief, and standalone `bento_tool.py`.
-- Allows document read/modify/validate/preview loop and built-in web search.
-- Blocks shell network, approval requests, environment inheritance, source tree access, and user session context.
-- Input/output pass AI Gateway security, masking, audit, and deletion-on-terminal-state rules.
+All three workloads require the [shared Hermes runtime](../../domains/ai/hermes.md#fresh-environment-setup). Plan and document output use the common structured contract; apps do not parse raw SDK tool calls. Hermes owns correction iterations. There is no separate Codex SDK runtime or package requirement. Old adapter overrides migrate to `hermes` while administrator local/external routes remain intact.
 
 ## Local DMR/Qwen
 

@@ -8,6 +8,15 @@ allowed-tools: Bash(agent-browser:*), Bash(npx agent-browser:*)
 
 Use installed CLI docs; this stub must not duplicate versioned command guidance.
 
+Start by checking the installed version and supported commands:
+
+```bash
+agent-browser --version
+agent-browser --help
+```
+
+If the CLI provides `skills`, read its native guides below. Otherwise, use the installed command help.
+
 ```bash
 agent-browser skills get core
 agent-browser skills get core --full

@@ -169,7 +169,7 @@ def ensure_default_llm_generation_profiles_registered() -> None:
             extra_body_builder=_openai_extra_body,
         )
     )
-    for provider in ("anthropic", "gemini"):
+    for provider in ("anthropic", "gemini", "openrouter"):
         _register_default_profile(
             LlmGenerationProfile(
                 profile_id=f"external_{provider}",

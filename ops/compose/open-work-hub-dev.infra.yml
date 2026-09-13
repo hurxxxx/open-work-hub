@@ -183,6 +183,9 @@ services:
     network_mode: host
     restart: unless-stopped
     read_only: true
+    user: '10000:10000'
+    group_add:
+      - '${OPEN_WORK_HUB_HERMES_DOCKER_GID:-0}'
     security_opt:
       - no-new-privileges:true
     tmpfs:
@@ -191,25 +194,29 @@ services:
     depends_on:
       hermes-bootstrap:
         condition: service_completed_successfully
+      hermes-terminal-egress:
+        condition: service_healthy
     environment:
-      API_SERVER_ENABLED: "true"
+      API_SERVER_ENABLED: 'true'
       API_SERVER_HOST: 127.0.0.1
       API_SERVER_KEY: ${OPEN_WORK_HUB_HERMES_API_KEY:-}
       API_SERVER_PORT: ${OPEN_WORK_HUB_HERMES_RUNTIME_PORT:-18642}
-      GATEWAY_MULTIPLEX_PROFILES: "true"
-      HERMES_GATEWAY_NO_SUPERVISE: "1"
-      HERMES_GID: "10000"
-      HERMES_MODEL: qwen/qwen3.8-flash
-      HERMES_UID: "10000"
-    command:
+      GATEWAY_MULTIPLEX_PROFILES: 'true'
+      HERMES_GATEWAY_NO_SUPERVISE: '1'
+      HERMES_GID: '10000'
+      HERMES_UID: '10000'
+    entrypoint:
       - /opt/hermes/.venv/bin/python
       - /opt/open-work-hub-hermes/gateway_entry.py
+    command:
       - gateway
       - run
       - --no-supervise
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
       - open-work-hub-dev-hermes-data:/opt/data
       - ../hermes/gateway_entry.py:/opt/open-work-hub-hermes/gateway_entry.py:ro
+      - ../hermes/plugins/owh_runtime:/opt/hermes/plugins/owh_runtime:ro
     healthcheck:
       test:
         - CMD-SHELL
@@ -319,7 +326,7 @@ services:
         - -c
         - >-
           import pathlib,socket;
-          assert pathlib.Path('/opt/data/home/egress-client/openrouter.token').is_file();
+          assert pathlib.Path('/opt/data/home/egress-client/ca.crt').is_file();
           s=socket.create_connection(('127.0.0.1',19090),3);s.close()
       interval: 10s
       timeout: 5s

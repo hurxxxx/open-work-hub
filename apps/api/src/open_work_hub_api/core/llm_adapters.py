@@ -37,6 +37,7 @@ class StreamChunk:
     text: str | None = None
     usage: dict[str, int] | None = None
     finish_reason: str | None = None
+    structured_output: dict[str, Any] | None = None
     tool_call_id: str | None = None
     tool_name: str | None = None
     args_delta: str | None = None

@@ -15,5 +15,5 @@ Read only the file that owns the current decision.
 - Start from current code/tests, then owner docs/ADRs.
 - Domain/app docs live under `docs/domains/<domain>/` and `docs/apps/<app-id>/`.
 - Product UI/data rules live under `docs/product/`.
-- GitLab `origin` Issue/MR state is canonical; GitHub `upstream` is source-only.
+- Git workflow and upstream contribution authorization: [root agent rules](../../AGENTS.md#git-and-delivery).
 - Do not create context maps, current snapshots, nested ADRs, progress archives, or raw-output docs.

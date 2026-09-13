@@ -16,7 +16,8 @@
 
 ## Git And Delivery
 
-- GitLab `origin` is canonical; GitHub `upstream` is source-only. Never send site changes through GitHub PRs.
+- GitLab `origin` is canonical for internal site work. GitHub `upstream` is the original project; internal site changes stay in GitLab.
+- Explicitly requested upstream contributions may publish scoped source changes on a GitHub feature branch and open a PR. PR creation and merge each require authorization; preserve required reviews/checks and keep direct `upstream` pushes disabled.
 - The checkout root contains `dev`, `prod`, and `worktrees/<feature>`; `prod` is reserved for `main` production operations.
 - Work in clean `dev` by default. Create a feature branch/worktree under `../worktrees/<slug>` only when the active task asks for branch, worktree, or MR isolation.
 - If `dev` has unrelated dirty work, use a temporary detached `../worktrees/<slug>` from `origin/dev`, integrate only the task diff, then remove it.

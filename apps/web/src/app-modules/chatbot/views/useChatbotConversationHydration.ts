@@ -175,7 +175,7 @@ export function useChatbotConversationHydration({
         const normalizedDetail = normalizeConversationDetail(detail);
         const nextViewState: ChatbotViewStatePatch = {
           activeConversationId: normalizedDetail.activeConversationId,
-          chatError: null,
+          chatError: detail.runError ?? null,
           scopeInfo: normalizedDetail.scopeInfo,
           turns: mergePendingUserTurn({
             conversationId: normalizedDetail.activeConversationId,

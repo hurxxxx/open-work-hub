@@ -13,60 +13,6 @@ from open_work_hub_api.domains.ai.model_settings_service import AiModelSettingsE
 from open_work_hub_api.domains.web_search import router, service
 
 
-class _AsyncTextStream:
-    def __init__(self, chunks: list[str]) -> None:
-        self._chunks = chunks
-
-    def __aiter__(self):
-        self._iterator = iter(self._chunks)
-        return self
-
-    async def __anext__(self) -> str:
-        try:
-            return next(self._iterator)
-        except StopIteration as exc:
-            raise StopAsyncIteration from exc
-
-
-class _FakeStream:
-    def __init__(self, chunks: list[str], final_message: object) -> None:
-        self.text_stream = _AsyncTextStream(chunks)
-        self._final_message = final_message
-
-    async def get_final_message(self) -> object:
-        return self._final_message
-
-
-class _FakeStreamManager:
-    def __init__(self, stream: _FakeStream) -> None:
-        self._stream = stream
-
-    async def __aenter__(self) -> _FakeStream:
-        return self._stream
-
-    async def __aexit__(self, _exc_type, _exc, _tb) -> None:
-        return None
-
-
-class _FakeMessages:
-    def __init__(self, stream: _FakeStream) -> None:
-        self._stream = stream
-        self.captured_request: dict | None = None
-
-    def stream(self, **kwargs):
-        self.captured_request = kwargs
-        return _FakeStreamManager(self._stream)
-
-
-class _FakeClient:
-    def __init__(self, stream: _FakeStream) -> None:
-        self.messages = _FakeMessages(stream)
-        self.closed = False
-
-    async def close(self) -> None:
-        self.closed = True
-
-
 def _settings(**overrides) -> Settings:
     values = {}
     values.update(overrides)
@@ -159,91 +105,65 @@ def test_prepare_web_search_execution_maps_database_route_error(monkeypatch) -> 
 
 
 @pytest.mark.anyio
-async def test_stream_web_search_answer_streams_text_and_final_citations(
-    monkeypatch,
-) -> None:
-    audit_records: list[dict] = []
+async def test_stream_web_search_uses_registered_hermes_result_and_budget(monkeypatch):
+    from open_work_hub_api.core.llm_adapters import StreamChunk
+
+    audit_records = []
     monkeypatch.setattr(
-        external_gateway,
-        "log_ai_external_call",
-        lambda **kwargs: audit_records.append(kwargs),
+        external_gateway, "log_ai_external_call", lambda **kwargs: audit_records.append(kwargs)
     )
-    final_message = SimpleNamespace(
-        model="claude-test",
-        content=[
-            SimpleNamespace(
-                text="현재 정보입니다.",
-                citations=[
-                    SimpleNamespace(
-                        url="https://example.com/news",
-                        title="Example News",
-                        cited_text="quoted evidence",
-                    )
-                ],
-            )
-        ],
-        usage=SimpleNamespace(
-            input_tokens=10,
-            output_tokens=20,
-            server_tool_use=SimpleNamespace(web_search_requests=1),
-        ),
-    )
-    fake_client = _FakeClient(_FakeStream(["현재 ", "정보입니다."], final_message))
-    route = _route()
-    monkeypatch.setattr(service, "resolve_llm_workload_route", lambda *_args: route)
+    monkeypatch.setattr(service, "resolve_llm_workload_route", lambda *_args: _route())
+    captured = []
+
+    async def native_stream(workload_id, context, db, **kwargs):
+        captured.append((workload_id, context, kwargs))
+        yield (
+            StreamChunk(kind="usage", usage={"prompt_tokens": 10, "completion_tokens": 20}),
+            None,
+            SimpleNamespace(default_model="admin-selected-model"),
+        )
+        yield (
+            StreamChunk(
+                kind="done",
+                structured_output={
+                    "answer": "Current information.[1]",
+                    "citations": [
+                        {"url": "https://example.com/news", "title": "Example", "cited_text": None}
+                    ],
+                },
+            ),
+            None,
+            SimpleNamespace(default_model="admin-selected-model"),
+        )
+
+    monkeypatch.setattr(service, "stream_llm", native_stream)
     prepared = service.prepare_web_search_execution(
-        question="최신 뉴스 알려줘",
+        question="Public news",
         max_uses=3,
         app_id="web-search",
         actor_user_id="user-1",
         db=None,
         settings=_settings(),
     )
-    captured_route: list[object] = []
-
     events = [
         event
         async for event in service.stream_web_search_answer(
-            question="최신 뉴스 알려줘",
-            max_uses=3,
-            prepared_execution=prepared,
-            client_factory=lambda resolved_route: (
-                captured_route.append(resolved_route) or fake_client
-            ),
+            question="Public news", max_uses=3, prepared_execution=prepared, db=object()
         )
     ]
-
-    assert [type(event) for event in events] == [
-        service.WebSearchAnswerDelta,
-        service.WebSearchAnswerDelta,
-        service.WebSearchAnswerComplete,
-    ]
-    assert events[0].text == "현재 "
-    complete = events[-1]
-    assert isinstance(complete, service.WebSearchAnswerComplete)
-    assert complete.response.answer == "현재 정보입니다.[1]"
-    assert complete.response.citations[0].url == "https://example.com/news"
-    assert complete.response.usage is not None
-    assert complete.response.usage.web_search_requests == 1
-    assert fake_client.closed is True
-    assert fake_client.messages.captured_request is not None
-    assert fake_client.messages.captured_request["tools"] == [
-        {
-            "type": service.WEB_SEARCH_TOOL_TYPE,
-            "name": "web_search",
-            "max_uses": 3,
-        }
-    ]
-    assert fake_client.messages.captured_request["system"] == service.SYSTEM_PROMPT
-    assert fake_client.messages.captured_request["model"] == "claude-db-test"
-    assert captured_route == [route]
+    assert len(events) == 2
+    assert events[0].text == "Current information.[1]"
+    assert events[1].response.citations[0].url == "https://example.com/news"
+    assert events[1].response.usage.output_tokens == 20
+    assert events[1].response.model == "admin-selected-model"
+    assert captured[0][0] == "web_search.answer"
+    assert captured[0][1].native_tool_limit == 3
+    assert "citations" in captured[0][2]["output_schema"]["properties"]
     assert audit_records[0]["status"] == "ok"
-    assert audit_records[0]["capability"] == "web_search"
-    assert audit_records[0]["provider"] == "anthropic"
 
 
 @pytest.mark.anyio
-async def test_stream_web_search_answer_blocks_pii_before_client_factory(
+async def test_web_search_blocks_pii_before_hermes_dispatch(
     monkeypatch,
 ) -> None:
     audit_records: list[dict] = []
@@ -256,9 +176,9 @@ async def test_stream_web_search_answer_blocks_pii_before_client_factory(
     monkeypatch.setattr(service, "resolve_llm_workload_route", lambda *_args: _route())
     monkeypatch.setattr(
         service,
-        "_anthropic_client_for_route",
+        "stream_llm",
         lambda *_args, **_kwargs: pytest.fail(
-            "provider client must not be created after gateway policy denial"
+            "Hermes must not dispatch after gateway policy denial"
         ),
     )
 
@@ -275,32 +195,6 @@ async def test_stream_web_search_answer_blocks_pii_before_client_factory(
     assert audit_records[0]["status"] == "blocked"
     assert audit_records[0]["policy_reason"] == "pii_detected"
     assert audit_records[0]["pii_hits"] == ["email"]
-
-
-def test_anthropic_client_uses_resolved_database_route(monkeypatch) -> None:
-    import anthropic
-
-    captured: dict[str, object] = {}
-    expected_client = object()
-
-    def fake_client(**kwargs):
-        captured.update(kwargs)
-        return expected_client
-
-    monkeypatch.setattr(anthropic, "AsyncAnthropic", fake_client)
-    route = _route(
-        endpoint_url="https://anthropic.db.example/custom/",
-        api_key=SecretStr("decrypted-database-key"),
-    )
-
-    client = service._anthropic_client_for_route(route, settings=_settings())
-
-    assert client is expected_client
-    assert captured == {
-        "api_key": "decrypted-database-key",
-        "base_url": "https://anthropic.db.example/custom",
-        "timeout": _settings().llm_external_long_generation_timeout_seconds,
-    }
 
 
 def test_web_search_policy_denied_message_hides_internal_reason_code() -> None:

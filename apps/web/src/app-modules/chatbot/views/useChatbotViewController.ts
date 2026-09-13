@@ -15,6 +15,7 @@ import {
   useAiGraphRunRecovery,
 } from '../api/useAiGraphRunRecovery';
 import { useChatStream } from '../api/useChatStream';
+import { listHermesRuns } from '../api/hermes-agent-api';
 import type { ChatTurn } from './chat/MessageBubble';
 import type {
   ChatbotExperienceConfig,
@@ -182,9 +183,31 @@ export function useChatbotViewController(
     ],
   );
   const chat = useChatStream(token, chatRuntimeKey, {
-    disableSyncFallback:
-      resolvedExperience.executionMode === 'durable_background',
+    disableSyncFallback: true,
+    conversationId: routeConversationId,
   });
+  const recoveredRunIds = useRef(new Set<string>());
+  const recoverChat = chat.recover;
+  const chatStatus = chat.state.status;
+  useEffect(() => {
+    if (!token || !routeConversationId || chatStatus !== 'idle') return;
+    let cancelled = false;
+    void listHermesRuns(token, {
+      sessionId: routeConversationId,
+      status: 'active',
+      limit: 1,
+    })
+      .then(({ data }) => {
+        const run = data[0];
+        if (cancelled || !run || recoveredRunIds.current.has(run.id)) return;
+        recoveredRunIds.current.add(run.id);
+        void recoverChat(routeConversationId, run.id);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [token, routeConversationId, chatStatus, recoverChat]);
   const pendingUserContentRef = useRef<string | null>(null);
   pendingUserContentRef.current =
     chat.state.status === 'streaming' ? chat.state.pendingUserContent : null;
@@ -285,7 +308,7 @@ export function useChatbotViewController(
         const normalizedDetail = normalizeConversationDetail(detail);
         setTurns(normalizedDetail.turns);
         setActiveConversationId(normalizedDetail.activeConversationId);
-        setChatError(null);
+        setChatError(detail.runError ?? null);
         syncLivePendingApproval(detail.livePendingApproval);
         setScopeInfo(normalizedDetail.scopeInfo);
       } catch {

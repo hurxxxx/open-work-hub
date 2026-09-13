@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from open_work_hub_api.domains.groups.models import Group
+
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from threading import Event
@@ -14,9 +16,8 @@ from starlette.requests import Request
 
 from open_work_hub_api.domains.auth.dependencies import AuthContext
 from open_work_hub_api.domains.auth.models import AuthSession, User
-from open_work_hub_api.domains.organization import admin_router
-from open_work_hub_api.domains.organization.models import OrganizationUnit
-from open_work_hub_api.domains.organization.schemas import OrganizationUnitUpdateRequest
+from open_work_hub_api.domains.groups import admin_router, service
+from open_work_hub_api.domains.groups.schemas import GroupUpdateRequest
 
 pytestmark = pytest.mark.migration
 
@@ -37,19 +38,19 @@ def test_concurrent_subtree_moves_cannot_create_organization_cycle(
         Event(),
     )
     backend_ids: dict[str, int] = {}
-    original_validate = admin_router.ensure_valid_parent
+    original_validate = service.ensure_valid_parent
 
-    def pause_after_validation(db, *, organization_unit_id, parent_id):
-        original_validate(db, organization_unit_id=organization_unit_id, parent_id=parent_id)
-        (first_validated if organization_unit_id == "root-a" else second_validated).set()
+    def pause_after_validation(db, *, group_id, parent_id):
+        original_validate(db, group_id=group_id, parent_id=parent_id)
+        (first_validated if group_id == "root-a" else second_validated).set()
         assert release.wait(10), "Concurrent move was not released"
 
-    monkeypatch.setattr(admin_router, "ensure_valid_parent", pause_after_validation)
+    monkeypatch.setattr(service, "ensure_valid_parent", pause_after_validation)
 
     def move(unit_id: str, parent_id: str):
         with factory() as db:
             backend_ids[unit_id] = db.scalar(text("select pg_backend_pid()"))
-            cached_units = list(db.scalars(select(OrganizationUnit))) if preload_hierarchy else []
+            cached_units = list(db.scalars(select(Group))) if preload_hierarchy else []
             if unit_id == "root-b":
                 second_started.set()
             actor = db.get(User, "org-race-admin")
@@ -65,9 +66,9 @@ def test_concurrent_subtree_moves_cannot_create_organization_cycle(
             )
             request = Request({"type": "http", "app": SimpleNamespace(state=SimpleNamespace())})
             try:
-                admin_router.update_organization_unit(
+                admin_router.update_group(
                     unit_id,
-                    OrganizationUnitUpdateRequest(parent_id=parent_id),
+                    GroupUpdateRequest(parent_id=parent_id),
                     request,
                     context,
                     db,
@@ -92,11 +93,22 @@ def test_concurrent_subtree_moves_cannot_create_organization_cycle(
                 )
             )
             for unit_id in ("root-a", "root-b"):
-                db.add(OrganizationUnit(id=unit_id, name=unit_id, slug=unit_id))
+                db.add(
+                    Group(
+                        source="hr", unit_type="department", id=unit_id, name=unit_id, slug=unit_id
+                    )
+                )
             db.flush()
             for unit_id, parent_id in (("child-a", "root-a"), ("child-b", "root-b")):
                 db.add(
-                    OrganizationUnit(id=unit_id, name=unit_id, slug=unit_id, parent_id=parent_id)
+                    Group(
+                        source="hr",
+                        unit_type="department",
+                        id=unit_id,
+                        name=unit_id,
+                        slug=unit_id,
+                        parent_id=parent_id,
+                    )
                 )
 
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -125,9 +137,7 @@ def test_concurrent_subtree_moves_cannot_create_organization_cycle(
                 "updated",
             ]
         with factory() as db:
-            parents = dict(
-                db.execute(select(OrganizationUnit.id, OrganizationUnit.parent_id)).all()
-            )
+            parents = dict(db.execute(select(Group.id, Group.parent_id)).all())
             for unit_id in ("root-a", "root-b", "child-a", "child-b"):
                 visited: set[str] = set()
                 while unit_id is not None:

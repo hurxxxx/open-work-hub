@@ -33,7 +33,6 @@ from open_work_hub_api.domains.mail.models import (
     MailSyncState,
 )
 from open_work_hub_api.domains.mail.sync_policy import MailSyncAccessRevoked
-from open_work_hub_api.domains.organization.models import OrganizationUnit
 
 
 def _user(user_id: str) -> User:
@@ -282,19 +281,17 @@ def _restrict_and_revoke(db: Session, reason: str) -> None:
             db.flush()
             db.delete(grant)
         else:
-            group = Group(id="group-1", kind="manual", name="Mail users", active=True)
+            group = Group(source="local", id="group-1", name="Mail users", active=True)
             db.add(group)
             db.flush()
             db.add(AppGroupGrant(app_id="mail", group_id=group.id))
             if reason.startswith("organization_"):
-                unit = OrganizationUnit(id="org-1", name="Mail team", slug="mail-team")
-                db.add(unit)
-                db.flush()
-                group.kind = "organization"
-                group.organization_unit_id = unit.id
-                owner.primary_organization_unit_id = unit.id
+                group.source = "hr"
+                group.slug = "mail-team"
+                group.unit_type = "department"
+                owner.primary_organization_unit_id = group.id
                 if reason == "organization_inactive":
-                    unit.active = False
+                    group.active = False
                 else:
                     owner.primary_organization_unit_id = None
             else:

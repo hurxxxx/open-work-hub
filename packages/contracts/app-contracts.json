@@ -44,27 +44,6 @@
       ]
     },
     {
-      "app_id": "hermes-terminal",
-      "title": "Hermes Terminal",
-      "icon_key": "square-terminal",
-      "execution_context_kind": "personal",
-      "resource_scope": "personal",
-      "route_base": "/apps/hermes-terminal",
-      "entry_route_id": "hermes-terminal.root",
-      "launcher": {
-        "placement": "category",
-        "pinned_by_default": false
-      },
-      "feature_flag": "hermes_enabled",
-      "routes": [
-        {
-          "route_id": "hermes-terminal.root",
-          "suffix": "",
-          "chrome": "fullSurface"
-        }
-      ]
-    },
-    {
       "app_id": "chatbot",
       "title": "AI Assistant",
       "icon_key": "message-square",

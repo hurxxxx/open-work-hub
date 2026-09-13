@@ -10,6 +10,7 @@ from open_work_hub_api.domains.hermes.execution import (
     mark_hermes_run_terminal_failure,
 )
 from open_work_hub_api.domains.hermes.maintenance import maintain_headless_hermes_once
+from open_work_hub_api.domains.hermes.files import cleanup_files
 from open_work_hub_api.domains.hermes.publication import publish_pending_hermes_dispatches
 
 from open_work_hub_worker.celery_app import celery_app
@@ -60,6 +61,7 @@ def run_hermes_agent(self, run_id: str) -> str:
                 api_key=settings.hermes_api_key.get_secret_value(),
                 request_timeout_seconds=settings.hermes_request_timeout_seconds,
                 lease_seconds=settings.hermes_run_timeout_seconds + 300,
+                max_concurrent_runs=settings.hermes_max_concurrent_runs,
             )
         )
     except HermesExecutionConfigurationError as error:
@@ -116,6 +118,8 @@ def republish_hermes_runs(limit: int = 100) -> int:
     asyncio.run(maintain_headless_hermes_once(limit=min(limit, 20)))
     session = db_session()
     try:
-        return publish_pending_hermes_dispatches(session, limit=limit)
+        published = publish_pending_hermes_dispatches(session, limit=limit)
+        cleanup_files(session, limit=limit)
+        return published
     finally:
         session.close()

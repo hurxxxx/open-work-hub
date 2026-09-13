@@ -10,17 +10,21 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.db import get_db_session
+from open_work_hub_api.core.i18n import localized_http_exception
+from open_work_hub_api.core.llm_errors import LlmProviderError
 from open_work_hub_api.core.settings import (
-    HERMES_FALLBACK_MODEL,
-    HERMES_MODEL,
-    HERMES_PROVIDER,
     HERMES_RELEASE,
     get_settings,
 )
+from open_work_hub_api.domains.ai.model_settings_service import AiModelSettingsError
 from open_work_hub_api.domains.auth.access import record_audit_log
 from open_work_hub_api.domains.auth.dependencies import AuthContext, require_admin_context
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.client import HermesClientError
+from open_work_hub_api.domains.hermes.model_policy import (
+    resolve_model_policy,
+    synchronize_model_policy,
+)
 from open_work_hub_api.domains.hermes.models import (
     HermesDispatchOutbox,
     HermesMaintenanceState,
@@ -33,7 +37,6 @@ from open_work_hub_api.domains.hermes.research_settings import (
     HermesResearchSettingsConflictError,
     HermesResearchSettingsSnapshot,
     get_research_settings,
-    get_research_source_policy,
     update_research_source,
 )
 from open_work_hub_api.domains.hermes.research_sources import (
@@ -215,6 +218,10 @@ def get_hermes_summary(
     db: Session = Depends(get_db_session),
     _admin: AuthContext = Depends(require_admin_context),
 ) -> AdminHermesSummaryResponse:
+    try:
+        policy = resolve_model_policy(db)
+    except (AiModelSettingsError, LlmProviderError):
+        policy = None
     profile_counts = {
         row[0]: int(row[1])
         for row in db.execute(
@@ -230,9 +237,9 @@ def get_hermes_summary(
     return AdminHermesSummaryResponse(
         enabled=get_settings().hermes_enabled,
         release=HERMES_RELEASE,
-        provider=HERMES_PROVIDER,
-        model=HERMES_MODEL,
-        fallback_model=HERMES_FALLBACK_MODEL,
+        provider=policy.provider if policy else "",
+        model=policy.model if policy else "",
+        fallback_model="",
         profile_counts=profile_counts,
         run_counts=run_counts,
     )
@@ -450,14 +457,21 @@ async def enforce_hermes_profile_model(
 ) -> AdminHermesProfileResponse:
     binding = _require_profile(db, binding_id)
     try:
-        await management_client().set_profile_model(
-            binding.profile_name,
-            research_sources=get_research_source_policy(db),
+        policy = resolve_model_policy(db)
+        if policy.route != binding.route:
+            raise HTTPException(status_code=409, detail={"code": "hermes.session_policy_changed"})
+        await synchronize_model_policy(
+            management_client(),
+            profile_name=binding.profile_name,
+            policy=policy,
         )
+    except (AiModelSettingsError, LlmProviderError) as error:
+        raise localized_http_exception(status_code=503, code="hermes.model_unavailable") from error
     except HermesClientError as error:
         _raise_client_error(error)
-    binding.provider = HERMES_PROVIDER
-    binding.model = HERMES_MODEL
+    binding.provider = policy.provider
+    binding.model = policy.model
+    invalidate_profile_policy_cache()
     binding.policy_revision += 1
     db.add(binding)
     db.commit()

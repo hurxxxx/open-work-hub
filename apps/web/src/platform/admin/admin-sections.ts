@@ -4,11 +4,6 @@ export const ADMIN_SECTION_DEFINITIONS = defineCoreAdminSections([
   { id: 'general', path: '/admin/general', roles: ['platform_admin'] },
   { id: 'people', path: '/admin/people', roles: ['platform_admin'] },
   {
-    id: 'organization',
-    path: '/admin/organization',
-    roles: ['platform_admin'],
-  },
-  {
     id: 'api-integrations',
     path: '/admin/api-integrations',
     roles: ['platform_admin'],
