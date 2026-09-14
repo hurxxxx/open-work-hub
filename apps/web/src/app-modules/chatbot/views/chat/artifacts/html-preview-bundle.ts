@@ -284,6 +284,18 @@ export async function bundleHtmlPreview(
     if (/url\(|@import/i.test(style.textContent || ''))
       style.textContent = await compile(style.textContent || '', entry, 'css');
   }
+  for (const element of doc.querySelectorAll<HTMLElement | SVGElement>(
+    '[style]',
+  )) {
+    // Parse as declarations first: an attribute cannot introduce CSS rules.
+    const declarations = element.style.cssText;
+    if (!/url\(/i.test(declarations)) continue;
+    const css = await compile(`.preview-inline{${declarations}}`, entry, 'css');
+    element.setAttribute(
+      'style',
+      css.slice(css.indexOf('{') + 1, css.lastIndexOf('}')),
+    );
+  }
   for (const image of doc.querySelectorAll('img[src]')) {
     const src = image.getAttribute('src')!;
     if (src.startsWith('data:')) continue;
