@@ -18,6 +18,54 @@ from test_alembic_migrations import _migration_config
 
 
 @pytest.mark.migration
+def test_file_revision_migration_preserves_current_bytes_without_inventing_a_run(postgres_dsn):
+    from datetime import timedelta
+    from open_work_hub_api.domains.auth.models import utcnow_naive
+    from open_work_hub_api.domains.hermes.models import (
+        HermesFileObject,
+        HermesFileRevision,
+        HermesSessionFile,
+    )
+    from test_hermes_runtime import seed, session_for
+
+    config = _migration_config(postgres_dsn)
+    command.upgrade(config, "hermes_runtime_20260912")
+    engine = sa.create_engine(postgres_dsn)
+    try:
+        with Session(engine) as db:
+            _, binding = seed(db)
+            session = session_for(db, binding)
+            expires = utcnow_naive() + timedelta(days=10)
+            db.add(HermesFileObject(object_key="migration-snapshot", expires_at=expires))
+            db.add(
+                HermesSessionFile(
+                    id="legacy-file",
+                    session_id=session.id,
+                    user_id=binding.user_id,
+                    relative_path="legacy.txt",
+                    size_bytes=3,
+                    sha256="abc",
+                    object_key="migration-snapshot",
+                    media_type="text/plain",
+                    expires_at=expires,
+                )
+            )
+            db.commit()
+        command.upgrade(config, "head")
+        with Session(engine) as db:
+            revision = db.get(HermesFileRevision, "legacy-file")
+            assert revision.file_id == "legacy-file"
+            assert revision.object_key == "migration-snapshot"
+            assert revision.run_id is None
+            assert revision.expires_at == expires
+        import_all_models()
+        with engine.connect() as connection:
+            assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.migration
 @pytest.mark.parametrize(
     "chat_enabled,chat_audience,terminal_enabled,terminal_audience,expected_audience,expected_users",
     [

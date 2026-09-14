@@ -122,6 +122,10 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
         if not tool_name.startswith(mcp_prefixed_tool_name(server_name, "")):
             if not execution.get("allow_native_tools"):
                 return _error("This workload may only submit its result")
+            if tool_name == "owh_preview":
+                from .preview import render_preview
+
+                return render_preview(args, execution=execution, server=server, run_id=run_id)
             if tool_name.startswith("mcp__owh_mcp_") and not tool_name.startswith(
                 f"mcp__owh_mcp_{namespace}_"
             ):
@@ -129,6 +133,8 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
             if not tool_name.startswith(f"mcp__owh_mcp_{namespace}_") and tool_name not in {
                 "web_search",
                 "web_extract",
+                "tool_search",
+                "tool_describe",
                 "terminal",
                 "process",
                 "read_file",
@@ -144,6 +150,19 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
                 "delegate_task",
             }:
                 return _error("Tool has no configured Open Work Hub execution policy")
+            if tool_name in {
+                "execute_code", "terminal", "process", "read_file",
+                "write_file", "patch", "search_files",
+            }:
+                from .native_execution import execute_native
+
+                return execute_native(
+                    tool_name,
+                    next_call,
+                    task_id=context.get("task_id"),
+                    server=server,
+                    run_id=run_id,
+                )
             return next_call()
         listed = _rpc(server, run_id, "tools/list", {})
         matches = [
@@ -185,10 +204,23 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
 
 
 def register(ctx):
+    from .native_execution import install_code_guard
     from .sandbox import OpenWorkHubSandbox
 
+    install_code_guard()
     ctx.register_terminal_environment_provider(OpenWorkHubSandbox())
     ctx.register_middleware("tool_execution", execute_tool)
+    ctx.register_tool(
+        name="owh_preview",
+        toolset="owh_runtime",
+        schema={
+            "name": "owh_preview",
+            "description": "Render a saved workspace HTML file and its local JS/CSS/images in an offline sandboxed Chromium. Returns bounded console/resource errors and a screenshot for vision-capable models. Use after creating or modifying interactive results, before claiming they work. No Playwright installation, public URL or running server is needed. External dependencies/fetch are blocked as in the chat preview; save dependencies locally. A rendering is evidence, not proof of task correctness.",
+            "parameters": {"type": "object", "properties": {"path": {"type": "string"}},
+                           "required": ["path"], "additionalProperties": False},
+        },
+        handler=lambda args, **kwargs: _error("Trusted interactive context is required"),
+    )
     ctx.register_tool(
         name="owh_submit_result",
         toolset="owh_runtime",

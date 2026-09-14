@@ -48,6 +48,7 @@ export interface UseChatStreamApi {
 const AI_STREAM_ENABLED_STORAGE_KEY = 'open-work-hub.ai.streamEnabled';
 
 interface ChatStreamRuntime {
+  stop: (() => Promise<void>) | null;
   abortController: AbortController | null;
   cleanupTimer: ReturnType<typeof setTimeout> | null;
   key: string;
@@ -67,6 +68,7 @@ function createChatStreamRuntime(
   scopeKey: string,
 ): ChatStreamRuntime {
   return {
+    stop: null,
     abortController: null,
     cleanupTimer: null,
     key,
@@ -137,6 +139,23 @@ function updateRuntimeState(
   }
 }
 
+function requestRuntimeStop(runtime: ChatStreamRuntime) {
+  const stop = runtime.stop;
+  if (!stop) return;
+  const runId = runtime.runId;
+  void stop().catch((error: unknown) => {
+    if (runtime.runId !== runId || runtime.state.status !== 'streaming') return;
+    updateRuntimeState(runtime, (prev) => ({
+      ...prev,
+      isStopping: false,
+      errorMessage:
+        error instanceof Error
+          ? error.message
+          : i18n.t('apps:ai.errors.stopFailed'),
+    }));
+  });
+}
+
 export function useChatStream(
   token: string | null,
   runtimeKey?: string | null,
@@ -178,7 +197,20 @@ export function useChatStream(
 
   const abort = useCallback(() => {
     const controller = runtime.abortController;
-    if (!controller) {
+    if (
+      !controller ||
+      runtime.state.isStopping ||
+      runtime.state.status !== 'streaming'
+    ) {
+      return;
+    }
+    if (runtime.stop || !runtime.state.streamOpened) {
+      updateRuntimeState(runtime, (prev) => ({
+        ...prev,
+        isStopping: true,
+        errorMessage: null,
+      }));
+      requestRuntimeStop(runtime);
       return;
     }
     controller.abort('stop');
@@ -212,6 +244,7 @@ export function useChatStream(
       runtime.abortController?.abort();
       runtime.abortController = null;
       runtime.ownerId = null;
+      runtime.stop = null;
       updateRuntimeState(runtime, (prev) =>
         resetChatStreamState(prev, {
           keepPendingApprovals: options?.keepPendingApprovals,
@@ -247,6 +280,7 @@ export function useChatStream(
       if (!token) {
         throw new AiApiError(401, i18n.t('auth:errors.noActiveSession'));
       }
+      if (runtime.state.status === 'streaming') return;
 
       runtime.abortController?.abort();
       const runId = runtime.runId + 1;
@@ -254,6 +288,12 @@ export function useChatStream(
       runtime.ownerId = consumerIdRef.current;
       const controller = new AbortController();
       runtime.abortController = controller;
+      runtime.stop = null;
+      const onStopReady = (stop: () => Promise<void>) => {
+        if (runtime.runId !== runId) return;
+        runtime.stop = stop;
+        if (runtime.state.isStopping) requestRuntimeStop(runtime);
+      };
 
       if (!existing && !disableSyncFallback && !shouldUseStreamingTransport()) {
         await sendViaSyncFallback({
@@ -282,8 +322,14 @@ export function useChatStream(
               existing.runId,
               existing.conversationId,
               controller.signal,
+              onStopReady,
             )
-          : await streamAiChat({ payload, token, signal: controller.signal });
+          : await streamAiChat({
+              payload,
+              token,
+              signal: controller.signal,
+              onStopReady,
+            });
         if (!response.body) {
           throw new AiApiError(0, i18n.t('apps:ai.errors.emptySseBody'));
         }
@@ -332,29 +378,16 @@ export function useChatStream(
         }
 
         if (!streamOpened) {
-          if (disableSyncFallback || existing) {
-            setStateForRun(runId, (prev) =>
-              failChatStreamState(
-                prev,
-                error instanceof Error
-                  ? error.message
-                  : i18n.t('apps:ai.errors.streamFailed'),
-              ),
-            );
-            return;
-          }
-          // Auto-fallback to the sync endpoint when SSE never opened (proxy
-          // buffering, transient gateway, etc.) so the user still gets a
-          // reply. `/api/v1/chatbot/chat` now accepts the same persistence
-          // fields as `/chat/stream`, so conversation history continues to
-          // append even when the transport downgrades.
-          await sendViaSyncFallback({
-            payload,
-            token,
-            runId,
-            setStateForRun,
-            fallbackReason: error,
-          });
+          // Native admission may already have succeeded. Reissuing this as
+          // a synchronous request would create a second run.
+          setStateForRun(runId, (prev) =>
+            failChatStreamState(
+              prev,
+              error instanceof Error
+                ? error.message
+                : i18n.t('apps:ai.errors.streamFailed'),
+            ),
+          );
           return;
         }
 
@@ -369,6 +402,7 @@ export function useChatStream(
       } finally {
         if (runtime.abortController === controller) {
           runtime.abortController = null;
+          runtime.stop = null;
         }
       }
     },
@@ -401,6 +435,12 @@ export function useChatStream(
       runtime.ownerId = consumerIdRef.current;
       const controller = new AbortController();
       runtime.abortController = controller;
+      runtime.stop = null;
+      const onStopReady = (stop: () => Promise<void>) => {
+        if (runtime.runId !== runId) return;
+        runtime.stop = stop;
+        if (runtime.state.isStopping) requestRuntimeStop(runtime);
+      };
       const seededApproval = options?.seedApproval ?? null;
 
       setStateForRun(
@@ -417,6 +457,7 @@ export function useChatStream(
           payload,
           token,
           signal: controller.signal,
+          onStopReady,
         });
         if (!response.body) {
           throw new AiApiError(0, i18n.t('apps:ai.errors.emptySseBody'));
@@ -476,6 +517,7 @@ export function useChatStream(
       } finally {
         if (runtime.abortController === controller) {
           runtime.abortController = null;
+          runtime.stop = null;
         }
       }
     },
@@ -500,7 +542,6 @@ async function sendViaSyncFallback({
   token,
   runId,
   setStateForRun,
-  fallbackReason,
 }: {
   payload: AiChatStreamRequest;
   token: string;
@@ -509,7 +550,6 @@ async function sendViaSyncFallback({
     runId: number,
     next: ChatStreamState | ((prev: ChatStreamState) => ChatStreamState),
   ) => void;
-  fallbackReason?: unknown;
 }) {
   setStateForRun(
     runId,
@@ -526,13 +566,12 @@ async function sendViaSyncFallback({
     const response = await sendAiChat(syncPayload, token, {});
     setStateForRun(runId, syncResponseToChatStreamState(response));
   } catch (error) {
-    const resolved = error instanceof Error ? error : fallbackReason;
     setStateForRun(runId, (prev) => ({
       ...prev,
       status: 'error',
       errorMessage:
-        resolved instanceof Error
-          ? resolved.message
+        error instanceof Error
+          ? error.message
           : i18n.t('apps:ai.errors.responseFailed'),
     }));
   }

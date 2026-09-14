@@ -7,18 +7,23 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes import files
-from open_work_hub_api.domains.hermes.file_router import download_file
+from open_work_hub_api.domains.hermes.file_router import (
+    download_file,
+    download_file_revision,
+    session_file_revisions,
+)
 from open_work_hub_api.domains.hermes.model_policy import (
     HermesModelPolicy,
     synchronize_model_policy,
 )
 from open_work_hub_api.domains.hermes.models import (
     HermesFileObject,
+    HermesFileRevision,
     HermesProfileBinding,
     HermesRunProjection,
     HermesSessionBinding,
@@ -1141,6 +1146,119 @@ async def test_cancelled_workload_returns_lease_and_recovers_durable_stop(
         engine.dispose()
 
 
+def test_file_revisions_preserve_run_identity_and_bound_total_history(
+    application_postgres_dsn, monkeypatch
+):
+    objects = {}
+    monkeypatch.setattr(
+        files,
+        "get_minio_client",
+        lambda: SimpleNamespace(
+            put_object=lambda bucket, key, stream, size, **kwargs: objects.update(
+                {key: stream.read()}
+            )
+        ),
+    )
+    monkeypatch.setattr(files, "ensure_bucket", lambda: None)
+    monkeypatch.setattr(files, "MAX_SESSION_BYTES", 12)
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            user, binding = seed(db)
+            admit_runtime_apps(db, user.id)
+            session = session_for(db, binding)
+            run = stage(db, binding, session)
+            db.commit()
+            first = files.save_file(
+                db, session=session, path="result.txt", data=b"first", execution_run_id=run.id
+            )
+            first_id = first.id
+            first_key = first.object_key
+            replay = files.save_file(
+                db, session=session, path="result.txt", data=b"first", execution_run_id=run.id
+            )
+            assert replay.id == first_id
+            revisions = list(
+                db.scalars(
+                    select(HermesFileRevision).where(HermesFileRevision.session_id == session.id)
+                )
+            )
+            assert len(revisions) == 1
+            assert revisions[0].run_id == run.id
+            assert revisions[0].user_id == user.id
+            assert revisions[0].object_key == first_key
+            listing = session_file_revisions(
+                session.id, file_id=first_id, run_id=run.id, limit=1, offset=0, db=db, user=user
+            )
+            assert listing.data[0].id == revisions[0].id
+            assert listing.has_more is False
+            files.save_file(
+                db, session=session, path="result.txt", data=b"second", execution_run_id=run.id
+            )
+            assert objects[first_key] == b"first"
+            assert (
+                len(
+                    list(
+                        db.scalars(
+                            select(HermesFileRevision).where(
+                                HermesFileRevision.session_id == session.id
+                            )
+                        )
+                    )
+                )
+                == 2
+            )
+            page = session_file_revisions(
+                session.id, file_id=first_id, run_id=run.id, limit=1, offset=0, db=db, user=user
+            )
+            assert page.has_more is True
+            with pytest.raises(HTTPException) as denied:
+                session_file_revisions(
+                    session.id,
+                    file_id=first_id,
+                    run_id=None,
+                    limit=100,
+                    offset=0,
+                    db=db,
+                    user=SimpleNamespace(id="another-user"),
+                )
+            assert denied.value.status_code == 404
+            with pytest.raises(ValueError, match="storage limit"):
+                files.save_file(
+                    db, session=session, path="result.txt", data=b"third", execution_run_id=run.id
+                )
+            db.rollback()
+            assert len(objects) == 2
+            session_id = session.id
+        with Session(engine) as reopened:
+            versions = list(
+                reopened.scalars(
+                    select(HermesFileRevision).where(HermesFileRevision.session_id == session_id)
+                )
+            )
+            assert {objects[row.object_key] for row in versions} == {b"first", b"second"}
+            from open_work_hub_api.domains.auth.models import CompanyAppControl
+
+            user = reopened.get(User, versions[0].user_id)
+            reopened.get(CompanyAppControl, "chatbot").enabled = False
+            reopened.commit()
+            denied_page = session_file_revisions(
+                session_id,
+                file_id=first_id,
+                run_id=None,
+                limit=100,
+                offset=0,
+                db=reopened,
+                user=user,
+            )
+            assert denied_page.data == []
+            with pytest.raises(HTTPException) as revoked:
+                download_file_revision(versions[0].id, db=reopened, user=user)
+            assert revoked.value.status_code == 404
+    finally:
+        engine.dispose()
+
+
 def test_files_preserve_cleanup_intent_and_owner_acl(application_postgres_dsn, monkeypatch):
     objects = {}
 
@@ -1174,7 +1292,21 @@ def test_files_preserve_cleanup_intent_and_owner_acl(application_postgres_dsn, m
             old_key = original.object_key
             current = files.save_file(db, session=session, path="report.txt", data=b"second")
             assert files.read_file(current) == b"second"
-            assert db.get(HermesFileObject, old_key).expires_at <= utcnow_naive()
+            old_revision = db.scalar(
+                select(HermesFileRevision).where(HermesFileRevision.object_key == old_key)
+            )
+            old_revision_id = old_revision.id
+            assert files.read_file(old_revision) == b"first"
+            assert db.get(HermesFileObject, old_key).expires_at > utcnow_naive()
+            assert download_file_revision(old_revision.id, db=db, user=user).body == b"first"
+            with pytest.raises(HTTPException) as denied_revision:
+                download_file_revision(
+                    old_revision.id, db=db, user=SimpleNamespace(id="another-user")
+                )
+            assert denied_revision.value.status_code == 404
+            # Retention, rather than a replacement, eventually queues old bytes.
+            db.get(HermesFileObject, old_key).expires_at = utcnow_naive() - timedelta(seconds=1)
+            db.commit()
             with pytest.raises(HTTPException) as error:
                 download_file(current.id, db=db, user=SimpleNamespace(id="another-user"))
             assert error.value.status_code == 404
@@ -1186,6 +1318,7 @@ def test_files_preserve_cleanup_intent_and_owner_acl(application_postgres_dsn, m
             storage.fail_delete = False
             assert files.cleanup_files(db) == 1
             assert old_key not in objects
+            assert db.get(HermesFileRevision, old_revision_id) is None
             reservation = db.get(HermesFileObject, current.object_key)
             reservation.expires_at = utcnow_naive() - timedelta(seconds=1)
             db.commit()

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CodeArtifact } from './CodeArtifact';
@@ -8,6 +8,8 @@ type Tab = 'preview' | 'source';
 export interface HtmlArtifactProps {
   content: string;
   title?: string | null;
+  previewContent?: string | null;
+  previewError?: boolean;
 }
 
 // HTML artifact renderer with Preview ↔ Source tabs, matching the pattern
@@ -15,9 +17,32 @@ export interface HtmlArtifactProps {
 // iframe so the page's scripts execute (needed for any interactive demo)
 // without `allow-same-origin` — that combination prevents the guest from
 // reading the parent's cookies, localStorage, or DOM even if it tries.
-export function HtmlArtifact({ content, title }: HtmlArtifactProps) {
+export function HtmlArtifact({
+  content,
+  title,
+  previewContent,
+  previewError,
+}: HtmlArtifactProps) {
   const { t } = useTranslation('apps');
   const [tab, setTab] = useState<Tab>('preview');
+  const [runtimeError, setRuntimeError] = useState(false);
+  const frame = useRef<HTMLIFrameElement>(null);
+  const html = previewContent === undefined ? content : previewContent;
+  const channel = useMemo(() => crypto.randomUUID(), [html]);
+  useEffect(() => {
+    setRuntimeError(false);
+    const onMessage = (event: MessageEvent) => {
+      if (
+        event.source === frame.current?.contentWindow &&
+        event.data?.channel === channel &&
+        event.data?.type === 'preview-error'
+      )
+        setRuntimeError(true);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [channel]);
+  const diagnostic = `<script>(()=>{const report=()=>parent.postMessage({channel:${JSON.stringify(channel)},type:'preview-error'},'*');addEventListener('error',report,true);addEventListener('unhandledrejection',report);addEventListener('securitypolicyviolation',report);})();</script>`;
 
   return (
     <div className="flex h-full flex-col">
@@ -39,18 +64,35 @@ export function HtmlArtifact({ content, title }: HtmlArtifactProps) {
       </div>
       <div className="min-h-0 flex-1">
         {tab === 'preview' ? (
-          <iframe
-            title={title ?? t('ai.htmlArtifact.title')}
-            srcDoc={content}
-            // `allow-scripts` lets the guest page run its own JS (needed
-            // for any interactive HTML). We intentionally do NOT include
-            // `allow-same-origin` — without it the iframe runs in a
-            // unique null origin with no access to parent cookies /
-            // localStorage / DOM, so even a hostile `<script>` inside
-            // the artifact can't escalate to the authenticated session.
-            sandbox="allow-scripts"
-            className="h-full w-full rounded-md border border-app-border bg-white"
-          />
+          <div className="flex h-full flex-col">
+            {previewError || runtimeError ? (
+              <p
+                role="status"
+                className="mb-2 app-text-body-sm text-app-ink-muted"
+              >
+                {t('ai.htmlArtifact.previewFailed')}
+              </p>
+            ) : null}
+            {html === null && !previewError ? (
+              <p role="status">{t('hermesWorkspace.loading')}</p>
+            ) : null}
+            {html !== null ? (
+              <iframe
+                ref={frame}
+                title={title ?? t('ai.htmlArtifact.title')}
+                srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">${diagnostic}${html}`}
+                referrerPolicy="no-referrer"
+                // `allow-scripts` lets the guest page run its own JS (needed
+                // for any interactive HTML). We intentionally do NOT include
+                // `allow-same-origin` — without it the iframe runs in a
+                // unique null origin with no access to parent cookies /
+                // localStorage / DOM, so even a hostile `<script>` inside
+                // the artifact can't escalate to the authenticated session.
+                sandbox="allow-scripts"
+                className="h-full w-full rounded-md border border-app-border bg-white"
+              />
+            ) : null}
+          </div>
         ) : (
           <CodeArtifact content={content} language="html" />
         )}

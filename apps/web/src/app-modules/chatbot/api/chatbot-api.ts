@@ -146,6 +146,7 @@ export interface StreamAiChatArgs {
   payload: AiChatStreamRequest;
   token: string;
   signal: AbortSignal;
+  onStopReady?: (stop: () => Promise<void>) => void;
 }
 
 export type AiApprovalStatusResponse = ApiSchema<'ApprovalStatusResponse'>;
@@ -162,15 +163,20 @@ export interface StreamAiResumeArgs {
   payload: ResumeAiChatRequest;
   token: string;
   signal: AbortSignal;
+  onStopReady?: (stop: () => Promise<void>) => void;
 }
 
 export async function streamAiChat({
   payload,
   token,
   signal,
+  onStopReady,
 }: StreamAiChatArgs): Promise<Response> {
   try {
     const started = await startHermesRun(payload, token);
+    onStopReady?.(async () => {
+      await stopHermesRun(token, started.run.id);
+    });
     const stopOnAbort = () => {
       if (signal.reason === 'stop')
         void stopHermesRun(token, started.run.id).catch(() => undefined);
@@ -200,7 +206,11 @@ export async function streamAiExistingRun(
   runId: string,
   conversationId: string,
   signal: AbortSignal,
+  onStopReady?: (stop: () => Promise<void>) => void,
 ): Promise<Response> {
+  onStopReady?.(async () => {
+    await stopHermesRun(token, runId);
+  });
   const stopOnAbort = () => {
     if (signal.reason === 'stop')
       void stopHermesRun(token, runId).catch(() => undefined);
@@ -318,8 +328,12 @@ export async function streamAiChatResume({
   payload,
   token,
   signal,
+  onStopReady,
 }: StreamAiResumeArgs): Promise<Response> {
   const reference = requireApprovalReference(payload.approval_id);
+  onStopReady?.(async () => {
+    await stopHermesRun(token, reference.runId);
+  });
   try {
     return await legacyEventStreamResponse({
       afterSequence: reference.sequence,
@@ -584,6 +598,10 @@ async function legacyEventStreamResponse(
               const resolvedSequence = Number.isFinite(sequence)
                 ? sequence
                 : undefined;
+              // Reconnects may replay the last acknowledged native event.
+              // Deduplicate before producing synthetic legacy envelopes.
+              if (resolvedSequence != null && resolvedSequence <= afterSequence)
+                continue;
               if (eventType === 'approval.request') {
                 // Replayed requests may already be resolved, including when a
                 // later request is pending. The server owns the current state.
