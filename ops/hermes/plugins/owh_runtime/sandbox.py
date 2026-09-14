@@ -55,7 +55,6 @@ class WorkspaceEnvironment(BaseEnvironment):
         self._recovery_lock = threading.Lock()
         self._closed = False
         self._synced_files = {}
-        self._checkpoint_pending = False
         self._container = f"owh-sandbox-{uuid4().hex}"
         self._docker = shutil.which("docker") or "docker"
         self._client_env = {
@@ -248,7 +247,6 @@ class WorkspaceEnvironment(BaseEnvironment):
         local = self._workspace({"op": "list"})
         for row in local:
             if remote.get(row["path"]) != row["sha256"]:
-                self._checkpoint_pending = True
                 body = self._workspace({"op": "read", "path": row["path"]})
                 _rpc(
                     server,
@@ -257,9 +255,9 @@ class WorkspaceEnvironment(BaseEnvironment):
                     {"path": row["path"], "data": body["data"]},
                 )
                 self._synced_files[row["path"]] = row["sha256"]
-        if self._checkpoint_pending:
-            _rpc(server, run_id, "owh/files/checkpoint", {})
-            self._checkpoint_pending = False
+        # The server owns pending snapshot state. This idempotent check also
+        # recovers a batch saved before a sandbox/gateway interruption.
+        _rpc(server, run_id, "owh/files/checkpoint", {})
         # Keep saved files as history even when the sandbox deletes them.
 
     def execute(self, command, cwd="", **kwargs):

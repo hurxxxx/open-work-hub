@@ -271,6 +271,8 @@ export async function bundleHtmlPreview(
   for (const link of doc.querySelectorAll('link[rel="stylesheet"]')) {
     const path = previewPath(link.getAttribute('href') || '', entry);
     const style = doc.createElement('style');
+    const media = link.getAttribute('media');
+    if (media !== null) style.setAttribute('media', media);
     style.textContent = await compile(
       new TextDecoder().decode(await read(path)),
       path,
