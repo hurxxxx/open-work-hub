@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import mimetypes
-from datetime import timedelta
+from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import PurePosixPath
 from uuid import uuid4
@@ -115,7 +115,7 @@ def save_file(
     data: bytes,
     reject_active_run: bool = False,
     execution_run_id: str | None = None,
-    preview_checkpoint: bool = False,
+    preview_checkpoint_at: datetime | None = None,
 ) -> HermesSessionFile:
     path = normalize_path(path)
     if len(data) > MAX_FILE_BYTES:
@@ -171,13 +171,13 @@ def save_file(
         )
     )
     digest = hashlib.sha256(data).hexdigest()
-    if preview_checkpoint and (existing is None or existing.sha256 != digest):
+    if preview_checkpoint_at is not None and (existing is None or existing.sha256 != digest):
         raise ValueError("Preview entry changed during checkpoint")
     if (
-        not preview_checkpoint
-        and existing is not None
+        existing is not None
         and existing.sha256 == digest
         and existing.expires_at > utcnow_naive()
+        and (preview_checkpoint_at is None or existing.updated_at >= preview_checkpoint_at)
     ):
         return existing
     count, size = db.execute(
@@ -212,7 +212,10 @@ def save_file(
         raise
     row = existing or HermesSessionFile(id=file_id, user_id=session.user_id, session_id=session.id)
     row.relative_path, row.size_bytes, row.sha256 = path, len(data), digest
-    row.object_key, row.media_type, row.updated_at = key, media_type, utcnow_naive()
+    # Every entry in the batch shares its immutable dependency cutoff. A
+    # checkpoint must not look like a later content change on the next retry.
+    row.object_key, row.media_type = key, media_type
+    row.updated_at = preview_checkpoint_at or utcnow_naive()
     row.expires_at = utcnow_naive() + timedelta(
         days=settings.hermes_terminal_artifact_retention_days
     )
@@ -278,7 +281,7 @@ def checkpoint_previews(db: Session, *, session: HermesSessionBinding, run_id: s
             path=row.relative_path,
             data=read_file(row),
             execution_run_id=run_id,
-            preview_checkpoint=True,
+            preview_checkpoint_at=latest,
         )
     return len(entries)
 
