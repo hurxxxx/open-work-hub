@@ -51,6 +51,11 @@ with patch.object(owh_runtime, "_rpc", rpc):
     files["demo/index.htm"] = files["demo/index.html"]
     assert render(path="demo/index.htm")["status"] == "rendered"
     print("PASS: HTML and HTM entrypoints share the browser MIME contract", flush=True)
+    files["demo/image.gif"] = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+    files["demo/gif.html"] = b'<img id="result" src="image.gif" onerror="throw new Error(\'GIF failed to decode\')">'
+    gif = render(path="demo/gif.html")
+    assert gif["status"] == "rendered" and "demo/image.gif" in gif["files"], gif
+    print("PASS: saved GIF image matches the web browser fixture", flush=True)
     files["demo/app.js"] = b'throw new Error("synthetic render failure");'
     broken = render()
     assert broken.get("error") == "preview.render_errors" and broken["errors"], broken
