@@ -11,6 +11,7 @@ it('accepts errors only from the current isolated preview and resets for a new v
   const channel = JSON.parse(frame.srcdoc.match(/channel:("[^"]*")/)![1]);
   expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
   expect(frame.srcdoc).toContain("connect-src 'none'");
+  expect(frame.srcdoc).toContain("worker-src 'none'");
   const send = (source: Window | null, value: string) =>
     act(() => {
       window.dispatchEvent(
