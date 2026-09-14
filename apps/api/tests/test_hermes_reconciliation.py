@@ -65,6 +65,51 @@ async def test_open_sse_cannot_hide_durable_completion(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("status_code", [404, 503])
+async def test_unreachable_old_runs_cannot_starve_a_later_completed_run(
+    application_postgres_dsn, monkeypatch, status_code
+):
+    class Native:
+        async def get_run(self, profile, run_id):
+            if run_id != "native-completed":
+                raise HermesClientError(
+                    operation="get_run", status_code=status_code,
+                    code="hermes.unavailable", message="Unavailable",
+                )
+            return {"status": "completed", "output": "recovered"}
+
+    engine = create_engine(application_postgres_dsn)
+    factory = sessionmaker(engine)
+    monkeypatch.setattr(maintenance, "get_session_factory", lambda: factory)
+    monkeypatch.setattr(maintenance, "runtime_client", Native)
+    try:
+        with factory() as db:
+            _, binding = seed(db)
+            repo = HermesRunRepository(db)
+            ids = []
+            for index in range(6):
+                run = stage(db, binding, session_for(db, binding))
+                assert repo.claim_execution(run.id, claim_token="worker", lease_seconds=3600).acquired
+                repo.attach_hermes_run(run.id, claim_token="worker", status="running", hermes_run_id=(
+                    "native-completed" if index == 5 else f"unreachable-{index}"
+                ))
+                run.updated_at = utcnow_naive() - timedelta(minutes=10 - index)
+                ids.append(run.id)
+            db.commit()
+        assert await maintenance._reconcile_finished_runs(limit=5) == (0, 5)
+        assert await maintenance._reconcile_finished_runs(limit=5) == (1, 4)
+        with factory() as db:
+            for run_id in ids[:5]:
+                run = db.get(HermesRunProjection, run_id)
+                assert run.status == "running" and run.finished_at is None
+                assert run.execution_claim_token == "worker"
+            recovered = db.get(HermesRunProjection, ids[5])
+            assert recovered.status == "completed" and recovered.output_text == "recovered"
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("native_status", ["completed", "failed", "running", "unavailable"])
 async def test_recovery_reconciles_terminal_native_status_during_a_worker_lease(
     application_postgres_dsn,

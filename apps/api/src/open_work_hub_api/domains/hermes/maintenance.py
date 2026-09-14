@@ -437,10 +437,12 @@ async def _reconcile_finished_runs(*, limit: int) -> tuple[int, int]:
     client = runtime_client()
 
     async def reconcile(row) -> tuple[int, int]:
+        unavailable = False
         try:
             payload = await client.get_run(row.profile_name, row.hermes_run_id)
         except HermesClientError:
-            return 0, 1
+            payload = {}
+            unavailable = True
         status = HermesRunRepository._normalize_status(str(payload.get("status")))
         with get_session_factory()() as db:
             repo = HermesRunRepository(db)
@@ -450,13 +452,13 @@ async def _reconcile_finished_runs(*, limit: int) -> tuple[int, int]:
                 or current.status in TERMINAL_RUN_STATUSES
                 or current.hermes_run_id != row.hermes_run_id
             ):
-                return 0, 0
-            if status not in TERMINAL_RUN_STATUSES:
-                # Rotate bounded scans past long-running native tasks without
-                # changing their activity, claims or approval state.
+                return 0, int(unavailable)
+            if unavailable or status not in TERMINAL_RUN_STATUSES:
+                # Rotate past long-running and temporarily unreachable tasks;
+                # a failed lookup must not starve later runs or change claims.
                 current.updated_at = utcnow_naive()
                 db.commit()
-                return 0, 0
+                return 0, int(unavailable)
             repo.append_event(row.id, {**payload, "event": f"run.{status}"})
             db.commit()
         return 1, 0
