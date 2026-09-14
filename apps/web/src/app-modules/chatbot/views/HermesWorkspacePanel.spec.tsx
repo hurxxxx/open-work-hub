@@ -169,7 +169,7 @@ describe('Hermes work and files panel', () => {
     expect(result.closest('details')).toBeNull();
     fireEvent.click(result);
     expect(onOpenFile).toHaveBeenCalledWith('dashboard.html', 'saved-version');
-    mocks.listFiles.mockReturnValue(new Promise(() => {}));
+    mocks.listFiles.mockReturnValue(new Promise(() => undefined));
     await act(async () =>
       rerender(
         <MemoryRouter>

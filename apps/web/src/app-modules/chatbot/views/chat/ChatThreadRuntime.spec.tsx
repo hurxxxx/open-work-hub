@@ -9,7 +9,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { expect, it } from 'vitest';
 
 const convertMessage = (message: ThreadMessageLike) => message;
-const onNew = async () => {};
+const onNew = async () => undefined;
 function ProbeMessage() {
   const id = useAuiState((state) => state.message.id);
   return <span>{id}</span>;
