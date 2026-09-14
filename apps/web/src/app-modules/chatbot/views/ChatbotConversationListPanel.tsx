@@ -2,11 +2,11 @@ import type { AppRouteId } from '@open-work-hub/contracts/app-contracts';
 import { buildAppHref } from '@open-work-hub/contracts/app-routes';
 import {
   MessageSquare,
-  Pencil,
+  MoreHorizontal,
+  Archive,
   Plus,
   Search,
   Sparkles,
-  Trash2,
 } from 'lucide-react';
 import {
   useCallback,
@@ -19,9 +19,15 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
-import { useConfirm, useFeedback, usePrompt } from '@open-work-hub/ui';
+import {
+  DropdownMenu,
+  useConfirm,
+  useFeedback,
+  usePrompt,
+} from '@open-work-hub/ui';
 
 import { cn } from '@/src/lib/utils';
+import { updateHermesSession } from '../api/hermes-agent-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   CHATBOT_SIDEBAR_INITIAL_STATE,
@@ -50,6 +56,8 @@ interface ChatbotConversationListPanelProps {
   scopeResourceId?: string;
   eyebrow?: string;
   title?: string;
+  placement?: 'inline' | 'shell';
+  onNavigate?: () => void;
 }
 
 interface ConversationListProps {
@@ -60,8 +68,13 @@ interface ConversationListProps {
   onNewConversation: () => void;
   onDelete: (conversationId: string) => void | Promise<void>;
   onRename: (conversation: ConversationSummary) => void | Promise<void>;
+  onUpdate: (
+    conversation: ConversationSummary,
+    changes: { pinned?: boolean; archived?: boolean },
+  ) => void | Promise<void>;
   onLoadMore: () => void | Promise<void>;
   hasMore: boolean;
+  isLoading: boolean;
   isLoadingMore: boolean;
   navigationDisabled: boolean;
   pendingConversationTitle?: string | null;
@@ -76,6 +89,7 @@ function ConversationList({
   conversations,
   error,
   hasMore,
+  isLoading,
   isLoadingMore,
   navigationDisabled,
   pendingConversationTitle,
@@ -83,6 +97,7 @@ function ConversationList({
   onLoadMore,
   onNewConversation,
   onRename,
+  onUpdate,
   onSelect,
   scopeRef,
   scopeResourceId,
@@ -91,6 +106,7 @@ function ConversationList({
 }: ConversationListProps) {
   const { t } = useTranslation(['apps', 'common']);
   const [query, setQuery] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const normalizedQuery = query.trim();
   const displayConversations = useMemo(() => {
     const pendingTitle = pendingConversationTitle?.trim();
@@ -124,11 +140,13 @@ function ConversationList({
   ]);
   const filteredConversations = useMemo(() => {
     return filterConversations(
-      displayConversations,
+      displayConversations.filter(
+        (item) => Boolean(item.archived) === showArchived,
+      ),
       normalizedQuery,
       t('apps:ai.sidebar.untitledConversation'),
     );
-  }, [displayConversations, normalizedQuery, t]);
+  }, [displayConversations, normalizedQuery, showArchived, t]);
   const groups = useMemo(
     () => groupConversationsByDate(filteredConversations),
     [filteredConversations],
@@ -187,10 +205,35 @@ function ConversationList({
             placeholder={t('apps:ai.sidebar.searchConversations')}
           />
         </label>
+        {normalizedQuery ? (
+          <p className="mt-1 app-text-micro text-app-ink/55">
+            {t('apps:ai.sidebar.searchLoadedTitles')}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          aria-pressed={showArchived}
+          onClick={() => setShowArchived((value) => !value)}
+          className="mt-2 flex items-center gap-1 app-text-caption text-app-ink/60"
+        >
+          <Archive size={13} />
+          {t(
+            showArchived
+              ? 'apps:ai.sidebar.showRecent'
+              : 'apps:ai.sidebar.showArchived',
+          )}
+        </button>
       </div>
 
       <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {error ? (
+        {isLoading && displayConversations.length === 0 ? (
+          <p
+            role="status"
+            className="px-2 py-1.5 app-text-caption text-app-ink/55"
+          >
+            {t('apps:ai.sidebar.loadingMore')}
+          </p>
+        ) : error ? (
           <div className="rounded-md px-2 py-1.5 app-text-caption text-app-warning-text dark:text-app-warning-text">
             {error}
           </div>
@@ -237,7 +280,7 @@ function ConversationList({
                                 : undefined
                           }
                           className={cn(
-                            'flex h-8 w-full items-center gap-2 rounded-md px-2 pr-14 text-left transition-colors',
+                            'flex h-8 w-full items-center gap-2 rounded-md px-2 pr-9 text-left transition-colors',
                             isActive
                               ? 'bg-app-surface-hover text-app-accent'
                               : 'text-app-ink/75 hover:bg-app-surface-hover hover:text-app-ink',
@@ -265,39 +308,70 @@ function ConversationList({
                           </span>
                         </button>
                         {!isPending ? (
-                          <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-focus-within/conversation:opacity-100 group-hover/conversation:opacity-100">
-                            <button
-                              type="button"
-                              aria-label={t(
-                                'apps:ai.sidebar.renameConversation',
-                              )}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void onRename(conversation);
-                              }}
-                              className="flex size-6 items-center justify-center rounded text-app-ink/35 transition-colors hover:bg-app-surface hover:text-app-accent"
-                            >
-                              <Pencil size={12} />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={t(
-                                'apps:ai.sidebar.deleteConversation',
-                              )}
-                              disabled={navigationDisabled}
-                              title={
-                                navigationDisabled
-                                  ? t('apps:ai.message.typing')
-                                  : undefined
+                          <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                            <DropdownMenu
+                              side="bottom"
+                              trigger={
+                                <button
+                                  type="button"
+                                  aria-label={t(
+                                    'apps:ai.sidebar.conversationActions',
+                                  )}
+                                  disabled={navigationDisabled}
+                                  className="flex size-7 items-center justify-center rounded text-app-ink/55 hover:bg-app-surface-hover focus-visible:ring-2 focus-visible:ring-app-accent"
+                                >
+                                  <MoreHorizontal size={16} />
+                                </button>
                               }
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void onDelete(conversation.id);
-                              }}
-                              className="flex size-6 items-center justify-center rounded text-app-ink/35 transition-colors hover:bg-app-surface hover:text-app-danger disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              <Trash2 size={12} />
-                            </button>
+                              items={[
+                                {
+                                  id: 'pin',
+                                  label: t(
+                                    conversation.pinned
+                                      ? 'apps:ai.sidebar.unpinConversation'
+                                      : 'apps:ai.sidebar.pinConversation',
+                                  ),
+                                  onSelect: () => {
+                                    void onUpdate(conversation, {
+                                      pinned: !conversation.pinned,
+                                    });
+                                  },
+                                },
+                                {
+                                  id: 'archive',
+                                  label: t(
+                                    conversation.archived
+                                      ? 'apps:ai.sidebar.restoreConversation'
+                                      : 'apps:ai.sidebar.archiveConversation',
+                                  ),
+                                  onSelect: () => {
+                                    void onUpdate(conversation, {
+                                      archived: !conversation.archived,
+                                    });
+                                  },
+                                },
+                                {
+                                  id: 'rename',
+                                  label: t(
+                                    'apps:ai.sidebar.renameConversation',
+                                  ),
+                                  onSelect: () => {
+                                    void onRename(conversation);
+                                  },
+                                },
+                                {
+                                  id: 'delete',
+                                  label: t(
+                                    'apps:ai.sidebar.deleteConversation',
+                                  ),
+                                  tone: 'danger',
+                                  separatorBefore: true,
+                                  onSelect: () => {
+                                    void onDelete(conversation.id);
+                                  },
+                                },
+                              ]}
+                            />
                           </div>
                         ) : null}
                       </li>
@@ -336,6 +410,8 @@ export function ChatbotConversationListPanel({
   scopeResourceId,
   eyebrow,
   title,
+  placement = 'inline',
+  onNavigate,
 }: ChatbotConversationListPanelProps) {
   const { t } = useTranslation(['apps', 'common']);
   const { token } = useAuth();
@@ -343,14 +419,32 @@ export function ChatbotConversationListPanel({
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
   const toast = useFeedback();
+  const [isLoading, setIsLoading] = useState(true);
   const [state, dispatch] = useReducer(
     chatbotSidebarReducer,
     CHATBOT_SIDEBAR_INITIAL_STATE,
   );
   const loadedLimitRef = useRef(CONVERSATION_LIST_LIMIT);
+  const requestVersion = useRef(0);
+  const ownerKey = useMemo(
+    () => ({ token, scopeRef, scopeResourceId }),
+    [token, scopeRef, scopeResourceId],
+  );
+  const owner = useRef(ownerKey);
+  owner.current = ownerKey;
+  const selectedConversation = useRef(activeConversationId);
+  selectedConversation.current = activeConversationId;
+  const pendingUpdates = useRef(new Set<string>());
 
   const loadConversationWindow = useCallback(async () => {
+    const version = ++requestVersion.current;
+    const belongsHere = () =>
+      version === requestVersion.current &&
+      owner.current.token === token &&
+      owner.current.scopeRef === scopeRef &&
+      owner.current.scopeResourceId === scopeResourceId;
     if (!token) {
+      setIsLoading(false);
       dispatch({ type: 'reset' });
       loadedLimitRef.current = CONVERSATION_LIST_LIMIT;
       return;
@@ -359,6 +453,7 @@ export function ChatbotConversationListPanel({
       CONVERSATION_LIST_LIMIT,
       loadedLimitRef.current,
     );
+    setIsLoading(true);
     try {
       const response = await listConversationsWindow(
         listConversations,
@@ -366,6 +461,7 @@ export function ChatbotConversationListPanel({
         requestedLimit,
         { scopeRef, scopeResourceId },
       );
+      if (!belongsHere()) return;
       loadedLimitRef.current = Math.max(
         CONVERSATION_LIST_LIMIT,
         response.items.length,
@@ -376,6 +472,7 @@ export function ChatbotConversationListPanel({
         nextCursor: response.nextCursor ?? null,
       });
     } catch (caughtError) {
+      if (!belongsHere()) return;
       dispatch({
         type: 'loadFailure',
         message:
@@ -383,11 +480,18 @@ export function ChatbotConversationListPanel({
             ? caughtError.message
             : t('apps:ai.sidebar.loadConversationsFailed'),
       });
+    } finally {
+      if (belongsHere()) setIsLoading(false);
     }
   }, [scopeRef, scopeResourceId, t, token]);
 
   useEffect(() => {
+    dispatch({ type: 'reset' });
+    loadedLimitRef.current = CONVERSATION_LIST_LIMIT;
     void loadConversationWindow();
+    return () => {
+      requestVersion.current += 1;
+    };
   }, [loadConversationWindow]);
 
   useEffect(() => {
@@ -409,13 +513,15 @@ export function ChatbotConversationListPanel({
           queryParams: conversationId ? { c: conversationId } : {},
         }),
       );
+      onNavigate?.();
     },
-    [navigate, routeId],
+    [navigate, routeId, onNavigate],
   );
 
   const loadMoreConversations = useCallback(async () => {
     if (!token || !state.nextCursor || state.isLoadingMore) return;
     dispatch({ type: 'loadMoreStart' });
+    const version = requestVersion.current;
     try {
       const response = await listConversations(token, {
         limit: CONVERSATION_LIST_LIMIT,
@@ -423,6 +529,7 @@ export function ChatbotConversationListPanel({
         scopeRef,
         scopeResourceId,
       });
+      if (version !== requestVersion.current) return;
       loadedLimitRef.current = Math.max(
         CONVERSATION_LIST_LIMIT,
         state.conversations.length + response.items.length,
@@ -433,6 +540,7 @@ export function ChatbotConversationListPanel({
         nextCursor: response.nextCursor ?? null,
       });
     } catch (caughtError) {
+      if (version !== requestVersion.current) return;
       dispatch({
         type: 'loadMoreFailure',
         message:
@@ -461,14 +569,22 @@ export function ChatbotConversationListPanel({
         cancelLabel: t('common:actions.cancel'),
         variant: 'danger',
       });
-      if (!confirmed) return;
-      await deleteConversation(token, conversationId, {});
-      dispatch({ type: 'deleteSuccess', conversationId });
-      if (activeConversationId === conversationId) {
-        navigateToAi();
+      if (!confirmed || owner.current !== ownerKey) return;
+      try {
+        await deleteConversation(token, conversationId, {});
+        if (owner.current !== ownerKey) return;
+        dispatch({ type: 'deleteSuccess', conversationId });
+        if (selectedConversation.current === conversationId) navigateToAi();
+      } catch (error) {
+        if (owner.current === ownerKey)
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : t('apps:hermesWorkspace.operationFailed'),
+          );
       }
     },
-    [activeConversationId, confirm, navigateToAi, t, token],
+    [ownerKey, confirm, navigateToAi, t, token, toast],
   );
 
   const handleRenameConversation = useCallback(
@@ -483,7 +599,11 @@ export function ChatbotConversationListPanel({
         cancelLabel: t('common:actions.cancel'),
       });
       const trimmedTitle = nextTitle?.trim() ?? '';
-      if (!trimmedTitle || trimmedTitle === (conversation.title ?? '').trim()) {
+      if (
+        owner.current !== ownerKey ||
+        !trimmedTitle ||
+        trimmedTitle === (conversation.title ?? '').trim()
+      ) {
         return;
       }
       try {
@@ -493,6 +613,7 @@ export function ChatbotConversationListPanel({
           trimmedTitle,
           {},
         );
+        if (owner.current !== ownerKey) return;
         dispatch({
           type: 'renameSuccess',
           conversation: {
@@ -503,6 +624,7 @@ export function ChatbotConversationListPanel({
         });
         toast.success(t('apps:ai.sidebar.renameConversationSuccess'));
       } catch (caughtError) {
+        if (owner.current !== ownerKey) return;
         toast.error(
           caughtError instanceof Error
             ? caughtError.message
@@ -510,14 +632,53 @@ export function ChatbotConversationListPanel({
         );
       }
     },
-    [prompt, t, toast, token],
+    [ownerKey, prompt, t, toast, token],
   );
+
+  const handleUpdateConversation = async (
+    conversation: ConversationSummary,
+    changes: { pinned?: boolean; archived?: boolean },
+  ) => {
+    if (
+      !token ||
+      navigationDisabled ||
+      pendingUpdates.current.has(conversation.id)
+    )
+      return;
+    pendingUpdates.current.add(conversation.id);
+    try {
+      await updateHermesSession(token, conversation.id, changes);
+      if (owner.current !== ownerKey) return;
+      await loadConversationWindow();
+      if (
+        owner.current === ownerKey &&
+        changes.archived &&
+        selectedConversation.current === conversation.id
+      )
+        navigateToAi();
+    } catch (error) {
+      if (owner.current === ownerKey)
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : t('apps:hermesWorkspace.operationFailed'),
+        );
+    } finally {
+      pendingUpdates.current.delete(conversation.id);
+    }
+  };
 
   return (
     <>
       {confirmDialog}
       {promptDialog}
-      <aside className="flex max-h-72 min-h-0 flex-col border-b border-app-border bg-app-surface-sidebar/70 lg:max-h-none lg:w-72 lg:shrink-0 lg:border-b-0 lg:border-r">
+      <aside
+        className={
+          placement === 'shell'
+            ? 'flex min-h-0 flex-col'
+            : 'flex max-h-72 min-h-0 flex-col border-b border-app-border bg-app-surface-sidebar/70 lg:max-h-none lg:w-72 lg:shrink-0 lg:border-b-0 lg:border-r'
+        }
+      >
         <ConversationList
           conversations={state.conversations}
           error={state.error}
@@ -526,9 +687,11 @@ export function ChatbotConversationListPanel({
           onNewConversation={() => navigateToAi()}
           onDelete={handleDeleteConversation}
           onRename={handleRenameConversation}
+          onUpdate={handleUpdateConversation}
           onLoadMore={loadMoreConversations}
           hasMore={Boolean(state.nextCursor)}
           isLoadingMore={state.isLoadingMore}
+          isLoading={isLoading}
           navigationDisabled={navigationDisabled}
           pendingConversationTitle={pendingConversationTitle}
           scopeRef={scopeRef}

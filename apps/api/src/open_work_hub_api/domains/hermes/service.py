@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 import hashlib
 import hmac
 import re
@@ -31,6 +32,26 @@ from open_work_hub_api.domains.hermes.research_sources import (
     ResearchSourceId,
     academic_research_environment_hint,
 )
+
+
+def interactive_instructions(user_instructions: str | None) -> str:
+    contract = (
+        "Execution environment: /workspace is the durable conversation filesystem; "
+        "successful file/terminal/code tools save snapshots before returning. Keep deliverables "
+        "there. Scratch space, packages and background processes are disposable. "
+        "Interactive HTML previews use only saved local JS/CSS/images, inline scripts/styles "
+        "and embedded data; external URLs, remote imports and fetch are blocked. Save required "
+        "dependencies locally and use relative paths or a self-contained HTML. "
+        "Use owh_preview on the saved HTML after creation or modification to inspect rendering, "
+        "console/resource errors and its screenshot before claiming visual completion. "
+        "Chromium is preinstalled for this tool; do not install Playwright or launch a public server "
+        "to verify a static result. Check the actual tool result, not merely its completion event. "
+        "On failure use its diagnostic to change the approach; repeated identical failures are "
+        "not progress. Infrastructure failures need a bounded explanation with preserved files, "
+        "not repeated installation attempts or sandbox disabling. Report what was verified and "
+        "any remaining limitation; do not claim success for unsaved or unverified work."
+    )
+    return contract + ("\n\nUser instructions:\n" + user_instructions if user_instructions else "")
 
 
 class HermesIntegrationDisabledError(RuntimeError):

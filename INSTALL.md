@@ -605,6 +605,7 @@ uv sync --frozen --python 3.12 --directory apps/worker
 Hermes 구조화 작업의 기본 의존성은 API와 Worker 양쪽에 설치되어야 한다. 체크아웃을 갱신한 뒤에도 위 두 `uv sync`를 실행한다. 선택 ML 패키지는 필요하지 않으며, 기능별 설정은 [Hermes 설치 문서](docs/domains/ai/hermes.md#development-checkout)를 따른다.
 
 잠금 파일을 변경하거나 의존성을 업그레이드해서 설치 오류를 우회하지 않는다.
+챗봇 UI 의존성도 위 `pnpm install --frozen-lockfile`로 설치한다. 별도 Desktop 설치는 필요 없으며, 채택 버전과 연결 방식은 [챗봇 UI 문서](docs/apps/chatbot/hermes-desktop/README.md)에서 관리한다.
 실패한 패키지·인증·네트워크·빌드 도구 문제를 구분하여 해결한다.
 
 환경설정은 먼저 기존 파일 유무와 키 목록을 확인한다. 이 도구는 값을 출력하지 않는다.
@@ -830,7 +831,7 @@ Bento 등 별도 주소를 쓰는 기능은 사용 시 해당 기능 문서의 �
 | --- | --- |
 | PostgreSQL·Redis·파일 저장소·검색 | 네이티브 DB·Redis 연결은 유지하고 필요한 저장소·검색만 추가한다. 개발 DB, 큐, 버킷, 색인 연결이 실제 실행 대상과 일치하는지 확인한다. Docker 서비스 정의는 [개발 Compose](ops/compose/open-work-hub-dev.infra.yml), 앱 연결 설정은 [개발 환경 설정](scripts/dev-env.sh)을 따른다. |
 | 개인정보 필터 | `OPEN_WORK_HUB_OPF_SERVICE_BASE_URL`에 별도 서비스 주소가 있으면 해당 서비스를 먼저 준비한다. 아래 실행 예와 [서비스 구현](apps/api/src/open_work_hub_api/domains/ai/privacy_filter_service.py)을 따른다. |
-| 모든 생성형 AI·챗봇 작업 파일 | 관리자 LLM 정책, 공급자 키 암호화 설정, Hermes 활성화, Docker 소켓 그룹·동시 실행 한도·마이그레이션은 [Hermes 설치 문서](docs/domains/ai/hermes.md#fresh-environment-setup)를 따른다. 기존 설치에서 플러그인·샌드박스 설정을 갱신할 때는 [게이트웨이 재생성 → API·Worker 갱신 절차](docs/domains/ai/hermes.md#updating-an-existing-development-installation)를 따른다. API·Worker의 프로필 정책만 바뀌는 경우는 [대화 컨텍스트 정책 적용 절차](docs/domains/ai/hermes.md#conversation-context-policy)를 따른다. 신규·기존 설치 모두 [실제 샌드박스·챗봇 명령 실행 검사](docs/domains/ai/hermes.md#sandbox-execution-check)로 완료를 확인하고, 실패 시 [오류별 복구 절차](docs/domains/ai/hermes.md#sandbox-startup-recovery)를 적용한다. 공급자별 temperature 지원과 확장 제약은 해당 문서의 [런타임 계약](docs/domains/ai/hermes.md#pinned-runtime-contract)·[확장 제약](docs/domains/ai/hermes.md#pinned-upstream-gaps)을 확인한다. 로컬 모델은 OpenRouter 키 없이 시작할 수 있다. 호스트에 Hermes를 별도 설치하지 않는다. |
+| 모든 생성형 AI·챗봇 작업 파일 | 관리자 LLM 정책, 공급자 키 암호화 설정, Hermes 활성화, Docker 소켓 그룹·동시 실행 한도·마이그레이션은 [Hermes 설치 문서](docs/domains/ai/hermes.md#fresh-environment-setup)를 따른다. 기존 설치에서 플러그인·샌드박스 설정을 갱신할 때는 [게이트웨이 재생성 → API·Worker 갱신 절차](docs/domains/ai/hermes.md#updating-an-existing-development-installation)를 따른다. API·Worker의 프로필 정책만 바뀌는 경우는 [대화 컨텍스트 정책 적용 절차](docs/domains/ai/hermes.md#conversation-context-policy)를 따른다. 네이티브 파일 쓰기는 Docker 호스트/VM의 Landlock ABI 3+가 필요하다. 신규·기존 설치 모두 [실제 샌드박스·네이티브 코드·파일·챗봇 실행 검사](docs/domains/ai/hermes.md#sandbox-execution-check)로 완료를 확인하고, 실패 시 [오류별 복구 절차](docs/domains/ai/hermes.md#sandbox-startup-recovery)를 적용한다. 정적 결과물은 기본 제공 Chromium과 `owh_preview`로 검사하며 Playwright를 추가 설치하지 않는다. [오프라인 렌더링·파일 수정·실행 종료 확인](docs/domains/ai/hermes.md#static-preview-execution)도 셋업 검증에 포함한다. 공급자별 temperature 지원과 확장 제약은 해당 문서의 [런타임 계약](docs/domains/ai/hermes.md#pinned-runtime-contract)·[확장 제약](docs/domains/ai/hermes.md#pinned-upstream-gaps)을 확인한다. 로컬 모델은 OpenRouter 키 없이 시작할 수 있다. 호스트에 Hermes를 별도 설치하지 않는다. |
 | 문서 AI·OCR·음성 인식 | 설정한 [Inference Gateway](docs/domains/inference-gateway/README.md)와 [RAG](docs/domains/rag/README.md) 연결을 준비한다. 개발 Compose가 외부 추론 서버까지 설치하지는 않는다. |
 | 슬라이드·다이어그램 | [Bento](docs/apps/bento/README.md)와 [Diagrams](docs/apps/diagrams/README.md)의 서버 주소·브라우저 연결을 확인한다. Bento의 별도 런타임 이미지와 Web bridge 프로토콜도 함께 맞춘다. |
 | 화상회의·녹음 | [Recording](docs/apps/recording/README.md)의 LiveKit·네트워크·추론 서비스 요구사항을 확인한다. |

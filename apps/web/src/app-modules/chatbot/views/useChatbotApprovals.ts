@@ -54,6 +54,14 @@ export function useChatbotApprovals({
 }) {
   const { t } = useTranslation(['apps', 'auth']);
   const autoResumeAttemptedApprovalsRef = useRef<Set<string>>(new Set());
+  const inFlightDecisions = useRef(new Set<string>());
+  const inFlightResumes = useRef(new Set<string>());
+  const ownerKey = useMemo(
+    () => ({ conversationId: currentConversationId, token }),
+    [currentConversationId, token],
+  );
+  const owner = useRef(ownerKey);
+  owner.current = ownerKey;
 
   const pendingApproval = useMemo(
     () =>
@@ -111,6 +119,9 @@ export function useChatbotApprovals({
         setApprovalError(t('apps:ai.view.conversationContextMissing'));
         return;
       }
+      if (inFlightResumes.current.has(approval.approval_id)) return;
+      inFlightResumes.current.add(approval.approval_id);
+      const belongsHere = () => owner.current === ownerKey;
       setApprovalAction({ approvalId: approval.approval_id, kind: 'resume' });
       setApprovalError(null);
       try {
@@ -125,14 +136,17 @@ export function useChatbotApprovals({
           },
         );
       } catch (error) {
-        handleApprovalActionError(error, t('apps:ai.view.resumeFailed'));
+        if (belongsHere())
+          handleApprovalActionError(error, t('apps:ai.view.resumeFailed'));
       } finally {
-        clearApprovalAction(approval.approval_id);
+        inFlightResumes.current.delete(approval.approval_id);
+        if (belongsHere()) clearApprovalAction(approval.approval_id);
       }
     },
     [
       allowedAppIds,
       clearApprovalAction,
+      ownerKey,
       currentConversationId,
       handleApprovalActionError,
       resumeChat,
@@ -153,6 +167,9 @@ export function useChatbotApprovals({
         setApprovalError(t('auth:errors.noActiveSession'));
         return;
       }
+      if (inFlightDecisions.current.has(approval.approval_id)) return;
+      inFlightDecisions.current.add(approval.approval_id);
+      const belongsHere = () => owner.current === ownerKey;
       setApprovalAction({
         approvalId: approval.approval_id,
         kind: decision === 'approved' ? 'approve' : 'reject',
@@ -168,6 +185,7 @@ export function useChatbotApprovals({
           }),
           {},
         );
+        if (!belongsHere()) return;
         const resolvedApproval = applyPendingApprovalDecision({
           approval,
           decision,
@@ -179,13 +197,20 @@ export function useChatbotApprovals({
         );
         await resumePendingApproval(resolvedApproval);
       } catch (error) {
-        handleApprovalActionError(error, t('apps:ai.view.applyApprovalFailed'));
+        if (belongsHere())
+          handleApprovalActionError(
+            error,
+            t('apps:ai.view.applyApprovalFailed'),
+          );
       } finally {
-        clearApprovalAction(approval.approval_id);
+        inFlightDecisions.current.delete(approval.approval_id);
+        if (belongsHere()) clearApprovalAction(approval.approval_id);
       }
     },
     [
       clearApprovalAction,
+      ownerKey,
+      currentConversationId,
       handleApprovalActionError,
       resumePendingApproval,
       setApprovalAction,
@@ -202,19 +227,30 @@ export function useChatbotApprovals({
         setApprovalError(t('auth:errors.noActiveSession'));
         return;
       }
+      if (inFlightDecisions.current.has(approval.approval_id)) return;
+      inFlightDecisions.current.add(approval.approval_id);
+      const belongsHere = () => owner.current === ownerKey;
       setApprovalAction({ approvalId: approval.approval_id, kind: 'abandon' });
       setApprovalError(null);
       try {
         await abandonAiApproval(token, approval.approval_id, {}, {});
+        if (!belongsHere()) return;
         upsertPendingApproval(cancelPendingApproval(approval));
       } catch (error) {
-        handleApprovalActionError(error, t('apps:ai.view.cancelRequestFailed'));
+        if (belongsHere())
+          handleApprovalActionError(
+            error,
+            t('apps:ai.view.cancelRequestFailed'),
+          );
       } finally {
-        clearApprovalAction(approval.approval_id);
+        inFlightDecisions.current.delete(approval.approval_id);
+        if (belongsHere()) clearApprovalAction(approval.approval_id);
       }
     },
     [
       clearApprovalAction,
+      ownerKey,
+      currentConversationId,
       handleApprovalActionError,
       setApprovalAction,
       setApprovalError,

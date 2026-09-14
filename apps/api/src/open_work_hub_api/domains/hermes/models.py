@@ -396,6 +396,29 @@ class HermesSessionFile(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
 
 
+class HermesFileRevision(Base):
+    __tablename__ = "hermes_file_revisions"
+    __table_args__ = (CheckConstraint("size_bytes >= 0", name="ck_hermes_file_revisions_size"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # Logical file identity survives expiry of the latest-path catalog row.
+    file_id: Mapped[str] = mapped_column(String(36), index=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("hermes_session_bindings.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("hermes_run_projections.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    relative_path: Mapped[str] = mapped_column(String(1024))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    object_key: Mapped[str] = mapped_column(String(1024), unique=True)
+    media_type: Mapped[str] = mapped_column(String(255))
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive)
+
+
 class HermesRunInput(Base):
     __tablename__ = "hermes_run_inputs"
 

@@ -69,6 +69,7 @@ from open_work_hub_api.domains.hermes.service import (
     ensure_job_profile,
     ensure_profile_binding,
     runtime_client,
+    interactive_instructions,
 )
 
 router = APIRouter(
@@ -118,7 +119,7 @@ def _session_response(binding: HermesSessionBinding, payload: dict) -> HermesSes
         preview=row.get("preview"),
         parent_session_id=row.get("parent_session_id"),
         pinned=bool(row.get("pinned")),
-        archived=bool(row.get("archived")),
+        archived=binding.status == "archived",
         scope_ref=binding.scope_ref,
         scope_resource_id=binding.scope_resource_id,
         created_at=binding.created_at,
@@ -351,7 +352,8 @@ async def update_session(
         _raise_integration_error(error)
     if "title" in changes:
         session.title = changes["title"]
-    session.status = "archived" if changes.get("archived") else "active"
+    if "archived" in changes:
+        session.status = "archived" if changes["archived"] else "active"
     session.updated_at = utcnow_naive()
     db.add(session)
     db.commit()
@@ -479,7 +481,7 @@ async def create_run(
             binding=profile,
             session=session,
             input_text=body.input,
-            instructions=body.instructions,
+            instructions=interactive_instructions(body.instructions),
             conversation_history=body.conversation_history,
             allowed_app_ids=body.allowed_app_ids,
             client_request_id=idempotency_key,

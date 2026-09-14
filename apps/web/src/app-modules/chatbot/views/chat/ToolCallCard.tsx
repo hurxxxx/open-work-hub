@@ -30,6 +30,7 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
         className="flex w-full items-start gap-3 text-left"
         onClick={() => setExpanded((current) => !current)}
         type="button"
+        aria-expanded={expanded}
       >
         <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-bg text-app-ink">
           <Icon size={16} />

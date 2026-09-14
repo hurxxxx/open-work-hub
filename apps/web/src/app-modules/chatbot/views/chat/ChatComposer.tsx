@@ -19,6 +19,7 @@ export interface ChatComposerProps {
   onSubmit: () => void;
   onAbort: () => void;
   isSending: boolean;
+  isStopping?: boolean;
   isStreaming: boolean;
   chatError: string | null;
   onSelectTool?: (item: NavItem) => void;
@@ -112,6 +113,8 @@ export function ChatComposer(props: ChatComposerProps) {
             disabled={props.isDisabled}
             onChange={(event) => props.onInputChange(event.target.value)}
             onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing || event.keyCode === 229)
+                return;
               const intent = getChatComposerKeyIntent({
                 input: props.input,
                 isDisabled: props.isDisabled,
@@ -152,12 +155,17 @@ export function ChatComposer(props: ChatComposerProps) {
             </div>
             {props.isSending && props.isStreaming ? (
               <button
-                aria-label={t('ai.stop')}
+                aria-label={t(props.isStopping ? 'ai.stopping' : 'ai.stop')}
+                disabled={props.isStopping}
                 className="flex size-8 shrink-0 items-center justify-center rounded-full border border-app-border bg-app-surface text-app-ink transition-colors hover:border-app-accent"
                 onClick={props.onAbort}
                 type="button"
               >
-                <Square size={14} />
+                {props.isStopping ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Square size={14} />
+                )}
               </button>
             ) : props.isSending ? (
               <button

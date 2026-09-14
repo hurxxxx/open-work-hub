@@ -1,10 +1,26 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ArtifactBuffer } from '../../api/agent-events';
 import { ArtifactPanel } from './ArtifactPanel';
 
+const feedback = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock('@open-work-hub/ui', async (original) => ({
+  ...(await original<typeof import('@open-work-hub/ui')>()),
+  useFeedback: () => feedback,
+}));
+
 describe('ArtifactPanel', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockReturnValue({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
+    );
+  });
   it('renders a durable artifact through its custom renderer before detail content loads', () => {
     const artifact: ArtifactBuffer = {
       id: 'report-1',

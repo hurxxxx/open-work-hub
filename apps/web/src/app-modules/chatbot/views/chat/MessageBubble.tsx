@@ -9,6 +9,7 @@ import type { ChatbotArtifactRenderer } from '../chatbot-experience';
 
 import { ArtifactCard } from './ArtifactCard';
 import { ThinkingPanel } from './ThinkingPanel';
+import { ToolCallGroup } from './ToolCallGroup';
 import type { ChatTurn } from './chat-turn';
 
 export type { ChatTurn } from './chat-turn';
@@ -130,6 +131,7 @@ export function MessageBubble({
 
   return (
     <div
+      data-turn-id={turn.id}
       className={`group flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
     >
       {!isUser && (
@@ -147,6 +149,7 @@ export function MessageBubble({
               : 'border-app-border bg-app-surface text-app-ink'
           }`}
         >
+          {!isUser ? <ToolCallGroup calls={turn.toolCalls ?? []} /> : null}
           {isEditing ? (
             <div className="space-y-2">
               <textarea
@@ -156,6 +159,8 @@ export function MessageBubble({
                 value={editValue}
                 onChange={(event) => onEditValueChange?.(event.target.value)}
                 onKeyDown={(event) => {
+                  if (event.nativeEvent.isComposing || event.keyCode === 229)
+                    return;
                   if (event.key === 'Escape') {
                     event.preventDefault();
                     onCancelEdit?.();
@@ -232,7 +237,7 @@ export function MessageBubble({
             className={`mt-1 flex items-center gap-1 transition-opacity ${
               showFailedRetry
                 ? 'opacity-100'
-                : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                : 'opacity-100 lg:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
             }`}
           >
             {actions.map((action) => {

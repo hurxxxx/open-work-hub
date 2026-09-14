@@ -43,6 +43,8 @@ def rpc(server, run_id, method, params):
             "data": params["data"],
         }
         return {}
+    if method == "owh/files/checkpoint":
+        return {"previews": 0}
     raise AssertionError("Unexpected synthetic file operation")
 
 
