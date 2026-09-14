@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 async function openPreview(
   page: Page,
   content: string,
-  files: Record<string, string> = {},
+  files: Record<string, string | number[]> = {},
 ) {
   await page.route('**/preview-fixture', (route) =>
     route.fulfill({
@@ -26,7 +26,10 @@ async function openPreview(
         async (path: string) => {
           if (!(path in files))
             throw new Error('Unexpected fixture dependency');
-          return new TextEncoder().encode(files[path]);
+          const data = files[path];
+          return typeof data === 'string'
+            ? new TextEncoder().encode(data)
+            : new Uint8Array(data);
         },
         new AbortController().signal,
       );
@@ -155,4 +158,27 @@ test('inline style images load from the saved dependency snapshot', async ({
     return [image.naturalWidth, image.naturalHeight];
   });
   expect(size).toEqual([80, 40]);
+});
+
+test('saved GIF images match the native preview fixture', async ({ page }) => {
+  await openPreview(
+    page,
+    `<img id="result" src="image.gif" onerror="throw new Error('GIF failed to decode')">`,
+    {
+      'demo/image.gif': [
+        ...Buffer.from(
+          'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+          'base64',
+        ),
+      ],
+    },
+  );
+  const size = await page
+    .frameLocator('iframe')
+    .locator('#result')
+    .evaluate(async (element: HTMLImageElement) => {
+      await element.decode();
+      return [element.naturalWidth, element.naturalHeight];
+    });
+  expect(size).toEqual([1, 1]);
 });
