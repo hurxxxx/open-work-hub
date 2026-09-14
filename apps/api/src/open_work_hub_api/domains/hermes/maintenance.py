@@ -23,6 +23,7 @@ from open_work_hub_api.domains.hermes.models import (
 )
 from open_work_hub_api.domains.hermes.repository import (
     ACTIVE_RUN_STATUSES,
+    TERMINAL_RUN_STATUSES,
     HermesRunRepository,
     utcnow_naive,
 )
@@ -407,7 +408,63 @@ def _delete_expired_events(*, retention_days: int, limit: int) -> int:
         )
         db.execute(delete(HermesDispatchOutbox).where(HermesDispatchOutbox.run_id.in_(run_ids)))
         db.commit()
-        return event_count
+    return event_count
+
+
+async def _reconcile_finished_runs(*, limit: int) -> tuple[int, int]:
+    # Read native durable status independently of long worker leases. Never
+    # create/replay a run or infer failure from inactivity or a control outage.
+    with get_session_factory()() as db:
+        rows = list(
+            db.execute(
+                select(
+                    HermesRunProjection.id,
+                    HermesRunProjection.hermes_run_id,
+                    HermesProfileBinding.profile_name,
+                )
+                .join(
+                    HermesProfileBinding,
+                    HermesProfileBinding.id == HermesRunProjection.profile_binding_id,
+                )
+                .where(
+                    HermesRunProjection.status.in_(ACTIVE_RUN_STATUSES),
+                    HermesRunProjection.hermes_run_id.is_not(None),
+                )
+                .order_by(HermesRunProjection.updated_at)
+                .limit(limit)
+            )
+        )
+    client = runtime_client()
+
+    async def reconcile(row) -> tuple[int, int]:
+        unavailable = False
+        try:
+            payload = await client.get_run(row.profile_name, row.hermes_run_id)
+        except HermesClientError:
+            payload = {}
+            unavailable = True
+        status = HermesRunRepository._normalize_status(str(payload.get("status")))
+        with get_session_factory()() as db:
+            repo = HermesRunRepository(db)
+            current = repo.get(row.id, for_update=True)
+            if (
+                current is None
+                or current.status in TERMINAL_RUN_STATUSES
+                or current.hermes_run_id != row.hermes_run_id
+            ):
+                return 0, int(unavailable)
+            if unavailable or status not in TERMINAL_RUN_STATUSES:
+                # Rotate past long-running and temporarily unreachable tasks;
+                # a failed lookup must not starve later runs or change claims.
+                current.updated_at = utcnow_naive()
+                db.commit()
+                return 0, int(unavailable)
+            repo.append_event(row.id, {**payload, "event": f"run.{status}"})
+            db.commit()
+        return 1, 0
+
+    results = await asyncio.gather(*(reconcile(row) for row in rows))
+    return sum(row[0] for row in results), sum(row[1] for row in results)
 
 
 async def maintain_headless_hermes_once(*, limit: int = 20) -> dict[str, int]:
@@ -440,15 +497,24 @@ async def maintain_headless_hermes_once(*, limit: int = 20) -> dict[str, int]:
         except Exception:
             return 0, 1
 
-    approval_result, run_result, job_result = await asyncio.gather(
+    async def status_phase() -> tuple[int, int]:
+        try:
+            return await _reconcile_finished_runs(limit=limit)
+        except Exception:
+            return 0, 1
+
+    approval_result, run_result, job_result, status_result = await asyncio.gather(
         approval_phase(),
         run_phase(),
         job_phase(),
+        status_phase(),
     )
     expired_approvals, approval_failures = approval_result
     revoked_runs, stopped_runs, stop_failures = run_result
     paused_jobs, pause_failures = job_result
     errors += approval_failures + stop_failures + pause_failures
+    reconciled_runs, status_failures = status_result
+    errors += status_failures
 
     try:
         deleted_events = await asyncio.to_thread(
@@ -466,6 +532,7 @@ async def maintain_headless_hermes_once(*, limit: int = 20) -> dict[str, int]:
         "revoked_runs_stopped": stopped_runs,
         "revoked_jobs_paused": paused_jobs,
         "events_deleted": deleted_events,
+        "runs_reconciled": reconciled_runs,
         "errors": errors,
     }
     try:

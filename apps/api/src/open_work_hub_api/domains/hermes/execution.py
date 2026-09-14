@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from contextlib import suppress
 from typing import Any
 from uuid import uuid4
@@ -26,6 +27,9 @@ from open_work_hub_api.domains.hermes.repository import (
 
 class HermesExecutionConfigurationError(RuntimeError):
     pass
+
+
+STATUS_POLL_SECONDS = 5.0
 
 
 def hermes_run_access_allowed(db: Session, run: Any) -> bool:
@@ -129,23 +133,29 @@ async def execute_hermes_run(
                     code="hermes.invalid_run_response",
                     message="Hermes accepted a run without returning a run ID.",
                 )
+            accepted_status = repository._normalize_status(str(accepted.get("status")))
             repository.attach_hermes_run(
                 run.id,
                 claim_token=claim_token,
                 hermes_run_id=hermes_run_id,
-                status=str(accepted.get("status") or "queued"),
+                status="running" if accepted_status in TERMINAL_RUN_STATUSES else accepted_status,
             )
             repository.append_event(
                 run.id,
-                {"event": "run.accepted", **accepted},
+                {
+                    "event": "run.accepted",
+                    **accepted,
+                    "status": "running"
+                    if accepted_status in TERMINAL_RUN_STATUSES
+                    else accepted_status,
+                },
                 claim_token=claim_token,
             )
             db.delete(run_input)
             db.commit()
             # Cancellation can reserve a terminal native admission without
             # starting a model, or recover an already terminal remote run.
-            accepted_status = repository._normalize_status(str(accepted.get("status")))
-            if run.status == "stopping" and accepted_status in TERMINAL_RUN_STATUSES:
+            if accepted_status in TERMINAL_RUN_STATUSES:
                 # Admission responses contain only identity/status. Fetch the
                 # durable result before projecting output, usage, or errors.
                 status_payload = await client.get_run(profile.profile_name, hermes_run_id)
@@ -201,6 +211,33 @@ async def execute_hermes_run(
             )
         )
         stream_error: HermesClientError | None = None
+        next_status_poll = time.monotonic() + STATUS_POLL_SECONDS
+
+        async def preserve_pending_events(item_kind: str, item: object) -> None:
+            # Freeze the producer before draining its bounded queue. Durable
+            # status supplies the final event after all available live evidence.
+            if not stream_task.done():
+                stream_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await stream_task
+            pending = [(item_kind, item)]
+            while not event_queue.empty():
+                pending.append(event_queue.get_nowait())
+            db.expire_all()
+            latest = repository.get(run_id, for_update=True)
+            if latest is None:
+                raise HermesRunNotFoundError(run_id)
+            pending_claim = None if latest.status in TERMINAL_RUN_STATUSES else claim_token
+            for kind, event in pending:
+                if (
+                    kind == "event" and isinstance(event, dict)
+                    and event.get("event") not in {f"run.{s}" for s in TERMINAL_RUN_STATUSES}
+                ):
+                    # A maintenance poll may already have released the claim;
+                    # the repository retains terminal state while appending.
+                    repository.append_event(run_id, event, claim_token=pending_claim)
+            db.commit()
+
         try:
             while True:
                 try:
@@ -213,7 +250,35 @@ async def execute_hermes_run(
                 if current is None:
                     raise HermesRunNotFoundError(run_id)
                 if current.status in TERMINAL_RUN_STATUSES:
+                    await preserve_pending_events(item_kind, item)
                     break
+
+                # Native SSE is a live, single-consumer queue, not the durable
+                # source of truth. A lost final event must not hold the worker
+                # and conversation open while keepalives continue to arrive.
+                if time.monotonic() >= next_status_poll:
+                    try:
+                        payload = await client.get_run(profile.profile_name, hermes_run_id)
+                    except HermesClientError:
+                        # This poll supplements the live stream. Preserve the
+                        # dequeued event and retry after the normal interval.
+                        pass
+                    else:
+                        if repository._normalize_status(str(payload.get("status"))) in TERMINAL_RUN_STATUSES:
+                            await preserve_pending_events(item_kind, item)
+                            if current.status in TERMINAL_RUN_STATUSES:
+                                break
+                        if (
+                            repository._normalize_status(str(payload.get("status")))
+                            in TERMINAL_RUN_STATUSES
+                            or payload.get("last_event") == "approval.request"
+                            and current.pending_approval is None
+                        ):
+                            repository.apply_status(run_id, payload, claim_token=claim_token)
+                        db.commit()
+                    next_status_poll = time.monotonic() + STATUS_POLL_SECONDS
+                    if current.status in TERMINAL_RUN_STATUSES:
+                        break
 
                 access_allowed = hermes_run_access_allowed(db, current)
                 if not access_allowed and current.status != "stopping":

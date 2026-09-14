@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { sendAiChat, streamAiChat, streamAiChatResume } from './chatbot-api';
 import { useChatStream } from './useChatStream';
@@ -15,6 +15,102 @@ vi.mock('./chatbot-api', async (importOriginal) => {
 });
 
 describe('useChatStream', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  it('keeps observing after a stop request until the server confirms terminal state', async () => {
+    let streamController: ReadableStreamDefaultController<Uint8Array>;
+    const stop = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(streamAiChat).mockImplementation(async ({ onStopReady }) => {
+      onStopReady?.(stop);
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            streamController = controller;
+          },
+        }),
+      );
+    });
+    const hook = renderHook(() => useChatStream('token', 'confirmed-stop'));
+    let sending: Promise<void>;
+    act(() => {
+      sending = hook.result.current.send({
+        messages: [{ role: 'user', content: 'Test stop' }],
+      });
+    });
+    await waitFor(() =>
+      expect(hook.result.current.state.streamOpened).toBe(true),
+    );
+    act(() => {
+      hook.result.current.abort();
+      hook.result.current.abort();
+    });
+    expect(stop).toHaveBeenCalledOnce();
+    expect(hook.result.current.state.status).toBe('streaming');
+    expect(hook.result.current.state.isStopping).toBe(true);
+    const signal = vi.mocked(streamAiChat).mock.calls.at(-1)?.[0].signal;
+    expect(signal?.aborted).toBe(false);
+    await act(async () => {
+      streamController.enqueue(
+        new TextEncoder().encode(
+          'data: {"type":"done","seq":1,"timestamp_ms":1,"data":{"finish_reason":"cancelled","meta":null}}\n\n',
+        ),
+      );
+      streamController.close();
+      await sending;
+    });
+    expect(hook.result.current.state.status).toBe('cancelled');
+    expect(hook.result.current.state.isStopping).toBe(false);
+    hook.unmount();
+  });
+
+  it('allows retrying a failed stop without claiming the run was cancelled', async () => {
+    const stop = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Stop unavailable'))
+      .mockResolvedValue(undefined);
+    vi.mocked(streamAiChat).mockImplementation(async ({ onStopReady }) => {
+      onStopReady?.(stop);
+      return new Response(new ReadableStream<Uint8Array>());
+    });
+    const hook = renderHook(() => useChatStream('token', 'failed-stop'));
+    act(() => {
+      void hook.result.current.send({
+        messages: [{ role: 'user', content: 'Test stop' }],
+      });
+    });
+    await waitFor(() =>
+      expect(hook.result.current.state.streamOpened).toBe(true),
+    );
+    act(() => hook.result.current.abort());
+    await waitFor(() =>
+      expect(hook.result.current.state.errorMessage).toBe('Stop unavailable'),
+    );
+    expect(hook.result.current.state.status).toBe('streaming');
+    expect(hook.result.current.state.isStopping).toBe(false);
+    act(() => hook.result.current.abort());
+    expect(stop).toHaveBeenCalledTimes(2);
+    act(() => hook.result.current.reset());
+    hook.unmount();
+  });
+
+  it('does not create a second run after native admission or stream opening fails', async () => {
+    vi.mocked(sendAiChat).mockClear();
+    vi.mocked(streamAiChat).mockRejectedValue(
+      new Error('Connection lost after admission'),
+    );
+    const hook = renderHook(() =>
+      useChatStream('token', 'no-double-admission'),
+    );
+    await act(() =>
+      hook.result.current.send({
+        messages: [{ role: 'user', content: 'One request' }],
+      }),
+    );
+    expect(sendAiChat).not.toHaveBeenCalled();
+    expect(hook.result.current.state.status).toBe('error');
+    hook.unmount();
+  });
   afterEach(() => {
     vi.restoreAllMocks();
   });

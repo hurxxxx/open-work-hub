@@ -6,6 +6,7 @@ import type {
 export const CONVERSATION_LIST_LIMIT = 50;
 
 export type ConversationDateGroupId =
+  | 'historyPinned'
   | 'historyToday'
   | 'historyYesterday'
   | 'historyOlder';
@@ -67,6 +68,7 @@ export function groupConversationsByDate(
   now = new Date(),
 ): ConversationDateGroup[] {
   const groups: Record<ConversationDateGroupId, ConversationSummary[]> = {
+    historyPinned: [],
     historyToday: [],
     historyYesterday: [],
     historyOlder: [],
@@ -76,7 +78,9 @@ export function groupConversationsByDate(
   yesterdayStart.setDate(todayStart.getDate() - 1);
   for (const conversation of conversations) {
     const updatedAt = new Date(conversation.updatedAt);
-    if (updatedAt >= todayStart) {
+    if (conversation.pinned) {
+      groups.historyPinned.push(conversation);
+    } else if (updatedAt >= todayStart) {
       groups.historyToday.push(conversation);
     } else if (updatedAt >= yesterdayStart) {
       groups.historyYesterday.push(conversation);
@@ -175,7 +179,14 @@ export function chatbotSidebarReducer(
       return { ...state, isLoadingMore: true };
     case 'loadMoreSuccess':
       return {
-        conversations: [...state.conversations, ...action.items],
+        conversations: [
+          ...new Map(
+            [...state.conversations, ...action.items].map((item) => [
+              item.id,
+              item,
+            ]),
+          ).values(),
+        ],
         nextCursor: action.nextCursor,
         isLoadingMore: false,
         error: null,

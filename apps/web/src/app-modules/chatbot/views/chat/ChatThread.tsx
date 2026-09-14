@@ -1,20 +1,28 @@
 import { ArrowDown, Bot, Loader2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ThreadPrimitive } from '@assistant-ui/react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { MarkdownContent } from '@/src/components/artifacts/MarkdownContent';
 
-import type { ArtifactBuffer, ChatStreamStatus } from '../../api/agent-events';
+import type {
+  ArtifactBuffer,
+  ChatStreamStatus,
+  ToolCallBuffer,
+} from '../../api/agent-events';
 import type { ChatbotArtifactRenderer } from '../chatbot-experience';
 import { AiRunProgress, type AiRunProgressValue } from './AiRunProgress';
 import { ArtifactCard } from './ArtifactCard';
 import { MessageBubble, type ChatTurn } from './MessageBubble';
 import { ThinkingPanel } from './ThinkingPanel';
+import { ToolCallGroup } from './ToolCallGroup';
+import { ChatThreadRuntime } from './ChatThreadRuntime';
 
 export interface LiveAssistant {
   content: string;
   reasoning: string;
   status: ChatStreamStatus;
   artifacts?: ArtifactBuffer[];
+  toolCalls?: ToolCallBuffer[];
   progress?: AiRunProgressValue;
 }
 
@@ -28,6 +36,9 @@ export interface ChatThreadProps {
   onCopyTurn?: (turn: ChatTurn) => Promise<void> | void;
   onEditTurn?: (turn: ChatTurn) => void;
   onRetryTurn?: (turn: ChatTurn) => void;
+  onSendMessage?: (content: string) => void;
+  onEditMessage?: (turn: ChatTurn, content: string) => Promise<void>;
+  onAbort?: () => void;
   editingTurnId?: string | null;
   editValue?: string;
   onEditValueChange?: (value: string) => void;
@@ -48,7 +59,15 @@ type ScrollFollowState = {
   isAtBottom: boolean;
 };
 
-export function ChatThread({
+export function ChatThread(props: ChatThreadProps) {
+  return (
+    <ChatThreadRuntime {...props}>
+      <ChatThreadContent {...props} />
+    </ChatThreadRuntime>
+  );
+}
+
+function ChatThreadContent({
   turns,
   liveAssistant,
   typingLabel,
@@ -68,7 +87,12 @@ export function ChatThread({
   artifactRenderers = [],
   resolvedArtifacts = [],
 }: ChatThreadProps) {
+  const turnById = useMemo(
+    () => new Map(turns.map((turn) => [turn.id, turn])),
+    [turns],
+  );
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const shouldFollowRef = useRef(true);
   const [scrollFollowState, setScrollFollowState] = useState<ScrollFollowState>(
     {
@@ -102,8 +126,27 @@ export function ChatThread({
     liveAssistant?.content.length,
     liveAssistant?.reasoning.length,
     liveAssistant?.artifacts?.length,
+    liveAssistant?.toolCalls,
     liveAssistant?.status,
   ]);
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    // The external runtime renders persisted messages after its store update.
+    // Observe actual layout as well as stream state so hydration/images follow
+    // the bottom while a user reading earlier messages keeps their position.
+    const observer = new ResizeObserver(() => {
+      if (shouldFollowRef.current && scrollRef.current) {
+        scrollRef.current.scrollTo({
+          top: scrollRef.current.scrollHeight,
+          behavior: 'auto',
+        });
+      }
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
 
   const showTypingHint =
     liveAssistant !== null &&
@@ -111,6 +154,7 @@ export function ChatThread({
     liveAssistant.content.length === 0 &&
     liveAssistant.reasoning.length === 0 &&
     (liveAssistant.artifacts?.length ?? 0) === 0 &&
+    (liveAssistant.toolCalls?.length ?? 0) === 0 &&
     !liveAssistant.progress;
 
   return (
@@ -128,75 +172,86 @@ export function ChatThread({
             isAtBottom: nextAtBottom,
           });
         }}
-        className="custom-scrollbar h-full space-y-4 overflow-y-auto p-5"
+        className="custom-scrollbar h-full overflow-y-auto p-5"
       >
-        {turns.map((turn) => (
-          <MessageBubble
-            key={turn.id}
-            turn={turn}
-            activeArtifactId={activeArtifactId}
-            onOpenArtifact={onOpenArtifact}
-            onCopy={onCopyTurn}
-            onEdit={hasPersistedTurnId(turn) ? onEditTurn : undefined}
-            onRetry={hasPersistedTurnId(turn) ? onRetryTurn : undefined}
-            editValue={editingTurnId === turn.id ? editValue : undefined}
-            onEditValueChange={onEditValueChange}
-            onSubmitEdit={onSubmitEdit}
-            onCancelEdit={onCancelEdit}
-            sourceArtifactTypes={sourceArtifactTypes}
-            artifactRenderers={artifactRenderers}
-            resolvedArtifacts={resolvedArtifacts}
-          />
-        ))}
-        {liveAssistant && !showTypingHint && (
-          <div className="flex gap-3 justify-start">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-accent">
-              <Bot size={16} />
-            </div>
-            <div className="max-w-[min(720px,80%)] rounded-lg border border-app-border bg-app-surface px-4 py-3 app-text-body-sm leading-relaxed text-app-ink">
-              {liveAssistant.content ? (
-                <MarkdownContent
-                  content={liveAssistant.content}
-                  className="chat-message-markdown"
+        <div ref={contentRef} className="space-y-4">
+          <ThreadPrimitive.Messages>
+            {({ message }) => {
+              const turn = turnById.get(message.id);
+              return turn ? (
+                <MessageBubble
+                  key={turn.id}
+                  turn={turn}
+                  activeArtifactId={activeArtifactId}
+                  onOpenArtifact={onOpenArtifact}
+                  onCopy={onCopyTurn}
+                  onEdit={hasPersistedTurnId(turn) ? onEditTurn : undefined}
+                  onRetry={hasPersistedTurnId(turn) ? onRetryTurn : undefined}
+                  editValue={editingTurnId === turn.id ? editValue : undefined}
+                  onEditValueChange={onEditValueChange}
+                  onSubmitEdit={onSubmitEdit}
+                  onCancelEdit={onCancelEdit}
+                  sourceArtifactTypes={sourceArtifactTypes}
+                  artifactRenderers={artifactRenderers}
+                  resolvedArtifacts={resolvedArtifacts}
                 />
-              ) : null}
-              {liveAssistant.progress ? (
-                <AiRunProgress value={liveAssistant.progress} />
-              ) : null}
-              {liveAssistant.status === 'streaming' && (
-                <span className="ml-1 inline-block h-3 w-1 animate-pulse bg-app-accent align-baseline" />
-              )}
-              <ThinkingPanel
-                reasoning={liveAssistant.reasoning}
-                status={liveAssistant.status}
-              />
-              {liveAssistant.artifacts && liveAssistant.artifacts.length > 0
-                ? liveAssistant.artifacts
-                    .filter(
-                      (artifact) =>
-                        !sourceArtifactTypes.includes(artifact.type),
-                    )
-                    .map((artifact) => (
-                      <ArtifactCard
-                        key={artifact.id}
-                        artifact={artifact}
-                        isActive={activeArtifactId === artifact.id}
-                        onOpen={(id) => onOpenArtifact?.(id)}
-                        renderers={artifactRenderers}
-                      />
-                    ))
-                : null}
+              ) : null;
+            }}
+          </ThreadPrimitive.Messages>
+          {liveAssistant && !showTypingHint && (
+            <div className="flex gap-3 justify-start">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-accent">
+                <Bot size={16} />
+              </div>
+              <div className="max-w-[min(720px,80%)] rounded-lg border border-app-border bg-app-surface px-4 py-3 app-text-body-sm leading-relaxed text-app-ink">
+                <ToolCallGroup
+                  calls={liveAssistant.toolCalls ?? []}
+                  isRunning={liveAssistant.status === 'streaming'}
+                />
+                {liveAssistant.content ? (
+                  <MarkdownContent
+                    content={liveAssistant.content}
+                    className="chat-message-markdown"
+                  />
+                ) : null}
+                {liveAssistant.progress ? (
+                  <AiRunProgress value={liveAssistant.progress} />
+                ) : null}
+                {liveAssistant.status === 'streaming' && (
+                  <span className="ml-1 inline-block h-3 w-1 animate-pulse bg-app-accent align-baseline" />
+                )}
+                <ThinkingPanel
+                  reasoning={liveAssistant.reasoning}
+                  status={liveAssistant.status}
+                />
+                {liveAssistant.artifacts && liveAssistant.artifacts.length > 0
+                  ? liveAssistant.artifacts
+                      .filter(
+                        (artifact) =>
+                          !sourceArtifactTypes.includes(artifact.type),
+                      )
+                      .map((artifact) => (
+                        <ArtifactCard
+                          key={artifact.id}
+                          artifact={artifact}
+                          isActive={activeArtifactId === artifact.id}
+                          onOpen={(id) => onOpenArtifact?.(id)}
+                          renderers={artifactRenderers}
+                        />
+                      ))
+                  : null}
+              </div>
             </div>
-          </div>
-        )}
-        {showTypingHint && (
-          <div className="flex items-center gap-3 text-app-ink/55">
-            <div className="flex size-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-accent">
-              <Loader2 size={16} className="animate-spin" />
+          )}
+          {showTypingHint && (
+            <div className="flex items-center gap-3 text-app-ink/55">
+              <div className="flex size-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-accent">
+                <Loader2 size={16} className="animate-spin" />
+              </div>
+              <span className="app-text-body-sm">{typingLabel}</span>
             </div>
-            <span className="app-text-body-sm">{typingLabel}</span>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {!isAtBottom ? (
         <button

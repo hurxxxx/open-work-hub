@@ -123,13 +123,27 @@ def test_workload_blocks_native_tools_but_can_correct_and_submit(plugin, monkeyp
         )
 
     assert "error" in invoke("terminal", {})
+    assert "error" in invoke("owh_preview", {"path": "index.html"})
+    assert "error" in invoke("tool_search", {"query": "tools"})
+    assert "error" in invoke("tool_describe", {"tool": "terminal"})
     assert invoke("owh_submit_result", {"result": {"answer": "invalid"}}) == {"accepted": False}
     assert invoke("owh_submit_result", {"result": {"answer": 42}}) == {"accepted": True}
     assert len(attempts) == 2
 
 
 @pytest.mark.parametrize("native_run_id", ["", "cron_job_fixture", "run_forged"])
-@pytest.mark.parametrize("tool", ["web_search", "read_file", "terminal", "owh_submit_result"])
+@pytest.mark.parametrize(
+    "tool",
+    [
+        "web_search",
+        "read_file",
+        "terminal",
+        "owh_preview",
+        "tool_search",
+        "tool_describe",
+        "owh_submit_result",
+    ],
+)
 def test_jobs_profile_intentionally_denies_tools_without_an_owh_run(
     plugin, monkeypatch, native_run_id, tool
 ):
@@ -173,6 +187,24 @@ def test_registered_native_tool_requires_admission_for_every_call(plugin, monkey
     assert "error" in json.loads(invoke("web_search"))
     assert "error" in json.loads(invoke("terminal"))
     assert executions == ["web_search"] and admissions == ["run_test", "run_test"]
+
+
+@pytest.mark.parametrize("tool", ["tool_search", "tool_describe"])
+def test_interactive_tool_metadata_uses_authenticated_current_assembly(plugin, monkeypatch, tool):
+    calls = []
+
+    def rpc(server, run_id, method, params):
+        calls.append((run_id, method))
+        return {"allow_native_tools": True}
+
+    monkeypatch.setattr(plugin.module, "_rpc", rpc)
+    assert (
+        plugin.module.execute_tool(
+            tool_name=tool, args={}, next_call=lambda: "current tool metadata"
+        )
+        == "current tool metadata"
+    )
+    assert calls == [("run_test", "owh/context")]
 
 
 def test_rpc_resolves_native_profile_secret_references_and_rejects_unresolved(plugin, monkeypatch):

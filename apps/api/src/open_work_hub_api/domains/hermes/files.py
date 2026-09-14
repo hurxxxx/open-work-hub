@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import mimetypes
-from datetime import timedelta
+from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import PurePosixPath
 from uuid import uuid4
@@ -16,6 +16,7 @@ from open_work_hub_api.domains.auth.models import utcnow_naive
 from open_work_hub_api.domains.auth.app_access import can_use_app
 from open_work_hub_api.domains.hermes.models import (
     HermesFileObject,
+    HermesFileRevision,
     HermesProfileBinding,
     HermesRunProjection,
     HermesSessionBinding,
@@ -114,6 +115,7 @@ def save_file(
     data: bytes,
     reject_active_run: bool = False,
     execution_run_id: str | None = None,
+    preview_checkpoint_at: datetime | None = None,
 ) -> HermesSessionFile:
     path = normalize_path(path)
     if len(data) > MAX_FILE_BYTES:
@@ -169,16 +171,22 @@ def save_file(
         )
     )
     digest = hashlib.sha256(data).hexdigest()
-    if existing is not None and existing.sha256 == digest and existing.expires_at > utcnow_naive():
+    if preview_checkpoint_at is not None and (existing is None or existing.sha256 != digest):
+        raise ValueError("Preview entry changed during checkpoint")
+    if (
+        existing is not None
+        and existing.sha256 == digest
+        and existing.expires_at > utcnow_naive()
+        and (preview_checkpoint_at is None or existing.updated_at >= preview_checkpoint_at)
+    ):
         return existing
     count, size = db.execute(
-        select(func.count(), func.coalesce(func.sum(HermesSessionFile.size_bytes), 0)).where(
-            HermesSessionFile.session_id == session.id
+        select(func.count(), func.coalesce(func.sum(HermesFileRevision.size_bytes), 0)).where(
+            HermesFileRevision.session_id == session.id,
+            HermesFileRevision.expires_at > utcnow_naive(),
         )
     ).one()
-    if (existing is None and count >= MAX_SESSION_FILES) or size - (
-        existing.size_bytes if existing else 0
-    ) + len(data) > MAX_SESSION_BYTES:
+    if count >= MAX_SESSION_FILES or size + len(data) > MAX_SESSION_BYTES:
         raise ValueError("Workspace file storage limit reached")
     media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
     settings = get_settings()
@@ -202,25 +210,80 @@ def save_file(
     except Exception:
         db.rollback()
         raise
-    old_key = existing.object_key if existing is not None else None
     row = existing or HermesSessionFile(id=file_id, user_id=session.user_id, session_id=session.id)
     row.relative_path, row.size_bytes, row.sha256 = path, len(data), digest
-    row.object_key, row.media_type, row.updated_at = key, media_type, utcnow_naive()
+    # Every entry in the batch shares its immutable dependency cutoff. A
+    # checkpoint must not look like a later content change on the next retry.
+    row.object_key, row.media_type = key, media_type
+    row.updated_at = preview_checkpoint_at or utcnow_naive()
     row.expires_at = utcnow_naive() + timedelta(
         days=settings.hermes_terminal_artifact_retention_days
     )
     reservation.expires_at = row.expires_at
-    if old_key:
-        old_object = db.get(HermesFileObject, old_key)
-        if old_object:
-            old_object.expires_at = utcnow_naive()
     try:
         db.add(row)
+        db.add(
+            HermesFileRevision(
+                id=str(uuid4()),
+                file_id=row.id,
+                session_id=session.id,
+                user_id=session.user_id,
+                run_id=execution_run_id,
+                relative_path=path,
+                size_bytes=len(data),
+                sha256=digest,
+                object_key=key,
+                media_type=media_type,
+                expires_at=row.expires_at,
+                created_at=row.updated_at,
+            )
+        )
         db.commit()
     except Exception:
         db.rollback()
         raise
     return row
+
+
+def checkpoint_previews(db: Session, *, session: HermesSessionBinding, run_id: str) -> int:
+    """Bind unchanged HTML entries to a completed batch of dependency saves.
+
+    A preview version represents the entry plus the saved workspace at its
+    timestamp. Each uses the normal immutable object and retention contract.
+    """
+    db.execute(
+        select(HermesSessionBinding.id)
+        .where(HermesSessionBinding.id == session.id)
+        .with_for_update()
+    ).scalar_one()
+    require_active_file_run(
+        db, run_id=run_id, user_id=session.user_id, session_id=session.id, for_update=True
+    )
+    catalog = list_files(db, session_id=session.id)
+    latest = max((row.updated_at for row in catalog), default=utcnow_naive())
+    entries = [row for row in catalog if row.media_type == "text/html" and row.updated_at < latest]
+    count, size = db.execute(
+        select(func.count(), func.coalesce(func.sum(HermesFileRevision.size_bytes), 0)).where(
+            HermesFileRevision.session_id == session.id,
+            HermesFileRevision.expires_at > utcnow_naive(),
+        )
+    ).one()
+    if (
+        count + len(entries) > MAX_SESSION_FILES
+        or size + sum(row.size_bytes for row in entries) > MAX_SESSION_BYTES
+    ):
+        raise ValueError("Workspace file storage limit reached")
+    db.commit()
+    for row in entries:
+        save_file(
+            db,
+            session=session,
+            path=row.relative_path,
+            data=read_file(row),
+            execution_run_id=run_id,
+            preview_checkpoint_at=latest,
+        )
+    return len(entries)
 
 
 def cleanup_files(db: Session, *, limit: int = 100) -> int:
@@ -239,13 +302,16 @@ def cleanup_files(db: Session, *, limit: int = 100) -> int:
     client = get_minio_client()
     for row in rows:
         client.remove_object(get_settings().minio_bucket, row.object_key)
+        db.execute(
+            delete(HermesFileRevision).where(HermesFileRevision.object_key == row.object_key)
+        )
         db.execute(delete(HermesSessionFile).where(HermesSessionFile.object_key == row.object_key))
         db.delete(row)
     db.commit()
     return len(rows)
 
 
-def read_file(row: HermesSessionFile) -> bytes:
+def read_file(row: HermesSessionFile | HermesFileRevision) -> bytes:
     response = get_minio_client().get_object(get_settings().minio_bucket, row.object_key)
     try:
         data = response.read(MAX_FILE_BYTES + 1)
