@@ -71,6 +71,8 @@ export interface DoneEvent {
       | 'awaiting_approval';
     audit_id: string | null;
     meta: DoneMeta | null;
+    /** Authoritative final text supplied by the Hermes stream adapter. */
+    content?: string;
   };
 }
 
