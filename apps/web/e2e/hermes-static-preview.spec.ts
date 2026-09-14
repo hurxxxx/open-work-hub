@@ -237,3 +237,42 @@ for (const [method, content] of [
     expect(network).toEqual([]);
   });
 }
+
+test('high-density srcset and picture media retain saved image candidates', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    deviceScaleFactor: 2,
+    baseURL: test.info().project.use.baseURL,
+  });
+  const page = await context.newPage();
+  try {
+    await openPreview(
+      page,
+      `<img id="density" src="small.svg" srcset="small.svg 1x, large.svg 2x">
+       <picture><source media="(min-width: 400px)" srcset="large.svg"><img id="picture" src="small.svg"></picture>`,
+      {
+        'demo/small.svg':
+          '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>',
+        'demo/large.svg':
+          '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"/>',
+      },
+    );
+    const frame = page.frameLocator('iframe').frameLocator('iframe');
+    const width = (id: string) =>
+      frame.locator(id).evaluate(async (image: HTMLImageElement) => {
+        await image.decode();
+        if (!image.currentSrc.startsWith('data:'))
+          throw new Error('Candidate was not embedded');
+        return image.naturalWidth;
+      });
+    expect(await width('#density')).toBe(40);
+    expect(await width('#picture')).toBe(20);
+    await page
+      .locator('iframe')
+      .evaluate((element) => element.setAttribute('width', '600'));
+    await expect.poll(() => width('#picture')).toBe(80);
+  } finally {
+    await context.close();
+  }
+});

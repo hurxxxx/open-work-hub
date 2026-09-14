@@ -1,5 +1,6 @@
 import asyncio
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine
@@ -10,6 +11,63 @@ from open_work_hub_api.domains.hermes.client import HermesClientError
 from open_work_hub_api.domains.hermes.models import HermesRunProjection
 from open_work_hub_api.domains.hermes.repository import HermesRunRepository, utcnow_naive
 from test_hermes_runtime import seed, session_for, stage
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("status_code", [404, 503])
+async def test_auxiliary_poll_failure_keeps_sse_events_and_retry_interval(
+    application_postgres_dsn, monkeypatch, status_code
+):
+    clock = [0.0]
+    processed = [asyncio.Event(), asyncio.Event()]
+    calls = []
+    original_append = HermesRunRepository.append_event
+
+    def append(self, run_id, payload, **kwargs):
+        result = original_append(self, run_id, payload, **kwargs)
+        if payload.get("tool") in {"first", "second"}:
+            processed[int(payload["tool"] == "second")].set()
+        return result
+
+    class Native:
+        def __init__(self, **kwargs):
+            pass
+
+        async def create_run(self, *args, **kwargs):
+            return {"run_id": "native", "status": "running"}
+
+        async def iter_run_events(self, *args):
+            for index, timestamp in enumerate((5.0, 6.0)):
+                clock[0] = timestamp
+                yield {"event": "tool.completed", "tool": ("first", "second")[index]}
+                await processed[index].wait()
+            clock[0] = 10.0
+            yield {"event": "run.completed", "output": "saved"}
+
+        async def get_run(self, *args):
+            calls.append(clock[0])
+            raise HermesClientError(operation="get_run", status_code=status_code,
+                                    code="hermes.unavailable", message="Unavailable")
+
+    monkeypatch.setattr(execution, "HermesRuntimeClient", Native)
+    monkeypatch.setattr(execution, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(execution, "hermes_run_access_allowed", lambda *args: True)
+    monkeypatch.setattr(HermesRunRepository, "append_event", append)
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            _, binding = seed(db)
+            run = stage(db, binding, session_for(db, binding))
+            db.commit()
+            result = await asyncio.wait_for(execution.execute_hermes_run(
+                db, run_id=run.id, runtime_base_url="http://fixture.invalid", api_key="fixture",
+                request_timeout_seconds=1, lease_seconds=60,
+            ), 3)
+            assert result == "completed" and run.output_text == "saved"
+            assert all(event.is_set() for event in processed)
+            assert calls == [5.0, 10.0]
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.anyio

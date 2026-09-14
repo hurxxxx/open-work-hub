@@ -230,15 +230,21 @@ async def execute_hermes_run(
                 # source of truth. A lost final event must not hold the worker
                 # and conversation open while keepalives continue to arrive.
                 if time.monotonic() >= next_status_poll:
-                    payload = await client.get_run(profile.profile_name, hermes_run_id)
-                    if (
-                        repository._normalize_status(str(payload.get("status")))
-                        in TERMINAL_RUN_STATUSES
-                        or payload.get("last_event") == "approval.request"
-                        and current.pending_approval is None
-                    ):
-                        repository.apply_status(run_id, payload, claim_token=claim_token)
-                    db.commit()
+                    try:
+                        payload = await client.get_run(profile.profile_name, hermes_run_id)
+                    except HermesClientError:
+                        # This poll supplements the live stream. Preserve the
+                        # dequeued event and retry after the normal interval.
+                        pass
+                    else:
+                        if (
+                            repository._normalize_status(str(payload.get("status")))
+                            in TERMINAL_RUN_STATUSES
+                            or payload.get("last_event") == "approval.request"
+                            and current.pending_approval is None
+                        ):
+                            repository.apply_status(run_id, payload, claim_token=claim_token)
+                        db.commit()
                     next_status_poll = time.monotonic() + STATUS_POLL_SECONDS
                     if current.status in TERMINAL_RUN_STATUSES:
                         break
