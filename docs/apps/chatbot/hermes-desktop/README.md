@@ -38,7 +38,7 @@ Hermes Desktop의 대화·도구 내역·결과 패널 구성을 OWH 챗봇에 �
 | 형식 | 미리보기 경계 |
 | --- | --- |
 | PNG·JPEG·GIF·WebP | 최대 10 MiB, 인증된 바이트를 임시 object URL로 표시하고 전환/닫기 때 해제 |
-| HTML·SVG·Markdown·텍스트·코드 | 최대 2 MiB. HTML은 인증된 저장 버전의 로컬 JS/CSS/이미지를 `esbuild-wasm 0.28.1`로 묶은 뒤 `allow-scripts`만 허용한 opaque-origin iframe과 CSP로 외부 리소스/fetch를 제한한다. 의존 파일은 각 2 MiB, 총 10 MiB·100개로 제한한다. 순환 import와 import-map 접두사를 지원한다. 누락 파일·스크립트/CSP 오류는 미리보기 실패로 표시하며 소스 탭은 유지한다. SVG는 기존 정화기를 사용한다. |
+| HTML·SVG·Markdown·텍스트·코드 | 최대 2 MiB. HTML은 인증된 저장 버전의 로컬 JS/CSS/이미지를 `esbuild-wasm 0.28.1`로 묶은 뒤 `allow-scripts`만 허용한 중첩 opaque-origin iframe과 CSP로 외부 리소스/fetch/자기 탐색을 제한한다. 바깥 신뢰 문서의 `frame-src`가 안쪽 결과 문서의 외부 이동을 차단한다. 의존 파일은 각 2 MiB, 총 10 MiB·100개로 제한한다. 순환 import와 import-map 접두사를 지원한다. 누락 파일·스크립트/CSP 오류는 미리보기 실패로 표시하며 소스 탭은 유지한다. SVG는 기존 정화기를 사용한다. |
 | 기타 형식 또는 크기 초과 | 미리보기 대신 인증된 다운로드 제공 |
 
 HTML 의존 파일은 선택한 HTML 버전의 스냅샷 시점에 저장된 버전으로 조회하며 다른 대화·미래 버전·만료/권한 없는 파일로 대체하지 않는다. JS/CSS만 수정해도 런타임 체크포인트가 새 HTML 프리뷰 버전을 발행하므로 변경된 결과와 이전 결과를 구분할 수 있다. 런타임의 오프라인 Chromium 검사는 [정적 프리뷰 실행 계약](../../../domains/ai/hermes.md#static-preview-execution)을 따른다.

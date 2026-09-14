@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CodeArtifact } from './CodeArtifact';
-import { HTML_PREVIEW_CSP } from './html-preview-policy';
+import { htmlPreviewDocument } from './html-preview-document';
 
 type Tab = 'preview' | 'source';
 
@@ -43,7 +43,14 @@ export function HtmlArtifact({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [channel]);
-  const diagnostic = `<script>(()=>{const report=()=>parent.postMessage({channel:${JSON.stringify(channel)},type:'preview-error'},'*');addEventListener('error',report,true);addEventListener('unhandledrejection',report);addEventListener('securitypolicyviolation',report);})();</script>`;
+  const previewTitle = title ?? t('ai.htmlArtifact.title');
+  const document = useMemo(
+    () =>
+      html === null
+        ? undefined
+        : htmlPreviewDocument(html, channel, previewTitle),
+    [html, channel, previewTitle],
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -80,8 +87,8 @@ export function HtmlArtifact({
             {html !== null ? (
               <iframe
                 ref={frame}
-                title={title ?? t('ai.htmlArtifact.title')}
-                srcDoc={`<meta http-equiv="Content-Security-Policy" content="${HTML_PREVIEW_CSP}">${diagnostic}${html}`}
+                title={previewTitle}
+                srcDoc={document}
                 referrerPolicy="no-referrer"
                 // `allow-scripts` lets the guest page run its own JS (needed
                 // for any interactive HTML). We intentionally do NOT include

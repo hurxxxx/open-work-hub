@@ -48,14 +48,16 @@ def _migration_config(dsn: str | None = None) -> Config:
 def test_repository_starts_at_company_deployment_baseline() -> None:
     revisions = list(ScriptDirectory.from_config(_migration_config()).walk_revisions())
     assert [revision.revision for revision in revisions] == [
+        "hermes_initial_snapshot_20260914",
         "hermes_file_versions_20260914",
         "hermes_runtime_20260912",
         "group_sources_20260912",
         "company_20260908",
     ]
-    assert revisions[0].down_revision == "hermes_runtime_20260912"
-    assert revisions[1].down_revision == "group_sources_20260912"
-    assert revisions[2].down_revision == "company_20260908"
+    assert revisions[0].down_revision == "hermes_file_versions_20260914"
+    assert revisions[1].down_revision == "hermes_runtime_20260912"
+    assert revisions[2].down_revision == "group_sources_20260912"
+    assert revisions[3].down_revision == "company_20260908"
     assert revisions[-1].down_revision is None
     assert "clean deployment baseline" in revisions[-1].doc
 
