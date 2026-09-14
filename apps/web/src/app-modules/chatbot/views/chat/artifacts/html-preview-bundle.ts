@@ -1,4 +1,5 @@
 import { i18n } from '@/src/platform/i18n';
+import parseSrcset from '@prettier/parse-srcset';
 import type { BuildOptions, Loader } from 'esbuild-wasm';
 import wasmURL from 'esbuild-wasm/esbuild.wasm?url';
 
@@ -296,9 +297,8 @@ export async function bundleHtmlPreview(
       css.slice(css.indexOf('{') + 1, css.lastIndexOf('}')),
     );
   }
-  for (const image of doc.querySelectorAll('img[src]')) {
-    const src = image.getAttribute('src')!;
-    if (src.startsWith('data:')) continue;
+  const embedImage = async (src: string) => {
+    if (src.startsWith('data:')) return src;
     const path = previewPath(src, entry);
     const data = await read(path);
     const mime = (
@@ -315,7 +315,28 @@ export async function bundleHtmlPreview(
       throw new Error(i18n.t('apps:ai.htmlArtifact.previewFailed'), {
         cause: 'preview.unsupported_image',
       });
-    image.setAttribute('src', dataUrl(mime, data));
+    return dataUrl(mime, data);
+  };
+  for (const image of doc.querySelectorAll('img[src]')) {
+    image.setAttribute('src', await embedImage(image.getAttribute('src')!));
+  }
+  for (const image of doc.querySelectorAll(
+    'img[srcset], picture > source[srcset]',
+  )) {
+    const srcset = image.getAttribute('srcset')!;
+    if (!srcset.trim()) continue;
+    const candidates = [];
+    for (const candidate of parseSrcset(srcset)) {
+      const descriptors = [
+        candidate.width && `${candidate.width.value}w`,
+        candidate.height && `${candidate.height.value}h`,
+        candidate.density && `${candidate.density.value}x`,
+      ].filter(Boolean);
+      candidates.push(
+        [await embedImage(candidate.source.value), ...descriptors].join(' '),
+      );
+    }
+    image.setAttribute('srcset', candidates.join(', '));
   }
   const html = '<!doctype html>' + doc.documentElement.outerHTML;
   if (new TextEncoder().encode(html).byteLength > maxBytes)
