@@ -131,3 +131,28 @@ test('embedded stylesheets retain print and viewport media conditions', async ({
     .evaluate((frame) => frame.setAttribute('width', '300'));
   await expect(result).toHaveCSS('color', 'rgb(255, 0, 0)');
 });
+
+test('inline style images load from the saved dependency snapshot', async ({
+  page,
+}) => {
+  await openPreview(
+    page,
+    `<body><div id="result" style="width:80px;height:40px;background-image:url('./image.svg')"></div></body>`,
+    {
+      'demo/image.svg':
+        '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><rect width="80" height="40" fill="green"/></svg>',
+    },
+  );
+  const result = page.frameLocator('iframe').locator('#result');
+  await expect(result).toBeVisible();
+  const size = await result.evaluate(async (element) => {
+    const background = getComputedStyle(element).backgroundImage;
+    const url: string = JSON.parse(background.slice(4, -1));
+    if (!url.startsWith('data:')) throw new Error('Image was not embedded');
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    return [image.naturalWidth, image.naturalHeight];
+  });
+  expect(size).toEqual([80, 40]);
+});
