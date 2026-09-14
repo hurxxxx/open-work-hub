@@ -84,7 +84,7 @@ try {
       if (url.origin !== origin) throw new Error('External preview dependency blocked');
       const path = decodeURIComponent(url.pathname).slice(1);
       const data = await read(path);
-      const type = ({ '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+      const type = ({ '.html': 'text/html', '.htm': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
         '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
         '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml',
         '.webp': 'image/webp', '.woff2': 'font/woff2' })[extname(path).toLowerCase()];

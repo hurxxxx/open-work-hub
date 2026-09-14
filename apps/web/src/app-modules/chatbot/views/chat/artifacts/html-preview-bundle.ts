@@ -172,9 +172,22 @@ export async function bundleHtmlPreview(
     const source = src
       ? new TextDecoder().decode(await read(path))
       : script.textContent || '';
-    script.textContent = (
-      type === 'module' ? await compile(source, path, 'js') : source
-    ).replace(/<\/script/gi, '<\\/script');
+    if (
+      src &&
+      type !== 'module' &&
+      script.hasAttribute('defer') &&
+      !script.hasAttribute('async')
+    ) {
+      // Inline classic scripts ignore defer. An inline module keeps the
+      // browser's post-parse ordering; a real classic script retains globals
+      // without eval or expanding the iframe's script-source policy.
+      script.setAttribute('type', 'module');
+      script.textContent = `const script=document.createElement('script');script.textContent=${JSON.stringify(source).replace(/</g, '\\u003c')};document.body.appendChild(script);`;
+    } else {
+      script.textContent = (
+        type === 'module' ? await compile(source, path, 'js') : source
+      ).replace(/<\/script/gi, '<\\/script');
+    }
     for (const attr of ['src', 'integrity', 'crossorigin', 'async', 'defer'])
       script.removeAttribute(attr);
   }

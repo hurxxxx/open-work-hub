@@ -27,9 +27,9 @@ def rpc(server, run_id, method, params):
     raise AssertionError("Preview must not write files or invoke an application tool")
 
 
-def render(*, vision=True):
+def render(*, vision=True, path="demo/index.html"):
     with patch("tools.vision_tools._should_use_native_vision_fast_path", return_value=vision):
-        payload = render_preview({"path": "demo/index.html"},
+        payload = render_preview({"path": path},
             execution={"sandbox": {"image": sys.argv[1], "no_proxy": "localhost"}},
             server={"fixture": True}, run_id="run_preview_check")
     failed, _ = _detect_tool_failure("owh_preview", payload)
@@ -48,6 +48,9 @@ with patch.object(owh_runtime, "_rpc", rpc):
     assert good.get("status") == "rendered" and not good["errors"], good
     assert len(good["files"]) == 3 and good["page"]["canvases"] == [{"width": 200, "height": 100}]
     print("PASS: local HTML/module rendering with verified Chromium sandbox", flush=True)
+    files["demo/index.htm"] = files["demo/index.html"]
+    assert render(path="demo/index.htm")["status"] == "rendered"
+    print("PASS: HTML and HTM entrypoints share the browser MIME contract", flush=True)
     files["demo/app.js"] = b'throw new Error("synthetic render failure");'
     broken = render()
     assert broken.get("error") == "preview.render_errors" and broken["errors"], broken
