@@ -22,6 +22,23 @@ function envelope(type: string, data: unknown, timestampMs = 0): RawAgentEvent {
   };
 }
 
+it('reconciles partial deltas with the authoritative final text', () => {
+  const partial = applyChatStreamEvent(
+    createChatStreamStartState({ transport: 'stream' }),
+    envelope('content_delta', { text: 'partial' }),
+  ).next;
+  const done = applyChatStreamEvent(
+    partial,
+    envelope('done', {
+      finish_reason: 'stop',
+      content: 'complete answer',
+      meta: null,
+    }),
+  );
+  expect(done.next.contentBuffer).toBe('complete answer');
+  expect(done.terminal).toBe(true);
+});
+
 function pendingApproval(
   overrides: Partial<PendingApproval> = {},
 ): PendingApproval {

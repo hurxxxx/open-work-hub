@@ -46,6 +46,69 @@ describe('Hermes chat session creation', () => {
     });
   });
 
+  it.each([false, true])(
+    'replaces partial streamed text at completion when status lookup fails: %s',
+    async (unavailable) => {
+      hermesMocks.getHermesRun.mockResolvedValueOnce({
+        id: 'run-1',
+        status: 'running',
+      });
+      if (unavailable)
+        hermesMocks.getHermesRun.mockRejectedValueOnce(
+          new Error('Unavailable'),
+        );
+      else
+        hermesMocks.getHermesRun.mockResolvedValueOnce({
+          id: 'run-1',
+          status: 'completed',
+          output_text: 'complete durable answer',
+        });
+      hermesMocks.streamHermesRunEvents.mockResolvedValue(
+        new Response(
+          'id: 1\nevent: message.delta\ndata: {"event":"message.delta","delta":"partial"}\n\n' +
+            'id: 2\nevent: run.completed\ndata: {"event":"run.completed","output":"complete event answer"}\n\n',
+        ),
+      );
+      const response = await streamAiExistingRun(
+        'token',
+        'run-1',
+        'session-1',
+        new AbortController().signal,
+      );
+      const frames = (await response.text())
+        .trim()
+        .split('\n\n')
+        .map((frame) => JSON.parse(frame.slice(6)));
+      expect(frames.at(-1).data.content).toBe(
+        unavailable ? 'complete event answer' : 'complete durable answer',
+      );
+      expect(frames.at(-1).data.finish_reason).toBe('stop');
+    },
+  );
+
+  it('retains a longer streamed prefix when the final lookup is unavailable', async () => {
+    hermesMocks.getHermesRun
+      .mockResolvedValueOnce({ id: 'run-1', status: 'running' })
+      .mockRejectedValueOnce(new Error('Unavailable'));
+    hermesMocks.streamHermesRunEvents.mockResolvedValue(
+      new Response(
+        'id: 1\nevent: message.delta\ndata: {"event":"message.delta","delta":"complete streamed answer"}\n\n' +
+          'id: 2\nevent: run.completed\ndata: {"event":"run.completed","output":"complete"}\n\n',
+      ),
+    );
+    const response = await streamAiExistingRun(
+      'token',
+      'run-1',
+      'session-1',
+      new AbortController().signal,
+    );
+    const frames = (await response.text())
+      .trim()
+      .split('\n\n')
+      .map((frame) => JSON.parse(frame.slice(6)));
+    expect(frames.at(-1).data.content).toBe('complete streamed answer');
+  });
+
   it('leaves first-turn titles to the official Hermes auto-title flow', async () => {
     hermesMocks.createHermesSession
       .mockResolvedValueOnce({ id: 'owh-session-1' })

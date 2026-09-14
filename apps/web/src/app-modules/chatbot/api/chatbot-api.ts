@@ -522,6 +522,7 @@ async function legacyEventStreamResponse(
   const openTools: Array<{ id: string; name: string }> = [];
   let syntheticSequence = args.afterSequence;
   let contentSeen = false;
+  let streamedContent = '';
   let terminal = false;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -642,6 +643,7 @@ async function legacyEventStreamResponse(
                 const text = stringValue(payload.delta ?? payload.text);
                 if (text) {
                   contentSeen = true;
+                  streamedContent += text;
                   emit('content_delta', { text }, resolvedSequence);
                 }
               } else if (eventType === 'reasoning.available') {
@@ -763,6 +765,7 @@ async function legacyEventStreamResponse(
                 if (run.status === 'completed') {
                   emit('done', {
                     finish_reason: 'stop',
+                    content: run.output_text ?? undefined,
                     audit_id: null,
                     meta: doneMeta(args.runId, runPolicy),
                   });
@@ -801,7 +804,23 @@ async function legacyEventStreamResponse(
                   break;
                 }
               } else if (eventType === 'run.completed') {
-                const output = stringValue(payload.output);
+                // Event payloads have a smaller retention bound than the
+                // durable result. Hydrate it before final text reconciliation.
+                let output =
+                  typeof payload.output === 'string'
+                    ? payload.output
+                    : undefined;
+                try {
+                  const run = await getHermesRun(args.token, args.runId);
+                  if (run.status === 'completed' && run.output_text != null)
+                    output = run.output_text;
+                } catch {
+                  // Keep the final event output when its projection is
+                  // unavailable, preserving a longer already-streamed prefix
+                  // if the retained event output was truncated.
+                  if (output && streamedContent.startsWith(output))
+                    output = streamedContent;
+                }
                 if (output && !contentSeen) {
                   emit('content_delta', { text: output }, resolvedSequence);
                 }
@@ -809,6 +828,7 @@ async function legacyEventStreamResponse(
                 if (usage) emit('usage', usage);
                 emit('done', {
                   finish_reason: 'stop',
+                  content: output,
                   audit_id: null,
                   meta: doneMeta(args.runId, runPolicy),
                 });

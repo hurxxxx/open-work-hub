@@ -227,6 +227,7 @@ export function applyChatStreamEvent(
         next: {
           ...prev,
           status,
+          contentBuffer: data.content ?? prev.contentBuffer,
           isStopping: false,
           doneMeta: data.meta ?? null,
           finishReason: reason,

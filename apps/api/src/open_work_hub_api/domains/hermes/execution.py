@@ -212,6 +212,32 @@ async def execute_hermes_run(
         )
         stream_error: HermesClientError | None = None
         next_status_poll = time.monotonic() + STATUS_POLL_SECONDS
+
+        async def preserve_pending_events(item_kind: str, item: object) -> None:
+            # Freeze the producer before draining its bounded queue. Durable
+            # status supplies the final event after all available live evidence.
+            if not stream_task.done():
+                stream_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await stream_task
+            pending = [(item_kind, item)]
+            while not event_queue.empty():
+                pending.append(event_queue.get_nowait())
+            db.expire_all()
+            latest = repository.get(run_id, for_update=True)
+            if latest is None:
+                raise HermesRunNotFoundError(run_id)
+            pending_claim = None if latest.status in TERMINAL_RUN_STATUSES else claim_token
+            for kind, event in pending:
+                if (
+                    kind == "event" and isinstance(event, dict)
+                    and event.get("event") not in {f"run.{s}" for s in TERMINAL_RUN_STATUSES}
+                ):
+                    # A maintenance poll may already have released the claim;
+                    # the repository retains terminal state while appending.
+                    repository.append_event(run_id, event, claim_token=pending_claim)
+            db.commit()
+
         try:
             while True:
                 try:
@@ -224,6 +250,7 @@ async def execute_hermes_run(
                 if current is None:
                     raise HermesRunNotFoundError(run_id)
                 if current.status in TERMINAL_RUN_STATUSES:
+                    await preserve_pending_events(item_kind, item)
                     break
 
                 # Native SSE is a live, single-consumer queue, not the durable
@@ -237,6 +264,10 @@ async def execute_hermes_run(
                         # dequeued event and retry after the normal interval.
                         pass
                     else:
+                        if repository._normalize_status(str(payload.get("status"))) in TERMINAL_RUN_STATUSES:
+                            await preserve_pending_events(item_kind, item)
+                            if current.status in TERMINAL_RUN_STATUSES:
+                                break
                         if (
                             repository._normalize_status(str(payload.get("status")))
                             in TERMINAL_RUN_STATUSES

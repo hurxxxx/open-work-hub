@@ -3,14 +3,58 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from open_work_hub_api.domains.hermes import execution, maintenance
 from open_work_hub_api.domains.hermes.client import HermesClientError
-from open_work_hub_api.domains.hermes.models import HermesRunProjection
+from open_work_hub_api.domains.hermes.models import HermesRunEvent, HermesRunProjection
 from open_work_hub_api.domains.hermes.repository import HermesRunRepository, utcnow_naive
 from test_hermes_runtime import seed, session_for, stage
+
+
+@pytest.mark.anyio
+async def test_terminal_poll_preserves_dequeued_and_buffered_live_events(
+    application_postgres_dsn, monkeypatch
+):
+    class Native:
+        def __init__(self, **kwargs):
+            pass
+
+        async def create_run(self, *args, **kwargs):
+            return {"run_id": "native", "status": "running"}
+
+        async def iter_run_events(self, *args):
+            yield {"event": "message.delta", "delta": "partial"}
+            yield {"event": "tool.completed", "tool": "saved-file"}
+            yield {"event": "message.delta", "delta": " answer"}
+            await asyncio.Event().wait()
+
+        async def get_run(self, *args):
+            return {"status": "completed", "output": "partial answer"}
+
+    monkeypatch.setattr(execution, "HermesRuntimeClient", Native)
+    monkeypatch.setattr(execution, "STATUS_POLL_SECONDS", 0)
+    monkeypatch.setattr(execution, "hermes_run_access_allowed", lambda *args: True)
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            _, binding = seed(db)
+            run = stage(db, binding, session_for(db, binding))
+            db.commit()
+            assert await asyncio.wait_for(execution.execute_hermes_run(
+                db, run_id=run.id, runtime_base_url="http://fixture.invalid", api_key="fixture",
+                request_timeout_seconds=1, lease_seconds=60,
+            ), 3) == "completed"
+            events = list(db.scalars(select(HermesRunEvent).where(
+                HermesRunEvent.run_id == run.id
+            ).order_by(HermesRunEvent.sequence)))
+            assert [event.event_type for event in events] == [
+                "run.created", "run.accepted", "message.delta", "tool.completed", "message.delta", "run.completed"
+            ]
+            assert run.output_text == "partial answer"
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.anyio
