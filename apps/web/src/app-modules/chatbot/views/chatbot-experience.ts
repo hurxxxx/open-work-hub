@@ -31,6 +31,7 @@ export interface ChatbotExperienceConfig {
   conversationScope?: ChatbotConversationScopeBinding;
   sidebarEyebrow?: string;
   sidebarTitle?: string;
+  conversationListPlacement?: 'inline' | 'shell';
   emptyGreeting?: string;
   emptySubline?: string;
   artifactRenderers?: readonly ChatbotArtifactRenderer[];
@@ -48,6 +49,7 @@ export type ResolvedChatbotExperienceConfig = Required<
     | 'sidebarTitle'
     | 'title'
     | 'autoOpenArtifacts'
+    | 'conversationListPlacement'
   >
 > &
   Pick<

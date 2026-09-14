@@ -43,6 +43,7 @@ export interface ChatStreamState {
     | 'awaiting_approval'
     | null;
   status: ChatStreamStatus;
+  isStopping: boolean;
   errorMessage: string | null;
   toolCalls: ToolCallBuffer[];
   pendingApprovals: PendingApproval[];
@@ -69,6 +70,7 @@ export const CHAT_STREAM_INITIAL_STATE: ChatStreamState = {
   doneMeta: null,
   finishReason: null,
   status: 'idle',
+  isStopping: false,
   errorMessage: null,
   toolCalls: [],
   pendingApprovals: [],
@@ -130,6 +132,8 @@ export function cancelChatStreamState(prev: ChatStreamState): ChatStreamState {
   return {
     ...prev,
     status: 'cancelled',
+    isStopping: false,
+    toolCalls: closeOpenToolCalls(prev.toolCalls),
     artifacts: closeOpenArtifacts(prev.artifacts),
   };
 }
@@ -141,6 +145,8 @@ export function failChatStreamState(
   return {
     ...prev,
     status: 'error',
+    isStopping: false,
+    toolCalls: closeOpenToolCalls(prev.toolCalls),
     errorMessage,
     artifacts: closeOpenArtifacts(prev.artifacts),
   };
@@ -172,6 +178,13 @@ export function applyChatStreamEvent(
   prev: ChatStreamState,
   event: RawAgentEvent,
 ): ChatStreamTransition {
+  if (
+    prev.status === 'done' ||
+    prev.status === 'cancelled' ||
+    prev.status === 'error'
+  ) {
+    return { next: prev, terminal: true };
+  }
   switch (event.type) {
     case 'content_delta': {
       const data = (event as ContentDeltaEvent).data;
@@ -214,8 +227,12 @@ export function applyChatStreamEvent(
         next: {
           ...prev,
           status,
+          contentBuffer: data.content ?? prev.contentBuffer,
+          isStopping: false,
           doneMeta: data.meta ?? null,
           finishReason: reason,
+          toolCalls: closeOpenToolCalls(prev.toolCalls),
+          artifacts: closeOpenArtifacts(prev.artifacts),
         },
         terminal: true,
       };
@@ -228,13 +245,17 @@ export function applyChatStreamEvent(
       };
     }
     case 'tool_call_started': {
+      const started = toolCallFromStartedEvent(event as ToolCallStartedEvent);
+      if (
+        started.call_id &&
+        prev.toolCalls.some((call) => call.call_id === started.call_id)
+      ) {
+        return { next: prev, terminal: false };
+      }
       return {
         next: {
           ...prev,
-          toolCalls: [
-            ...prev.toolCalls,
-            toolCallFromStartedEvent(event as ToolCallStartedEvent),
-          ],
+          toolCalls: [...prev.toolCalls, started],
         },
         terminal: false,
       };
@@ -497,5 +518,11 @@ function closeOpenArtifacts(artifacts: ArtifactBuffer[]): ArtifactBuffer[] {
     artifact.status === 'open'
       ? { ...artifact, status: 'closed' as const }
       : artifact,
+  );
+}
+
+function closeOpenToolCalls(calls: ToolCallBuffer[]): ToolCallBuffer[] {
+  return calls.map((call) =>
+    call.status === 'running' ? { ...call, status: 'unknown' } : call,
   );
 }

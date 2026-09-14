@@ -1,13 +1,13 @@
 import { useFeedback } from '@open-work-hub/ui';
-import { useEffect, useRef, useState } from 'react';
+import { Loader2, Paperclip } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import {
-  downloadAuthenticatedContent,
-  downloadBlobAsFile,
-} from '@/src/platform/browser/browser-download';
+import { downloadBlobAsFile } from '@/src/platform/browser/browser-download';
+import { apiFetchBinary } from '@/src/platform/api/client';
 import { formatByteSize } from '@/src/platform/format/byte-size';
 import {
   downloadHermesTerminalFile,
@@ -19,22 +19,35 @@ import {
 import {
   createHermesSession,
   listHermesFiles,
+  listHermesFileRevisions,
   listHermesRuns,
   listHermesSessions,
   stopHermesRun,
   uploadHermesFile,
   type HermesFile,
+  type HermesFileRevision,
   type HermesRun,
 } from '../api/hermes-agent-api';
+import { HermesGeneratedResults } from './chat/HermesGeneratedResults';
 
 export function HermesWorkspacePanel({
   conversationId,
   scopeRef,
   scopeResourceId,
+  onOpenFile,
+  canAutoOpen = false,
+  attachmentHost,
+  uploadDisabled = false,
+  onUploadingChange,
 }: {
   conversationId: string | null;
   scopeRef?: string;
   scopeResourceId?: string;
+  onOpenFile?: (fileId: string, revisionId?: string) => void;
+  canAutoOpen?: boolean;
+  attachmentHost?: HTMLElement | null;
+  uploadDisabled?: boolean;
+  onUploadingChange?: (uploading: boolean) => void;
 }) {
   const { token } = useAuth();
   const { t } = useTranslation('apps');
@@ -42,6 +55,9 @@ export function HermesWorkspacePanel({
   const [, setSearchParams] = useSearchParams();
   const [files, setFiles] = useState<HermesFile[]>([]);
   const [runs, setRuns] = useState<HermesRun[]>([]);
+  const [sessionRuns, setSessionRuns] = useState<HermesRun[]>([]);
+  const [fileRevisions, setFileRevisions] = useState<HermesFileRevision[]>([]);
+  const [moreResults, setMoreResults] = useState(false);
   const [sessionTitles, setSessionTitles] = useState<Record<string, string>>(
     {},
   );
@@ -56,8 +72,15 @@ export function HermesWorkspacePanel({
   const [failed, setFailed] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [revision, setRevision] = useState(0);
-  const owner = useRef({ conversationId, token });
-  owner.current = { conversationId, token };
+  const ownerKey = useMemo(
+    () => ({ conversationId, token, scopeRef, scopeResourceId }),
+    [conversationId, token, scopeRef, scopeResourceId],
+  );
+  const owner = useRef(ownerKey);
+  owner.current = ownerKey;
+  const [loadedOwner, setLoadedOwner] = useState<object | null>(null);
+  const currentFiles = loadedOwner === ownerKey ? files : [];
+  const currentRuns = loadedOwner === ownerKey ? runs : [];
 
   useEffect(() => {
     if (!token) return;
@@ -65,22 +88,40 @@ export function HermesWorkspacePanel({
     let timer: ReturnType<typeof setTimeout>;
     setFiles([]);
     setRuns([]);
+    setSessionRuns([]);
+    setFileRevisions([]);
+    setMoreResults(false);
+    setLoadedOwner(null);
     setLoading(true);
     setFailed(false);
     const load = async () => {
       try {
-        const [fileResult, runResult] = await Promise.all([
-          conversationId
-            ? listHermesFiles(token, conversationId)
-            : Promise.resolve({ data: [] }),
-          listHermesRuns(token, { status: 'active', limit: 100 }),
-        ]);
+        const [fileResult, runResult, revisionResult, sessionRunResult] =
+          await Promise.all([
+            conversationId
+              ? listHermesFiles(token, conversationId)
+              : Promise.resolve({ data: [] }),
+            listHermesRuns(token, { status: 'active', limit: 100 }),
+            conversationId
+              ? listHermesFileRevisions(token, conversationId)
+              : Promise.resolve({ data: [], has_more: false }),
+            conversationId
+              ? listHermesRuns(token, { sessionId: conversationId, limit: 100 })
+              : Promise.resolve({ data: [] }),
+          ]);
         if (cancelled) return;
         setFiles(fileResult.data);
         setRuns(runResult.data);
+        setSessionRuns(sessionRunResult.data);
+        setFileRevisions(revisionResult.data);
+        setMoreResults(revisionResult.has_more);
+        setLoadedOwner(ownerKey);
         setFailed(false);
       } catch {
-        if (!cancelled) setFailed(true);
+        if (!cancelled) {
+          setFailed(true);
+          setLoadedOwner(null);
+        }
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -93,7 +134,7 @@ export function HermesWorkspacePanel({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [token, conversationId, revision, t]);
+  }, [token, conversationId, revision, t, ownerKey]);
 
   useEffect(() => {
     if (!token) return;
@@ -157,6 +198,8 @@ export function HermesWorkspacePanel({
       const next = new URLSearchParams(current);
       next.set('c', id);
       next.delete('a');
+      next.delete('f');
+      next.delete('v');
       return next;
     });
   const runAction = async (action: () => Promise<unknown>) => {
@@ -168,13 +211,13 @@ export function HermesWorkspacePanel({
     }
   };
   const upload = async (file: File) => {
-    if (!token) return;
+    if (!token || uploading || uploadDisabled) return;
     if (file.size > 64 * 1024 * 1024) {
       feedback.error(t('hermesWorkspace.fileTooLarge'));
       return;
     }
     setUploading(true);
-    const startedIn = conversationId;
+    onUploadingChange?.(true);
     try {
       const sessionId =
         conversationId ??
@@ -185,180 +228,223 @@ export function HermesWorkspacePanel({
           })
         ).id;
       await uploadHermesFile(token, sessionId, file);
-      if (
-        owner.current.conversationId === startedIn &&
-        owner.current.token === token
-      ) {
+      if (owner.current === ownerKey) {
         openSession(sessionId);
         setRevision((value) => value + 1);
       }
-      feedback.success(t('hermesWorkspace.uploaded'));
+      if (owner.current === ownerKey)
+        feedback.success(t('hermesWorkspace.uploaded'));
     } catch {
       feedback.error(t('hermesWorkspace.operationFailed'));
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
     }
   };
 
+  const attachment = (
+    <label
+      className="flex cursor-pointer items-center gap-2 rounded-md p-2 text-app-ink/65 focus-within:ring-2 focus-within:ring-app-accent"
+      title={t('hermesWorkspace.attach')}
+    >
+      {uploading ? (
+        <Loader2 size={16} className="animate-spin" />
+      ) : (
+        <Paperclip size={16} />
+      )}
+      <span className="sr-only">{t('hermesWorkspace.attach')}</span>
+      <input
+        type="file"
+        aria-label={t('hermesWorkspace.attach')}
+        disabled={
+          !token ||
+          loading ||
+          failed ||
+          uploading ||
+          uploadDisabled ||
+          (Boolean(conversationId) &&
+            runs.some((run) => run.session_binding_id === conversationId))
+        }
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          if (file) void upload(file);
+        }}
+        className="sr-only"
+      />
+    </label>
+  );
+
   return (
-    <details className="border-b border-app-border px-4 py-2 text-app-ink app-text-body-sm">
-      <summary className="cursor-pointer">
-        {t('hermesWorkspace.title', { count: runs.length })}
-      </summary>
-      <div className="max-h-64 space-y-3 overflow-auto py-3">
-        <p className="text-app-ink/60">{t('hermesWorkspace.continues')}</p>
-        {loading ? (
-          <p role="status">{t('hermesWorkspace.loading')}</p>
-        ) : failed ? (
-          <p role="alert">{t('hermesWorkspace.loadFailed')}</p>
-        ) : null}
-        <ul className="divide-y divide-app-border">
-          {runs.map((run) => (
-            <li key={run.id} className="flex items-center gap-2 py-1">
-              <button
-                type="button"
-                disabled={!run.session_binding_id}
-                className="min-w-0 flex-1 truncate text-start"
-                onClick={() =>
-                  run.session_binding_id && openSession(run.session_binding_id)
-                }
+    <div className="shrink-0 border-b border-app-border">
+      <details className="border-b border-app-border px-4 py-2 text-app-ink app-text-body-sm">
+        <summary className="cursor-pointer">
+          {t('hermesWorkspace.title', {
+            count: currentRuns.length,
+            files: currentFiles.length,
+          })}
+        </summary>
+        <div className="max-h-64 space-y-3 overflow-auto py-3">
+          <p className="text-app-ink/60">{t('hermesWorkspace.continues')}</p>
+          {loading ? <p role="status">{t('hermesWorkspace.loading')}</p> : null}
+          <ul className="divide-y divide-app-border">
+            {currentRuns.map((run) => (
+              <li key={run.id} className="flex items-center gap-2 py-1">
+                <button
+                  type="button"
+                  disabled={!run.session_binding_id}
+                  className="min-w-0 flex-1 truncate text-start"
+                  onClick={() =>
+                    run.session_binding_id &&
+                    openSession(run.session_binding_id)
+                  }
+                >
+                  <span className="block truncate">
+                    {run.session_binding_id
+                      ? sessionTitles[run.session_binding_id] ||
+                        t('hermesWorkspace.untitled')
+                      : t('hermesWorkspace.background')}
+                  </span>
+                  {t('hermesWorkspace.run', {
+                    status: t(`hermesWorkspace.status.${run.status}`),
+                    progress: run.progress_percent,
+                  })}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    token && void runAction(() => stopHermesRun(token, run.id))
+                  }
+                >
+                  {t('hermesWorkspace.stop')}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {attachmentHost
+            ? createPortal(attachment, attachmentHost)
+            : attachment}
+          <ul className="divide-y divide-app-border">
+            {currentFiles.map((file) => (
+              <li
+                key={file.id}
+                className="flex items-center justify-between gap-2 py-1"
               >
-                <span className="block truncate">
-                  {run.session_binding_id
-                    ? sessionTitles[run.session_binding_id] ||
-                      t('hermesWorkspace.untitled')
-                    : t('hermesWorkspace.background')}
-                </span>
-                {t('hermesWorkspace.run', {
-                  status: t(`hermesWorkspace.status.${run.status}`),
-                  progress: run.progress_percent,
-                })}
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  token && void runAction(() => stopHermesRun(token, run.id))
-                }
-              >
-                {t('hermesWorkspace.stop')}
-              </button>
-            </li>
-          ))}
-        </ul>
-        <label className="flex items-center gap-2">
-          <span className="shrink-0">{t('hermesWorkspace.attach')}</span>
-          <input
-            type="file"
-            aria-label={t('hermesWorkspace.attach')}
-            disabled={
-              !token ||
-              loading ||
-              failed ||
-              uploading ||
-              (Boolean(conversationId) &&
-                runs.some((run) => run.session_binding_id === conversationId))
-            }
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = '';
-              if (file) void upload(file);
-            }}
-            className="min-w-0 max-w-full"
-          />
-        </label>
-        <ul className="divide-y divide-app-border">
-          {files.map((file) => (
-            <li
-              key={file.id}
-              className="flex items-center justify-between gap-2 py-1"
-            >
-              <button
-                type="button"
-                className="min-w-0 truncate text-start"
-                onClick={() =>
-                  token &&
-                  void runAction(() =>
-                    downloadAuthenticatedContent(
-                      token,
-                      `/api/v1/agent/files/${encodeURIComponent(file.id)}/content`,
-                      file.relative_path,
-                    ),
-                  )
-                }
-              >
-                {file.relative_path}
-              </button>
-              <span className="shrink-0 text-app-ink/60">
-                {formatByteSize(file.size_bytes)}
-              </span>
-            </li>
-          ))}
-        </ul>
-        {!loading && !failed && !files.length ? (
-          <p className="text-app-ink/60">{t('hermesWorkspace.noFiles')}</p>
-        ) : null}
-        {legacyFailed ? (
-          <p role="alert">{t('hermesWorkspace.legacyLoadFailed')}</p>
-        ) : null}
-        {legacySessions.length > 0 ? (
-          <details>
-            <summary>{t('hermesWorkspace.legacy')}</summary>
-            <select
-              aria-label={t('hermesWorkspace.legacy')}
-              value={legacyId}
-              onChange={(event) => {
-                setLegacyId(event.target.value);
-                setLegacyPath('');
-              }}
-              className="my-2 max-w-full bg-app-surface"
-            >
-              <option value="">{t('hermesWorkspace.selectSession')}</option>
-              {legacySessions.map((session) => (
-                <option key={session.id} value={session.id}>
-                  {session.title}
-                </option>
-              ))}
-            </select>
-            {legacyPath ? (
-              <button
-                type="button"
-                onClick={() =>
-                  setLegacyPath(legacyPath.split('/').slice(0, -1).join('/'))
-                }
-              >
-                {t('hermesWorkspace.parentFolder')}
-              </button>
-            ) : null}
-            <ul>
-              {legacyFiles.map((file) => (
-                <li key={file.relative_path}>
-                  <button
-                    type="button"
-                    className="max-w-full truncate py-1 text-start"
-                    onClick={() => {
-                      if (file.kind === 'directory') {
-                        setLegacyPath(file.relative_path);
-                        return;
-                      }
-                      if (token)
+                <button
+                  type="button"
+                  className="min-w-0 truncate text-start"
+                  onClick={() =>
+                    onOpenFile
+                      ? onOpenFile(file.id)
+                      : token &&
                         void runAction(async () => {
-                          const response = await downloadHermesTerminalFile(
+                          const { blob } = await apiFetchBinary(
+                            `/api/v1/agent/files/${encodeURIComponent(file.id)}/content`,
                             token,
-                            legacyId,
-                            file.relative_path,
                           );
-                          downloadBlobAsFile(response.blob, file.name);
-                        });
-                    }}
-                  >
-                    {file.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
-      </div>
-    </details>
+                          downloadBlobAsFile(blob, file.relative_path);
+                        })
+                  }
+                >
+                  {file.relative_path}
+                </button>
+                <span className="shrink-0 text-app-ink/60">
+                  {formatByteSize(file.size_bytes)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {!loading && !failed && !files.length ? (
+            <p className="text-app-ink/60">{t('hermesWorkspace.noFiles')}</p>
+          ) : null}
+          {legacyFailed ? (
+            <p role="alert">{t('hermesWorkspace.legacyLoadFailed')}</p>
+          ) : null}
+          {legacySessions.length > 0 ? (
+            <details>
+              <summary>{t('hermesWorkspace.legacy')}</summary>
+              <select
+                aria-label={t('hermesWorkspace.legacy')}
+                value={legacyId}
+                onChange={(event) => {
+                  setLegacyId(event.target.value);
+                  setLegacyPath('');
+                }}
+                className="my-2 max-w-full bg-app-surface"
+              >
+                <option value="">{t('hermesWorkspace.selectSession')}</option>
+                {legacySessions.map((session) => (
+                  <option key={session.id} value={session.id}>
+                    {session.title}
+                  </option>
+                ))}
+              </select>
+              {legacyPath ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLegacyPath(legacyPath.split('/').slice(0, -1).join('/'))
+                  }
+                >
+                  {t('hermesWorkspace.parentFolder')}
+                </button>
+              ) : null}
+              <ul>
+                {legacyFiles.map((file) => (
+                  <li key={file.relative_path}>
+                    <button
+                      type="button"
+                      className="max-w-full truncate py-1 text-start"
+                      onClick={() => {
+                        if (file.kind === 'directory') {
+                          setLegacyPath(file.relative_path);
+                          return;
+                        }
+                        if (token)
+                          void runAction(async () => {
+                            const response = await downloadHermesTerminalFile(
+                              token,
+                              legacyId,
+                              file.relative_path,
+                            );
+                            downloadBlobAsFile(response.blob, file.name);
+                          });
+                      }}
+                    >
+                      {file.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </div>
+      </details>
+      {failed ? (
+        <p
+          role="alert"
+          className="px-4 py-2 app-text-body-sm text-app-danger-text"
+        >
+          {t('hermesWorkspace.loadFailed')}
+        </p>
+      ) : null}
+      {conversationId && onOpenFile ? (
+        <HermesGeneratedResults
+          key={conversationId}
+          sessionId={conversationId}
+          files={currentFiles}
+          revisions={loadedOwner === ownerKey ? fileRevisions : []}
+          runs={loadedOwner === ownerKey ? sessionRuns : []}
+          canAutoOpen={canAutoOpen && !failed}
+          loaded={loadedOwner === ownerKey}
+          onOpenFile={onOpenFile}
+        />
+      ) : null}
+      {moreResults && loadedOwner === ownerKey ? (
+        <p className="px-4 pb-2 app-text-caption text-app-ink/65">
+          {t('ai.generatedResults.moreFiles')}
+        </p>
+      ) : null}
+    </div>
   );
 }

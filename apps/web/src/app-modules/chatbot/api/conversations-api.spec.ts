@@ -97,6 +97,45 @@ describe('Hermes conversation history', () => {
     },
   );
 
+  it('groups native tool steps into their answer without merging different questions', async () => {
+    hermes.getHermesSessionMessages.mockResolvedValue({
+      data: [
+        { id: 'user-1', role: 'user', content: 'First question' },
+        {
+          id: 'step-1',
+          role: 'assistant',
+          reasoning: 'Checking',
+          tool_calls: [{ function: { name: 'terminal', arguments: '{}' } }],
+        },
+        {
+          id: 'step-2',
+          role: 'assistant',
+          content: 'Intermediate update',
+          tool_calls: [{ function: { name: 'terminal', arguments: '{}' } }],
+        },
+        { id: 'answer-1', role: 'assistant', content: 'First answer' },
+        { id: 'user-2', role: 'user', content: 'Second question' },
+        { id: 'answer-2', role: 'assistant', content: 'Second answer' },
+      ],
+    });
+    const detail = await getConversation('token', 'session-1');
+    expect(detail.turns).toHaveLength(4);
+    expect(detail.turns[1]).toMatchObject({
+      id: 'step-1',
+      content: 'Intermediate update\n\nFirst answer',
+      reasoning: 'Checking',
+    });
+    expect(detail.turns[1].toolCalls?.map((call) => call.call_id)).toEqual([
+      'step-1:tool:0',
+      'step-2:tool:0',
+    ]);
+    expect(detail.turns[3]).toMatchObject({
+      id: 'answer-2',
+      content: 'Second answer',
+      toolCalls: [],
+    });
+  });
+
   it('does not retain an older error after a successful run', async () => {
     hermes.listHermesRuns.mockResolvedValue({
       data: [{ status: 'completed', error_message: null }],

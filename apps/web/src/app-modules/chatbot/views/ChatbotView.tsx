@@ -1,12 +1,13 @@
 import { LazyMotion, domAnimation, m } from 'motion/react';
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useCallback, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { ChatbotSidebarPortal } from '../sidebar';
 
 import { ApprovalModal } from './chat/ApprovalModal';
 import { ChatComposer } from './chat/ChatComposer';
 import { ChatThread } from './chat/ChatThread';
 import { ChatTopBar } from './chat/ChatTopBar';
 import { EmptyState } from './chat/EmptyState';
-import { ToolCallCard } from './chat/ToolCallCard';
 import type { ChatbotExperienceConfig } from './chatbot-experience';
 import { resolveFailedPromptRestoreInput } from './chatbot-view-model';
 import { HermesWorkspacePanel } from './HermesWorkspacePanel';
@@ -19,6 +20,11 @@ import {
 const ArtifactPanel = lazy(() =>
   import('./chat/ArtifactPanel').then((module) => ({
     default: module.ArtifactPanel,
+  })),
+);
+const HermesFilePanel = lazy(() =>
+  import('./chat/HermesFilePanel').then((module) => ({
+    default: module.HermesFilePanel,
   })),
 );
 
@@ -156,9 +162,13 @@ function FailedPromptNotice({
 function ChatComposerBlock({
   autoFocus = false,
   controller,
+  attachmentHostRef,
+  isUploading = false,
 }: {
   autoFocus?: boolean;
   controller: ChatbotViewController;
+  attachmentHostRef?: (element: HTMLDivElement | null) => void;
+  isUploading?: boolean;
 }) {
   const { actions, derived, state } = controller;
   const {
@@ -192,14 +202,18 @@ function ChatComposerBlock({
         onSubmit={handleSubmit}
         onAbort={abortChat}
         isSending={isSending}
+        isStopping={chatState.isStopping}
         isStreaming={chatState.transport === 'stream'}
-        chatError={chatError}
-        isDisabled={isComposerDisabled}
+        chatError={
+          chatError ??
+          (chatState.status === 'streaming' ? chatState.errorMessage : null)
+        }
+        isDisabled={isComposerDisabled || isUploading}
         onSelectTool={handleSelectTool}
         toolItems={slashCommandItems}
         placeholder={composerPlaceholder}
         autoFocus={autoFocus}
-        leadingControls={null}
+        leadingControls={<div ref={attachmentHostRef} />}
       />
     </>
   );
@@ -210,6 +224,44 @@ function ChatbotViewContent({
 }: {
   controller: ChatbotViewController;
 }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [attachmentHost, setAttachmentHost] = useState<HTMLDivElement | null>(
+    null,
+  );
+  const [isUploading, setIsUploading] = useState(false);
+  const fileId = searchParams.get('f');
+  const revisionId = searchParams.get('v');
+  const selectRevision = useCallback(
+    (id: string) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.set('v', id);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+  const openFile = (id: string, revision?: string) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set('f', id);
+      if (revision) next.set('v', revision);
+      else next.delete('v');
+      next.delete('a');
+      return next;
+    });
+  };
+  const closeFile = () => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete('f');
+      next.delete('v');
+      return next;
+    });
+  };
   const { actions, derived, state } = controller;
   const {
     approvalAction,
@@ -248,7 +300,6 @@ function ChatbotViewContent({
     durableRun,
     experience,
     t,
-    visibleToolCalls,
   } = derived;
 
   return (
@@ -259,18 +310,42 @@ function ChatbotViewContent({
         className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-app-bg"
       >
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-app-surface lg:flex-row">
-          <ChatbotConversationListPanel
-            activeConversationId={currentConversationId}
-            navigationDisabled={isSending && !currentConversationId}
-            pendingConversationTitle={
-              isSending ? chatState.pendingUserContent : null
-            }
-            routeId={experience.routeId}
-            scopeRef={experience.conversationScope?.ref}
-            scopeResourceId={experience.conversationScope?.resourceId}
-            eyebrow={experience.sidebarEyebrow}
-            title={experience.sidebarTitle}
-          />
+          {experience.conversationListPlacement === 'shell' ? (
+            <ChatbotSidebarPortal>
+              {(onNavigate) => (
+                <ChatbotConversationListPanel
+                  activeConversationId={currentConversationId}
+                  navigationDisabled={
+                    (isSending || isUploading) && !currentConversationId
+                  }
+                  pendingConversationTitle={
+                    isSending ? chatState.pendingUserContent : null
+                  }
+                  routeId={experience.routeId}
+                  scopeRef={experience.conversationScope?.ref}
+                  scopeResourceId={experience.conversationScope?.resourceId}
+                  title={experience.sidebarTitle}
+                  placement="shell"
+                  onNavigate={onNavigate}
+                />
+              )}
+            </ChatbotSidebarPortal>
+          ) : (
+            <ChatbotConversationListPanel
+              activeConversationId={currentConversationId}
+              navigationDisabled={
+                (isSending || isUploading) && !currentConversationId
+              }
+              pendingConversationTitle={
+                isSending ? chatState.pendingUserContent : null
+              }
+              routeId={experience.routeId}
+              scopeRef={experience.conversationScope?.ref}
+              scopeResourceId={experience.conversationScope?.resourceId}
+              eyebrow={experience.sidebarEyebrow}
+              title={experience.sidebarTitle}
+            />
+          )}
 
           <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-app-surface">
             <ChatTopBar
@@ -283,6 +358,17 @@ function ChatbotViewContent({
               conversationId={currentConversationId}
               scopeRef={experience.conversationScope?.ref}
               scopeResourceId={experience.conversationScope?.resourceId}
+              onOpenFile={openFile}
+              canAutoOpen={
+                !fileId &&
+                !routeArtifactId &&
+                !state.input.trim() &&
+                !editingTurnId &&
+                !isUploading
+              }
+              attachmentHost={attachmentHost}
+              onUploadingChange={setIsUploading}
+              uploadDisabled={isRunInProgress || !state.isConversationReady}
             />
 
             {turns.length === 0 && !isRunInProgress ? (
@@ -299,7 +385,12 @@ function ChatbotViewContent({
                 }
               >
                 <div className="space-y-2">
-                  <ChatComposerBlock controller={controller} autoFocus />
+                  <ChatComposerBlock
+                    controller={controller}
+                    autoFocus
+                    attachmentHostRef={setAttachmentHost}
+                    isUploading={isUploading}
+                  />
                 </div>
               </EmptyState>
             ) : (
@@ -311,6 +402,11 @@ function ChatbotViewContent({
                   activeArtifactId={routeArtifactId}
                   onOpenArtifact={handleOpenArtifact}
                   onCopyTurn={handleCopyTurn}
+                  onSendMessage={isUploading ? undefined : actions.handleSubmit}
+                  onEditMessage={(turn, content) =>
+                    submitEditedTurn(turn.id, content)
+                  }
+                  onAbort={actions.abortChat}
                   onEditTurn={handleStartEditTurn}
                   onRetryTurn={(turn) => {
                     void handleRetryTurn(turn);
@@ -335,6 +431,7 @@ function ChatbotViewContent({
                           reasoning: isSending ? chatState.reasoningBuffer : '',
                           status: isSending ? chatState.status : 'streaming',
                           artifacts: isSending ? chatState.artifacts : [],
+                          toolCalls: isSending ? chatState.toolCalls : [],
                           progress:
                             durableRun && recoveredRunIsActive
                               ? {
@@ -347,15 +444,37 @@ function ChatbotViewContent({
                   }
                   forceFollowKey={forceFollowKey}
                 />
-                {visibleToolCalls.map((call) => (
-                  <ToolCallCard key={call.call_id} call={call} />
-                ))}
                 <div className="sticky bottom-0 z-10 space-y-2 border-t border-app-border bg-app-surface p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-                  <ChatComposerBlock controller={controller} />
+                  <ChatComposerBlock
+                    controller={controller}
+                    attachmentHostRef={setAttachmentHost}
+                    isUploading={isUploading}
+                  />
                 </div>
               </>
             )}
           </section>
+          {fileId && currentConversationId ? (
+            <Suspense fallback={null}>
+              <HermesFilePanel
+                key={`${currentConversationId}:${fileId}`}
+                sessionId={currentConversationId}
+                fileId={fileId}
+                revisionId={revisionId}
+                onRevisionChange={selectRevision}
+                onClose={closeFile}
+              />
+            </Suspense>
+          ) : activeArtifact ? (
+            <Suspense fallback={null}>
+              <ArtifactPanel
+                artifact={activeArtifact}
+                artifacts={allArtifacts}
+                renderers={experience.artifactRenderers}
+                onClose={handleCloseArtifact}
+              />
+            </Suspense>
+          ) : null}
         </div>
         {pendingApproval ? (
           <ApprovalModal
@@ -372,16 +491,6 @@ function ChatbotViewContent({
           />
         ) : null}
         {confirmDialog}
-        {activeArtifact ? (
-          <Suspense fallback={null}>
-            <ArtifactPanel
-              artifact={activeArtifact}
-              artifacts={allArtifacts}
-              renderers={experience.artifactRenderers}
-              onClose={handleCloseArtifact}
-            />
-          </Suspense>
-        ) : null}
       </m.div>
     </LazyMotion>
   );

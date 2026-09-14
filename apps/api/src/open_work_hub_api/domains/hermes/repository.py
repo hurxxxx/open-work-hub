@@ -505,7 +505,11 @@ class HermesRunRepository:
         claim_token: str,
     ) -> HermesRunProjection:
         status = self._normalize_status(str(payload.get("status") or "running"))
-        event_type = str(payload.get("last_event") or f"run.{status}")
+        event_type = (
+            f"run.{status}"
+            if status in TERMINAL_RUN_STATUSES
+            else str(payload.get("last_event") or f"run.{status}")
+        )
         event_payload = {"event": event_type, **payload}
         # Polling is the recovery path after Hermes' single-consumer SSE
         # stream has been disconnected. Approval details live under the
@@ -630,6 +634,10 @@ class HermesRunRepository:
         *,
         sequence: int,
     ) -> None:
+        # A maintenance status poll can finish a run while a worker still has
+        # buffered tool events. Retain that evidence without reopening the run.
+        if run.status in TERMINAL_RUN_STATUSES:
+            return
         now = utcnow_naive()
         stop_requested = run.status == "stopping"
         run.updated_at = now

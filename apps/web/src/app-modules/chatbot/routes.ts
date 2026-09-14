@@ -18,6 +18,10 @@ export const chatbotAppRoutes: AppRouteDefinition[] = [
     appId: 'chatbot',
     chrome: getAppRouteChrome('chatbot.root'),
     path: getAppRoutePattern('chatbot.root'),
-    element: lazyRoute(createElement(ChatbotView)),
+    element: lazyRoute(
+      createElement(ChatbotView, {
+        experience: { conversationListPlacement: 'shell' },
+      }),
+    ),
   },
 ];

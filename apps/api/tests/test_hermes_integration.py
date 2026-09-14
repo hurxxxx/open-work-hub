@@ -55,6 +55,34 @@ from open_work_hub_api.domains.hermes.service import (
 pytestmark = pytest.mark.anyio
 
 
+async def test_renaming_an_archived_session_does_not_restore_it(
+    application_postgres_dsn, monkeypatch
+):
+    from test_hermes_runtime import seed, session_for
+    from open_work_hub_api.domains.hermes.schemas import HermesSessionUpdate
+
+    class Client:
+        async def update_session(self, profile, session_id, changes):
+            assert changes == {"title": "Renamed"}
+            return {"title": "Renamed", "archived": True}
+
+    monkeypatch.setattr(hermes_router, "runtime_client", lambda: Client())
+    engine = create_engine(application_postgres_dsn)
+    try:
+        with Session(engine) as db:
+            user, binding = seed(db)
+            session = session_for(db, binding)
+            session.status = "archived"
+            db.commit()
+            result = await hermes_router.update_session(
+                session.id, HermesSessionUpdate(title="Renamed"), db=db, current_user=user
+            )
+            assert result.archived is True
+            assert session.status == "archived"
+    finally:
+        engine.dispose()
+
+
 def test_stage_persists_run_before_foreign_key_children(
     application_postgres_dsn: str,
 ) -> None:
@@ -160,6 +188,7 @@ async def test_headless_maintenance_records_a_durable_heartbeat_without_work(
             "revoked_runs_stopped": 0,
             "revoked_jobs_paused": 0,
             "events_deleted": 0,
+            "runs_reconciled": 0,
             "errors": 0,
         }
         with Session(engine) as db:
@@ -1084,7 +1113,10 @@ async def test_scheduled_job_profile_clones_the_interactive_profile() -> None:
 @pytest.mark.parametrize("profile_exists", [False, True], ids=["fresh", "existing"])
 @pytest.mark.parametrize("reject_config", [False, True], ids=["applied", "rejected"])
 async def test_profile_reconciliation_enforces_compression_before_activation(
-    monkeypatch, route, profile_exists, reject_config,
+    monkeypatch,
+    route,
+    profile_exists,
+    reject_config,
 ) -> None:
     profile_name = f"owh-{uuid4().hex}" + ("-local" if route == "local" else "")
     binding = SimpleNamespace(
@@ -1095,7 +1127,9 @@ async def test_profile_reconciliation_enforces_compression_before_activation(
         provisioned_at=None,
     )
     monkeypatch.setattr(
-        hermes_service, "get_or_create_profile_binding", lambda _db, **_kwargs: binding,
+        hermes_service,
+        "get_or_create_profile_binding",
+        lambda _db, **_kwargs: binding,
     )
     reconciled_cache = {}
     monkeypatch.setattr(hermes_service, "_profile_reconciled_until", reconciled_cache)
@@ -1118,8 +1152,10 @@ async def test_profile_reconciliation_enforces_compression_before_activation(
             configs.append(config)
             if reject_config:
                 raise HermesClientError(
-                    operation="update_profile_config", status_code=503,
-                    code="hermes.config_unavailable", message="Configuration unavailable.",
+                    operation="update_profile_config",
+                    status_code=503,
+                    code="hermes.config_unavailable",
+                    message="Configuration unavailable.",
                 )
             return {"ok": True}
 
@@ -1127,7 +1163,9 @@ async def test_profile_reconciliation_enforces_compression_before_activation(
             return {"servers": []}
 
     db = SimpleNamespace(
-        add=lambda _row: None, commit=lambda: None, refresh=lambda _row: None,
+        add=lambda _row: None,
+        commit=lambda: None,
+        refresh=lambda _row: None,
     )
     settings = SimpleNamespace(
         hermes_enabled=True,
@@ -1136,7 +1174,12 @@ async def test_profile_reconciliation_enforces_compression_before_activation(
     )
     kwargs = {
         "model_policy": HermesModelPolicy(
-            route, "openai", "test-model", "http://model.test/v1", "test-key", 1024,
+            route,
+            "openai",
+            "test-model",
+            "http://model.test/v1",
+            "test-key",
+            1024,
         ),
         "user": SimpleNamespace(),
         "settings": settings,

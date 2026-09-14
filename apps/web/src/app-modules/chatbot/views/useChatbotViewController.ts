@@ -28,7 +28,6 @@ import {
   buildPromptEditTransition,
   buildRetryTurnTransition,
   buildSubmitTransition,
-  mergeToolCalls,
   normalizeConversationDetail,
   resolvePendingAiDraft,
   serializeTurnForModel,
@@ -86,6 +85,8 @@ export function useChatbotViewController(
       routeAppId: experience.routeAppId ?? 'chatbot',
       routeId: experience.routeId ?? 'chatbot.root',
       sidebarEyebrow: experience.sidebarEyebrow ?? 'AI',
+      conversationListPlacement:
+        experience.conversationListPlacement ?? 'inline',
       sidebarTitle:
         experience.sidebarTitle ?? t('apps:ai.sidebar.recentConversations'),
       title: experience.title ?? t('apps:ai.view.title'),
@@ -107,6 +108,7 @@ export function useChatbotViewController(
     experience.routeAppId,
     experience.routeId,
     experience.sidebarEyebrow,
+    experience.conversationListPlacement,
     experience.sidebarTitle,
     experience.sourceArtifactTypes,
     experience.title,
@@ -222,14 +224,6 @@ export function useChatbotViewController(
   const isConversationReady =
     routeConversationId === null ||
     activeConversationId === routeConversationId;
-  const finalizedToolCalls = useMemo(
-    () => turns.flatMap((turn) => turn.toolCalls ?? []),
-    [turns],
-  );
-  const visibleToolCalls = useMemo(
-    () => mergeToolCalls(finalizedToolCalls, chat.state.toolCalls),
-    [chat.state.toolCalls, finalizedToolCalls],
-  );
   const slashCommandItems: NavItem[] = [];
 
   const currentConversationId = activeConversationId ?? routeConversationId;
@@ -578,9 +572,12 @@ export function useChatbotViewController(
     setEditingText(turn.content);
   };
 
-  const submitEditedTurn = async () => {
+  const submitEditedTurn = async (
+    turnId = editingTurnId,
+    text = editingText,
+  ) => {
     if (
-      !editingTurnId ||
+      !turnId ||
       !token ||
       isRunInProgress ||
       !isConversationReady ||
@@ -589,8 +586,8 @@ export function useChatbotViewController(
       return;
     }
     const transition = buildPromptEditTransition({
-      editingText,
-      editingTurnId,
+      editingText: text,
+      editingTurnId: turnId,
       turns,
     });
     if (transition.status === 'invalid') {
@@ -639,9 +636,9 @@ export function useChatbotViewController(
     navigate(resolveAppInvocationHref(item));
   }
 
-  function handleSubmit() {
+  function handleSubmit(content = input) {
     const transition = buildSubmitTransition({
-      input,
+      input: content,
       nowMs: Date.now(),
       turns,
     });
@@ -716,7 +713,6 @@ export function useChatbotViewController(
       scopeOptions,
       slashCommandItems,
       t,
-      visibleToolCalls,
     },
   };
 }

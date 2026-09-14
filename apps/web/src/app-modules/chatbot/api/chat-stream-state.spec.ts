@@ -22,6 +22,23 @@ function envelope(type: string, data: unknown, timestampMs = 0): RawAgentEvent {
   };
 }
 
+it('reconciles partial deltas with the authoritative final text', () => {
+  const partial = applyChatStreamEvent(
+    createChatStreamStartState({ transport: 'stream' }),
+    envelope('content_delta', { text: 'partial' }),
+  ).next;
+  const done = applyChatStreamEvent(
+    partial,
+    envelope('done', {
+      finish_reason: 'stop',
+      content: 'complete answer',
+      meta: null,
+    }),
+  );
+  expect(done.next.contentBuffer).toBe('complete answer');
+  expect(done.terminal).toBe(true);
+});
+
 function pendingApproval(
   overrides: Partial<PendingApproval> = {},
 ): PendingApproval {
@@ -38,6 +55,25 @@ function pendingApproval(
 }
 
 describe('chat stream state', () => {
+  it('ignores repeated tool starts and late events after a terminal response', () => {
+    const started = createChatStreamStartState({ transport: 'stream' });
+    const toolStart = envelope('tool_call_started', {
+      call_id: 'one',
+      name: 'terminal',
+    });
+    const once = applyChatStreamEvent(started, toolStart).next;
+    const twice = applyChatStreamEvent(once, toolStart).next;
+    expect(twice.toolCalls).toHaveLength(1);
+    const done = applyChatStreamEvent(
+      twice,
+      envelope('done', { finish_reason: 'stop', audit_id: null, meta: null }),
+    ).next;
+    expect(done.toolCalls[0].status).toBe('unknown');
+    expect(
+      applyChatStreamEvent(done, envelope('content_delta', { text: 'late' }))
+        .next,
+    ).toBe(done);
+  });
   it('keeps the pending user question in the shared run state', () => {
     const started = createChatStreamStartState({
       transport: 'stream',

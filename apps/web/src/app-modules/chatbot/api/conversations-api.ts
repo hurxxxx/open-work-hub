@@ -46,6 +46,8 @@ export interface ConversationTurn {
 }
 
 export interface ConversationSummary {
+  pinned?: boolean;
+  archived?: boolean;
   id: string;
   title: string;
   scopeRef?: string | null;
@@ -151,11 +153,13 @@ export async function getConversation(
     const latestRun = runs.data[0];
     return {
       ...sessionToSummary(session),
-      turns: messages.data
-        .map((message, index) =>
-          messageToTurn(message, index, session.id, toolResults),
-        )
-        .filter((turn): turn is ConversationTurn => turn !== null),
+      turns: groupAssistantTurns(
+        messages.data
+          .map((message, index) =>
+            messageToTurn(message, index, session.id, toolResults),
+          )
+          .filter((turn): turn is ConversationTurn => turn !== null),
+      ),
       livePendingApproval: runToPendingApproval(latestRun),
       runError:
         latestRun?.status === 'failed' || latestRun?.status === 'invalid_output'
@@ -220,6 +224,8 @@ export async function deleteConversation(
 
 function sessionToSummary(session: HermesSession): ConversationSummary {
   return {
+    pinned: session.pinned,
+    archived: session.archived,
     id: session.id,
     title: session.title?.trim() || '',
     scopeRef: session.scope_ref ?? null,
@@ -227,6 +233,31 @@ function sessionToSummary(session: HermesSession): ConversationSummary {
     createdAt: session.created_at,
     updatedAt: session.updated_at,
   };
+}
+
+// Native history stores an assistant message before every tool call. Present
+// consecutive assistant messages as one answer, preserving their text/tools.
+// This is a display group at user-message boundaries, not a run/file mapping.
+function groupAssistantTurns(turns: ConversationTurn[]): ConversationTurn[] {
+  const grouped: ConversationTurn[] = [];
+  for (const turn of turns) {
+    const previous = grouped.at(-1);
+    if (turn.role !== 'assistant' || previous?.role !== 'assistant') {
+      grouped.push(turn);
+      continue;
+    }
+    grouped[grouped.length - 1] = {
+      ...previous,
+      content: [previous.content, turn.content].filter(Boolean).join('\n\n'),
+      reasoning: [previous.reasoning, turn.reasoning]
+        .filter(Boolean)
+        .join('\n\n'),
+      reasoningStatus: previous.reasoning || turn.reasoning ? 'done' : null,
+      finishReason: turn.finishReason,
+      toolCalls: [...(previous.toolCalls ?? []), ...(turn.toolCalls ?? [])],
+    };
+  }
+  return grouped;
 }
 
 function messageToTurn(
@@ -239,8 +270,9 @@ function messageToTurn(
   if (role !== 'user' && role !== 'assistant') return null;
   const reasoning = stringValue(message.reasoning_content ?? message.reasoning);
   const timestamp = timestampToIso(message.timestamp);
+  const id = stringValue(message.id) || `${sessionId}:${index + 1}`;
   return {
-    id: stringValue(message.id) || `${sessionId}:${index + 1}`,
+    id,
     seq: index + 1,
     role,
     content: displayContent(message),
@@ -256,7 +288,7 @@ function messageToTurn(
     piiHits: [],
     toolCalls:
       role === 'assistant'
-        ? mapStoredToolCalls(message.tool_calls, timestamp, toolResults)
+        ? mapStoredToolCalls(message.tool_calls, timestamp, toolResults, id)
         : [],
     pendingApprovals: [],
     artifacts: [],
@@ -290,6 +322,7 @@ function mapStoredToolCalls(
   value: unknown,
   timestamp: string,
   toolResults: Map<string, Record<string, unknown>>,
+  messageId: string,
 ) {
   if (!Array.isArray(value)) return [];
   const startedAtMs = Date.parse(timestamp);
@@ -302,7 +335,7 @@ function mapStoredToolCalls(
         : {};
     const name = stringValue(fn.name ?? row.name);
     if (!name) return [];
-    const callId = stringValue(row.id) || `stored-tool-${index}`;
+    const callId = stringValue(row.id) || `${messageId}:tool:${index}`;
     const message = toolResults.get(callId);
     const result = message ? storedToolResult(message) : null;
     return [
