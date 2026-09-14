@@ -14,6 +14,8 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
+from pathlib import Path
 from uuid import uuid4
 
 from agent.terminal_env_provider import TerminalEnvironmentProvider
@@ -41,14 +43,19 @@ def _deployment_resource(key: str) -> str:
 
 
 class WorkspaceEnvironment(BaseEnvironment):
-    def __init__(self, *, policy: dict, server: dict, run_id: str, timeout: int):
+    def __init__(self, *, policy: dict, server: dict, run_id: str, timeout: int,
+                 preview: bool = False):
         # Compose owns physical resources. A database/runner namespace is not
         # a Docker network or volume name, including during database cutovers.
         network = _deployment_resource("OWH_HERMES_TERMINAL_SANDBOX_NETWORK")
         ca_volume = _deployment_resource("OWH_HERMES_TERMINAL_EGRESS_CLIENT_VOLUME")
         super().__init__(cwd="/workspace", timeout=min(timeout, 180))
         self._server, self._run_id = server, run_id
+        self._cleanup_lock = threading.Lock()
+        self._recovery_lock = threading.Lock()
+        self._closed = False
         self._synced_files = {}
+        self._checkpoint_pending = False
         self._container = f"owh-sandbox-{uuid4().hex}"
         self._docker = shutil.which("docker") or "docker"
         self._client_env = {
@@ -90,7 +97,7 @@ class WorkspaceEnvironment(BaseEnvironment):
             "--user=10000:10000",
             "--workdir=/workspace",
             "--entrypoint=/bin/sleep",
-            f"--network={network}",
+            f"--network={'none' if preview else network}",
             "--tmpfs=/workspace:rw,exec,nosuid,size=256m,mode=1777",
             "--tmpfs=/tmp:rw,exec,nosuid,size=256m,mode=1777",
             "--tmpfs=/opt/data:rw,exec,nosuid,size=64m,uid=10000,gid=10000",
@@ -98,6 +105,10 @@ class WorkspaceEnvironment(BaseEnvironment):
             "--mount",
             f"type=volume,src={ca_volume},dst={ca_path},volume-subpath=ca.crt,readonly",
         ]
+        if preview:
+            # Chromium keeps its own user/PID/network namespace and seccomp
+            # sandbox. No extra Linux capability or host IPC is granted.
+            args.extend(["--security-opt", f"seccomp={Path(__file__).with_name('chromium-seccomp.json')}"])
         environment = {
             "HOME": "/home/hermes",
             "HTTP_PROXY": "http://hermes-terminal-egress:19091",
@@ -144,13 +155,21 @@ class WorkspaceEnvironment(BaseEnvironment):
         except Exception:
             try:
                 self.cleanup()
-            except (subprocess.SubprocessError, OSError):
+            except (subprocess.SubprocessError, OSError, EnvironmentConnectionError):
                 # Preserve the actionable original failure; the one-hour
                 # deadline still bounds a container if Docker is unreachable.
                 pass
             raise
 
     def _run_bash(self, cmd_string, *, login=False, timeout=120, stdin_data=None):
+        from .file_write_boundary import FILE_WRITE_SCRIPT
+        from .native_execution import file_write_environment
+
+        shell = ["/bin/bash", "-c", cmd_string]
+        if file_write_environment.get() is self:
+            shell = [
+                "/opt/hermes/.venv/bin/python", "-I", "-c", FILE_WRITE_SCRIPT, cmd_string
+            ]
         # A regular anonymous file avoids a pipe writer thread/deadlock for
         # large stdin. It is private transport scratch, never authoritative.
         with tempfile.TemporaryFile(mode="w+t") as source:
@@ -166,9 +185,7 @@ class WorkspaceEnvironment(BaseEnvironment):
                     "/usr/bin/timeout",
                     "--kill-after=5",
                     str(min(timeout, 180)),
-                    "/bin/bash",
-                    "-c",
-                    cmd_string,
+                    *shell,
                 ],
                 stdin=source,
                 stdout=subprocess.PIPE,
@@ -231,6 +248,7 @@ class WorkspaceEnvironment(BaseEnvironment):
         local = self._workspace({"op": "list"})
         for row in local:
             if remote.get(row["path"]) != row["sha256"]:
+                self._checkpoint_pending = True
                 body = self._workspace({"op": "read", "path": row["path"]})
                 _rpc(
                     server,
@@ -239,14 +257,29 @@ class WorkspaceEnvironment(BaseEnvironment):
                     {"path": row["path"], "data": body["data"]},
                 )
                 self._synced_files[row["path"]] = row["sha256"]
+        if self._checkpoint_pending:
+            _rpc(server, run_id, "owh/files/checkpoint", {})
+            self._checkpoint_pending = False
         # Keep saved files as history even when the sandbox deletes them.
 
     def execute(self, command, cwd="", **kwargs):
+        from tools.interrupt import is_interrupted
+
         from . import runtime_transport
 
+        if is_interrupted():
+            self.cleanup()
+        if self._closed or not self._container:
+            # Native remote-kernel polling retries exceptions; an explicit
+            # non-JSON response ends that protocol promptly on cancellation.
+            return {"returncode": 130, "output": "OWH sandbox execution ended"}
         self._server, self._run_id = runtime_transport()
         self.restore_files()
         result = super().execute(command, cwd, **kwargs)
+        if result.get("returncode") in {124, 130}:
+            self.cleanup()
+        if not self._container:
+            return result
         try:
             self.save_files()
         except Exception:
@@ -256,16 +289,37 @@ class WorkspaceEnvironment(BaseEnvironment):
             }
         return result
 
+    def _kill_process(self, proc):
+        # Killing only the Docker client leaves detached code/children alive.
+        try:
+            self.cleanup()
+        finally:
+            proc.kill()
+
     def cleanup(self, **kwargs):
-        if getattr(self, "_container", None):
-            subprocess.run(
-                [self._docker, "rm", "--force", self._container],
-                capture_output=True,
-                timeout=30,
-                env=self._client_env,
-                check=False,
-            )
-            self._container = None
+        with self._cleanup_lock:
+            self._closed = True
+            if getattr(self, "_container", None):
+                result = subprocess.run(
+                    [self._docker, "rm", "--force", self._container],
+                    capture_output=True,
+                    timeout=30,
+                    env=self._client_env,
+                    check=False,
+                )
+                if result.returncode:
+                    probe = subprocess.run(
+                        [
+                            self._docker, "ps", "--all", "--filter",
+                            f"name=^{self._container}$", "--format", "{{.ID}}",
+                        ],
+                        capture_output=True, timeout=15, env=self._client_env, check=False,
+                    )
+                    if probe.returncode or (probe.stdout or b"").strip():
+                        raise _infrastructure_error(
+                            "Sandbox removal was not confirmed (sandbox.cleanup_failed)."
+                        )
+                self._container = None
 
 
 class OpenWorkHubSandbox(TerminalEnvironmentProvider):
@@ -285,6 +339,8 @@ class OpenWorkHubSandbox(TerminalEnvironmentProvider):
         context = _rpc(server, run_id, "owh/context", {})
         if not context.get("allow_native_tools"):
             raise RuntimeError("This workload cannot execute code")
-        return WorkspaceEnvironment(
+        environment = WorkspaceEnvironment(
             policy=context["sandbox"], server=server, run_id=run_id, timeout=timeout
         )
+        environment._task_id = task_id
+        return environment

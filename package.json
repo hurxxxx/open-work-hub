@@ -158,6 +158,7 @@
     "yaml": "2.8.3"
   },
   "dependencies": {
+    "@assistant-ui/react": "0.15.18",
     "@blocknote/core": "^0.52.1",
     "@blocknote/mantine": "^0.52.1",
     "@blocknote/react": "^0.52.1",
@@ -196,6 +197,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dompurify": "^3.4.0",
+    "esbuild-wasm": "0.28.1",
     "eventsource-parser": "^3.0.7",
     "highlight.js": "^11.11.1",
     "i18next": "^26.0.8",

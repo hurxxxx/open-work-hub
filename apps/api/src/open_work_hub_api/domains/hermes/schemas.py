@@ -149,6 +149,25 @@ class HermesFileListResponse(BaseModel):
     data: list[HermesFileResponse]
 
 
+class HermesFileRevisionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    file_id: str
+    session_id: str
+    run_id: str | None
+    relative_path: str
+    size_bytes: int
+    media_type: str
+    sha256: str
+    created_at: datetime
+    expires_at: datetime
+
+
+class HermesFileRevisionListResponse(BaseModel):
+    data: list[HermesFileRevisionResponse]
+    has_more: bool
+
+
 class HermesSteerRequest(BaseModel):
     input: str = Field(min_length=1, max_length=50_000)
 

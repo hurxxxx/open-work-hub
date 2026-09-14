@@ -373,6 +373,107 @@ export function deleteHermesJob(token: string, jobId: string): Promise<void> {
 }
 
 export type HermesFile = ApiSchema<'HermesFileResponse'>;
+export type HermesFileRevision = ApiSchema<'HermesFileRevisionResponse'>;
+export function listHermesFileRevisions(
+  token: string,
+  sessionId: string,
+  fileId?: string,
+  offset = 0,
+) {
+  const query = new URLSearchParams({
+    offset: String(offset),
+    limit: '100',
+  });
+  if (fileId) query.set('file_id', fileId);
+  return request<ApiSchema<'HermesFileRevisionListResponse'>>(
+    `/api/v1/agent/sessions/${encodeURIComponent(sessionId)}/file-revisions?${query}`,
+    token,
+  );
+}
+export function getHermesFileRevision(token: string, revisionId: string) {
+  return request<HermesFileRevision>(
+    `/api/v1/agent/file-revisions/${encodeURIComponent(revisionId)}`,
+    token,
+  );
+}
+
+export function hermesFileRevisionContentPath(revisionId: string) {
+  return `/api/v1/agent/file-revisions/${encodeURIComponent(revisionId)}/content`;
+}
+
+export async function previewHermesFileRevision(
+  token: string,
+  revision: HermesFileRevision,
+  limit: number,
+  signal: AbortSignal,
+): Promise<Blob> {
+  if (revision.size_bytes > limit)
+    throw new Error(i18n.t('apps:ai.filePreview.tooLarge'));
+  return readPreviewBytes(
+    token,
+    hermesFileRevisionContentPath(revision.id),
+    limit,
+    signal,
+    revision.size_bytes,
+    revision.media_type,
+  );
+}
+
+export async function previewHermesAsset(
+  token: string,
+  revisionId: string,
+  path: string,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
+  const query = new URLSearchParams({ path });
+  const blob = await readPreviewBytes(
+    token,
+    `/api/v1/agent/file-revisions/${encodeURIComponent(revisionId)}/preview-asset?${query}`,
+    2 * 1024 * 1024,
+    signal,
+  );
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+async function readPreviewBytes(
+  token: string,
+  path: string,
+  limit: number,
+  signal: AbortSignal,
+  expectedSize?: number,
+  mediaType = 'application/octet-stream',
+): Promise<Blob> {
+  const response = await fetch(path, {
+    headers: jsonHeaders(token, { Accept: '*/*' }),
+    cache: 'no-store',
+    redirect: 'error',
+    signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+  });
+  if (!response.ok || !response.body)
+    throw new HermesAgentApiError(
+      response.status,
+      i18n.t('apps:ai.filePreview.unavailable'),
+    );
+  const reader = response.body.getReader();
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit || (expectedSize !== undefined && size > expectedSize))
+        throw new Error(i18n.t('apps:ai.filePreview.tooLarge'));
+      chunks.push(new Uint8Array(value));
+    }
+  } finally {
+    await reader.cancel();
+    reader.releaseLock();
+  }
+  if (expectedSize !== undefined && size !== expectedSize)
+    throw new Error(i18n.t('apps:ai.filePreview.unavailable'));
+  return new Blob(chunks, { type: mediaType });
+}
 export function listHermesFiles(token: string, sessionId: string) {
   return request<ApiSchema<'HermesFileListResponse'>>(
     `/api/v1/agent/sessions/${encodeURIComponent(sessionId)}/files`,

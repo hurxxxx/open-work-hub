@@ -50,7 +50,17 @@ export function useChatbotArtifactRouting({
       sourceSearchParams: URLSearchParams;
     }) => {
       setSearchParams(
-        buildArtifactSearchParams(sourceSearchParams, artifactId),
+        (() => {
+          const next = buildArtifactSearchParams(
+            sourceSearchParams,
+            artifactId,
+          );
+          if (artifactId) {
+            next.delete('f');
+            next.delete('v');
+          }
+          return next;
+        })(),
         {
           replace,
         },

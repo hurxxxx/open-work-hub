@@ -38,6 +38,25 @@ function pendingApproval(
 }
 
 describe('chat stream state', () => {
+  it('ignores repeated tool starts and late events after a terminal response', () => {
+    const started = createChatStreamStartState({ transport: 'stream' });
+    const toolStart = envelope('tool_call_started', {
+      call_id: 'one',
+      name: 'terminal',
+    });
+    const once = applyChatStreamEvent(started, toolStart).next;
+    const twice = applyChatStreamEvent(once, toolStart).next;
+    expect(twice.toolCalls).toHaveLength(1);
+    const done = applyChatStreamEvent(
+      twice,
+      envelope('done', { finish_reason: 'stop', audit_id: null, meta: null }),
+    ).next;
+    expect(done.toolCalls[0].status).toBe('unknown');
+    expect(
+      applyChatStreamEvent(done, envelope('content_delta', { text: 'late' }))
+        .next,
+    ).toBe(done);
+  });
   it('keeps the pending user question in the shared run state', () => {
     const started = createChatStreamStartState({
       transport: 'stream',

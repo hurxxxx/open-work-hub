@@ -13,6 +13,7 @@ import { HermesWorkspacePanel } from './HermesWorkspacePanel';
 
 const mocks = vi.hoisted(() => ({
   listFiles: vi.fn(),
+  listRevisions: vi.fn(),
   listRuns: vi.fn(),
   listSessions: vi.fn(),
   stop: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock('@/src/platform/auth/auth-provider', () => ({
 vi.mock('@open-work-hub/ui', () => ({ useFeedback: () => mocks.feedback }));
 vi.mock('../api/hermes-agent-api', () => ({
   listHermesFiles: mocks.listFiles,
+  listHermesFileRevisions: mocks.listRevisions,
   listHermesRuns: mocks.listRuns,
   listHermesSessions: mocks.listSessions,
   stopHermesRun: mocks.stop,
@@ -57,6 +59,7 @@ describe('Hermes work and files panel', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.listFiles.mockResolvedValue({ data: [] });
+    mocks.listRevisions.mockResolvedValue({ data: [], has_more: false });
     mocks.listRuns.mockResolvedValue({ data: [] });
     mocks.listSessions.mockResolvedValue({ data: [] });
     mocks.legacy.mockResolvedValue({ items: [] });
@@ -130,5 +133,50 @@ describe('Hermes work and files panel', () => {
       (screen.getByLabelText('hermesWorkspace.attach') as HTMLInputElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it('shows generated results outside collapsed details and routes the server revision', async () => {
+    const saved = {
+      ...file('dashboard.html'),
+      media_type: 'text/html',
+      sha256: 'a'.repeat(64),
+    };
+    mocks.listFiles.mockResolvedValue({ data: [saved] });
+    mocks.listRevisions.mockResolvedValue({
+      data: [
+        {
+          ...saved,
+          id: 'saved-version',
+          file_id: saved.id,
+          session_id: 'a',
+          run_id: 'run-a',
+          created_at: '2026-09-14T00:00:00Z',
+          expires_at: '2026-10-14T00:00:00Z',
+        },
+      ],
+      has_more: false,
+    });
+    const onOpenFile = vi.fn();
+    const { container, rerender } = render(
+      <MemoryRouter>
+        <HermesWorkspacePanel conversationId="a" onOpenFile={onOpenFile} />
+      </MemoryRouter>,
+    );
+    const result = await screen.findByRole('button', {
+      name: /dashboard.html.*ai.generatedResults.openVersion/,
+    });
+    expect(container.querySelector('details')?.open).toBe(false);
+    expect(result.closest('details')).toBeNull();
+    fireEvent.click(result);
+    expect(onOpenFile).toHaveBeenCalledWith('dashboard.html', 'saved-version');
+    mocks.listFiles.mockReturnValue(new Promise(() => {}));
+    await act(async () =>
+      rerender(
+        <MemoryRouter>
+          <HermesWorkspacePanel conversationId="b" onOpenFile={onOpenFile} />
+        </MemoryRouter>,
+      ),
+    );
+    expect(screen.queryByRole('button', { name: /dashboard.html/ })).toBeNull();
   });
 });

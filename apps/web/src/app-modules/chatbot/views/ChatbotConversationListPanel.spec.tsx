@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { listConversations } from '../api/conversations-api';
 import { ChatbotConversationListPanel } from './ChatbotConversationListPanel';
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
+vi.mock('react-i18next', () => {
+  const translation = {
     t: (key: string) =>
       ({
         'apps:ai.message.typing': '답변 작성 중',
@@ -17,14 +17,16 @@ vi.mock('react-i18next', () => ({
         'apps:ai.sidebar.renameConversation': '대화 이름 변경',
         'apps:ai.sidebar.searchConversations': '대화 검색',
       })[key] ?? key,
-  }),
-}));
+  };
+  return { useTranslation: () => translation };
+});
 
 vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({ token: 'token-1' }),
 }));
 
-vi.mock('@open-work-hub/ui', () => ({
+vi.mock('@open-work-hub/ui', async (original) => ({
+  ...(await original<typeof import('@open-work-hub/ui')>()),
   useConfirm: () => ({
     confirm: vi.fn(),
     confirmDialog: null,
@@ -89,7 +91,9 @@ describe('ChatbotConversationListPanel', () => {
     expect(
       screen.getByRole('button', { name: '새 대화' }).hasAttribute('disabled'),
     ).toBe(true);
-    for (const button of screen.getAllByRole('button', { name: '대화 삭제' })) {
+    for (const button of screen.getAllByRole('button', {
+      name: 'apps:ai.sidebar.conversationActions',
+    })) {
       expect(button.hasAttribute('disabled')).toBe(true);
     }
   });
@@ -115,5 +119,27 @@ describe('ChatbotConversationListPanel', () => {
 
     expect(await screen.findByText('권역별 발생 건수를 비교해줘')).toBeTruthy();
     expect(screen.queryByText('apps:ai.sidebar.noConversations')).toBeNull();
+  });
+
+  it('distinguishes the initial request from an empty conversation list', async () => {
+    let finish!: () => void;
+    vi.mocked(listConversations).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ items: [], nextCursor: null });
+        }),
+    );
+    render(
+      <MemoryRouter>
+        <ChatbotConversationListPanel activeConversationId={null} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('status')).toBeTruthy();
+    expect(screen.queryByText('apps:ai.sidebar.noConversations')).toBeNull();
+    finish();
+    expect(
+      await screen.findByText('apps:ai.sidebar.noConversations'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });

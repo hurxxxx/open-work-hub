@@ -334,6 +334,17 @@ def _handle_file_request(
                 },
             )
         )
+    if method == "owh/files/checkpoint":
+        from open_work_hub_api.domains.hermes.files import checkpoint_previews
+
+        try:
+            count = checkpoint_previews(db, session=session, run_id=run_id)
+        except ValueError:
+            db.rollback()
+            return JSONResponse(
+                _rpc_error(request_id, -32602, "Preview snapshot could not be saved")
+            )
+        return JSONResponse(_rpc_result(request_id, {"previews": count}))
     if method == "owh/files/read":
         row = next((row for row in files if row.id == params.get("id")), None)
         if row is None:
@@ -458,6 +469,7 @@ def _prepare_mcp_response(
         "owh/files/list",
         "owh/files/read",
         "owh/files/write",
+        "owh/files/checkpoint",
     }:
         _principal, _tools, run = _available_tools(
             db,

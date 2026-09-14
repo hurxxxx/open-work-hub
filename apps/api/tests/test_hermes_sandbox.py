@@ -109,6 +109,44 @@ def test_sandbox_uses_deployment_resources_and_checks_before_creation(sandbox):
         environment.cleanup()
 
 
+def test_failed_removal_keeps_exact_container_for_retry_and_closes_execution(sandbox, monkeypatch):
+    environment = sandbox.create()
+    container = environment._container
+    original = sandbox.module.subprocess.run
+    monkeypatch.setattr(
+        sandbox.module.subprocess,
+        "run",
+        lambda args, **kwargs: subprocess.CompletedProcess(args, 1),
+    )
+    with pytest.raises(sandbox.error, match="sandbox.cleanup_failed"):
+        environment.cleanup()
+    assert environment._closed and environment._container == container
+    monkeypatch.setattr(sandbox.module.subprocess, "run", original)
+    environment.cleanup()
+    assert environment._container is None
+
+
+def test_preview_uses_an_offline_container_and_preserves_outer_isolation(sandbox):
+    environment = sandbox.module.WorkspaceEnvironment(
+        policy={"image": "pinned-image", "no_proxy": "localhost"},
+        server={},
+        run_id="synthetic-run",
+        timeout=30,
+        preview=True,
+    )
+    try:
+        args = next(args for args in sandbox.calls if args[1] == "run")
+        assert "--network=none" in args
+        assert "--cap-drop=ALL" in args and "--security-opt=no-new-privileges" in args
+        assert "--read-only" in args and "--user=10000:10000" in args
+        assert any(value.endswith("chromium-seccomp.json") for value in args)
+        assert not any(
+            "unconfined" in value or "--cap-add" in value or "--ipc=host" in value for value in args
+        )
+    finally:
+        environment.cleanup()
+
+
 @pytest.mark.parametrize("key", [NETWORK_KEY, VOLUME_KEY])
 @pytest.mark.parametrize("value", [None, "", "../host", "volume,readonly=false"])
 def test_missing_or_invalid_deployment_resources_fail_before_docker(
