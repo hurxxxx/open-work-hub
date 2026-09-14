@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { CodeArtifact } from './CodeArtifact';
+import { HTML_PREVIEW_CSP } from './html-preview-policy';
 
 type Tab = 'preview' | 'source';
 
@@ -80,7 +81,7 @@ export function HtmlArtifact({
               <iframe
                 ref={frame}
                 title={title ?? t('ai.htmlArtifact.title')}
-                srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">${diagnostic}${html}`}
+                srcDoc={`<meta http-equiv="Content-Security-Policy" content="${HTML_PREVIEW_CSP}">${diagnostic}${html}`}
                 referrerPolicy="no-referrer"
                 // `allow-scripts` lets the guest page run its own JS (needed
                 // for any interactive HTML). We intentionally do NOT include

@@ -12,7 +12,7 @@ let browser, nextId = 0, buffer = '', usedBytes = 0;
 const pending = new Map(), handlers = new Map(), cache = new Map();
 const errors = [];
 const report = (message) => { if (errors.length < 20) errors.push(String(message).slice(0, 300)); };
-const csp = "default-src 'none'; script-src 'unsafe-inline' https://workspace.invalid; style-src 'unsafe-inline' https://workspace.invalid; img-src data: blob: https://workspace.invalid; font-src data: https://workspace.invalid; connect-src 'none'; base-uri 'none'; form-action 'none'; sandbox allow-scripts";
+const csp = "default-src 'none'; script-src 'unsafe-inline' data: https://workspace.invalid; style-src 'unsafe-inline' https://workspace.invalid; img-src data: blob: https://workspace.invalid; font-src data: https://workspace.invalid; connect-src 'none'; base-uri 'none'; form-action 'none'; sandbox allow-scripts";
 const send = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
   const id = ++nextId;
   pending.set(id, { resolve, reject });

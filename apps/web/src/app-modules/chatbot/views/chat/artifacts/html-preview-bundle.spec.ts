@@ -1,11 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { bundleHtmlPreview, previewPath } from './html-preview-bundle';
 
 vi.mock('esbuild-wasm', async (original) => ({
   ...(await original<typeof import('esbuild-wasm')>()),
   // Node's official API starts its own WASM executable; wasmURL is browser-only.
-  initialize: async () => {},
+  initialize: async () => undefined,
 }));
-import { bundleHtmlPreview, previewPath } from './html-preview-bundle';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -41,10 +41,12 @@ it('bundles local module dependencies, cycles, import maps, CSS and images witho
   expect(output.querySelector('img')?.src).toMatch(
     /^data:image\/svg\+xml;base64,/,
   );
-  const script = output.querySelector('script')!.textContent!;
-  const page = document.implementation.createHTMLDocument();
-  new Function('document', script)(page);
-  expect(page.body.dataset.result).toBe('42');
+  const modules = JSON.parse(
+    output.querySelector('script[type="importmap"]')?.textContent || '{}',
+  );
+  expect(Object.values(modules.imports)).toEqual([
+    expect.stringMatching(/^data:text\/javascript;base64,/),
+  ]);
   expect(new Set(loaded).size).toBe(5);
 });
 
@@ -55,6 +57,8 @@ it('preserves classic-script globals and refuses remote, missing, excessive and 
     '//cdn.example/a.js',
     'file:///etc/passwd',
     'a\\b.js',
+    'a\nb.js',
+    '%00.js',
   ])
     expect(() => previewPath(path, 'demo/index.html')).toThrow();
   const load = vi.fn(async () =>
@@ -66,7 +70,10 @@ it('preserves classic-script globals and refuses remote, missing, excessive and 
     load,
     new AbortController().signal,
   );
-  expect(result).toContain('var sharedValue = 42');
+  const classic = new DOMParser()
+    .parseFromString(result, 'text/html')
+    .querySelector('script');
+  expect(atob(classic?.src.split(',')[1] || '')).toBe('var sharedValue = 42;');
   await expect(
     bundleHtmlPreview(
       '<script src="https://cdn.example/a.js"></script>',

@@ -37,8 +37,8 @@ describe('ChatThread execution details', () => {
         constructor(callback: () => void) {
           resize = callback;
         }
-        observe() {}
-        disconnect() {}
+        observe = vi.fn();
+        disconnect = vi.fn();
       },
     );
   });
