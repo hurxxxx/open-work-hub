@@ -124,46 +124,68 @@ export function HermesFilePanel({
     if (!token || !revisionId) return;
     let cancelled = false;
     let objectUrl: string | null = null;
+    let loaded = false;
+    let timer: ReturnType<typeof setTimeout>;
     const abort = new AbortController();
-    void (async () => {
-      const selected = await getHermesFileRevision(token, revisionId);
-      if (cancelled) return;
-      if (selected.session_id !== sessionId || selected.file_id !== fileId)
-        throw new Error(t('ai.filePreview.unavailable'));
-      setRevision(selected);
-      const kind = hermesFilePreviewKind(selected);
-      const limit = kind === 'image' ? 10 * 1024 * 1024 : 2 * 1024 * 1024;
-      if (!kind || selected.size_bytes > limit) return;
-      const blob = await previewHermesFileRevision(
-        token,
-        selected,
-        limit,
-        abort.signal,
-      );
-      if (cancelled) return;
-      const text = kind === 'image' ? '' : await blob.text();
-      if (cancelled) return;
-      if (kind === 'image') objectUrl = URL.createObjectURL(blob);
-      setPreview({ text, url: objectUrl ?? '' });
-      if (kind === 'html') {
-        try {
-          const html = await bundleHtmlPreview(
-            text,
-            selected.relative_path,
-            (path) =>
-              previewHermesAsset(token, selected.id, path, abort.signal),
-            abort.signal,
-          );
-          if (!cancelled) setPreviewHtml(html);
-        } catch {
-          if (!cancelled) setBundleError(true);
+    const refresh = () =>
+      void (async () => {
+        const selected = await getHermesFileRevision(token, revisionId);
+        if (cancelled) return;
+        if (selected.session_id !== sessionId || selected.file_id !== fileId)
+          throw new Error(t('ai.filePreview.unavailable'));
+        if (loaded) return;
+        loaded = true;
+        setError(false);
+        setBundleError(false);
+        setRevision(selected);
+        const kind = hermesFilePreviewKind(selected);
+        const limit = kind === 'image' ? 10 * 1024 * 1024 : 2 * 1024 * 1024;
+        if (!kind || selected.size_bytes > limit) return;
+        const blob = await previewHermesFileRevision(
+          token,
+          selected,
+          limit,
+          abort.signal,
+        );
+        if (cancelled) return;
+        const text = kind === 'image' ? '' : await blob.text();
+        if (cancelled) return;
+        if (kind === 'image') objectUrl = URL.createObjectURL(blob);
+        setPreview({ text, url: objectUrl ?? '' });
+        if (kind === 'html') {
+          try {
+            const html = await bundleHtmlPreview(
+              text,
+              selected.relative_path,
+              (path) =>
+                previewHermesAsset(token, selected.id, path, abort.signal),
+              abort.signal,
+            );
+            if (!cancelled) setPreviewHtml(html);
+          } catch {
+            if (!cancelled) setBundleError(true);
+          }
         }
-      }
-    })().catch(() => {
-      if (!cancelled) setError(true);
-    });
+      })()
+        .catch(() => {
+          if (cancelled) return;
+          loaded = false;
+          setError(true);
+          setRevision(null);
+          setPreview(null);
+          setPreviewHtml(null);
+          setSourceRun(null);
+          setShowSource(false);
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          objectUrl = null;
+        })
+        .finally(() => {
+          if (!cancelled) timer = setTimeout(refresh, 4000);
+        });
+    refresh();
     return () => {
       cancelled = true;
+      clearTimeout(timer);
       abort.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };

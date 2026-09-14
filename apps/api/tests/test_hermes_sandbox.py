@@ -126,6 +126,44 @@ def test_failed_removal_keeps_exact_container_for_retry_and_closes_execution(san
     assert environment._container is None
 
 
+def test_recreated_sandbox_retries_server_checkpoint_without_new_local_changes(
+    sandbox, monkeypatch
+):
+    package = sys.modules["owh_sandbox_test"]
+    attempts = []
+
+    def rpc(server, run_id, method, params):
+        if method == "owh/files/list":
+            return {"files": [{"relative_path": "app.js", "sha256": "saved"}]}
+        assert method == "owh/files/checkpoint"
+        attempts.append(run_id)
+        if len(attempts) == 1:
+            raise OSError("synthetic checkpoint outage")
+        return {"created": 1}
+
+    monkeypatch.setattr(package, "_rpc", rpc, raising=False)
+    monkeypatch.setattr(package, "runtime_transport", lambda: ({}, "run_current"), raising=False)
+    monkeypatch.setattr(
+        sandbox.module.WorkspaceEnvironment,
+        "_workspace",
+        lambda *_args: [
+            {"path": "app.js", "sha256": "saved"},
+        ],
+    )
+    first = sandbox.create()
+    try:
+        with pytest.raises(OSError, match="checkpoint outage"):
+            first.save_files()
+    finally:
+        first.cleanup()
+    restored = sandbox.create()
+    try:
+        restored.save_files()
+        assert attempts == ["run_current", "run_current"]
+    finally:
+        restored.cleanup()
+
+
 def test_preview_uses_an_offline_container_and_preserves_outer_isolation(sandbox):
     environment = sandbox.module.WorkspaceEnvironment(
         policy={"image": "pinned-image", "no_proxy": "localhost"},

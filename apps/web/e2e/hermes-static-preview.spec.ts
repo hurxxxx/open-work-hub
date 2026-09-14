@@ -106,3 +106,28 @@ test('embedded scripts cannot access the parent or send network requests', async
   expect(network).toEqual([]);
   await expect(page.locator('body')).not.toHaveAttribute('data-escaped');
 });
+
+test('embedded stylesheets retain print and viewport media conditions', async ({
+  page,
+}) => {
+  await openPreview(
+    page,
+    `<head><link rel="stylesheet" href="print.css" media="print">
+    <link rel="stylesheet" href="narrow.css" media="(max-width: 400px)"></head>
+    <body><p id="result">visible</p></body>`,
+    {
+      'demo/print.css': 'body { display: none; }',
+      'demo/narrow.css': '#result { color: rgb(255, 0, 0); }',
+    },
+  );
+  await page
+    .locator('iframe')
+    .evaluate((frame) => frame.setAttribute('width', '600'));
+  const result = page.frameLocator('iframe').locator('#result');
+  await expect(result).toBeVisible();
+  await expect(result).toHaveCSS('color', 'rgb(0, 0, 0)');
+  await page
+    .locator('iframe')
+    .evaluate((frame) => frame.setAttribute('width', '300'));
+  await expect(result).toHaveCSS('color', 'rgb(255, 0, 0)');
+});

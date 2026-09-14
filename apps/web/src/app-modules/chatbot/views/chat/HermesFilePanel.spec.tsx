@@ -151,6 +151,38 @@ it('shows an unavailable image instead of a broken-image success state', async (
   await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
 });
 
+it('rechecks a selected old version even while other versions remain accessible', async () => {
+  vi.useFakeTimers();
+  const input = props();
+  vi.mocked(listHermesFileRevisions).mockResolvedValue({
+    data: [{ ...revision, id: 'newer' }],
+    has_more: true,
+  });
+  const { unmount } = render(<HermesFilePanel {...input} />);
+  try {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByRole('img')).toBeTruthy();
+    vi.mocked(getHermesFileRevision).mockRejectedValue(
+      new Error('unavailable'),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    expect(screen.getByRole('alert')).toBeTruthy();
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: '다운로드' }).hasAttribute('disabled'),
+    ).toBe(true);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
+    expect(input.onRevisionChange).not.toHaveBeenCalled();
+  } finally {
+    unmount();
+    vi.useRealTimers();
+  }
+});
+
 it('observes new versions while preserving the selected preview and loaded history', async () => {
   vi.useFakeTimers();
   const newer = {
