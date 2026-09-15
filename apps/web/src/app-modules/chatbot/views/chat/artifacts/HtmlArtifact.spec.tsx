@@ -1,7 +1,27 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 
 import { HtmlArtifact } from './HtmlArtifact';
+
+it('renders on HTTP origins without randomUUID and rotates the preview channel', () => {
+  vi.stubGlobal('crypto', { getRandomValues: crypto.getRandomValues.bind(crypto) });
+  try {
+    const { container, rerender, unmount } = render(<HtmlArtifact content="<p>first</p>" />);
+    const channel = () => JSON.parse(
+      container.querySelector('iframe')!.srcdoc.match(/channel:("[^"]*")/)![1],
+    );
+    const first = channel();
+    expect(first).toMatch(/^[0-9a-f]{32}$/);
+    rerender(<HtmlArtifact content="<p>first</p>" />);
+    expect(channel()).toBe(first);
+    rerender(<HtmlArtifact content="<p>second</p>" />);
+    expect(channel()).not.toBe(first);
+    expect(container.querySelector('iframe')!.getAttribute('sandbox')).toBe('allow-scripts');
+    unmount();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 it('accepts errors only from the current isolated preview and resets for a new version', () => {
   const { container, rerender } = render(
