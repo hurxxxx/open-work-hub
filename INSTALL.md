@@ -687,6 +687,13 @@ OPEN_WORK_HUB_WEB_DEV_PORT=4200
 OPEN_WORK_HUB_API_DEV_LOGIN_ALLOWED_HOSTS=<서버-IP>
 ```
 
+DNS 또는 Tailscale 호스트명으로 접속한다면 해당 호스트명을
+`OPEN_WORK_HUB_WEB_DEV_ALLOWED_HOSTS`에 추가한다(여러 호스트는 쉼표로 구분).
+`OPEN_WORK_HUB_API_DEV_LOGIN_ALLOWED_HOSTS`에도 실제 개발 로그인 호스트를 허용하고
+설정을 읽는 개발 서비스를 재시작한다. `allowedHosts: true`로 전체 호스트를 허용하지 않는다.
+HTTP IP·호스트명 접속에서 로그인 후 생성된 HTML 파일의 미리보기와 소스 탭까지 확인한다.
+HTTPS 또는 localhost에서만 검사하면 보안 컨텍스트 전용 브라우저 API 의존성을 놓칠 수 있다.
+
 Web은 모든 IPv4 인터페이스에서 수신하고 API 요청을 loopback의 API로 프록시한다.
 API·개발 PostgreSQL·Redis의 수신 주소는 loopback으로 유지한다. `0.0.0.0`은 수신 설정이며 사용자에게 전달할 접속 주소는 서버 IP다.
 새 개발 DB의 시드 비밀번호는 첫 실행 전에 `OPEN_WORK_HUB_API_DEV_LOGIN_PASSWORD`에 고유한 값으로 설정하고 `.auth_info`에 기록한다.
@@ -822,6 +829,12 @@ Bento 등 별도 주소를 쓰는 기능은 사용 시 해당 기능 문서의 �
 기능별 사용자 수용 검사는 [사용자 수용 검사](docs/product/core-platform-user-acceptance.md)를 따른다.
 
 ## 6. 실제 기능 개발용 서비스 연결
+
+**파일 업로드·챗봇 작업 파일을 사용하려면 MinIO를 필수로 준비한다.**
+최소 PostgreSQL·Redis 실행만으로는 파일 저장 기능이 동작하지 않는다.
+로컬 MinIO 설치 또는 기존 MinIO 연결, API·Worker 설정 일치와 실제 저장 검사는
+[Hermes 필수 파일 저장소](docs/domains/ai/hermes.md#required-file-storage)를 따른다.
+게이트웨이가 healthy이거나 샌드박스 검사만 통과했다고 파일 저장 준비가 완료된 것은 아니다.
 
 사용할 기능의 설정을 준비한 뒤 최소 실행을 종료하고 전체 개발 경로로 전환한다.
 `.env.example`에는 추가 서비스와 모델 준비를 전제로 한 설정도 있으므로

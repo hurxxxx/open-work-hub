@@ -29,7 +29,14 @@ export function HtmlArtifact({
   const [runtimeError, setRuntimeError] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
   const html = previewContent === undefined ? content : previewContent;
-  const channel = useMemo(() => crypto.randomUUID(), [html]);
+  // Remote HTTP development origins lack randomUUID, but getRandomValues
+  // remains available. Keep a fresh unpredictable channel per preview version.
+  const channel = useMemo(
+    () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+      byte.toString(16).padStart(2, '0'),
+    ).join(''),
+    [html],
+  );
   useEffect(() => {
     setRuntimeError(false);
     const onMessage = (event: MessageEvent) => {
