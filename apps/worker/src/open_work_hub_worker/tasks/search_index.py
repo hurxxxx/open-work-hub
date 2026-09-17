@@ -3,14 +3,14 @@ from __future__ import annotations
 import logging
 import sys
 from datetime import UTC, datetime, timedelta
-from functools import lru_cache
 from pathlib import Path
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from open_work_hub_worker.celery_app import celery_app
+from open_work_hub_worker.runtime import db_session as _db_session
 from open_work_hub_worker.queue_contract import (
     SEARCH_INDEX_REALTIME_QUEUE,
     SEARCH_INDEX_RESOURCE_TASK_NAME,
@@ -70,17 +70,6 @@ from open_work_hub_api.domains.source_access.resource_types import (  # noqa: E4
 logger = logging.getLogger(__name__)
 OUTBOX_REPUBLISH_BATCH_SIZE = 100
 FILES_OPERATOR_GATE_PAUSE_SECONDS = 60
-
-
-@lru_cache(maxsize=1)
-def _session_factory():
-    settings = get_settings()
-    engine = create_engine(settings.postgres_dsn, pool_pre_ping=True)
-    return sessionmaker(bind=engine, class_=Session)
-
-
-def _db_session() -> Session:
-    return _session_factory()()
 
 
 def _search_client() -> KeywordSearchClient:

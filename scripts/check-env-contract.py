@@ -5,10 +5,9 @@ import ast
 import re
 import sys
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from re import Pattern
-
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS_FILE_PARTS = [
@@ -433,7 +432,9 @@ def evaluate_env_contract(
     current_env_name: str,
     forbidden_patterns: Iterable[Pattern[str]],
     forbidden_env_keys: Iterable[str] = (),
+    runtime_config_keys: Iterable[str] = (),
 ) -> EnvContractReport:
+    public_keys = frozenset(runtime_config_keys)
     parsed_env_files = tuple(parse_env(env_file) for env_file in env_files)
     settings_scans = tuple(
         scan_settings_file(settings_file) for settings_file in settings_files
@@ -476,8 +477,8 @@ def evaluate_env_contract(
         for env_file in parsed_env_files:
             if env_file.name == current_env_name or env_file.missing:
                 continue
-            missing = sorted(base.key_set - env_file.key_set)
-            extra = sorted(env_file.key_set - base.key_set)
+            missing = sorted(base.key_set - env_file.key_set - public_keys)
+            extra = sorted(env_file.key_set - base.key_set - public_keys)
             if missing or extra:
                 failures.append(
                     EnvContractFailure(
@@ -488,7 +489,9 @@ def evaluate_env_contract(
                         ),
                     )
                 )
-            elif env_file.keys != base.keys:
+            elif tuple(key for key in env_file.keys if key not in public_keys) != tuple(
+                key for key in base.keys if key not in public_keys
+            ):
                 failures.append(
                     EnvContractFailure(
                         code="env_key_order_mismatch",
@@ -530,8 +533,15 @@ def evaluate_env_contract(
     settings_keys: set[str] = set(DEPLOY_ENV_KEYS)
     for settings_scan in settings_scans:
         settings_keys.update(settings_scan.keys)
+    unknown_public_keys = public_keys - settings_keys
+    if unknown_public_keys:
+        failures.append(EnvContractFailure(
+            code="unknown_runtime_config_key",
+            message="runtime config contains keys without typed settings: "
+            + ", ".join(sorted(unknown_public_keys)),
+        ))
     if base is not None and not base.missing:
-        missing_settings_keys = sorted(settings_keys - base.key_set)
+        missing_settings_keys = sorted(settings_keys - base.key_set - public_keys)
         if missing_settings_keys:
             failures.append(
                 EnvContractFailure(
@@ -586,6 +596,19 @@ def load_text_file(path: Path, *, root: Path = ROOT) -> TextFileContent:
 
 
 def build_report(root: Path = ROOT) -> EnvContractReport:
+    sys.path.insert(0, str(ROOT / "apps/api/src"))
+    from open_work_hub_api.core.runtime_config import (
+        RuntimeConfigError,
+        load_runtime_document,
+    )
+
+    config_failure = None
+    try:
+        runtime_document = load_runtime_document(root)
+        public_keys = frozenset(runtime_document["defaults"])
+    except RuntimeConfigError as error:
+        public_keys = frozenset()
+        config_failure = EnvContractFailure(code="invalid_runtime_config", message=str(error))
     env_name = current_env_name(root)
     env_files = tuple(
         load_env_file(name, path) for name, path in env_file_paths(root, env_name).items()
@@ -597,14 +620,18 @@ def build_report(root: Path = ROOT) -> EnvContractReport:
         load_text_file(path, root=root)
         for path in source_files(root, excluded_paths={Path(__file__).resolve()})
     )
-    return evaluate_env_contract(
+    report = evaluate_env_contract(
         env_files=env_files,
         settings_files=settings_files,
         source_file_contents=source_file_contents,
         current_env_name=env_name,
         forbidden_patterns=FORBIDDEN_ENV_PATTERNS,
         forbidden_env_keys=FORBIDDEN_ENV_KEYS,
+        runtime_config_keys=public_keys,
     )
+    if config_failure is not None:
+        report = replace(report, failures=(*report.failures, config_failure))
+    return report
 
 
 def format_report_lines(report: EnvContractReport) -> tuple[str, ...]:

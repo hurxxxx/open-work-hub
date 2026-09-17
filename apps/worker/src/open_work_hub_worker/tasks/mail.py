@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
 
 from open_work_hub_api.domains.mail.service import (
     MailSyncRetryScheduled,
@@ -11,22 +10,14 @@ from open_work_hub_api.domains.mail.service import (
     sync_account,
 )
 from open_work_hub_api.domains.mail.sync_policy import MailSyncAccessRevoked
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
 
 from open_work_hub_worker.celery_app import celery_app
+from open_work_hub_worker.runtime import db_session_factory as _session_factory
 from open_work_hub_worker.settings import get_settings as get_worker_settings
 
 logger = logging.getLogger(__name__)
 _MAIL_SYNC_TASK_TIME_LIMIT = get_worker_settings().mail_sync_processing_lease_seconds
 _MAIL_SYNC_SOFT_TIME_LIMIT = max(1, _MAIL_SYNC_TASK_TIME_LIMIT - 60)
-
-
-@lru_cache(maxsize=1)
-def _session_factory():
-    settings = get_worker_settings()
-    engine = create_engine(settings.postgres_dsn, pool_pre_ping=True)
-    return sessionmaker(bind=engine, class_=Session)
 
 
 @celery_app.task(

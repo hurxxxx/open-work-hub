@@ -2,6 +2,9 @@
   "name": "worker",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/worker/src",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals", "{workspaceRoot}/config/runtime*.json"]
+  },
   "projectType": "application",
   "tags": ["scope:worker", "type:app"],
   "targets": {

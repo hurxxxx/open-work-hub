@@ -74,6 +74,7 @@ COPY --chown=open-work-hub:open-work-hub apps/api/alembic apps/api/alembic
 COPY --chown=open-work-hub:open-work-hub apps/api/alembic.ini apps/api/alembic.ini
 COPY --chown=open-work-hub:open-work-hub apps/worker/src apps/worker/src
 COPY --chown=open-work-hub:open-work-hub pnpm-workspace.yaml pnpm-workspace.yaml
+COPY --chown=open-work-hub:open-work-hub config config
 COPY --chown=open-work-hub:open-work-hub packages/contracts/open-work-hub-desktop-update-feed.manifest.json packages/contracts/open-work-hub-desktop-update-feed.manifest.json
 COPY --chown=open-work-hub:open-work-hub scripts/blocknote-collab-codec.mjs scripts/blocknote-collab-codec.mjs
 COPY --from=web-build /usr/local/bin/node /usr/local/bin/node

@@ -4,7 +4,12 @@ import sys
 from pathlib import Path
 
 from celery import Celery
-from celery.signals import after_setup_logger, after_setup_task_logger, celeryd_init
+from celery.signals import (
+    after_setup_logger,
+    after_setup_task_logger,
+    celeryd_init,
+    worker_process_init,
+)
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
@@ -21,6 +26,7 @@ from open_work_hub_worker.queue_contract import (
     worker_bootstrap_group_requires_llm_routing,
 )
 from open_work_hub_worker.settings import get_settings
+from open_work_hub_worker.runtime import configure_database, reset_database_after_fork
 
 
 def _workspace_root() -> Path:
@@ -54,6 +60,16 @@ install_beat_health()
 @after_setup_task_logger.connect
 def _restore_sensitive_http_logging_guard(**_kwargs) -> None:
     install_sensitive_http_logging_guard()
+
+
+@celeryd_init.connect
+def _configure_database_pools(**_kwargs) -> None:
+    configure_database()
+
+
+@worker_process_init.connect
+def _reset_database_pool_after_fork(**_kwargs) -> None:
+    reset_database_after_fork()
 
 
 @celeryd_init.connect

@@ -1,0 +1,338 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Open Work Hub public runtime defaults",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "defaults",
+    "profiles"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "defaults": {
+      "$ref": "#/$defs/settings",
+      "required": [
+        "OPEN_WORK_HUB_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS",
+        "OPEN_WORK_HUB_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS",
+        "OPEN_WORK_HUB_LLM_REQUEST_TIMEOUT_SECONDS",
+        "OPEN_WORK_HUB_AI_AGENT_MAX_CONSECUTIVE_TOOL_ERRORS",
+        "OPEN_WORK_HUB_AI_AGENT_MAX_TOOL_CALLS",
+        "OPEN_WORK_HUB_AI_AGENT_MAX_TURNS",
+        "OPEN_WORK_HUB_AI_CONVERSATION_RUN_LOCK_TTL_SECONDS",
+        "OPEN_WORK_HUB_AI_RUNTIME_RETENTION_DAYS",
+        "OPEN_WORK_HUB_AI_RUNTIME_TRACE_PAYLOAD_MAX_BYTES",
+        "OPEN_WORK_HUB_MODEL_STATUS_REQUEST_TIMEOUT_SECONDS",
+        "OPEN_WORK_HUB_RAG_BACKFILL_BATCH_SIZE",
+        "OPEN_WORK_HUB_RAG_BACKFILL_THROTTLE_MS",
+        "OPEN_WORK_HUB_RAG_EMBEDDING_BATCH_SIZE",
+        "OPEN_WORK_HUB_RAG_EMBEDDING_MAX_SEQ_LENGTH",
+        "OPEN_WORK_HUB_RAG_EMBEDDING_MODEL",
+        "OPEN_WORK_HUB_RAG_EMBEDDING_REVISION",
+        "OPEN_WORK_HUB_RAG_JOB_MAX_ATTEMPTS",
+        "OPEN_WORK_HUB_RAG_JOB_PROCESSING_LEASE_SECONDS",
+        "OPEN_WORK_HUB_RAG_JOB_RETRY_BACKOFF_SECONDS",
+        "OPEN_WORK_HUB_RAG_QUERY_TIMEOUT_MS",
+        "OPEN_WORK_HUB_RAG_RERANK_CANDIDATE_K",
+        "OPEN_WORK_HUB_RAG_RERANKER_BATCH_SIZE",
+        "OPEN_WORK_HUB_RAG_RERANKER_MAX_LENGTH",
+        "OPEN_WORK_HUB_RAG_RERANKER_MODEL",
+        "OPEN_WORK_HUB_RAG_RERANKER_REVISION",
+        "OPEN_WORK_HUB_API_ASR_REQUEST_TIMEOUT_SECONDS",
+        "OPEN_WORK_HUB_API_DB_MAX_OVERFLOW",
+        "OPEN_WORK_HUB_API_DB_POOL_SIZE",
+        "OPEN_WORK_HUB_API_DB_POOL_TIMEOUT",
+        "OPEN_WORK_HUB_WORKER_DB_MAX_OVERFLOW",
+        "OPEN_WORK_HUB_WORKER_DB_POOL_SIZE",
+        "OPEN_WORK_HUB_WORKER_DB_POOL_TIMEOUT",
+        "OPEN_WORK_HUB_API_EVENT_LOOP_LAG_INTERVAL_SECONDS",
+        "OPEN_WORK_HUB_API_EVENT_LOOP_LAG_WARN_MS",
+        "OPEN_WORK_HUB_API_COLLAB_ACL_RECHECK_SECONDS",
+        "OPEN_WORK_HUB_API_COLLAB_CLEANUP_TIMEOUT_SECONDS",
+        "OPEN_WORK_HUB_API_COLLAB_MAX_ROOM_CLIENTS",
+        "OPEN_WORK_HUB_API_COLLAB_MAX_USER_ROOM_CONNECTIONS",
+        "OPEN_WORK_HUB_API_COLLAB_SNAPSHOT_DEBOUNCE_MS",
+        "OPEN_WORK_HUB_API_RECORDING_MAX_SIZE_BYTES",
+        "OPEN_WORK_HUB_API_RECORDING_STAGING_RETENTION_HOURS",
+        "OPEN_WORK_HUB_MAIL_SYNC_DISPATCH_VISIBILITY_SECONDS",
+        "OPEN_WORK_HUB_MAIL_SYNC_MAX_ATTEMPTS",
+        "OPEN_WORK_HUB_MAIL_SYNC_MAX_MESSAGES",
+        "OPEN_WORK_HUB_MAIL_SYNC_PROCESSING_LEASE_SECONDS",
+        "OPEN_WORK_HUB_MAIL_SYNC_RETRY_BACKOFF_SECONDS",
+        "OPEN_WORK_HUB_OTEL_METRICS_EXPORT_INTERVAL_MS"
+      ]
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["local", "dev", "prod", "preview", "test"],
+      "properties": {
+        "local": {
+          "$ref": "#/$defs/settings"
+        },
+        "dev": {
+          "$ref": "#/$defs/settings"
+        },
+        "prod": {
+          "$ref": "#/$defs/settings"
+        },
+        "preview": {
+          "$ref": "#/$defs/settings"
+        },
+        "test": {
+          "$ref": "#/$defs/settings"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "OPEN_WORK_HUB_MAIL_SYNC_MAX_MESSAGES": {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_MAIL_SYNC_MAX_ATTEMPTS": {
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_MAIL_SYNC_RETRY_BACKOFF_SECONDS": {
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_MAIL_SYNC_PROCESSING_LEASE_SECONDS": {
+          "maximum": 7200,
+          "minimum": 60,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_MAIL_SYNC_DISPATCH_VISIBILITY_SECONDS": {
+          "maximum": 3600,
+          "minimum": 30,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_COLLAB_ACL_RECHECK_SECONDS": {
+          "maximum": 300,
+          "minimum": 5,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_COLLAB_SNAPSHOT_DEBOUNCE_MS": {
+          "maximum": 30000,
+          "minimum": 250,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_COLLAB_MAX_USER_ROOM_CONNECTIONS": {
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_COLLAB_MAX_ROOM_CLIENTS": {
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_COLLAB_CLEANUP_TIMEOUT_SECONDS": {
+          "maximum": 60,
+          "minimum": 0.1,
+          "type": "number"
+        },
+        "OPEN_WORK_HUB_API_DB_POOL_SIZE": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_DB_MAX_OVERFLOW": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_DB_POOL_TIMEOUT": {
+          "maximum": 300,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_RECORDING_MAX_SIZE_BYTES": {
+          "minimum": 1048576,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_RECORDING_STAGING_RETENTION_HOURS": {
+          "maximum": 720,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_ASR_REQUEST_TIMEOUT_SECONDS": {
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "type": "number"
+        },
+        "OPEN_WORK_HUB_MODEL_STATUS_REQUEST_TIMEOUT_SECONDS": {
+          "exclusiveMinimum": 0,
+          "maximum": 30,
+          "type": "number"
+        },
+        "OPEN_WORK_HUB_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS": {
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "type": "number"
+        },
+        "OPEN_WORK_HUB_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS": {
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "type": "number"
+        },
+        "OPEN_WORK_HUB_LLM_REQUEST_TIMEOUT_SECONDS": {
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "type": "number"
+        },
+        "OPEN_WORK_HUB_AI_CONVERSATION_RUN_LOCK_TTL_SECONDS": {
+          "maximum": 86400,
+          "minimum": 60,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_AI_RUNTIME_TRACE_PAYLOAD_MAX_BYTES": {
+          "maximum": 1048576,
+          "minimum": 1024,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_AI_RUNTIME_RETENTION_DAYS": {
+          "maximum": 3650,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_AI_AGENT_MAX_TURNS": {
+          "maximum": 32,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_AI_AGENT_MAX_TOOL_CALLS": {
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_AI_AGENT_MAX_CONSECUTIVE_TOOL_ERRORS": {
+          "maximum": 16,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_RAG_QUERY_TIMEOUT_MS": {
+          "maximum": 600000,
+          "minimum": 100,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_RAG_RERANK_CANDIDATE_K": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_RAG_JOB_PROCESSING_LEASE_SECONDS": {
+          "maximum": 7200,
+          "minimum": 60,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_RAG_EMBEDDING_MODEL": {
+          "type": "string"
+        },
+        "OPEN_WORK_HUB_RAG_EMBEDDING_REVISION": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "OPEN_WORK_HUB_RAG_EMBEDDING_BATCH_SIZE": {
+          "maximum": 256,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_RAG_EMBEDDING_MAX_SEQ_LENGTH": {
+          "maximum": 8192,
+          "minimum": 128,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_RAG_RERANKER_MODEL": {
+          "type": "string"
+        },
+        "OPEN_WORK_HUB_RAG_RERANKER_REVISION": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "OPEN_WORK_HUB_RAG_RERANKER_BATCH_SIZE": {
+          "maximum": 256,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_RAG_RERANKER_MAX_LENGTH": {
+          "maximum": 8192,
+          "minimum": 128,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_OTEL_METRICS_EXPORT_INTERVAL_MS": {
+          "maximum": 300000,
+          "minimum": 1000,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_EVENT_LOOP_LAG_WARN_MS": {
+          "maximum": 60000,
+          "minimum": 100,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_API_EVENT_LOOP_LAG_INTERVAL_SECONDS": {
+          "maximum": 60,
+          "minimum": 0.1,
+          "type": "number"
+        },
+        "OPEN_WORK_HUB_WORKER_DB_POOL_SIZE": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_WORKER_DB_MAX_OVERFLOW": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_WORKER_DB_POOL_TIMEOUT": {
+          "maximum": 300,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_RAG_BACKFILL_BATCH_SIZE": {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_RAG_BACKFILL_THROTTLE_MS": {
+          "maximum": 60000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_RAG_JOB_MAX_ATTEMPTS": {
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "OPEN_WORK_HUB_RAG_JOB_RETRY_BACKOFF_SECONDS": {
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        }
+      }
+    }
+  }
+}
