@@ -106,9 +106,89 @@ The env backup must be a regular non-symlink file with mode 0600. The image must
 
 Recovery stops only the production app Compose project without deleting volumes, atomically restores the root `.env` with mode 0600, and starts the immutable previous image using the previous revision's Compose and host-mounted helpers. The snapshot also contains its matching `.env`, because Compose's service `env_file` is resolved relative to its file. Recovery uses the previous revision's smoke validator and does not run migrations. Restoring a tag alone, or validating an old env with the new code's renamed keys, is insufficient. Keep the paired old database/namespaces and backup until the rollback retention decision is made; do not automatically delete them after a successful deployment. Snapshot restoration does not rewind shared persistent volumes or external side effects, which require separate compatibility review.
 
+## Public runtime configuration
+
+[`config/runtime.json`](../../../config/runtime.json) owns reviewed, non-secret API/Worker
+startup defaults: database pools, LLM call timeouts, agent limits, retry/retention limits,
+collaboration limits, and embedding/reranker model IDs and revisions. The versioned JSON
+schema allowlists the supported typed `OPEN_WORK_HUB_*` keys and validates their ranges.
+Missing files, unknown keys/profiles, duplicate JSON keys and invalid values fail startup;
+validation errors do not print supplied values. `pnpm check:env-contract` validates this
+document as well as the remaining env contract. Public config keys may be absent from
+env files or appear as overrides; non-config key coverage/order and duplicate checks remain.
+API and Worker Nx inputs include these files, so config-only edits invalidate their cached
+checks. Runtime config and pool regressions run in the API/Worker contract test targets.
+
+Settings precedence, highest first: explicit constructor values (tests), process environment,
+checkout `.env`, Pydantic secret files when configured, selected `profiles` overrides,
+`defaults`, typed code defaults. `OPEN_WORK_HUB_ENV_PROFILE` selects `local`, `dev`, `prod`,
+`preview` or `test`; `development`/`production` map to `dev`/`prod`. With no profile, `local`
+applies. Settings are cached per process; changes require its normal restart.
+
+Credentials, signing/encryption keys, DSNs, site endpoints/namespaces, feature admission
+and Hermes settings remain in protected env configuration. Active generative provider/model
+and workload routing remain authoritative in the Admin database; see [AI Gateway](../ai/gateway.md).
+Embedding-model changes still require the retrieval owner's index/version migration contract.
+Do not copy real env values into Git or add an unused model-preset file.
+
+Existing installations can run `uv run --frozen --python 3.12 --directory apps/api python
+../../scripts/runtime-config-migrate.py` from their checkout root. The default is a dry run;
+`--apply` atomically removes only public values equal to that profile's defaults, retains
+custom overrides and interpolation dependencies, and creates a mode-0600 `.env.backup-config-*`
+recovery copy. The tool rejects tracked/symlink/non-0600 files, duplicate keys and changes to
+unrelated multiline values. Review `.env.local` overlays separately. Protect backups like the
+original env file; they are ignored by Git and Docker.
+
+The application image contains both `config/runtime.json` and its schema. Deployment and
+rollback therefore use the config from the corresponding immutable image. Production env
+overrides remain compatible with the previous image; prune them only after the matching
+code/config has been promoted and deployed. Config/env edits do not authorize promotion,
+deployment or restart. Do not bind-mount a newer config over a rollback image.
+
+## Database connection budgets
+
+PostgreSQL's connection limit belongs to the physical server, including when development
+and production use different databases on it. Budget every API process and Celery child,
+plus migration/operator capacity, below the server's non-reserved connection limit.
+
+| Runtime | Retained connections per process | Extra concurrent connections | Settings |
+| --- | --- | --- | --- |
+| API | 5 | 5 | `OPEN_WORK_HUB_API_DB_POOL_SIZE`, `OPEN_WORK_HUB_API_DB_MAX_OVERFLOW` |
+| Worker child | 1 | 2 | `OPEN_WORK_HUB_WORKER_DB_POOL_SIZE`, `OPEN_WORK_HUB_WORKER_DB_MAX_OVERFLOW` |
+
+Both `OPEN_WORK_HUB_API_DB_POOL_TIMEOUT` and `OPEN_WORK_HUB_WORKER_DB_POOL_TIMEOUT`
+default to 45 seconds. These are lazy pool limits, not connections opened at startup.
+For example, two API processes and eighteen worker children have a combined maximum
+of `2 × (5 + 5) + 18 × (1 + 2) = 74` connections, retaining at most 28 after work finishes.
+Additional processes/replicas and configuration overrides change that budget.
+
+Worker startup binds API-domain database access to the same worker engine; mail, search,
+media cleanup and shared worker tasks reuse it. Prefork children replace the inherited
+pool with SQLAlchemy's `Engine.dispose(close=False)` through Celery's
+`worker_process_init` signal. Existing session factories retain their engine binding.
+The [SQLAlchemy pooling contract](https://docs.sqlalchemy.org/en/20/core/pooling.html)
+owns connection retention, overflow closure, rollback-on-return and fork isolation.
+Do not create a task-local engine, or use `pool_size=0` to disable pooling: zero removes
+the pool size limit. SQLAlchemy's `NullPool` is the explicit no-pooling option.
+
+`Session.close()` returns a connection to its pool; PostgreSQL `idle` alone is not proof
+of a leaked session. Beat still runs maintenance every 30–60 seconds without users.
+Inspect `pg_stat_activity` grouped by `application_name`, `state` and database/role,
+excluding query text and business data. Clients identify themselves as
+`owh:<environment>:api` or `owh:<environment>:worker`. Repeated empty maintenance cycles
+must not grow the retained connection count. Investigate persistent `idle in transaction`
+separately, and never terminate arbitrary connections to conceal a leak.
+
+For existing installations, explicitly review the pool keys in each protected `.env`:
+old API values of 32/64 override the new defaults. Apply reviewed values through the
+development supervisor or the guarded production deployment procedure with the required
+authorization; editing defaults does not update running workers or production images.
+After rollout, verify connection counts over several Beat cycles and authenticated API
+requests. No database recreation or PostgreSQL capacity increase is required by this change.
+
 ## Persistent development runtime
 
-`dev.sh` is a foreground development command: its children stop when its session exits. A continuously available development address requires an independent host supervisor with restart-on-exit and persistent logs, using the same entrypoint, selected flags and checkout. For native minimal installation this is `./dev.sh --minimal-infra --no-infra`; use `./dev.sh --with-worker` when the selected configuration includes a worker. Manage that runtime through its supervisor instead of starting a second copy or stopping its children directly. Development workers use two concurrent processes to bound their memory use on a host shared with other environments. Keep host-specific service definitions outside the repository.
+`dev.sh` is a foreground development command: its children stop when its session exits. A continuously available development address requires an independent host supervisor with restart-on-exit and persistent logs, using the same entrypoint, selected flags and checkout. For native minimal installation this is `./dev.sh --minimal-infra --no-infra`; use `./dev.sh --with-worker` when the selected configuration includes a worker. Manage that runtime through its supervisor instead of starting a second copy or stopping its children directly. Development worker concurrency is declared in `apps/worker/project.json`; include every child in the database and memory budgets. Keep host-specific service definitions outside the repository.
 
 After startup, reboot or recovery, follow the shared [development access checks](installation-operations.md#development-access-checks): verify local listeners and API readiness, then use `pnpm dev:login-smoke` plus browser login, screens and logout for HTTP development access. `pnpm dev:public-smoke` remains required for an HTTPS public-domain development origin; it rejects HTTP and IP-address origins, including HTTPS IP addresses. Remote-PC installations also require a separate client-path browser check. INSTALL uses the same conditions; a server checking its own address does not establish client reachability.
 

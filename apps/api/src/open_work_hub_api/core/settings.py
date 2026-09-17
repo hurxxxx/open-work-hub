@@ -7,6 +7,8 @@ from dotenv import dotenv_values
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from open_work_hub_api.core.runtime_config_source import RuntimeConfigSettingsSource
+
 from open_work_hub_api.open_work_hub_desktop_update_manifest import (
     open_work_hub_desktop_update_dir_values,
 )
@@ -228,13 +230,13 @@ class Settings(BaseSettings):
         validation_alias="OPEN_WORK_HUB_API_COLLAB_CLEANUP_TIMEOUT_SECONDS",
     )
     db_pool_size: int = Field(
-        default=32,
+        default=5,
         ge=1,
         le=100,
         validation_alias="OPEN_WORK_HUB_API_DB_POOL_SIZE",
     )
     db_max_overflow: int = Field(
-        default=64,
+        default=5,
         ge=0,
         le=100,
         validation_alias="OPEN_WORK_HUB_API_DB_MAX_OVERFLOW",
@@ -943,6 +945,18 @@ class Settings(BaseSettings):
         extra="ignore",
         populate_by_name=True,
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+    ):
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            RuntimeConfigSettingsSource(settings_cls, WORKSPACE_ROOT),
+        )
 
     @model_validator(mode="after")
     def _validate_runtime_config(self) -> "Settings":

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
+import shutil
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "check-env-contract.py"
 SPEC = importlib.util.spec_from_file_location("check_env_contract", MODULE_PATH)
@@ -17,6 +18,18 @@ SPEC.loader.exec_module(env_contract)
 
 
 class EnvContractScannerTest(unittest.TestCase):
+    def test_build_report_rejects_invalid_runtime_config_without_values(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            shutil.copytree(MODULE_PATH.parents[1] / "config", root / "config")
+            path = root / "config/runtime.json"
+            doc = json.loads(path.read_text())
+            doc["defaults"]["OPEN_WORK_HUB_HERMES_API_KEY"] = "synthetic-secret"
+            path.write_text(json.dumps(doc))
+            report = env_contract.build_report(root)
+            self.assertIn("invalid_runtime_config", self.codes(report))
+            self.assertNotIn("synthetic-secret", self.messages(report))
+
     def evaluate(
         self,
         root: Path,
@@ -26,6 +39,7 @@ class EnvContractScannerTest(unittest.TestCase):
         source_texts: dict[str, str] | None = None,
         forbidden_patterns: tuple[re.Pattern[str], ...] = (),
         forbidden_env_keys: tuple[str, ...] = (),
+        runtime_config_keys: tuple[str, ...] = (),
     ):
         env_files = []
         for name, text in env_texts.items():
@@ -72,7 +86,34 @@ class EnvContractScannerTest(unittest.TestCase):
             current_env_name="dev",
             forbidden_patterns=forbidden_patterns,
             forbidden_env_keys=forbidden_env_keys,
+            runtime_config_keys=runtime_config_keys,
         )
+
+    def test_public_defaults_cover_optional_env_overrides_without_hiding_secret_mismatches(self):
+        settings = '''
+class Settings:
+    model_config = SettingsConfigDict(env_prefix="OPEN_WORK_HUB_")
+    tuning: int = 5
+'''
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report = self.evaluate(
+                root,
+                env_texts={"dev": "OPEN_WORK_HUB_SECRET=private\n",
+                           "example": "OPEN_WORK_HUB_TUNING=8\nOPEN_WORK_HUB_SECRET=\n"},
+                settings_texts={"settings.py": settings},
+                runtime_config_keys=("OPEN_WORK_HUB_TUNING",),
+            )
+            self.assertNotIn("env_keyset_mismatch", self.codes(report))
+            self.assertNotIn("env_key_order_mismatch", self.codes(report))
+            self.assertNotIn("OPEN_WORK_HUB_TUNING", self.messages(report))
+            report = self.evaluate(
+                root,
+                env_texts={"dev": "OPEN_WORK_HUB_SECRET=private\n", "example": ""},
+                runtime_config_keys=("OPEN_WORK_HUB_TUNING",),
+            )
+            self.assertIn("env_keyset_mismatch", self.codes(report))
+            self.assertIn("unknown_runtime_config_key", self.codes(report))
 
     def messages(self, report) -> str:
         return "\n".join(failure.message for failure in report.failures)

@@ -58,6 +58,41 @@ Native file writes additionally require a Linux Docker host/VM with [Landlock AB
 
 Configure a provider/model in administrator LLM settings and verify that its endpoint is reachable from the host-network gateway. A local-only installation needs no OpenRouter key. Development startup accepts an enabled Hermes without that key; egress health requires the public CA and listening proxy, not a legacy token file. `OPENROUTER_API_KEY` is optional legacy egress configuration for draining existing Terminal sessions; if retained, it stays only in the trusted egress container. It is not the new model-policy source.
 
+### Required file storage
+
+MinIO is required for Hermes chatbot workspace files, including files created by
+`terminal` and `execute_code`. PostgreSQL stores file metadata; MinIO stores the
+bytes. A healthy gateway and successful sandbox creation do not verify storage.
+Start MinIO before accepting chatbot file work. A remote MinIO deployment may be
+used instead of a local container, but it must be reachable from both API and worker.
+
+For a local development installation, use the pinned service and persistent volume:
+
+```bash
+(
+  source scripts/dev-env.sh
+  dev_docker compose --env-file "$(dev_compose_env_file)" \
+    -f "$(dev_compose_file)" up -d --no-deps minio
+)
+```
+
+Match `OPEN_WORK_HUB_MINIO_ENDPOINT`, `OPEN_WORK_HUB_MINIO_ACCESS_KEY`,
+`OPEN_WORK_HUB_MINIO_SECRET_KEY` and `OPEN_WORK_HUB_MINIO_BUCKET` in the actual
+API/worker environment to the service. For local Compose, the credentials must
+match `OPEN_WORK_HUB_INFRA_MINIO_ROOT_USER` and
+`OPEN_WORK_HUB_INFRA_MINIO_ROOT_PASSWORD`, and the endpoint port must match
+`OPEN_WORK_HUB_INFRA_MINIO_PORT`. Preserve existing credentials and storage;
+record installed credentials in `.auth_info` under the installation guide's rules.
+
+Verify authenticated bucket access and a synthetic object write/read/delete using
+the application settings. Then run the sandbox checks below and create/reopen a
+saved file through the chatbot. The sandbox smoke scripts mock file RPC, so their
+PASS results alone do not establish API-to-MinIO connectivity. A
+`Workspace files could not be saved` error requires checking the API's first
+storage error, including refused connections, credentials and bucket permissions,
+before changing sandbox lifecycle code. Recreating a sandbox cannot restore a
+missing storage service or recover bytes that were never saved.
+
 ### Development checkout
 
 API and worker both require `jsonschema` in their default dependency groups for shared structured workloads; optional local-ML extras are not a runtime prerequisite. After updating the checkout, sync both locked Python environments before starting services:
