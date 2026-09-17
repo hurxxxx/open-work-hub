@@ -163,6 +163,8 @@ test('production dependency layers exclude revision churn, uv cache and local te
     'utf8',
   );
   const [buildStages, runtime] = dockerfile.split('AS runtime');
+  assert.match(runtime, /COPY --chown=open-work-hub:open-work-hub config config/);
+  assert.ok(!ignore.split('\n').includes('config'));
   assert.equal(
     (buildStages.match(/uv sync --no-cache --frozen/g) ?? []).length,
     4,

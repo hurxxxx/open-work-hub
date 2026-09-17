@@ -23,6 +23,8 @@ Approval replay, graph execution, and artifact state are owned by [AI Execution]
 - Endpoint: `OPEN_WORK_HUB_LLM_LOCAL_BASE_URL`.
 - Profile: `OPEN_WORK_HUB_LLM_LOCAL_PROVIDER`.
 - Model selection lives in Admin model catalog/routing, not env or app code.
+- Non-secret LLM timeouts and preprocessing-model defaults live in the tracked
+  [runtime configuration](../release/README.md#public-runtime-configuration); active model routing stays in the database.
 - Docker Model Runner profile uses OpenAI-compatible API.
 - Dev default: `http://127.0.0.1:12434/engines/v1`.
 - Use `scripts/dev-local-qwen.sh` for model install/status/smoke.

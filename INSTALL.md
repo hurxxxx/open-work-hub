@@ -624,6 +624,21 @@ bash .agents/skills/owh-env-contracts/scripts/local-env-files.sh install --sourc
 템플릿으로 덮어쓸 이유가 아니다. 필요한 키만 기존 값을 보존하여 맞춘다.
 환경 파일 취급은 [환경설정 절차](.agents/skills/owh-env-contracts/references/env-files.md)를 따른다.
 
+DB 풀·시간제한·재시도·임베딩/리랭커 모델의 공통 권장값은 Git 추적 대상인
+[`config/runtime.json`](config/runtime.json)에서 관리한다. `defaults` 위에
+`OPEN_WORK_HUB_ENV_PROFILE`에 해당하는 `profiles` 설정이 적용되며, `.env`와 프로세스 환경변수는
+이를 덮어쓸 수 있다. 비밀키·접속정보·설치별 설정은 계속 `.env`에 둔다.
+설정 범위·우선순위·운영 반영은 [공개 런타임 설정](docs/domains/release/README.md#public-runtime-configuration)을 따른다.
+
+기존 설치는 다음 dry run으로 중복 기본값을 확인한다. 제거 대상 키 이름만 출력하며,
+기본값과 다른 기존 지정값은 보존한다. 확인 후 `--apply`를 붙이면 `0600` 백업을 만들고
+중복 항목만 제거한다. 현재 체크아웃에 설정 파일과 새 로더가 모두 있어야 하며,
+운영의 이전 코드에서 먼저 제거하지 않는다.
+
+```bash
+uv run --frozen --python 3.12 --directory apps/api python ../../scripts/runtime-config-migrate.py
+```
+
 ```bash
 pnpm check:env-contract
 pnpm check:path-hardcoding
@@ -680,6 +695,10 @@ OpenSearch를 포함한 추가 서비스는 이 단계에서 필요하지 않으
 systemd unit에는 실제 바이너리·설정·데이터 경로를 사용하고 서비스 계정으로 인증 연결을 검증한다.
 
 첫 실행 전에 개발 `.env`에서 다음 항목을 설정한다. 서버 IP는 PC에서 실제로 접속할 주소로 바꾸고 기존의 다른 설정은 보존한다.
+
+DB 연결 설정은 [API·Worker 연결 예산](docs/domains/release/README.md#database-connection-budgets)을 따른다.
+개발·운영이 PostgreSQL 서버를 공유하면 모든 프로세스의 한도를 합산한다.
+기존 설치의 API 풀 32/64 설정은 새 기본값으로 자동 변경되지 않으므로 해당 절의 설정 검토·적용·검증 절차를 함께 수행한다.
 
 ```dotenv
 OPEN_WORK_HUB_WEB_DEV_HOST=0.0.0.0

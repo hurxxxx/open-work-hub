@@ -2,6 +2,9 @@
   "name": "api",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/api/src",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals", "{workspaceRoot}/config/runtime*.json"]
+  },
   "projectType": "application",
   "tags": ["scope:api", "type:app"],
   "targets": {
@@ -121,7 +124,7 @@
       "cache": false,
       "options": {
         "cwd": "apps/api",
-        "command": "UV_PROJECT_ENVIRONMENT=../../.runtime/ci-api-venv uv run --no-sync --frozen --python 3.12 --group dev python -m pytest tests/test_platform_adapter_registries.py tests/test_keyword_search_registry.py tests/test_ai_gateway_direct_call_guard.py -q"
+        "command": "UV_PROJECT_ENVIRONMENT=../../.runtime/ci-api-venv uv run --no-sync --frozen --python 3.12 --group dev python -m pytest tests/test_platform_adapter_registries.py tests/test_keyword_search_registry.py tests/test_ai_gateway_direct_call_guard.py tests/test_runtime_config.py tests/test_database_pool.py -q"
       }
     },
     "ci-contracts": {
