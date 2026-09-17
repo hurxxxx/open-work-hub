@@ -1,9 +1,12 @@
 import importlib.util
+import json
+import os
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -15,6 +18,26 @@ KEY = "OPEN_WORK_HUB_WORKER_DB_POOL_SIZE"
 
 
 class MigrationTest(unittest.TestCase):
+    def test_process_profile_takes_precedence_over_dotenv_profile(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (root / ".gitignore").write_text(".env*\n")
+            shutil.copytree(ROOT / "config", root / "config")
+            config = root / "config/runtime.json"
+            document = json.loads(config.read_text())
+            document["profiles"]["prod"][KEY] = 2
+            config.write_text(json.dumps(document))
+            env = root / ".env"
+            original = f"OPEN_WORK_HUB_ENV_PROFILE=dev\n{KEY}=1\n"
+            env.write_text(original)
+            env.chmod(0o600)
+            with patch.dict(os.environ, {"OPEN_WORK_HUB_ENV_PROFILE": "prod"}):
+                self.assertEqual(migration.migrate(root, ".env", apply=True), ())
+                self.assertEqual(env.read_text(), original)
+            with patch.dict(os.environ, {"OPEN_WORK_HUB_ENV_PROFILE": "dev"}):
+                self.assertEqual(migration.migrate(root, ".env", apply=False), (KEY,))
+
     def test_duplicate_keys_and_multiline_changes_are_rejected(self):
         with self.assertRaises(ValueError):
             migration.prune_defaults(f"{KEY}=2\n{KEY}=1\n", {KEY: 1})

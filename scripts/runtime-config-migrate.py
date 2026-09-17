@@ -69,8 +69,9 @@ def migrate(root: Path, filename: str, *, apply: bool) -> tuple[str, ...]:
     if ignored.returncode:
         raise ValueError("Env file must be ignored and untracked.")
     original = target.read_text(encoding="utf-8")
-    profile = dotenv_values(target, interpolate=False).get(
-        "OPEN_WORK_HUB_ENV_PROFILE", ""
+    profile = os.environ.get(
+        "OPEN_WORK_HUB_ENV_PROFILE",
+        dotenv_values(target, interpolate=False).get("OPEN_WORK_HUB_ENV_PROFILE", ""),
     )
     updated, removed = prune_defaults(original, runtime_defaults(root, profile or ""))
     if apply and removed:
