@@ -193,7 +193,7 @@ def test_external_trace_adapter_exceptions_are_normalized_to_failed_summary() ->
             "latency_ms": 0,
             "output_kind_hint": None,
             "planned_agent_count": 0,
-            "provider": "openai",
+            "provider": None,
             "raw_output_persisted": False,
             "retry_count": 0,
             "status": "failed",
@@ -251,7 +251,7 @@ def test_external_egress_denies_provider_outside_allowlist() -> None:
     assert decision.provider == "anthropic"
 
 
-def test_external_planning_default_provider_uses_ai_llm_default() -> None:
+def test_external_planning_requires_explicit_resolved_provider() -> None:
     decision = evaluate_external_egress(
         capability="planning",
         provider=None,
@@ -264,9 +264,9 @@ def test_external_planning_default_provider_uses_ai_llm_default() -> None:
         ),
     )
 
-    assert decision.allow_external is True
-    assert decision.requested_provider == "anthropic"
-    assert decision.provider == "anthropic"
+    assert decision.allow_external is False
+    assert decision.requested_provider == ""
+    assert decision.reason == "provider_not_allowed"
 
 
 def test_external_egress_blocks_pii_for_planning() -> None:

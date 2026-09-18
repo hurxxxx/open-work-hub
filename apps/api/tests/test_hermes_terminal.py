@@ -24,11 +24,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from open_work_hub_api.core.app_contracts_generated import APP_CONTRACT_BY_ID
 from open_work_hub_api.core.settings import (
-    HERMES_FALLBACK_MODEL,
-    HERMES_MODEL,
     HERMES_PROVIDER,
     Settings,
 )
+from open_work_hub_api.domains.hermes_terminal.legacy_policy import HERMES_MODEL, HERMES_FALLBACK_MODEL
 from open_work_hub_api.domains.auth.models import User, utcnow_naive
 from open_work_hub_api.domains.hermes.models import HermesProfileBinding
 from open_work_hub_api.domains.hermes.research_sources import DEFAULT_RESEARCH_SOURCE_POLICY
@@ -77,7 +76,7 @@ def test_terminal_launcher_is_retired_and_chatbot_remains_personal() -> None:
     assert APP_CONTRACT_BY_ID["chatbot"]["resource_scope"] == "personal"
 
 
-def test_broker_image_packages_research_source_policy_module() -> None:
+def test_broker_image_packages_its_policy_modules() -> None:
     repository_root = Path(__file__).resolve().parents[3]
     dockerfile = (repository_root / "ops/hermes-terminal-broker/Dockerfile").read_text(
         encoding="utf-8"
@@ -85,6 +84,7 @@ def test_broker_image_packages_research_source_policy_module() -> None:
 
     assert "domains/hermes/__init__.py" in dockerfile
     assert "domains/hermes/research_sources.py" in dockerfile
+    assert "domains/hermes_terminal/legacy_policy.py" in dockerfile
 
 
 def test_standard_and_yolo_commands_use_only_official_hermes_flags() -> None:

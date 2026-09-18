@@ -8,6 +8,9 @@ import {
 
 const provider: AiModelProviderConfig = {
   provider_id: 'anthropic',
+  provider_kind: 'anthropic',
+  preset: '',
+  verified: false,
   display_name: 'Anthropic',
   route_mode: 'external',
   credential_kind: 'api_key',
@@ -26,6 +29,8 @@ const draft: LlmProviderDraft = {
   defaultModelId: 'anthropic-claude-sonnet-4-6',
   apiKey: '',
   clearApiKey: false,
+  displayName: 'Anthropic',
+  credentialKind: 'api_key',
 };
 
 describe('buildLlmProviderUpdate', () => {
@@ -34,6 +39,8 @@ describe('buildLlmProviderUpdate', () => {
       expected_registry_digest: 'digest',
       expected_version: 3,
       enabled: true,
+      display_name: 'Anthropic',
+      credential_kind: 'api_key',
       endpoint_url: 'https://api.anthropic.com',
       default_model_id: 'anthropic-claude-sonnet-4-6',
     });

@@ -81,6 +81,7 @@ class AppRegistration:
     feature_flag: str | None = None
     required_system_roles: tuple[str, ...] = ()
     backend_domain: str | None = None
+    ai_capability_modules: tuple[str, ...] = ()
 
 
 def app_registration(
@@ -89,6 +90,7 @@ def app_registration(
     nav_items: tuple[AppNavRegistration, ...] = (),
     coming_soon: bool = False,
     backend_domain: str | None = None,
+    ai_capability_modules: tuple[str, ...] = (),
 ) -> AppRegistration:
     """Create an app registration from the generated leaf-app contract.
 
@@ -116,6 +118,7 @@ def app_registration(
         feature_flag=cast(str | None, contract.get("feature_flag")),
         required_system_roles=tuple(cast(list[str], contract.get("required_system_roles", []))),
         backend_domain=backend_domain,
+        ai_capability_modules=ai_capability_modules,
     )
 
 

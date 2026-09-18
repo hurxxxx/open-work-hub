@@ -8,6 +8,9 @@ const MODEL_SETTINGS_FIXTURE = {
   providers: [
     {
       provider_id: 'anthropic',
+      provider_kind: 'anthropic',
+      preset: '',
+      verified: false,
       display_name: 'Anthropic',
       route_mode: 'external',
       credential_kind: 'api_key',
@@ -37,6 +40,7 @@ const MODEL_SETTINGS_FIXTURE = {
   ],
   workloads: [
     {
+      app_id: 'platform',
       workload_id: 'e2e_external_workload',
       task_kind: 'e2e_external_workload',
       owner_domain: 'platform',
@@ -73,6 +77,9 @@ const MODEL_SETTINGS_FIXTURE = {
           provider_id: 'anthropic',
           model_key: 'claude-sonnet-4-6',
           route_source: 'default',
+          connection_source: 'global',
+          model_source: 'connection',
+          output_cap_source: 'global',
           config_source: 'database',
           max_output_tokens: 64 * 1024,
         },
@@ -82,6 +89,8 @@ const MODEL_SETTINGS_FIXTURE = {
     },
   ],
   orphaned_overrides: [],
+  defaults: [],
+  provider_kinds: ['anthropic'],
 } satisfies ApiSchema<'AiModelSettingsResponse'>;
 
 test('keeps compact LLM routing dropdown labels inside their controls', async ({
@@ -94,8 +103,8 @@ test('keeps compact LLM routing dropdown labels inside their controls', async ({
 
   await page.goto('/admin/llm');
 
-  const dropdowns = page.locator('main select');
-  await expect(dropdowns).toHaveCount(4);
+  const dropdowns = page.locator('main table select');
+  await expect(dropdowns).toHaveCount(3);
 
   const metrics = await dropdowns.evaluateAll((nodes) =>
     nodes.map((node) => {
@@ -131,4 +140,76 @@ test('keeps compact LLM routing dropdown labels inside their controls', async ({
       `${metric.label ?? 'dropdown'} must leave enough vertical space for its label`,
     ).toBeGreaterThanOrEqual(metric.textHeight);
   }
+});
+
+test('saves only a workload output cap while preserving model inheritance', async ({
+  page,
+}) => {
+  await stubShellBackend(page, { user: FAKE_PLATFORM_ADMIN_USER });
+  await page.route('**/api/v1/admin/ai-model-settings', (route) =>
+    route.fulfill({ json: MODEL_SETTINGS_FIXTURE }),
+  );
+  let saved: Record<string, unknown> | undefined;
+  await page.route(
+    '**/api/v1/admin/ai-model-settings/workloads/*/route?*',
+    (route) => {
+      expect(new URL(route.request().url()).searchParams.get('app_id')).toBe(
+        'platform',
+      );
+      saved = route.request().postDataJSON();
+      return route.fulfill({ json: MODEL_SETTINGS_FIXTURE });
+    },
+  );
+  await page.goto('/admin/llm');
+  const row = page.locator('main tbody tr').first();
+  await row.locator('input[type="number"]').fill('8');
+  await row.getByRole('button', { name: '저장', exact: true }).click();
+  await expect
+    .poll(() => saved)
+    .toMatchObject({
+      provider_id: null,
+      model_ids: {},
+      route_mode: null,
+      external_max_output_tokens: 8192,
+      local_max_output_tokens: null,
+    });
+});
+
+test('allows changing the global external default in the administrator screen', async ({
+  page,
+}) => {
+  await stubShellBackend(page, { user: FAKE_PLATFORM_ADMIN_USER });
+  await page.route('**/api/v1/admin/ai-model-settings', (route) =>
+    route.fulfill({ json: MODEL_SETTINGS_FIXTURE }),
+  );
+  let saved: Record<string, unknown> | undefined;
+  await page.route(
+    '**/api/v1/admin/ai-model-settings/defaults/external?*',
+    (route) => {
+      expect(new URL(route.request().url()).searchParams.get('app_id')).toBe(
+        '',
+      );
+      saved = route.request().postDataJSON();
+      return route.fulfill({ json: MODEL_SETTINGS_FIXTURE });
+    },
+  );
+  await page.goto('/admin/llm');
+  const form = page.getByRole('form', { name: '외부 API LLM', exact: true });
+  await form
+    .getByRole('combobox', { name: '연결', exact: true })
+    .selectOption('anthropic');
+  await form.locator('select').nth(1).selectOption('model-anthropic');
+  await form
+    .getByRole('spinbutton', { name: '출력 상한 (K)', exact: true })
+    .fill('16');
+  await form.getByRole('button', { name: '저장', exact: true }).click();
+  await expect
+    .poll(() => saved)
+    .toMatchObject({
+      provider_id: 'anthropic',
+      model_id: 'model-anthropic',
+      max_output_tokens: 16384,
+      expected_version: 0,
+      expected_provider_version: 1,
+    });
 });

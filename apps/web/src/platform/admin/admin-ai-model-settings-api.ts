@@ -3,6 +3,9 @@ import { jsonBodyHeaders, jsonHeaders } from '@/src/platform/api/client';
 export type AiModelRoute = 'local' | 'external';
 
 export interface AiModelProviderConfig {
+  provider_kind: string;
+  preset: string;
+  verified: boolean;
   provider_id: string;
   display_name: string;
   route_mode: AiModelRoute;
@@ -31,7 +34,7 @@ export interface AiModelCatalogEntry {
 }
 
 export interface AiModelRouteOverride {
-  route_mode: AiModelRoute;
+  route_mode: AiModelRoute | null;
   provider_id: string | null;
   model_ids: Record<string, string>;
   local_max_output_tokens: number | null;
@@ -46,11 +49,15 @@ export interface AiModelResolvedRoute {
   provider_id: string;
   model_key: string;
   route_source: 'default' | 'override';
-  config_source: 'database' | 'legacy_env' | 'database_with_legacy_env';
+  config_source: 'database';
   max_output_tokens: number;
+  connection_source: 'global' | 'app' | 'workload';
+  model_source: 'global' | 'app' | 'workload' | 'connection';
+  output_cap_source: 'global' | 'app' | 'workload' | 'registry';
 }
 
 export interface AiModelWorkload {
+  app_id: string;
   workload_id: string;
   task_kind: string;
   owner_domain: string;
@@ -86,7 +93,7 @@ export interface AiModelWorkload {
 
 export interface AiModelOrphanedOverride {
   workload_id: string;
-  route_mode: AiModelRoute;
+  route_mode: AiModelRoute | null;
   provider_id: string | null;
   model_ids: Record<string, string>;
   local_max_output_tokens: number | null;
@@ -96,7 +103,18 @@ export interface AiModelOrphanedOverride {
   updated_at: string | null;
 }
 
+export interface AiModelPolicyDefault {
+  app_id: string;
+  route_mode: AiModelRoute;
+  provider_id: string | null;
+  model_id: string | null;
+  max_output_tokens: number | null;
+  version: number;
+}
+
 export interface AdminAiModelSettings {
+  defaults: AiModelPolicyDefault[];
+  provider_kinds: string[];
   registry_digest: string;
   providers: AiModelProviderConfig[];
   models: AiModelCatalogEntry[];
@@ -128,6 +146,8 @@ export interface AiModelProviderUpdate {
   enabled: boolean;
   endpoint_url: string | null;
   default_model_id: string | null;
+  display_name?: string;
+  credential_kind?: 'none' | 'api_key';
   api_key?: string;
   clear_api_key?: boolean;
 }
@@ -153,7 +173,7 @@ export interface AiModelCatalogUpdate {
 export interface AiModelRouteUpdate {
   expected_registry_digest: string;
   expected_version: number | null;
-  route_mode: AiModelRoute;
+  route_mode: AiModelRoute | null;
   provider_id: string | null;
   model_ids: Record<string, string>;
   local_max_output_tokens: number | null;
@@ -276,10 +296,11 @@ export function updateAdminAiModelWorkloadRoute(
   token: string,
   workloadId: string,
   payload: AiModelRouteUpdate,
+  appId: string,
 ): Promise<AdminAiModelSettings> {
   return request<AdminAiModelSettings>(
     token,
-    `/api/v1/admin/ai-model-settings/workloads/${encodeURIComponent(workloadId)}/route`,
+    `/api/v1/admin/ai-model-settings/workloads/${encodeURIComponent(workloadId)}/route?app_id=${encodeURIComponent(appId)}`,
     { method: 'PUT', body: JSON.stringify(payload) },
   );
 }
@@ -291,11 +312,13 @@ export function resetAdminAiModelWorkloadRoute(
     expected_registry_digest: string;
     expected_version: number;
   },
+  appId: string,
 ): Promise<AdminAiModelSettings> {
   const params = new URLSearchParams({
     expected_registry_digest: payload.expected_registry_digest,
   });
   params.set('expected_version', String(payload.expected_version));
+  params.set('app_id', appId);
   return request<AdminAiModelSettings>(
     token,
     `/api/v1/admin/ai-model-settings/workloads/${encodeURIComponent(workloadId)}/route?${params.toString()}`,
@@ -313,11 +336,8 @@ export function groupAiModelWorkloadsByApp(
 ): AiModelWorkloadGroup[] {
   const groups = new Map<string, AiModelWorkload[]>();
   for (const workload of workloads) {
-    const appIds =
-      workload.app_ids.length > 0 ? workload.app_ids : ['platform'];
-    for (const appId of new Set(appIds)) {
-      groups.set(appId, [...(groups.get(appId) ?? []), workload]);
-    }
+    const appId = workload.app_id || 'platform';
+    groups.set(appId, [...(groups.get(appId) ?? []), workload]);
   }
   return [...groups.entries()]
     .map(([appId, items]) => ({
@@ -344,5 +364,60 @@ export function isConfigurableModelRoutingWorkload(
   return (
     workload.management_surface === 'llm_routing' ||
     workload.required_capabilities.includes('vision')
+  );
+}
+
+export function createAdminAiModelConnection(
+  token: string,
+  payload: AiModelProviderUpdate & {
+    provider_kind: string;
+    display_name: string;
+    route_mode: AiModelRoute;
+    preset: string;
+  },
+): Promise<AdminAiModelSettings> {
+  return request(token, '/api/v1/admin/ai-model-settings/connections', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function probeAdminAiModelConnection(
+  token: string,
+  connection: AiModelProviderConfig,
+  digest: string,
+): Promise<{ ready: boolean; code: string | null; version: number }> {
+  return request(
+    token,
+    `/api/v1/admin/ai-model-settings/connections/${encodeURIComponent(connection.provider_id)}/probe`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        expected_version: connection.version,
+        expected_registry_digest: digest,
+      }),
+    },
+  );
+}
+
+export interface AiModelPolicyDefaultUpdate {
+  expected_registry_digest: string;
+  expected_version: number;
+  expected_provider_version?: number;
+  provider_id: string | null;
+  model_id: string | null;
+  max_output_tokens: number | null;
+}
+
+export function updateAdminAiModelDefault(
+  token: string,
+  appId: string,
+  route: AiModelRoute,
+  payload: AiModelPolicyDefaultUpdate,
+): Promise<AdminAiModelSettings> {
+  return request(
+    token,
+    `/api/v1/admin/ai-model-settings/defaults/${route}?app_id=${encodeURIComponent(appId)}`,
+    { method: 'PUT', body: JSON.stringify(payload) },
   );
 }

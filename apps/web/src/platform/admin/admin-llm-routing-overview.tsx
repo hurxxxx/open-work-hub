@@ -14,19 +14,58 @@ import {
   updateAdminAiModelWorkloadRoute,
   type AdminAiModelSettings,
   type AiModelCatalogEntry,
-  type AiModelProviderConfig,
   type AiModelRoute,
   type AiModelWorkload,
+  type AiModelRouteUpdate,
 } from './admin-ai-model-settings-api';
+import { AdminLlmDefaults } from './admin-llm-defaults';
 import { EmptyPanel, FORM_FIELD_CLASS as fieldClassName } from './admin-shared';
 
-interface WorkloadDraft {
+export interface WorkloadDraft {
   routeMode: AiModelRoute;
   providerId: string;
+  providerExplicit: boolean;
   modelIds: Record<string, string>;
   localMaxOutputK: string;
   externalMaxOutputK: string;
   runtimeAdapterId: string;
+}
+
+export function buildLlmWorkloadUpdate(
+  data: AdminAiModelSettings,
+  workload: AiModelWorkload,
+  draft: WorkloadDraft,
+): AiModelRouteUpdate {
+  const modelIds = Object.fromEntries(
+    Object.entries(draft.modelIds).filter(([, id]) => Boolean(id)),
+  );
+  const localCap = parseOutputK(draft.localMaxOutputK);
+  const externalCap = parseOutputK(draft.externalMaxOutputK);
+  return {
+    expected_registry_digest: data.registry_digest,
+    expected_version: workload.override?.version ?? null,
+    route_mode:
+      draft.routeMode === workload.effective_route
+        ? (workload.override?.route_mode ?? null)
+        : draft.routeMode,
+    provider_id:
+      draft.providerExplicit || Object.keys(modelIds).length > 0
+        ? draft.providerId || null
+        : null,
+    model_ids: modelIds,
+    local_max_output_tokens:
+      localCap === workload.local_max_output_tokens
+        ? (workload.override?.local_max_output_tokens ?? null)
+        : localCap,
+    external_max_output_tokens:
+      externalCap === workload.external_max_output_tokens
+        ? (workload.override?.external_max_output_tokens ?? null)
+        : externalCap,
+    runtime_adapter_id:
+      draft.runtimeAdapterId === workload.effective_runtime_adapter
+        ? (workload.override?.runtime_adapter_id ?? null)
+        : draft.runtimeAdapterId,
+  };
 }
 
 type RouteFilter = 'all' | AiModelRoute;
@@ -63,24 +102,17 @@ function outputCapsValid(
   );
 }
 
-function defaultProviderId(
+function inheritedProviderId(
+  data: AdminAiModelSettings,
   workload: AiModelWorkload,
-  routeMode: AiModelRoute,
-  providers: AiModelProviderConfig[],
+  route: AiModelRoute,
 ): string {
-  if (routeMode === 'local') return 'local';
-  const allowed = (
-    workload.allowed_providers.length > 0
-      ? workload.allowed_providers
-      : providers.map((provider) => provider.provider_id)
-  ).filter((providerId) => providerId !== 'local');
   return (
-    allowed.find((providerId) =>
-      providers.some(
-        (provider) => provider.provider_id === providerId && provider.enabled,
-      ),
-    ) ??
-    allowed[0] ??
+    data.defaults.find(
+      (row) => row.app_id === workload.app_id && row.route_mode === route,
+    )?.provider_id ??
+    data.defaults.find((row) => row.app_id === '' && row.route_mode === route)
+      ?.provider_id ??
     ''
   );
 }
@@ -94,11 +126,12 @@ function modelsForWorkload(
     (model) =>
       model.provider_id === providerId &&
       model.enabled &&
+      model.discovery_status === 'active' &&
       modelSupportsCapabilities(model, workload.required_capabilities),
   );
 }
 
-function selectedModelId(
+export function selectedModelId(
   data: AdminAiModelSettings,
   workload: AiModelWorkload,
   draft: WorkloadDraft,
@@ -106,24 +139,24 @@ function selectedModelId(
 ): string {
   const models = modelsForWorkload(data, workload, draft.providerId);
   const selected = draft.modelIds[role];
-  if (selected && models.some((model) => model.id === selected)) {
-    return selected;
-  }
-  const resolvedModel = workload.resolved_routes.find(
-    (route) =>
-      route.model_role === role && route.provider_id === draft.providerId,
-  )?.model_key;
-  const resolvedEntry = models.find(
-    (model) => model.model_key === resolvedModel,
-  );
-  if (resolvedEntry) return resolvedEntry.id;
+  if (selected)
+    return models.some((model) => model.id === selected) ? selected : '';
+  const explicitConnection =
+    draft.providerExplicit || Object.values(draft.modelIds).some(Boolean);
+  const inherited = explicitConnection
+    ? undefined
+    : [workload.app_id, '']
+        .map((appId) =>
+          data.defaults.find(
+            (row) => row.app_id === appId && row.route_mode === draft.routeMode,
+          ),
+        )
+        .find((row) => row?.provider_id);
   const providerDefault = data.providers.find(
     (provider) => provider.provider_id === draft.providerId,
   )?.default_model_id;
-  if (providerDefault && models.some((model) => model.id === providerDefault)) {
-    return providerDefault;
-  }
-  return models[0]?.id ?? '';
+  const modelId = inherited?.model_id || providerDefault;
+  return models.some((model) => model.id === modelId) ? modelId || '' : '';
 }
 
 function workloadReady(
@@ -150,6 +183,7 @@ function workloadSelectionUnchanged(
     workload.override?.provider_id ?? workload.resolved_routes[0]?.provider_id;
   const persistedModels = workload.override?.model_ids ?? {};
   return (
+    draft.providerExplicit === Boolean(workload.override?.provider_id) &&
     draft.routeMode === workload.effective_route &&
     draft.providerId === persistedProvider &&
     JSON.stringify(draft.modelIds) === JSON.stringify(persistedModels) &&
@@ -211,13 +245,14 @@ function initialDrafts(
       const routeMode =
         workload.override?.route_mode ?? workload.effective_route;
       return [
-        workload.workload_id,
+        `${workload.app_id}:${workload.workload_id}`,
         {
           routeMode,
+          providerExplicit: Boolean(workload.override?.provider_id),
           providerId:
             workload.override?.provider_id ??
             workload.resolved_routes[0]?.provider_id ??
-            defaultProviderId(workload, routeMode, data.providers),
+            inheritedProviderId(data, workload, routeMode),
           modelIds: workload.override?.model_ids ?? {},
           localMaxOutputK: tokenCapToK(workload.local_max_output_tokens),
           externalMaxOutputK: tokenCapToK(workload.external_max_output_tokens),
@@ -300,7 +335,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
     if (!data) return [];
     const normalizedQuery = query.trim().toLocaleLowerCase();
     return routingWorkloads.filter((workload) => {
-      const draft = drafts[workload.workload_id];
+      const draft = drafts[`${workload.app_id}:${workload.workload_id}`];
       if (!draft) return false;
       if (routeFilter !== 'all' && draft.routeMode !== routeFilter)
         return false;
@@ -337,7 +372,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
     if (!data) return { external: 0, local: 0, needsSetup: 0 };
     return routingWorkloads.reduce(
       (counts, workload) => {
-        const draft = drafts[workload.workload_id];
+        const draft = drafts[`${workload.app_id}:${workload.workload_id}`];
         if (!draft) return counts;
         counts[draft.routeMode] += 1;
         if (!effectiveWorkloadReady(data, workload, draft))
@@ -372,6 +407,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
 
   return (
     <div className="space-y-3">
+      <AdminLlmDefaults token={token} data={data} onSaved={applySnapshot} />
       <div className="grid gap-2 rounded-md border border-app-border bg-app-surface px-2 py-2 sm:grid-cols-[minmax(0,1fr)_140px_auto] sm:items-center xl:grid-cols-[auto_minmax(240px,1fr)_140px_auto]">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 sm:col-span-3 xl:col-span-1">
           <span className="app-text-caption shrink-0 whitespace-nowrap text-app-ink/65">
@@ -470,7 +506,8 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
           </thead>
           <tbody className="divide-y divide-app-border">
             {filteredWorkloads.map((workload) => {
-              const draft = drafts[workload.workload_id];
+              const draft =
+                drafts[`${workload.app_id}:${workload.workload_id}`];
               if (!draft) return null;
               const ready = effectiveWorkloadReady(data, workload, draft);
               const readinessCode = effectiveReadinessCode(
@@ -478,13 +515,16 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                 workload,
                 draft,
               );
-              const providerIds =
-                draft.routeMode === 'local'
-                  ? ['local']
-                  : (workload.allowed_providers.length > 0
-                      ? workload.allowed_providers
-                      : data.providers.map((provider) => provider.provider_id)
-                    ).filter((providerId) => providerId !== 'local');
+              const providerIds = data.providers
+                .filter(
+                  (provider) =>
+                    provider.route_mode === draft.routeMode &&
+                    (workload.allowed_providers.length === 0 ||
+                      workload.allowed_providers.includes(
+                        provider.provider_kind,
+                      )),
+                )
+                .map((provider) => provider.provider_id);
               const roles =
                 workload.model_roles.length > 0
                   ? workload.model_roles
@@ -501,7 +541,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
               return (
                 <tr
                   className="align-middle hover:bg-app-surface-hover"
-                  key={workload.workload_id}
+                  key={`${workload.app_id}:${workload.workload_id}`}
                 >
                   <td className="px-1.5 py-1.5">
                     <div className="space-y-0.5">
@@ -545,13 +585,14 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                             )?.adapter_id ?? draft.runtimeAdapterId;
                           setDrafts((current) => ({
                             ...current,
-                            [workload.workload_id]: {
+                            [`${workload.app_id}:${workload.workload_id}`]: {
                               routeMode,
-                              providerId: defaultProviderId(
+                              providerId: inheritedProviderId(
+                                data,
                                 workload,
                                 routeMode,
-                                data.providers,
                               ),
+                              providerExplicit: false,
                               modelIds: {},
                               localMaxOutputK: draft.localMaxOutputK,
                               externalMaxOutputK: draft.externalMaxOutputK,
@@ -569,7 +610,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                           </option>
                         ))}
                       </select>
-                      {draft.routeMode === 'external' ? (
+                      {
                         <select
                           aria-label={t(
                             'admin.console.aiSecurity.routingOverview.providerFor',
@@ -579,15 +620,41 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                           onChange={(event) =>
                             setDrafts((current) => ({
                               ...current,
-                              [workload.workload_id]: {
+                              [`${workload.app_id}:${workload.workload_id}`]: {
                                 ...draft,
-                                providerId: event.target.value,
+                                providerId:
+                                  event.target.value === '__inherit__'
+                                    ? inheritedProviderId(
+                                        data,
+                                        workload,
+                                        draft.routeMode,
+                                      )
+                                    : event.target.value,
+                                providerExplicit:
+                                  event.target.value !== '__inherit__',
                                 modelIds: {},
                               },
                             }))
                           }
-                          value={draft.providerId}
+                          value={
+                            draft.providerExplicit
+                              ? draft.providerId
+                              : '__inherit__'
+                          }
                         >
+                          <option value="__inherit__">
+                            {t('admin.console.aiSecurity.llmDefaults.inherit')}{' '}
+                            ·{' '}
+                            {data.providers.find(
+                              (provider) =>
+                                provider.provider_id ===
+                                inheritedProviderId(
+                                  data,
+                                  workload,
+                                  draft.routeMode,
+                                ),
+                            )?.display_name ?? '—'}
+                          </option>
                           {providerIds.map((providerId) => (
                             <option key={providerId} value={providerId}>
                               {data.providers.find(
@@ -596,7 +663,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                             </option>
                           ))}
                         </select>
-                      ) : null}
+                      }
                     </div>
                   </td>
                   <td className="px-1.5 py-1.5">
@@ -613,22 +680,24 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                             const adapter = workload.runtime_adapters.find(
                               (item) => item.adapter_id === runtimeAdapterId,
                             );
-                            const routeMode =
-                              adapter?.allowed_routes[0] ?? draft.routeMode;
-                            const providerId =
-                              adapter?.allowed_providers[0] ??
-                              defaultProviderId(
-                                workload,
-                                routeMode,
-                                data.providers,
-                              );
+                            const routeMode = adapter?.allowed_routes.includes(
+                              draft.routeMode,
+                            )
+                              ? draft.routeMode
+                              : (adapter?.allowed_routes[0] ?? draft.routeMode);
+                            const providerId = inheritedProviderId(
+                              data,
+                              workload,
+                              routeMode,
+                            );
                             setDrafts((current) => ({
                               ...current,
-                              [workload.workload_id]: {
+                              [`${workload.app_id}:${workload.workload_id}`]: {
                                 ...draft,
                                 runtimeAdapterId,
                                 routeMode,
                                 providerId,
+                                providerExplicit: false,
                                 modelIds: {},
                               },
                             }));
@@ -651,12 +720,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                           workload,
                           draft.providerId,
                         );
-                        const value = selectedModelId(
-                          data,
-                          workload,
-                          draft,
-                          role,
-                        );
+                        const value = draft.modelIds[role] ?? '';
                         const resolvedRoute = workload.resolved_routes.find(
                           (route) =>
                             route.model_role === role &&
@@ -692,21 +756,39 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                             onChange={(event) =>
                               setDrafts((current) => ({
                                 ...current,
-                                [workload.workload_id]: {
-                                  ...draft,
-                                  modelIds: {
-                                    ...draft.modelIds,
-                                    [role]: event.target.value,
+                                [`${workload.app_id}:${workload.workload_id}`]:
+                                  {
+                                    ...draft,
+                                    modelIds: {
+                                      ...draft.modelIds,
+                                      [role]: event.target.value,
+                                    },
                                   },
-                                },
                               }))
                             }
                             value={value}
                           >
                             <option value="">
                               {t(
-                                'admin.console.aiSecurity.modelSettings.models.selectModel',
-                              )}
+                                'admin.console.aiSecurity.llmDefaults.inherit',
+                              )}{' '}
+                              ·{' '}
+                              {models.find(
+                                (model) =>
+                                  model.id ===
+                                  selectedModelId(
+                                    data,
+                                    workload,
+                                    {
+                                      ...draft,
+                                      modelIds: {
+                                        ...draft.modelIds,
+                                        [role]: '',
+                                      },
+                                    },
+                                    role,
+                                  ),
+                              )?.model_key ?? '—'}
                             </option>
                             {models.map((model) => (
                               <option key={model.id} value={model.id}>
@@ -716,6 +798,17 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                           </select>
                         );
                       })}
+                      {workload.resolved_routes.map((resolved) => (
+                        <div
+                          key={resolved.model_role}
+                          className="app-text-caption text-app-ink/55"
+                        >
+                          {resolved.model_key} ·{' '}
+                          {t(
+                            `admin.console.aiSecurity.llmDefaults.sources.${resolved.connection_source}`,
+                          )}
+                        </div>
+                      ))}
                       {!ready ? (
                         <div
                           className="app-text-caption w-full truncate text-app-danger-text"
@@ -784,10 +877,11 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                               onChange={(event) =>
                                 setDrafts((current) => ({
                                   ...current,
-                                  [workload.workload_id]: {
-                                    ...draft,
-                                    [field]: event.target.value,
-                                  },
+                                  [`${workload.app_id}:${workload.workload_id}`]:
+                                    {
+                                      ...draft,
+                                      [field]: event.target.value,
+                                    },
                                 }))
                               }
                               step={1}
@@ -828,6 +922,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                                       data.registry_digest,
                                     expected_version: version,
                                   },
+                                  workload.app_id,
                                 ),
                             );
                           }}
@@ -846,43 +941,15 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                           aria-label={t('common:actions.save')}
                           disabled={!ready || !capsValid || savingKey !== null}
                           onClick={() => {
-                            const modelIds = Object.fromEntries(
-                              roles
-                                .map((role) => [
-                                  role,
-                                  selectedModelId(data, workload, draft, role),
-                                ])
-                                .filter(([, modelId]) => Boolean(modelId)),
-                            );
-                            const localMaxOutputTokens = parseOutputK(
-                              draft.localMaxOutputK,
-                            );
-                            const externalMaxOutputTokens = parseOutputK(
-                              draft.externalMaxOutputK,
-                            );
-                            if (
-                              localMaxOutputTokens === null ||
-                              externalMaxOutputTokens === null
-                            )
-                              return;
-                            void runMutation(workload.workload_id, () =>
-                              updateAdminAiModelWorkloadRoute(
-                                token,
-                                workload.workload_id,
-                                {
-                                  expected_registry_digest:
-                                    data.registry_digest,
-                                  expected_version:
-                                    workload.override?.version ?? null,
-                                  route_mode: draft.routeMode,
-                                  provider_id: draft.providerId || null,
-                                  model_ids: modelIds,
-                                  local_max_output_tokens: localMaxOutputTokens,
-                                  external_max_output_tokens:
-                                    externalMaxOutputTokens,
-                                  runtime_adapter_id: draft.runtimeAdapterId,
-                                },
-                              ),
+                            void runMutation(
+                              `${workload.app_id}:${workload.workload_id}`,
+                              () =>
+                                updateAdminAiModelWorkloadRoute(
+                                  token,
+                                  workload.workload_id,
+                                  buildLlmWorkloadUpdate(data, workload, draft),
+                                  workload.app_id,
+                                ),
                             );
                           }}
                           size="icon"

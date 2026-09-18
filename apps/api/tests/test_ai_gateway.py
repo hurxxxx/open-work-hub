@@ -703,6 +703,7 @@ def test_execute_llm_uses_registered_admin_route_without_caller_model_controls(
             route="external",
             provider_id="anthropic",
             adapter_provider="anthropic",
+            requires_credentials=True,
             endpoint_url="https://api.anthropic.com",
             api_key=SimpleNamespace(get_secret_value=lambda: "database-key"),
             model_key="claude-sonnet-4-6",
@@ -715,7 +716,7 @@ def test_execute_llm_uses_registered_admin_route_without_caller_model_controls(
     def fake_complete(request, db):
         captured["request"] = request
         captured["db"] = db
-        return SimpleNamespace(text="ok"), SimpleNamespace(), request.workload_config
+        return SimpleNamespace(text="ok"), SimpleNamespace(provider=request.workload_config.provider, model=request.workload_config.default_model, chosen_pool=request.workload_config.pool), request.workload_config
 
     monkeypatch.setattr(gateway_module, "complete_gateway_chat_text", fake_complete)
     db = object()
@@ -741,7 +742,7 @@ def test_execute_llm_uses_registered_admin_route_without_caller_model_controls(
     assert request.workload_config.api_key == "database-key"
     assert request.workload_config.base_url == "https://api.anthropic.com"
     assert request.workload_config.provider == "anthropic"
-    assert result.config.default_model == "claude-sonnet-4-6"
+    assert result.metadata.model == "claude-sonnet-4-6"
 
 
 def test_execute_llm_uses_route_cap_when_caller_omits_max_tokens(
@@ -756,7 +757,8 @@ def test_execute_llm_uses_route_cap_when_caller_omits_max_tokens(
             workload=workload,
             route="local",
             provider_id="local",
-            adapter_provider="vllm",
+            adapter_provider="local",
+            requires_credentials=False,
             endpoint_url="http://local.test/v1",
             api_key=SimpleNamespace(get_secret_value=lambda: "local-key"),
             model_key="local-model",
@@ -768,7 +770,7 @@ def test_execute_llm_uses_route_cap_when_caller_omits_max_tokens(
 
     def fake_complete(request, _db):
         captured["request"] = request
-        return SimpleNamespace(text="ok"), SimpleNamespace(), request.workload_config
+        return SimpleNamespace(text="ok"), SimpleNamespace(provider=request.workload_config.provider, model=request.workload_config.default_model, chosen_pool=request.workload_config.pool), request.workload_config
 
     monkeypatch.setattr(gateway_module, "complete_gateway_chat_text", fake_complete)
     execute_llm(

@@ -699,6 +699,9 @@ systemd unit에는 실제 바이너리·설정·데이터 경로를 사용하고
 DB 연결 설정은 [API·Worker 연결 예산](docs/domains/release/README.md#database-connection-budgets)을 따른다.
 개발·운영이 PostgreSQL 서버를 공유하면 모든 프로세스의 한도를 합산한다.
 기존 설치의 API 풀 32/64 설정은 새 기본값으로 자동 변경되지 않으므로 해당 절의 설정 검토·적용·검증 절차를 함께 수행한다.
+접속이 몰릴 때 풀 대기가 발생하면 같은 절의 인증 동시 요청 검사를 실행하고,
+열린 챗봇 이벤트 스트림이 초기 조회 연결을 계속 점유하지 않는지 확인한다.
+풀 크기를 늘리기 전에 요청 처리 스레드의 대기와 연결 반환 시점을 구분한다.
 
 ```dotenv
 OPEN_WORK_HUB_WEB_DEV_HOST=0.0.0.0
@@ -863,7 +866,7 @@ Bento 등 별도 주소를 쓰는 기능은 사용 시 해당 기능 문서의 �
 | --- | --- |
 | PostgreSQL·Redis·파일 저장소·검색 | 네이티브 DB·Redis 연결은 유지하고 필요한 저장소·검색만 추가한다. 개발 DB, 큐, 버킷, 색인 연결이 실제 실행 대상과 일치하는지 확인한다. Docker 서비스 정의는 [개발 Compose](ops/compose/open-work-hub-dev.infra.yml), 앱 연결 설정은 [개발 환경 설정](scripts/dev-env.sh)을 따른다. |
 | 개인정보 필터 | `OPEN_WORK_HUB_OPF_SERVICE_BASE_URL`에 별도 서비스 주소가 있으면 해당 서비스를 먼저 준비한다. 아래 실행 예와 [서비스 구현](apps/api/src/open_work_hub_api/domains/ai/privacy_filter_service.py)을 따른다. |
-| 모든 생성형 AI·챗봇 작업 파일 | 관리자 LLM 정책, 공급자 키 암호화 설정, Hermes 활성화, Docker 소켓 그룹·동시 실행 한도·마이그레이션은 [Hermes 설치 문서](docs/domains/ai/hermes.md#fresh-environment-setup)를 따른다. 기존 설치에서 플러그인·샌드박스 설정을 갱신할 때는 [게이트웨이 재생성 → API·Worker 갱신 절차](docs/domains/ai/hermes.md#updating-an-existing-development-installation)를 따른다. API·Worker의 프로필 정책만 바뀌는 경우는 [대화 컨텍스트 정책 적용 절차](docs/domains/ai/hermes.md#conversation-context-policy)를 따른다. 네이티브 파일 쓰기는 Docker 호스트/VM의 Landlock ABI 3+가 필요하다. 신규·기존 설치 모두 [실제 샌드박스·네이티브 코드·파일·챗봇 실행 검사](docs/domains/ai/hermes.md#sandbox-execution-check)로 완료를 확인하고, 실패 시 [오류별 복구 절차](docs/domains/ai/hermes.md#sandbox-startup-recovery)를 적용한다. 정적 결과물은 기본 제공 Chromium과 `owh_preview`로 검사하며 Playwright를 추가 설치하지 않는다. [오프라인 렌더링·파일 수정·실행 종료 확인](docs/domains/ai/hermes.md#static-preview-execution)도 셋업 검증에 포함한다. 공급자별 temperature 지원과 확장 제약은 해당 문서의 [런타임 계약](docs/domains/ai/hermes.md#pinned-runtime-contract)·[확장 제약](docs/domains/ai/hermes.md#pinned-upstream-gaps)을 확인한다. 로컬 모델은 OpenRouter 키 없이 시작할 수 있다. 호스트에 Hermes를 별도 설치하지 않는다. |
+| 모든 생성형 AI·챗봇 작업 파일 | 관리자 LLM 정책(전역·앱·워크로드 상속), 공급자 키 암호화 설정, Hermes 활성화, Docker 소켓 그룹·동시 실행 한도·마이그레이션은 [Hermes 설치 문서](docs/domains/ai/hermes.md#fresh-environment-setup)를 따른다. 기존 설치에서 플러그인·샌드박스 설정을 갱신할 때는 [게이트웨이 재생성 → API·Worker 갱신 절차](docs/domains/ai/hermes.md#updating-an-existing-development-installation)를 따른다. API·Worker의 프로필 정책만 바뀌는 경우는 [대화 컨텍스트 정책 적용 절차](docs/domains/ai/hermes.md#conversation-context-policy)를 따른다. 네이티브 파일 쓰기는 Docker 호스트/VM의 Landlock ABI 3+가 필요하다. 신규·기존 설치 모두 [실제 샌드박스·네이티브 코드·파일·구조화 결과 제출·챗봇 실행 검사](docs/domains/ai/hermes.md#sandbox-execution-check)로 완료를 확인하고, 실패 시 [오류별 복구 절차](docs/domains/ai/hermes.md#sandbox-startup-recovery)를 적용한다. 정적 결과물은 기본 제공 Chromium과 `owh_preview`로 검사하며 Playwright를 추가 설치하지 않는다. [오프라인 렌더링·파일 수정·실행 종료 확인](docs/domains/ai/hermes.md#static-preview-execution)도 셋업 검증에 포함한다. 공급자별 temperature 지원과 확장 제약은 해당 문서의 [런타임 계약](docs/domains/ai/hermes.md#pinned-runtime-contract)·[확장 제약](docs/domains/ai/hermes.md#pinned-upstream-gaps)을 확인한다. 로컬 모델은 OpenRouter 키 없이 시작할 수 있다. 기본 모델·앱별 모델·공급자 API 키는 관리자 LLM 설정에서 관리하며, 기존 설치의 LLM 환경변수는 [DB 설정 이관 절차](docs/domains/ai/hermes.md#db-connection-and-default-policy-cutover)로 정리한다. vLLM/Ollama 서버는 별도로 실행한 뒤 관리자 연결에 등록한다. 호스트에 Hermes를 별도 설치하지 않는다. |
 | 문서 AI·OCR·음성 인식 | 설정한 [Inference Gateway](docs/domains/inference-gateway/README.md)와 [RAG](docs/domains/rag/README.md) 연결을 준비한다. 개발 Compose가 외부 추론 서버까지 설치하지는 않는다. |
 | 슬라이드·다이어그램 | [Bento](docs/apps/bento/README.md)와 [Diagrams](docs/apps/diagrams/README.md)의 서버 주소·브라우저 연결을 확인한다. Bento의 별도 런타임 이미지와 Web bridge 프로토콜도 함께 맞춘다. |
 | 화상회의·녹음 | [Recording](docs/apps/recording/README.md)의 LiveKit·네트워크·추론 서비스 요구사항을 확인한다. |
@@ -905,6 +908,13 @@ pnpm dev:infra:up
 ```bash
 ./dev.sh --with-worker --no-infra
 ```
+
+데모 환경의 Worker는 `config/runtime.json`의 `OPEN_WORK_HUB_WORKER_CONCURRENCY=1`로
+작업 실행 자식 프로세스 하나를 유지한다. 개발·운영 모두 같은 설정을 사용하며,
+운영 적용에는 해당 설정을 포함한 릴리스 이미지가 필요하다. `.env`에 비밀이 아닌
+동시 실행 수를 복제하지 않는다. 작업은 순차 처리되고 Worker 감독 프로세스와 Beat는
+별도로 유지된다. 조정과 재시작은 [Worker 실행 계약](docs/domains/release/README.md#persistent-development-runtime)을 따른다.
+공유 서버의 메모리 한도·스왑 확인과 LXC 호스트 설정은 [메모리·스왑 운영 확인](docs/domains/release/installation-operations.md#memory-and-swap)을 따른다.
 
 네이티브 DB·Redis는 4절의 연결 검사로, Docker 서비스는 `pnpm infra:dev:status`로 확인한다.
 별도 터미널에서 Worker를 포함한 앱 상태를 확인한다.

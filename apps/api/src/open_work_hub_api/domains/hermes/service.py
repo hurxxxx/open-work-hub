@@ -294,7 +294,9 @@ async def ensure_profile_binding(
 ) -> HermesProfileBinding:
     resolved = require_hermes_enabled(settings)
     policy = model_policy or resolve_model_policy(db)
-    binding = get_or_create_profile_binding(db, user=user, route=policy.route)
+    binding = get_or_create_profile_binding(
+        db, user=user, route=policy.route, provider=policy.provider, model=policy.model
+    )
     db.commit()
     db.refresh(binding)
     if research_sources is None or research_policy_revision is None:

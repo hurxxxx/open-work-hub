@@ -13,6 +13,8 @@ from open_work_hub_api.domains.ai.model_credentials import encrypt_api_key
 from open_work_hub_api.domains.ai.model_settings_models import (
     AiModelCatalogEntry,
     AiModelProviderConfig,
+    AiModelPolicyDefault,
+    AiModelRouteOverride,
 )
 from open_work_hub_api.domains.ai.model_settings_service import (
     AiModelSettingsError,
@@ -21,7 +23,7 @@ from open_work_hub_api.domains.ai.model_settings_service import (
 )
 
 
-_WORKLOAD_ID = "web_search.answer"
+_WORKLOAD_ID = "chatbot"
 _DB_ENDPOINT = "https://db-anthropic.example.test"
 _DB_MODEL_ID = "anthropic-database-selected-model"
 _DB_MODEL_KEY = "database-selected-model"
@@ -66,6 +68,9 @@ def _enable_database_anthropic_provider(db) -> str:
     provider.endpoint_url = _DB_ENDPOINT
     provider.api_key_ciphertext = ciphertext
     provider.default_model_id = model.id
+    db.merge(
+        AiModelPolicyDefault(app_id="", route_mode="external", provider_id="anthropic", version=1)
+    )
     db.commit()
     return ciphertext
 
@@ -76,7 +81,16 @@ def test_external_workload_fails_closed_without_enabled_database_provider(
     monkeypatch: pytest.MonkeyPatch,
     provider_state: str,
 ) -> None:
-    del client
+    with get_session_factory()() as db:
+        db.add(
+            AiModelRouteOverride(
+                id="test-external-route",
+                app_id="chatbot",
+                workload_id="chatbot",
+                route_mode="external",
+            )
+        )
+        db.commit()
     _configure_conflicting_external_env(monkeypatch)
 
     with get_session_factory()() as db:
@@ -100,7 +114,7 @@ def test_external_workload_fails_closed_without_enabled_database_provider(
         with pytest.raises(AiModelSettingsError) as caught:
             resolve_ai_model_workload_route(db, workload_id=_WORKLOAD_ID)
 
-    assert caught.value.code == "admin.ai_model_provider_not_ready"
+    assert caught.value.code == "admin.ai_model_provider_required"
     assert "test-env-anthropic-secret" not in repr(caught.value)
     assert "env-only-model" not in repr(caught.value)
 
@@ -109,7 +123,16 @@ def test_enabled_database_provider_is_the_redacted_external_route_source(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    del client
+    with get_session_factory()() as db:
+        db.add(
+            AiModelRouteOverride(
+                id="test-external-route",
+                app_id="chatbot",
+                workload_id="chatbot",
+                route_mode="external",
+            )
+        )
+        db.commit()
     _configure_conflicting_external_env(monkeypatch)
 
     with get_session_factory()() as db:
@@ -143,7 +166,16 @@ def test_build_workload_request_does_not_read_legacy_pool_config_for_database_ro
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    del client
+    with get_session_factory()() as db:
+        db.add(
+            AiModelRouteOverride(
+                id="test-external-route",
+                app_id="chatbot",
+                workload_id="chatbot",
+                route_mode="external",
+            )
+        )
+        db.commit()
     _configure_conflicting_external_env(monkeypatch)
 
     def fail_if_legacy_pool_config_is_read(*_args, **_kwargs):
@@ -164,7 +196,7 @@ def test_build_workload_request_does_not_read_legacy_pool_config_for_database_ro
             _WORKLOAD_ID,
             LlmWorkloadContext(
                 source="tests.llm_db_control_plane",
-                app_id="web-search",
+                app_id="chatbot",
             ),
             db,
             messages=[{"role": "user", "content": "hello"}],

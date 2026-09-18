@@ -21,7 +21,6 @@ from open_work_hub_api.domains.pms.app_catalog import PMS_APP
 from open_work_hub_api.domains.recording.app_catalog import RECORDING_APP
 from open_work_hub_api.domains.retrieval.app_catalog import RETRIEVAL_SEARCH_APP
 from open_work_hub_api.domains.video_chat.app_catalog import VIDEO_CHAT_APP
-from open_work_hub_api.domains.web_search.app_catalog import WEB_SEARCH_APPS
 from open_work_hub_api.domains.whiteboard.app_catalog import WHITEBOARD_APP
 
 from .home_app_catalog import HOME_APP
@@ -30,7 +29,6 @@ _APP_REGISTRATIONS = (
     HOME_APP,
     AGENT_TERMINAL_APP,
     CHATBOT_APP,
-    *WEB_SEARCH_APPS,
     PMS_APP,
     DOCS_APP,
     FILES_APP,

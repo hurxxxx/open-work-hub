@@ -15,7 +15,6 @@ import { recordingManifest } from '@/src/app-modules/recording/manifest';
 import { retrievalSearchManifest } from '@/src/app-modules/retrieval-search/manifest';
 import { settingsManifest } from '@/src/app-modules/settings/manifest';
 import { videoChatManifest } from '@/src/app-modules/video-chat/manifest';
-import { webSearchManifest } from '@/src/app-modules/web-search/manifest';
 import { whiteboardManifest } from '@/src/app-modules/whiteboard/manifest';
 
 export {
@@ -36,7 +35,6 @@ export {
   retrievalSearchManifest,
   settingsManifest,
   videoChatManifest,
-  webSearchManifest,
   whiteboardManifest,
 };
 
@@ -44,7 +42,6 @@ export const DEFAULT_APP_CONTRACT_MANIFESTS = [
   homeManifest,
   agentTerminalManifest,
   chatbotManifest,
-  webSearchManifest,
   pmsManifest,
   docsManifest,
   filesManifest,

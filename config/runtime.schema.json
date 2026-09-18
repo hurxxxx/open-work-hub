@@ -47,6 +47,7 @@
         "OPEN_WORK_HUB_WORKER_DB_MAX_OVERFLOW",
         "OPEN_WORK_HUB_WORKER_DB_POOL_SIZE",
         "OPEN_WORK_HUB_WORKER_DB_POOL_TIMEOUT",
+        "OPEN_WORK_HUB_WORKER_CONCURRENCY",
         "OPEN_WORK_HUB_API_EVENT_LOOP_LAG_INTERVAL_SECONDS",
         "OPEN_WORK_HUB_API_EVENT_LOOP_LAG_WARN_MS",
         "OPEN_WORK_HUB_API_COLLAB_ACL_RECHECK_SECONDS",
@@ -92,6 +93,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "OPEN_WORK_HUB_WORKER_CONCURRENCY": {
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
         "OPEN_WORK_HUB_MAIL_SYNC_MAX_MESSAGES": {
           "maximum": 500,
           "minimum": 1,

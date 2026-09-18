@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-APP_CONTRACT_REVISION: Final = "sha256:b4c3c46e9f0289854938b2634116f50b05643e569dcc7f854fb66e56ed792f78"
+APP_CONTRACT_REVISION: Final = "sha256:5a7b0fdacb0c4cf1d957571dbfcfffd46b47ec34fd6182d9a3dd36bf83147cb8"
 APP_CONTRACTS: Final = [
   {
     "app_id": "home",
@@ -65,26 +65,6 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "chatbot.root",
-        "suffix": "",
-        "chrome": "containedSurface"
-      }
-    ]
-  },
-  {
-    "app_id": "web-search",
-    "title": "Web Search",
-    "icon_key": "globe-2",
-    "execution_context_kind": "personal",
-    "resource_scope": "personal",
-    "route_base": "/apps/web-search",
-    "entry_route_id": "web-search.root",
-    "launcher": {
-      "placement": "category",
-      "pinned_by_default": False
-    },
-    "routes": [
-      {
-        "route_id": "web-search.root",
         "suffix": "",
         "chrome": "containedSurface"
       }

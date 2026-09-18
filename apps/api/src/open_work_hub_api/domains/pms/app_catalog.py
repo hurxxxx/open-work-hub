@@ -5,6 +5,7 @@ from open_work_hub_api.core.app_registry import (
 
 PMS_APP = app_registration(
     "pms",
+    ai_capability_modules=('open_work_hub_api.domains.pms',),
     backend_domain="pms",
     nav_items=(
         AppNavRegistration(

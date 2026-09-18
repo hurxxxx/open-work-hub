@@ -418,7 +418,11 @@ export function AdminAiModelSettingsSection({ token }: { token: string }) {
                           className="app-text-caption truncate text-app-ink/50"
                           title={`${model.provider_id} · ${draft.modelKey} · ${model.id}`}
                         >
-                          {model.provider_id} · {draft.modelKey}
+                          {data.providers.find(
+                            (provider) =>
+                              provider.provider_id === model.provider_id,
+                          )?.display_name ?? model.provider_id}{' '}
+                          · {draft.modelKey}
                         </div>
                       </div>
                     </div>

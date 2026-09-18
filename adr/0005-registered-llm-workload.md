@@ -34,7 +34,7 @@ This ADR retains workload registration and provider-routing decisions.
 - API responses/UI never return API key plaintext.
 - Management groups: LLM Providers, Model Catalog, LLM Routing, AI Security, Audit Logs.
 - Document-processing vision workloads keep registry/audit but use `management_surface="document_processing"`.
-- Web Search is external-only; no local fallback.
+- Web search/page extraction is provided by interactive Hermes chatbot tools; the standalone Web Search app is retired. Workloads retain explicit route admission and no automatic fallback.
 
 ## Required Change Unit
 

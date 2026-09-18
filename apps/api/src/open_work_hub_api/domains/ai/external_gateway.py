@@ -837,7 +837,8 @@ def _merge_tuple_values(*groups: tuple[str, ...]) -> tuple[str, ...]:
 def _default_provider(capability: str, settings: Settings) -> str:
     if "search" in capability:
         return settings.ai_default_external_search_provider
-    return settings.ai_default_external_llm_provider
+    # Generative requests must carry the DB-resolved provider; no implicit selection.
+    return ""
 
 
 def _egress_capability(capability: str) -> ExternalCapability:

@@ -209,6 +209,7 @@ LlmRequestBackendMode = Literal["auto", "local"]
 class LlmPoolHealthResponse(BaseModel):
     pool: str
     provider: str
+    connection_id: str | None = None
     base_url: str
     model: str
     canonical_model: str
@@ -222,6 +223,7 @@ class LlmDualHealthResponse(BaseModel):
     local: LlmPoolHealthResponse
     external: LlmPoolHealthResponse | None = None
     external_providers: list[LlmPoolHealthResponse] = Field(default_factory=list)
+    connections: list[LlmPoolHealthResponse] = Field(default_factory=list)
 
 
 class ChatMessage(BaseModel):

@@ -185,7 +185,7 @@ def _seed_pending_approval(
             model_meta=model_meta
             or {
                 "model": "local/current-moe-test-model",
-                "provider": "mlx-lm",
+                "provider": "local",
                 "policy": "local_only",
                 "chosen_pool": "local",
                 "parallel_tool_calls": False,

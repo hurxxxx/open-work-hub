@@ -891,7 +891,6 @@ def configured_local_llm_control_plane(client: TestClient) -> None:
 
     del client
     from open_work_hub_api.core.db import get_session_factory
-    from open_work_hub_api.core.settings import get_settings
     from open_work_hub_api.domains.ai.model_settings_models import (
         AiModelCatalogEntry,
         AiModelProviderConfig,
@@ -924,8 +923,19 @@ def configured_local_llm_control_plane(client: TestClient) -> None:
             )
             db.add(model)
         provider.enabled = True
-        provider.endpoint_url = get_settings().llm_local_base_url
+        provider.endpoint_url = "http://127.0.0.1:12434/engines/v1"
         provider.default_model_id = model.id
+        from open_work_hub_api.domains.ai.model_settings_models import AiModelPolicyDefault
+
+        db.merge(
+            AiModelPolicyDefault(
+                app_id="",
+                route_mode="local",
+                provider_id="local",
+                max_output_tokens=32768,
+                version=1,
+            )
+        )
         db.commit()
 
 

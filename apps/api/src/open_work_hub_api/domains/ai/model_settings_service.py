@@ -13,11 +13,10 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.core.llm_pool_config_registry import resolve_llm_pool_config_values
 from open_work_hub_api.core.llm_provider_registry import (
-    external_llm_provider_ids,
     llm_provider_descriptor,
     llm_provider_ids,
+    parse_external_llm_provider_allowlist,
 )
 from open_work_hub_api.core.settings import Settings, get_settings
 from open_work_hub_api.domains.ai.agent_runtime import (
@@ -36,6 +35,7 @@ from open_work_hub_api.domains.ai.model_settings_models import (
     AiModelCatalogEntry,
     AiModelProviderConfig,
     AiModelRouteOverride,
+    AiModelPolicyDefault,
 )
 from open_work_hub_api.domains.ai.model_settings_schemas import (
     AiAgentRuntimeAdapterResponse,
@@ -49,6 +49,9 @@ from open_work_hub_api.domains.ai.model_settings_schemas import (
     AiModelRouteOverrideResponse,
     AiModelRouteOverrideUpdateRequest,
     AiModelSettingsResponse,
+    AiModelPolicyDefaultResponse,
+    AiModelPolicyDefaultUpdateRequest,
+    AiModelConnectionCreateRequest,
     AiModelWorkloadResponse,
 )
 from open_work_hub_api.domains.ai.registry import (
@@ -70,12 +73,17 @@ class ResolvedLlmWorkloadRoute:
     endpoint_url: str
     api_key: SecretStr | None = field(repr=False)
     route_source: Literal["default", "override"]
-    config_source: Literal["database", "legacy_env", "database_with_legacy_env"]
+    config_source: Literal["database"]
     local_max_output_tokens: int
     external_max_output_tokens: int
     max_output_tokens: int
     model_entry_id: str | None = None
     runtime_adapter_id: str = "chat_completion"
+    app_id: str = ""
+    requires_credentials: bool = True
+    connection_source: str = "global"
+    model_source: str = "connection"
+    output_cap_source: str = "global"
 
     @property
     def source(self) -> Literal["default", "override"]:
@@ -119,21 +127,52 @@ def assert_registry_digest(expected: str) -> str:
     return actual
 
 
+def _workload_app(workload: RegisteredLlmWorkload, app_id: str | None) -> str:
+    if app_id is None and len(workload.app_ids) == 1:
+        return workload.app_id
+    if app_id not in workload.app_ids:
+        raise AiModelSettingsError(
+            status_code=422,
+            code="admin.ai_model_workload_app_required",
+            context={"workload_id": workload.workload_id},
+        )
+    return str(app_id)
+
+
+def _policy_rows(db: Session, app_id: str, route: str):
+    return (
+        db.get(AiModelPolicyDefault, (app_id, route)),
+        db.get(AiModelPolicyDefault, ("", route)),
+    )
+
+
+def _resolved_cap(
+    db: Session,
+    workload: RegisteredLlmWorkload,
+    app_id: str,
+    override: AiModelRouteOverride | None,
+    route: str,
+) -> tuple[int, str]:
+    value = getattr(override, f"{route}_max_output_tokens", None)
+    if value is not None:
+        return value, "workload"
+    app, company = _policy_rows(db, app_id, route)
+    for row, source in ((app, "app"), (company, "global")):
+        if row is not None and row.max_output_tokens is not None:
+            return row.max_output_tokens, source
+    return getattr(workload, f"{route}_max_output_tokens"), "registry"
+
+
 def resolve_ai_model_workload_route(
     db: Session,
     *,
     workload_id: str,
+    app_id: str | None = None,
     model_role: str = "default",
     settings: Settings | None = None,
+    require_tool_calling: bool = False,
 ) -> ResolvedLlmWorkloadRoute:
-    """Resolve one workload role to an executable provider configuration.
-
-    Persisted provider defaults and workload overrides are authoritative and
-    fail closed when missing, corrupt, or not executable. Environment values
-    may supply the local transport endpoint during rollout, but never a model
-    selection.
-    """
-
+    """Resolve company -> app -> workload policy once, without env fallback."""
     workload = get_ai_capability_registry().get_llm_workload(workload_id)
     if workload is None:
         raise AiModelSettingsError(
@@ -141,174 +180,143 @@ def resolve_ai_model_workload_route(
             code="admin.ai_model_workload_not_found",
             context={"workload_id": workload_id},
         )
-    normalized_role = model_role.strip().lower()
-    if normalized_role not in workload.model_roles:
+    app_id = _workload_app(workload, app_id)
+    role = model_role.strip().lower()
+    if role not in workload.model_roles:
         raise AiModelSettingsError(
-            status_code=422,
-            code="admin.ai_model_role_not_allowed",
-            context={"model_role": normalized_role},
+            status_code=422, code="admin.ai_model_role_not_allowed", context={"model_role": role}
         )
-
-    resolved_settings = settings or get_settings()
     override = db.scalar(
-        select(AiModelRouteOverride).where(AiModelRouteOverride.workload_id == workload.workload_id)
-    )
-    route = override.route_mode if override is not None else workload.default_route
-    runtime_adapter_id = (
-        override.runtime_adapter_id
-        if override is not None and override.runtime_adapter_id
-        else workload.default_runtime_adapter
-    )
-    if runtime_adapter_id not in workload.allowed_runtime_adapters:
-        raise AiModelSettingsError(
-            status_code=503,
-            code="admin.ai_model_runtime_adapter_not_allowed",
-            context={"workload_id": workload.workload_id},
+        select(AiModelRouteOverride).where(
+            AiModelRouteOverride.workload_id == workload.workload_id,
+            AiModelRouteOverride.app_id == app_id,
         )
-    _require_runtime_route_compatibility(
-        workload,
-        runtime_adapter_id=runtime_adapter_id,
-        route=route,
-        provider_id=override.provider_id if override is not None else None,
-        status_code=503,
     )
+    route = (override.route_mode if override is not None else None) or workload.default_route
+    runtime = (
+        override.runtime_adapter_id if override is not None else None
+    ) or workload.default_runtime_adapter
     if route not in workload.allowed_routes:
         raise AiModelSettingsError(
             status_code=503,
             code="admin.ai_model_route_not_allowed",
-            context={"workload_id": workload.workload_id},
+            context={"workload_id": workload_id},
         )
-
-    provider_id = _runtime_provider_id(
-        db,
-        workload=workload,
-        route=route,
-        override=override,
-    )
-    provider_config = db.get(AiModelProviderConfig, provider_id)
-    if route == "external" and (provider_config is None or not provider_config.enabled):
+    if runtime not in workload.allowed_runtime_adapters:
         raise AiModelSettingsError(
             status_code=503,
-            code="admin.ai_model_provider_not_ready",
-            context={"provider_id": provider_id},
+            code="admin.ai_model_runtime_adapter_not_allowed",
+            context={"workload_id": workload_id},
         )
-
-    use_database_provider = bool(provider_config and provider_config.enabled)
-    pool_values = (
-        _legacy_pool_values(
-            route=route,
-            provider_id=provider_id,
-            settings=resolved_settings,
-        )
-        if route == "local"
-        else None
-    )
+    app, company = _policy_rows(db, app_id, route)
+    connection_id = None
     selected_model_id = None
-    if override is not None:
-        selected_model_id = override.model_ids.get(normalized_role)
-    if selected_model_id is None and use_database_provider and provider_config is not None:
-        selected_model_id = provider_config.default_model_id
-
-    model_key: str
-    if selected_model_id is not None:
-        model = _require_provider_model(
-            db,
-            provider_id=provider_id,
-            model_id=selected_model_id,
-            require_enabled=True,
+    connection_source = "global"
+    model_source = "connection"
+    for row, source in ((override, "workload"), (app, "app"), (company, "global")):
+        if row is None:
+            continue
+        model_id = (
+            row.model_ids.get(role) if isinstance(row, AiModelRouteOverride) else row.model_id
         )
-        _require_model_capabilities(model, workload=workload)
-        model_key = model.model_key
-    else:
-        model_key = ""
-    if not model_key:
-        raise AiModelSettingsError(
-            status_code=503,
-            code="admin.ai_model_selection_required",
-        )
-
-    endpoint_url = (
-        (provider_config.endpoint_url or "").strip()
-        if use_database_provider and provider_config is not None
-        else ""
-    ) or (pool_values.base_url.strip() if pool_values is not None else "")
-    if not endpoint_url:
+        if row.provider_id:
+            connection_id = row.provider_id
+            connection_source = source
+            selected_model_id = model_id
+            model_source = source if model_id else "connection"
+            break
+    if not connection_id:
+        raise AiModelSettingsError(status_code=503, code="admin.ai_model_provider_required")
+    connection = db.get(AiModelProviderConfig, connection_id)
+    if connection is None or not connection.enabled:
         raise AiModelSettingsError(
             status_code=503,
             code="admin.ai_model_provider_not_ready",
-            context={"provider_id": provider_id},
+            context={"provider_id": connection_id},
         )
-
-    api_key: SecretStr | None = None
-    used_database_secret = False
-    if use_database_provider and provider_config and provider_config.api_key_ciphertext:
+    if connection.route_mode != route:
+        raise AiModelSettingsError(status_code=503, code="admin.ai_model_route_provider_mismatch")
+    kind = connection.provider_kind
+    if route == "external" and kind not in parse_external_llm_provider_allowlist(
+        (settings or get_settings()).llm_external_allowed_providers
+    ):
+        raise AiModelSettingsError(
+            status_code=503,
+            code="admin.ai_model_provider_not_allowed",
+            context={"provider_id": connection_id},
+        )
+    if (
+        route == "external"
+        and workload.allowed_providers
+        and kind not in workload.allowed_providers
+    ):
+        raise AiModelSettingsError(
+            status_code=503,
+            code="admin.ai_model_provider_not_allowed",
+            context={"workload_id": workload_id},
+        )
+    _require_runtime_route_compatibility(
+        workload, runtime_adapter_id=runtime, route=route, provider_id=kind, status_code=503
+    )
+    selected_model_id = selected_model_id or connection.default_model_id
+    if not selected_model_id:
+        raise AiModelSettingsError(status_code=503, code="admin.ai_model_selection_required")
+    model = _require_provider_model(
+        db, provider_id=connection_id, model_id=selected_model_id, require_enabled=True
+    )
+    _require_model_capabilities(model, workload=workload)
+    if require_tool_calling and "tool_calling" not in model.capabilities:
+        raise AiModelSettingsError(
+            status_code=503,
+            code="admin.ai_model_capability_mismatch",
+            context={"model_id": model.id, "workload_id": workload_id},
+        )
+    endpoint = (connection.endpoint_url or "").strip()
+    if not endpoint:
+        raise AiModelSettingsError(
+            status_code=503,
+            code="admin.ai_model_provider_not_ready",
+            context={"provider_id": connection_id},
+        )
+    if route == "local":
+        _validate_endpoint_url(endpoint, provider_id=connection_id, route_mode="local")
+    api_key = None
+    if connection.api_key_ciphertext:
         try:
-            api_key = decrypt_api_key(provider_config.api_key_ciphertext)
-            used_database_secret = True
+            api_key = decrypt_api_key(connection.api_key_ciphertext)
         except AiModelCredentialError as exc:
             raise AiModelSettingsError(
-                status_code=503,
-                code="admin.ai_model_credential_encryption_unavailable",
+                status_code=503, code="admin.ai_model_credential_encryption_unavailable"
             ) from exc
-    elif route == "external":
+    if connection.credential_kind == "api_key" and api_key is None:
         raise AiModelSettingsError(
             status_code=503,
             code="admin.ai_model_provider_key_required",
-            context={"provider_id": provider_id},
+            context={"provider_id": connection_id},
         )
-    elif pool_values is not None and pool_values.api_key.strip():
-        api_key = SecretStr(pool_values.api_key.strip())
-    if route == "external" and api_key is None:
-        raise AiModelSettingsError(
-            status_code=503,
-            code="admin.ai_model_provider_key_required",
-            context={"provider_id": provider_id},
-        )
-
-    used_database_model = selected_model_id is not None
-    used_database_endpoint = bool(
-        use_database_provider and provider_config and provider_config.endpoint_url
-    )
-    database_parts = used_database_model or used_database_endpoint or used_database_secret
-    legacy_parts = route == "local" and (not used_database_model or not used_database_endpoint)
-    config_source: Literal["database", "legacy_env", "database_with_legacy_env"]
-    if database_parts and legacy_parts:
-        config_source = "database_with_legacy_env"
-    elif database_parts:
-        config_source = "database"
-    else:
-        config_source = "legacy_env"
-
-    local_max_output_tokens = _effective_max_output_tokens(
-        workload,
-        override,
-        route="local",
-    )
-    external_max_output_tokens = _effective_max_output_tokens(
-        workload,
-        override,
-        route="external",
-    )
-    max_output_tokens = local_max_output_tokens if route == "local" else external_max_output_tokens
-
+    local_cap, local_source = _resolved_cap(db, workload, app_id, override, "local")
+    external_cap, external_source = _resolved_cap(db, workload, app_id, override, "external")
     return ResolvedLlmWorkloadRoute(
         workload=workload,
-        route=route,  # type: ignore[arg-type]
-        provider_id=provider_id,
-        adapter_provider=(
-            pool_values.provider if route == "local" and pool_values is not None else provider_id
-        ),
-        model_role=normalized_role,
-        model_key=model_key,
-        endpoint_url=endpoint_url,
+        app_id=app_id,
+        route=route,
+        provider_id=connection_id,
+        adapter_provider=kind,
+        model_role=role,
+        model_key=model.model_key,
+        endpoint_url=endpoint,
         api_key=api_key,
-        route_source="override" if override is not None else "default",
-        config_source=config_source,
-        local_max_output_tokens=local_max_output_tokens,
-        external_max_output_tokens=external_max_output_tokens,
-        max_output_tokens=max_output_tokens,
-        model_entry_id=selected_model_id,
-        runtime_adapter_id=runtime_adapter_id,
+        route_source="override" if override and override.route_mode else "default",
+        config_source="database",
+        local_max_output_tokens=local_cap,
+        external_max_output_tokens=external_cap,
+        max_output_tokens=local_cap if route == "local" else external_cap,
+        model_entry_id=model.id,
+        runtime_adapter_id=runtime,
+        requires_credentials=connection.credential_kind == "api_key",
+        connection_source=connection_source,
+        model_source=model_source,
+        output_cap_source=local_source if route == "local" else external_source,
     )
 
 
@@ -330,7 +338,7 @@ def get_ai_model_settings_snapshot(db: Session) -> AiModelSettingsResponse:
     override_rows = list(
         db.scalars(select(AiModelRouteOverride).order_by(AiModelRouteOverride.workload_id)).all()
     )
-    overrides_by_workload = {row.workload_id: row for row in override_rows}
+    overrides_by_workload = {(row.app_id, row.workload_id): row for row in override_rows}
 
     providers = [
         _serialize_provider(
@@ -338,7 +346,9 @@ def get_ai_model_settings_snapshot(db: Session) -> AiModelSettingsResponse:
             providers_by_id.get(provider_id),
             settings=settings,
         )
-        for provider_id in llm_provider_ids(control_plane_only=True)
+        for provider_id in dict.fromkeys(
+            (*llm_provider_ids(control_plane_only=True), *providers_by_id)
+        )
     ]
     # Discovery rows absent from the provider's current inventory are retained
     # for audit/history, but are not part of the selectable admin catalog.
@@ -347,15 +357,18 @@ def get_ai_model_settings_snapshot(db: Session) -> AiModelSettingsResponse:
         _serialize_workload(
             db,
             descriptor,
-            overrides_by_workload.get(descriptor.workload_id),
+            overrides_by_workload.get((app_id, descriptor.workload_id)),
+            app_id=app_id,
         )
         for descriptor in sorted(
             registry.llm_workloads.values(),
             key=lambda item: (item.owner_domain, item.workload_id),
         )
+        for app_id in descriptor.app_ids
     ]
     orphaned = [
         AiModelOrphanedOverrideResponse(
+            app_id=row.app_id,
             workload_id=row.workload_id,
             route_mode=row.route_mode,  # type: ignore[arg-type]
             provider_id=row.provider_id,  # type: ignore[arg-type]
@@ -368,6 +381,7 @@ def get_ai_model_settings_snapshot(db: Session) -> AiModelSettingsResponse:
         )
         for row in override_rows
         if row.workload_id not in registry.llm_workloads
+        or row.app_id not in registry.llm_workloads[row.workload_id].app_ids
     ]
     return AiModelSettingsResponse(
         registry_digest=ai_model_registry_digest(),
@@ -375,6 +389,15 @@ def get_ai_model_settings_snapshot(db: Session) -> AiModelSettingsResponse:
         models=models,
         workloads=workloads,
         orphaned_overrides=orphaned,
+        defaults=[
+            AiModelPolicyDefaultResponse.model_validate(row, from_attributes=True)
+            for row in db.scalars(
+                select(AiModelPolicyDefault).order_by(
+                    AiModelPolicyDefault.app_id, AiModelPolicyDefault.route_mode
+                )
+            ).all()
+        ],
+        provider_kinds=list(llm_provider_ids()),
     )
 
 
@@ -407,26 +430,28 @@ def update_ai_model_provider(
 ) -> None:
     assert_registry_digest(payload.expected_registry_digest)
     normalized_provider_id = provider_id.strip().lower()
-    descriptor = llm_provider_descriptor(normalized_provider_id)
-    if descriptor is None or not descriptor.control_plane_visible:
+    row = db.get(AiModelProviderConfig, normalized_provider_id)
+    descriptor = llm_provider_descriptor(row.provider_kind if row else normalized_provider_id)
+    if descriptor is None:
         raise AiModelSettingsError(
             status_code=404,
             code="admin.ai_model_provider_not_found",
             context={"provider_id": normalized_provider_id},
         )
-    endpoint_url = payload.endpoint_url
-    if descriptor.route_mode == "external" and endpoint_url is None:
-        endpoint_url = descriptor.default_endpoint_url or None
-    _validate_endpoint_url(endpoint_url, provider_id=normalized_provider_id)
-
-    row = db.get(AiModelProviderConfig, normalized_provider_id)
+    route = row.route_mode if row else descriptor.route_mode
+    endpoint_url = payload.endpoint_url or descriptor.default_endpoint_url or None
+    _validate_endpoint_url(endpoint_url, provider_id=normalized_provider_id, route_mode=route)
     expected_version = payload.expected_version
     if row is None:
         if expected_version not in (None, 0):
             _raise_version_conflict()
         row = AiModelProviderConfig(
             provider_id=normalized_provider_id,
-            enabled=normalized_provider_id == "local",
+            provider_kind=descriptor.provider_id,
+            route_mode=descriptor.route_mode,
+            credential_kind=descriptor.credential_kind,
+            display_name=descriptor.display_name,
+            enabled=False,
             version=1,
             updated_by=actor_user_id,
         )
@@ -445,11 +470,6 @@ def update_ai_model_provider(
 
     encrypted_api_key = row.api_key_ciphertext
     if payload.api_key is not None:
-        if normalized_provider_id == "local":
-            raise AiModelSettingsError(
-                status_code=422,
-                code="admin.ai_model_local_key_not_allowed",
-            )
         try:
             encrypted_api_key = encrypt_api_key(payload.api_key)
         except AiModelCredentialError as exc:
@@ -460,13 +480,37 @@ def update_ai_model_provider(
     elif payload.clear_api_key:
         encrypted_api_key = None
 
-    if normalized_provider_id != "local" and payload.enabled and not encrypted_api_key:
+    credential_kind = payload.credential_kind or row.credential_kind
+    if (
+        descriptor.provider_id not in {"local", "openai_compatible"}
+        and credential_kind != "api_key"
+    ):
+        raise AiModelSettingsError(
+            status_code=422,
+            code="admin.ai_model_provider_key_required",
+            context={"provider_id": normalized_provider_id},
+        )
+    if credential_kind == "none":
+        encrypted_api_key = None
+    if (
+        credential_kind == "api_key"
+        and payload.enabled
+        and not encrypted_api_key
+        and not payload.clear_api_key
+    ):
         raise AiModelSettingsError(
             status_code=422,
             code="admin.ai_model_provider_key_required",
             context={"provider_id": normalized_provider_id},
         )
 
+    before = _ready_policies(db) if row.default_model_id != payload.default_model_id else []
+    verified = row.verified_version == row.version and (
+        row.endpoint_url == endpoint_url
+        and row.api_key_ciphertext == encrypted_api_key
+        and row.default_model_id == payload.default_model_id
+        and row.credential_kind == credential_kind
+    )
     now = utcnow_naive()
     result = db.execute(
         update(AiModelProviderConfig)
@@ -476,6 +520,9 @@ def update_ai_model_provider(
         )
         .values(
             enabled=payload.enabled,
+            display_name=payload.display_name or row.display_name or descriptor.display_name,
+            credential_kind=credential_kind,
+            verified_version=row.version + 1 if verified else None,
             endpoint_url=endpoint_url,
             default_model_id=payload.default_model_id,
             api_key_ciphertext=encrypted_api_key,
@@ -486,6 +533,8 @@ def update_ai_model_provider(
     )
     if result.rowcount != 1:
         _raise_version_conflict()
+    if payload.enabled and not payload.clear_api_key:
+        _preserve_ready_policies(db, before)
 
 
 def discover_ai_model_provider_catalog(
@@ -506,53 +555,36 @@ def discover_ai_model_provider_catalog(
         actor_user_id=actor_user_id,
     )
     resolved_settings = settings or get_settings()
-    pool_values = (
-        _legacy_pool_values(
-            route="local",
-            provider_id=normalized_provider_id,
-            settings=resolved_settings,
-        )
-        if normalized_provider_id == "local"
-        else None
+    endpoint_url = (provider.endpoint_url or "").strip()
+    _validate_endpoint_url(
+        endpoint_url or None, provider_id=normalized_provider_id, route_mode=provider.route_mode
     )
-    endpoint_url = (provider.endpoint_url or "").strip() or (
-        pool_values.base_url.strip() if pool_values is not None else ""
-    )
-    _validate_endpoint_url(endpoint_url or None, provider_id=normalized_provider_id)
-
-    api_key = (
-        pool_values.api_key.strip()
-        if normalized_provider_id == "local" and pool_values is not None
-        else ""
-    )
-    if normalized_provider_id != "local":
-        if not provider.api_key_ciphertext:
-            raise AiModelSettingsError(
-                status_code=422,
-                code="admin.ai_model_provider_key_required",
-                context={"provider_id": normalized_provider_id},
-            )
+    api_key = ""
+    if provider.api_key_ciphertext:
         try:
             api_key = decrypt_api_key(provider.api_key_ciphertext).get_secret_value()
         except AiModelCredentialError as exc:
             raise AiModelSettingsError(
-                status_code=503,
-                code="admin.ai_model_credential_encryption_unavailable",
+                status_code=503, code="admin.ai_model_credential_encryption_unavailable"
             ) from exc
-
+    if provider.credential_kind == "api_key" and not api_key:
+        raise AiModelSettingsError(
+            status_code=422,
+            code="admin.ai_model_provider_key_required",
+            context={"provider_id": normalized_provider_id},
+        )
+    version = provider.version
+    kind = provider.provider_kind
+    requires_credentials = provider.credential_kind == "api_key"
+    # A saved connection is required. Release its read transaction before network I/O.
+    db.rollback()
     try:
         discovered = discover_provider_models(
-            normalized_provider_id,
+            kind,
             endpoint_url,
             api_key or None,
-            min(
-                30.0,
-                (
-                    pool_values.long_generation_timeout_seconds
-                    if pool_values is not None
-                    else resolved_settings.llm_external_long_generation_timeout_seconds
-                ),
-            ),
+            min(30.0, resolved_settings.llm_request_timeout_seconds),
+            requires_credentials=requires_credentials,
         )
     except ProviderModelDiscoveryError as exc:
         if exc.code == "api_key_required":
@@ -567,6 +599,15 @@ def discover_ai_model_provider_catalog(
             context={"provider_id": normalized_provider_id},
         ) from exc
 
+    provider = db.scalar(
+        select(AiModelProviderConfig)
+        .where(AiModelProviderConfig.provider_id == normalized_provider_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if provider is None or provider.version != version:
+        _raise_version_conflict()
+    provider.verified_version = None
     now = utcnow_naive()
     rows = list(
         db.scalars(
@@ -685,6 +726,15 @@ def update_ai_model_catalog_entry(
             context={"model_id": model_id},
         )
 
+    before = _ready_policies(db)
+    # A model's transport identity can change independently of its connection.
+    # Invalidate the saved probe under the same transaction as the catalog edit.
+    db.execute(
+        update(AiModelProviderConfig)
+        .where(AiModelProviderConfig.default_model_id == model_id)
+        .values(verified_version=None)
+    )
+
     result = db.execute(
         update(AiModelCatalogEntry)
         .where(
@@ -704,6 +754,8 @@ def update_ai_model_catalog_entry(
     if result.rowcount != 1:
         _raise_version_conflict()
 
+    _preserve_ready_policies(db, before)
+
 
 def upsert_ai_model_route_override(
     db: Session,
@@ -711,6 +763,7 @@ def upsert_ai_model_route_override(
     workload_id: str,
     payload: AiModelRouteOverrideUpdateRequest,
     actor_user_id: str,
+    app_id: str | None = None,
 ) -> None:
     assert_registry_digest(payload.expected_registry_digest)
     workload = get_ai_capability_registry().get_llm_workload(workload_id)
@@ -720,57 +773,54 @@ def upsert_ai_model_route_override(
             code="admin.ai_model_workload_not_found",
             context={"workload_id": workload_id},
         )
-    provider_id = _validate_route_override(db, workload=workload, payload=payload)
-
+    app_id = _workload_app(workload, app_id)
+    _validate_route_override(db, workload=workload, payload=payload)
     row = db.scalar(
-        select(AiModelRouteOverride).where(AiModelRouteOverride.workload_id == workload.workload_id)
-    )
-    if row is None:
-        if payload.expected_version not in (None, 0):
-            _raise_version_conflict()
-        db.add(
-            AiModelRouteOverride(
-                id=new_id(),
-                workload_id=workload.workload_id,
-                route_mode=payload.route_mode,
-                provider_id=provider_id,
-                model_ids_json=dict(payload.model_ids),
-                local_max_output_tokens=payload.local_max_output_tokens,
-                external_max_output_tokens=payload.external_max_output_tokens,
-                runtime_adapter_id=(payload.runtime_adapter_id or workload.default_runtime_adapter),
-                version=1,
-                updated_by=actor_user_id,
-            )
-        )
-        try:
-            db.flush()
-        except IntegrityError as exc:
-            db.rollback()
-            _raise_version_conflict(exc)
-        return
-    if payload.expected_version != row.version:
-        _raise_version_conflict()
-
-    result = db.execute(
-        update(AiModelRouteOverride)
+        select(AiModelRouteOverride)
         .where(
-            AiModelRouteOverride.id == row.id,
-            AiModelRouteOverride.version == row.version,
+            AiModelRouteOverride.workload_id == workload.workload_id,
+            AiModelRouteOverride.app_id == app_id,
         )
-        .values(
-            route_mode=payload.route_mode,
-            provider_id=provider_id,
-            model_ids_json=dict(payload.model_ids),
-            local_max_output_tokens=payload.local_max_output_tokens,
-            external_max_output_tokens=payload.external_max_output_tokens,
-            runtime_adapter_id=(payload.runtime_adapter_id or workload.default_runtime_adapter),
-            version=row.version + 1,
-            updated_by=actor_user_id,
-            updated_at=utcnow_naive(),
+        .with_for_update()
+    )
+    if payload.expected_version not in ((row.version,) if row else (None, 0)):
+        _raise_version_conflict()
+    empty = not any(
+        (
+            payload.route_mode,
+            payload.provider_id,
+            payload.model_ids,
+            payload.local_max_output_tokens,
+            payload.external_max_output_tokens,
+            payload.runtime_adapter_id,
         )
     )
-    if result.rowcount != 1:
-        _raise_version_conflict()
+    if empty:
+        before = _ready_policies(db)
+        if row:
+            db.delete(row)
+        db.flush()
+        _preserve_ready_policies(db, before)
+        return
+    if row is None:
+        row = AiModelRouteOverride(
+            id=new_id(), workload_id=workload.workload_id, app_id=app_id, version=0
+        )
+        db.add(row)
+    row.route_mode = payload.route_mode
+    row.provider_id = payload.provider_id
+    row.model_ids_json = dict(payload.model_ids)
+    row.local_max_output_tokens = payload.local_max_output_tokens
+    row.external_max_output_tokens = payload.external_max_output_tokens
+    row.runtime_adapter_id = payload.runtime_adapter_id
+    row.version += 1
+    row.updated_by = actor_user_id
+    row.updated_at = utcnow_naive()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        _raise_version_conflict(exc)
+    _preserve_ready_policies(db, [(app_id, workload_id, role) for role in workload.model_roles])
 
 
 def delete_ai_model_route_override(
@@ -779,12 +829,24 @@ def delete_ai_model_route_override(
     workload_id: str,
     expected_registry_digest: str,
     expected_version: int,
+    app_id: str | None = None,
 ) -> None:
     assert_registry_digest(expected_registry_digest)
-    row = db.scalar(
-        select(AiModelRouteOverride).where(
-            AiModelRouteOverride.workload_id == workload_id.strip().lower()
+    workload = get_ai_capability_registry().get_llm_workload(workload_id)
+    if workload is None:
+        raise AiModelSettingsError(
+            status_code=404,
+            code="admin.ai_model_workload_not_found",
+            context={"workload_id": workload_id},
         )
+    app_id = _workload_app(workload, app_id)
+    row = db.scalar(
+        select(AiModelRouteOverride)
+        .where(
+            AiModelRouteOverride.workload_id == workload.workload_id,
+            AiModelRouteOverride.app_id == app_id,
+        )
+        .with_for_update()
     )
     if row is None:
         raise AiModelSettingsError(
@@ -794,8 +856,10 @@ def delete_ai_model_route_override(
         )
     if row.version != expected_version:
         _raise_version_conflict()
+    before = _ready_policies(db)
     db.delete(row)
     db.flush()
+    _preserve_ready_policies(db, before)
 
 
 def _serialize_provider(
@@ -804,38 +868,31 @@ def _serialize_provider(
     *,
     settings: Settings,
 ) -> AiModelProviderResponse:
-    descriptor = llm_provider_descriptor(provider_id)
+    descriptor = llm_provider_descriptor(row.provider_kind if row else provider_id)
     if descriptor is None:
         raise AiModelSettingsError(
             status_code=404,
             code="admin.ai_model_provider_not_found",
             context={"provider_id": provider_id},
         )
-    pool_values = (
-        _legacy_pool_values(route="local", provider_id=provider_id, settings=settings)
-        if descriptor.route_mode == "local"
-        else None
-    )
-    stored_endpoint_url = (row.endpoint_url or "").strip() if row is not None else ""
-    default_endpoint_url = (
-        pool_values.base_url.strip() if pool_values is not None else descriptor.default_endpoint_url
-    )
+    endpoint = (row.endpoint_url or "") if row else descriptor.default_endpoint_url
     return AiModelProviderResponse(
         provider_id=provider_id,
-        display_name=descriptor.display_name,
-        route_mode=descriptor.route_mode,
-        credential_kind=descriptor.credential_kind,
-        enabled=row.enabled if row is not None else descriptor.route_mode == "local",
-        endpoint_url=stored_endpoint_url or default_endpoint_url or None,
-        endpoint_source=(
-            "custom"
-            if stored_endpoint_url and stored_endpoint_url != default_endpoint_url
-            else "default"
-        ),
+        provider_kind=descriptor.provider_id,
+        display_name=(row.display_name or descriptor.display_name)
+        if row
+        else descriptor.display_name,
+        preset=row.preset if row else "",
+        verified=bool(row and row.verified_version == row.version),
+        route_mode=row.route_mode if row else descriptor.route_mode,
+        credential_kind=row.credential_kind if row else descriptor.credential_kind,
+        enabled=row.enabled if row else False,
+        endpoint_url=endpoint or None,
+        endpoint_source="default" if endpoint == descriptor.default_endpoint_url else "custom",
         has_api_key=bool(row and row.api_key_ciphertext),
-        default_model_id=row.default_model_id if row is not None else None,
-        version=row.version if row is not None else 0,
-        updated_at=row.updated_at if row is not None else None,
+        default_model_id=row.default_model_id if row else None,
+        version=row.version if row else 0,
+        updated_at=row.updated_at if row else None,
     )
 
 
@@ -872,6 +929,8 @@ def _serialize_workload(
     db: Session,
     descriptor: RegisteredLlmWorkload,
     override: AiModelRouteOverride | None,
+    *,
+    app_id: str,
 ) -> AiModelWorkloadResponse:
     serialized_override = _serialize_override(override) if override is not None else None
     resolved_routes: list[AiModelResolvedRouteResponse] = []
@@ -881,6 +940,7 @@ def _serialize_workload(
             resolved = resolve_ai_model_workload_route(
                 db,
                 workload_id=descriptor.workload_id,
+                app_id=app_id,
                 model_role=model_role,
             )
         except AiModelSettingsError as exc:
@@ -894,13 +954,17 @@ def _serialize_workload(
                 route_source=resolved.route_source,
                 config_source=resolved.config_source,
                 max_output_tokens=resolved.max_output_tokens,
+                connection_source=resolved.connection_source,
+                model_source=resolved.model_source,
+                output_cap_source=resolved.output_cap_source,
             )
         )
     return AiModelWorkloadResponse(
+        app_id=app_id,
         workload_id=descriptor.workload_id,
         task_kind=descriptor.task_kind,
         owner_domain=descriptor.owner_domain,
-        app_ids=list(descriptor.app_ids),
+        app_ids=[app_id],
         description=descriptor.description,
         label_key=descriptor.label_key,
         description_key=descriptor.description_key,
@@ -926,7 +990,7 @@ def _serialize_workload(
         default_route=descriptor.default_route,
         effective_route=(
             serialized_override.route_mode
-            if serialized_override is not None
+            if serialized_override is not None and serialized_override.route_mode
             else descriptor.default_route
         ),
         allowed_routes=list(descriptor.allowed_routes),
@@ -934,16 +998,8 @@ def _serialize_workload(
         required_capabilities=list(descriptor.required_capabilities),
         model_roles=list(descriptor.model_roles),
         external_data=descriptor.external_data,
-        local_max_output_tokens=_effective_max_output_tokens(
-            descriptor,
-            override,
-            route="local",
-        ),
-        external_max_output_tokens=_effective_max_output_tokens(
-            descriptor,
-            override,
-            route="external",
-        ),
+        local_max_output_tokens=_resolved_cap(db, descriptor, app_id, override, "local")[0],
+        external_max_output_tokens=_resolved_cap(db, descriptor, app_id, override, "external")[0],
         ready=readiness_code is None,
         readiness_code=readiness_code,
         resolved_routes=resolved_routes,
@@ -952,22 +1008,9 @@ def _serialize_workload(
     )
 
 
-def _effective_max_output_tokens(
-    workload: RegisteredLlmWorkload,
-    override: AiModelRouteOverride | None,
-    *,
-    route: Literal["local", "external"] | str,
-) -> int:
-    if route == "local":
-        if override is not None and override.local_max_output_tokens is not None:
-            return override.local_max_output_tokens
-        return workload.local_max_output_tokens
-    if override is not None and override.external_max_output_tokens is not None:
-        return override.external_max_output_tokens
-    return workload.external_max_output_tokens
-
-
-def _validate_endpoint_url(endpoint_url: str | None, *, provider_id: str) -> None:
+def _validate_endpoint_url(
+    endpoint_url: str | None, *, provider_id: str, route_mode: str | None = None
+) -> None:
     if endpoint_url is None:
         return
     parsed = urlsplit(endpoint_url)
@@ -976,14 +1019,37 @@ def _validate_endpoint_url(endpoint_url: str | None, *, provider_id: str) -> Non
             status_code=422,
             code="admin.ai_model_endpoint_invalid",
         )
-    if parsed.username or parsed.password:
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise AiModelSettingsError(status_code=422, code="admin.ai_model_endpoint_invalid") from exc
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise AiModelSettingsError(
             status_code=422,
             code="admin.ai_model_endpoint_invalid",
         )
-    if provider_id == "local":
+    if (route_mode or ("local" if provider_id == "local" else "external")) == "local":
+        allowed_hosts = {
+            host.strip().lower()
+            for host in get_settings().llm_local_allowed_hosts.split(",")
+            if host.strip()
+        }
+        if not parsed.hostname or parsed.hostname.lower() not in allowed_hosts:
+            raise AiModelSettingsError(
+                status_code=422, code="admin.ai_model_local_host_not_allowed"
+            )
+        if parsed.hostname in {"metadata.google.internal", "169.254.169.254"}:
+            raise AiModelSettingsError(status_code=422, code="admin.ai_model_endpoint_invalid")
+        try:
+            address = ipaddress.ip_address(parsed.hostname or "")
+        except ValueError:
+            address = None
+        if address is not None and (
+            address.is_link_local or address.is_multicast or address.is_unspecified
+        ):
+            raise AiModelSettingsError(status_code=422, code="admin.ai_model_endpoint_invalid")
         return
-    if parsed.scheme != "https" or parsed.port not in {None, 443} or not parsed.hostname:
+    if parsed.scheme != "https" or port not in {None, 443} or not parsed.hostname:
         raise AiModelSettingsError(
             status_code=422,
             code="admin.ai_model_endpoint_public_https_required",
@@ -1007,92 +1073,6 @@ def _validate_endpoint_url(endpoint_url: str | None, *, provider_id: str) -> Non
             status_code=422,
             code="admin.ai_model_endpoint_public_https_required",
         )
-
-
-def _runtime_provider_id(
-    db: Session,
-    *,
-    workload: RegisteredLlmWorkload,
-    route: str,
-    override: AiModelRouteOverride | None,
-) -> str:
-    if override is not None:
-        provider_id = (override.provider_id or ("local" if route == "local" else "")).strip()
-        if not provider_id:
-            raise AiModelSettingsError(
-                status_code=503,
-                code="admin.ai_model_provider_required",
-            )
-        descriptor = llm_provider_descriptor(provider_id)
-        if descriptor is None or descriptor.route_mode != route:
-            raise AiModelSettingsError(
-                status_code=503,
-                code="admin.ai_model_route_provider_mismatch",
-            )
-        if (
-            route == "external"
-            and workload.allowed_providers
-            and provider_id not in workload.allowed_providers
-        ):
-            raise AiModelSettingsError(
-                status_code=503,
-                code="admin.ai_model_provider_not_allowed",
-                context={"workload_id": workload.workload_id},
-            )
-        return provider_id
-
-    if route == "local":
-        return "local"
-
-    allowed = tuple(
-        provider_id
-        for provider_id in (workload.allowed_providers or external_llm_provider_ids())
-        if (
-            (descriptor := llm_provider_descriptor(provider_id)) is not None
-            and descriptor.route_mode == "external"
-        )
-    )
-    if not allowed:
-        raise AiModelSettingsError(
-            status_code=503,
-            code="admin.ai_model_provider_required",
-        )
-    enabled = tuple(
-        provider_id
-        for provider_id in allowed
-        if ((row := db.get(AiModelProviderConfig, provider_id)) is not None and row.enabled)
-    )
-    if len(enabled) == 1:
-        return enabled[0]
-    if not enabled:
-        raise AiModelSettingsError(
-            status_code=503,
-            code="admin.ai_model_provider_not_ready",
-        )
-    raise AiModelSettingsError(
-        status_code=503,
-        code="admin.ai_model_provider_required",
-    )
-
-
-def _legacy_pool_values(
-    *,
-    route: str,
-    provider_id: str,
-    settings: Settings,
-):
-    try:
-        return resolve_llm_pool_config_values(
-            pool=route,
-            provider=None if route == "local" else provider_id,
-            settings=settings,
-        )
-    except ValueError as exc:
-        raise AiModelSettingsError(
-            status_code=503,
-            code="admin.ai_model_provider_not_ready",
-            context={"provider_id": provider_id},
-        ) from exc
 
 
 def _require_model_capabilities(
@@ -1126,7 +1106,11 @@ def _ensure_provider_row(
         )
     row = AiModelProviderConfig(
         provider_id=provider_id,
-        enabled=descriptor.route_mode == "local",
+        provider_kind=descriptor.provider_id,
+        route_mode=descriptor.route_mode,
+        credential_kind=descriptor.credential_kind,
+        display_name=descriptor.display_name,
+        enabled=False,
         version=1,
         updated_by=actor_user_id,
     )
@@ -1159,104 +1143,60 @@ def _require_provider_model(
 
 
 def _validate_route_override(
-    db: Session,
-    *,
-    workload: RegisteredLlmWorkload,
-    payload: AiModelRouteOverrideUpdateRequest,
-) -> str:
-    runtime_adapter_id = payload.runtime_adapter_id or workload.default_runtime_adapter
-    if runtime_adapter_id not in workload.allowed_runtime_adapters:
-        raise AiModelSettingsError(
-            status_code=422,
-            code="admin.ai_model_runtime_adapter_not_allowed",
-            context={"workload_id": workload.workload_id},
-        )
-    _require_runtime_route_compatibility(
-        workload,
-        runtime_adapter_id=runtime_adapter_id,
-        route=payload.route_mode,
-        provider_id=payload.provider_id,
-        status_code=422,
-    )
-    if payload.route_mode not in workload.allowed_routes:
+    db: Session, *, workload: RegisteredLlmWorkload, payload: AiModelRouteOverrideUpdateRequest
+) -> None:
+    route = payload.route_mode or workload.default_route
+    runtime = payload.runtime_adapter_id or workload.default_runtime_adapter
+    if route not in workload.allowed_routes:
         raise AiModelSettingsError(
             status_code=422,
             code="admin.ai_model_route_not_allowed",
             context={"workload_id": workload.workload_id},
         )
-    provider_id = payload.provider_id or ("local" if payload.route_mode == "local" else "")
-    if not provider_id:
+    if runtime not in workload.allowed_runtime_adapters:
         raise AiModelSettingsError(
             status_code=422,
-            code="admin.ai_model_provider_required",
-        )
-    if payload.route_mode == "local" and provider_id != "local":
-        raise AiModelSettingsError(
-            status_code=422,
-            code="admin.ai_model_route_provider_mismatch",
-        )
-    if payload.route_mode == "external" and provider_id == "local":
-        raise AiModelSettingsError(
-            status_code=422,
-            code="admin.ai_model_route_provider_mismatch",
-        )
-    if (
-        payload.route_mode == "external"
-        and workload.allowed_providers
-        and provider_id not in workload.allowed_providers
-    ):
-        raise AiModelSettingsError(
-            status_code=422,
-            code="admin.ai_model_provider_not_allowed",
+            code="admin.ai_model_runtime_adapter_not_allowed",
             context={"workload_id": workload.workload_id},
         )
-    provider = db.get(AiModelProviderConfig, provider_id)
-    if provider is None or not provider.enabled:
-        raise AiModelSettingsError(
-            status_code=422,
-            code="admin.ai_model_provider_not_ready",
-            context={"provider_id": provider_id},
-        )
-
-    unknown_roles = sorted(set(payload.model_ids) - set(workload.model_roles))
-    if unknown_roles:
+    unknown = set(payload.model_ids) - set(workload.model_roles)
+    if unknown:
         raise AiModelSettingsError(
             status_code=422,
             code="admin.ai_model_role_not_allowed",
-            context={"model_role": unknown_roles[0]},
+            context={"model_role": sorted(unknown)[0]},
         )
-    selected_models = [
-        _require_provider_model(
-            db,
-            provider_id=provider_id,
-            model_id=model_id,
-            require_enabled=True,
-        )
-        for model_id in payload.model_ids.values()
-    ]
-    if not selected_models and provider.default_model_id:
-        selected_models.append(
-            _require_provider_model(
-                db,
-                provider_id=provider_id,
-                model_id=provider.default_model_id,
-                require_enabled=True,
-            )
-        )
-    if payload.route_mode == "external" and not selected_models:
-        raise AiModelSettingsError(
-            status_code=422,
-            code="admin.ai_model_selection_required",
-        )
-    required_capabilities = set(workload.required_capabilities)
-    for model in selected_models:
-        if not required_capabilities.issubset(model.capabilities):
+    if payload.model_ids and not payload.provider_id:
+        raise AiModelSettingsError(status_code=422, code="admin.ai_model_provider_required")
+    if payload.provider_id:
+        provider = db.get(AiModelProviderConfig, payload.provider_id)
+        if provider is None or not provider.enabled:
             raise AiModelSettingsError(
                 status_code=422,
-                code="admin.ai_model_capability_mismatch",
-                context={"model_id": model.id, "workload_id": workload.workload_id},
+                code="admin.ai_model_provider_not_ready",
+                context={"provider_id": payload.provider_id},
             )
-    return provider_id
+        if provider.route_mode != route:
+            raise AiModelSettingsError(
+                status_code=422, code="admin.ai_model_route_provider_mismatch"
+            )
+        _require_runtime_route_compatibility(
+            workload,
+            runtime_adapter_id=runtime,
+            route=route,
+            provider_id=provider.provider_kind,
+            status_code=422,
+        )
+        for model_id in payload.model_ids.values():
+            model = _require_provider_model(
+                db, provider_id=provider.provider_id, model_id=model_id, require_enabled=True
+            )
+            try:
+                _require_model_capabilities(model, workload=workload)
+            except AiModelSettingsError as exc:
+                raise AiModelSettingsError(
+                    status_code=422, code=exc.code, context=exc.context
+                ) from exc
 
 
 def _require_runtime_route_compatibility(
@@ -1291,7 +1231,13 @@ def _model_is_referenced(db: Session, *, model_id: str) -> bool:
             AiModelProviderConfig.default_model_id == model_id
         )
     )
-    if provider_default is not None:
+    if (
+        provider_default is not None
+        or db.scalar(
+            select(AiModelPolicyDefault.app_id).where(AiModelPolicyDefault.model_id == model_id)
+        )
+        is not None
+    ):
         return True
     return any(
         model_id in row.model_ids.values() for row in db.scalars(select(AiModelRouteOverride)).all()
@@ -1323,3 +1269,221 @@ __all__ = [
     "update_ai_model_provider",
     "upsert_ai_model_route_override",
 ]
+
+
+def create_ai_model_connection(
+    db: Session, *, payload: AiModelConnectionCreateRequest, actor_user_id: str
+) -> str:
+    assert_registry_digest(payload.expected_registry_digest)
+    descriptor = llm_provider_descriptor(payload.provider_kind)
+    if descriptor is None:
+        raise AiModelSettingsError(
+            status_code=422,
+            code="admin.ai_model_provider_not_found",
+            context={"provider_id": payload.provider_kind},
+        )
+    if (
+        payload.provider_kind not in {"local", "openai_compatible"}
+        and payload.route_mode != "external"
+    ):
+        raise AiModelSettingsError(status_code=422, code="admin.ai_model_route_provider_mismatch")
+    if payload.provider_kind == "local" and payload.route_mode != "local":
+        raise AiModelSettingsError(status_code=422, code="admin.ai_model_route_provider_mismatch")
+    if payload.preset and payload.provider_kind != "openai_compatible":
+        raise AiModelSettingsError(status_code=422, code="admin.ai_model_route_provider_mismatch")
+    identifier = "conn_" + new_id().replace("-", "")[:24]
+    row = AiModelProviderConfig(
+        provider_id=identifier,
+        provider_kind=descriptor.provider_id,
+        display_name=payload.display_name,
+        route_mode=payload.route_mode,
+        credential_kind=payload.credential_kind or descriptor.credential_kind,
+        preset=payload.preset,
+        enabled=False,
+        version=1,
+        updated_by=actor_user_id,
+    )
+    db.add(row)
+    db.flush()
+    update_ai_model_provider(
+        db,
+        provider_id=identifier,
+        payload=AiModelProviderUpdateRequest(
+            **payload.model_dump(
+                exclude={"provider_kind", "route_mode", "preset", "expected_version", "enabled"}
+            ),
+            expected_version=1,
+            enabled=False,
+        ),
+        actor_user_id=actor_user_id,
+    )
+    return identifier
+
+
+def _ready_policies(db: Session) -> list[tuple[str, str, str]]:
+    ready = []
+    for workload in get_ai_capability_registry().llm_workloads.values():
+        for app_id in workload.app_ids:
+            for role in workload.model_roles:
+                try:
+                    resolve_ai_model_workload_route(
+                        db, workload_id=workload.workload_id, app_id=app_id, model_role=role
+                    )
+                except AiModelSettingsError:
+                    continue
+                ready.append((app_id, workload.workload_id, role))
+    return ready
+
+
+def _preserve_ready_policies(db: Session, policies: list[tuple[str, str, str]]) -> None:
+    for app_id, workload_id, role in policies:
+        try:
+            resolve_ai_model_workload_route(
+                db, workload_id=workload_id, app_id=app_id, model_role=role
+            )
+        except AiModelSettingsError as exc:
+            raise AiModelSettingsError(
+                status_code=422,
+                code="admin.ai_model_default_breaks_workload",
+                context={"workload_id": workload_id, "app_id": app_id},
+            ) from exc
+
+
+def update_ai_model_policy_default(
+    db: Session,
+    *,
+    app_id: str,
+    route: str,
+    payload: AiModelPolicyDefaultUpdateRequest,
+    actor_user_id: str,
+) -> None:
+    from open_work_hub_api.domains.auth.app_catalog import get_app_catalog_item
+
+    assert_registry_digest(payload.expected_registry_digest)
+    if route not in {"local", "external"}:
+        raise AiModelSettingsError(status_code=422, code="admin.ai_model_route_provider_mismatch")
+    if app_id and get_app_catalog_item(app_id) is None:
+        raise AiModelSettingsError(status_code=404, code="admin.ai_model_app_not_found")
+    before = _ready_policies(db)
+    row = db.scalar(
+        select(AiModelPolicyDefault)
+        .where(AiModelPolicyDefault.app_id == app_id, AiModelPolicyDefault.route_mode == route)
+        .with_for_update()
+    )
+    if payload.expected_version != (row.version if row else 0):
+        _raise_version_conflict()
+    provider = (
+        db.scalar(
+            select(AiModelProviderConfig)
+            .where(AiModelProviderConfig.provider_id == payload.provider_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if payload.provider_id
+        else None
+    )
+    if payload.model_id and not provider:
+        raise AiModelSettingsError(status_code=422, code="admin.ai_model_provider_required")
+    if payload.provider_id and (provider is None or not provider.enabled):
+        raise AiModelSettingsError(
+            status_code=422,
+            code="admin.ai_model_provider_not_ready",
+            context={"provider_id": payload.provider_id},
+        )
+    if provider is not None and provider.route_mode != route:
+        raise AiModelSettingsError(status_code=422, code="admin.ai_model_route_provider_mismatch")
+    if payload.model_id and provider is not None:
+        _require_provider_model(
+            db, provider_id=provider.provider_id, model_id=payload.model_id, require_enabled=True
+        )
+        if not app_id:
+            if payload.expected_provider_version != provider.version:
+                _raise_version_conflict()
+            provider.default_model_id = payload.model_id
+            provider.version += 1
+            provider.updated_by = actor_user_id
+    if app_id and not any((payload.provider_id, payload.model_id, payload.max_output_tokens)):
+        if row is not None:
+            db.delete(row)
+            db.flush()
+            _preserve_ready_policies(db, before)
+        return
+    if row is None:
+        row = AiModelPolicyDefault(app_id=app_id, route_mode=route, version=0)
+        db.add(row)
+    row.provider_id = payload.provider_id
+    row.model_id = payload.model_id if app_id else None
+    row.max_output_tokens = payload.max_output_tokens
+    row.version += 1
+    row.updated_by = actor_user_id
+    row.updated_at = utcnow_naive()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        _raise_version_conflict(exc)
+    _preserve_ready_policies(db, before)
+
+
+def probe_ai_model_connection(
+    db: Session, *, provider_id: str, expected_version: int, expected_registry_digest: str
+) -> bool:
+    """Check a saved model inventory without holding a DB connection during I/O."""
+    assert_registry_digest(expected_registry_digest)
+    row = db.get(AiModelProviderConfig, provider_id)
+    if row is None:
+        raise AiModelSettingsError(
+            status_code=404,
+            code="admin.ai_model_provider_not_found",
+            context={"provider_id": provider_id},
+        )
+    if row.version != expected_version:
+        _raise_version_conflict()
+    _validate_endpoint_url(row.endpoint_url, provider_id=provider_id, route_mode=row.route_mode)
+    model = _require_provider_model(
+        db, provider_id=provider_id, model_id=row.default_model_id or "", require_enabled=True
+    )
+    try:
+        key = (
+            decrypt_api_key(row.api_key_ciphertext).get_secret_value()
+            if row.api_key_ciphertext
+            else ""
+        )
+    except AiModelCredentialError as exc:
+        raise AiModelSettingsError(
+            status_code=503, code="admin.ai_model_credential_encryption_unavailable"
+        ) from exc
+    kind, endpoint, requires_key, model_key = (
+        row.provider_kind,
+        row.endpoint_url or "",
+        row.credential_kind == "api_key",
+        model.model_key,
+    )
+    model_id, model_version = model.id, model.version
+    timeout = min(10.0, get_settings().llm_request_timeout_seconds)
+    db.rollback()
+    try:
+        inventory = discover_provider_models(
+            kind, endpoint, key or None, timeout, requires_credentials=requires_key
+        )
+        ready = any(item.model_key == model_key for item in inventory)
+    except ProviderModelDiscoveryError:
+        ready = False
+    current_connection = db.scalar(
+        select(AiModelProviderConfig)
+        .where(AiModelProviderConfig.provider_id == provider_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if current_connection is None or current_connection.version != expected_version:
+        _raise_version_conflict()
+    current_model = db.scalar(
+        select(AiModelCatalogEntry)
+        .where(AiModelCatalogEntry.id == model_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if current_model is None or current_model.version != model_version:
+        _raise_version_conflict()
+    current_connection.verified_version = expected_version if ready else None
+    db.flush()
+    return ready

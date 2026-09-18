@@ -5,6 +5,7 @@ from open_work_hub_api.core.app_registry import (
 
 PLANNER_APP = app_registration(
     "planner",
+    ai_capability_modules=('open_work_hub_api.domains.planner',),
     nav_items=(
         AppNavRegistration(
             id="planner-calendar",

@@ -38,7 +38,7 @@ Paths under `domains/` are relative to `apps/api/src/open_work_hub_api/`. Keep t
 
 ## Conversation context policy
 
-`managed_compression_policy()` supplies the native compression settings for profile synchronization and the retained legacy model-update path. `ops/hermes/bootstrap.py` applies the same settings at startup; `test_hermes_bootstrap.py` checks parity because bootstrap runs outside the API package. Fresh local/external profiles receive the policy before activation, and existing profiles and isolated scheduled-job profiles receive it on reconciliation. A rejected configuration update fails admission and is not cached as successful.
+`managed_compression_policy()` supplies the native compression settings for profile synchronization. `ops/hermes/bootstrap.py` applies the same settings at startup; `test_hermes_bootstrap.py` checks parity because bootstrap runs outside the API package. Fresh local/external profiles receive the policy before activation, and existing profiles and isolated scheduled-job profiles receive it on reconciliation. A rejected configuration update fails admission and is not cached as successful.
 
 The managed settings enable compression with `threshold=0.50`, `threshold_tokens=100000`, `target_ratio=0.20`, and `protect_last_n=20`. Proactive tool-result pruning starts at `48000` tokens, with `8000` minimum result characters and `4096` minimum reclaimed tokens. The token threshold triggers compaction; it is not a hard per-request input limit. Hermes owns token accounting, model-window adjustments, summary/tail selection and persistence. Auxiliary compression follows the admitted main model with no fallback chain. The `session_search` restriction under [identity, tools and approvals](#identity-tools-and-approvals) still applies.
 
@@ -93,6 +93,38 @@ storage error, including refused connections, credentials and bucket permissions
 before changing sandbox lifecycle code. Recreating a sandbox cannot restore a
 missing storage service or recover bytes that were never saved.
 
+### DB connection and default-policy cutover
+
+Connection credentials/endpoints and model selection are DB-owned. The typed API/worker settings no longer read `OPEN_WORK_HUB_LLM_LOCAL_API_KEY`, `OPEN_WORK_HUB_LLM_LOCAL_BASE_URL`, `OPEN_WORK_HUB_LLM_LOCAL_PROVIDER` or `OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER`. Timeouts, embedding/reranker configuration, infrastructure secrets, external egress allowlists and the credential-encryption master key remain outside this control plane.
+
+For an existing installation, stop admission/API/worker processes before the cutover; preserve the DB, private env, and encryption master key together. From the intended checkout with its own environment loaded:
+
+```bash
+(cd apps/api && uv run --python 3.12 alembic upgrade head)
+uv run --directory apps/api --python 3.12 python ../../scripts/migrate-llm-settings.py
+uv run --directory apps/api --python 3.12 python ../../scripts/migrate-llm-settings.py --apply
+pnpm check:env-contract
+```
+
+The first helper invocation is a dry run. Resolve `${...}` references in retired LLM settings before running it; the helper refuses these values before any database mutation instead of encrypting a literal placeholder. Apply fills only missing DB values, verifies existing ciphertext decrypts, commits the DB first, and atomically removes retired keys from the ignored mode-0600 `.env`, preserving a private recovery copy. Repeating it preserves stored keys. Before running it, add `OPEN_WORK_HUB_LLM_LOCAL_ALLOWED_HOSTS` from `.env.example`, including the existing local inference hostname if different; the helper rejects endpoints outside this deployment allowlist. Active legacy Terminal sessions block removing `OPENROUTER_API_KEY`; drain them first. Native sessions already use DB keys. The optional legacy egress credential path remains only for old sessions. Do not remove deployment secrets or keys from another checkout as part of a dev cutover.
+
+For development, rebuild the retained Terminal broker from the matching checkout before restarting it after key removal. Its image must include `legacy_policy.py` and the health check that permits a drained legacy credential. Recreate egress so it discards the retired token, then the broker; gateway/plugin updates follow the [development update procedure](#updating-an-existing-development-installation):
+
+```bash
+(
+  source scripts/dev-env.sh
+  dev_docker compose --env-file "$(dev_compose_env_file)" -f "$(dev_compose_file)" build hermes-terminal-broker
+  dev_docker compose --env-file "$(dev_compose_env_file)" -f "$(dev_compose_file)" up -d --no-deps --force-recreate --wait hermes-terminal-egress
+  dev_docker compose --env-file "$(dev_compose_env_file)" -f "$(dev_compose_file)" up -d --no-deps --force-recreate --wait hermes-terminal-broker
+)
+```
+
+Production requires the corresponding authorized release images and guarded deployment procedure; a development cutover never replaces its broker image or credentials.
+
+Migration `llm_connections_20260918` preserves existing connection IDs, model IDs, ciphertext, explicit overrides and special workload caps. It copies shared-workload overrides to each owning app. It seeds an explicit default only when unambiguous; the env helper can fill a missing legacy external selection. An ambiguous/unconfigured route remains unavailable until the administrator chooses it. Rollback requires the matching database/configuration backup; downgrade cannot safely merge independently changed connection credentials or app policies.
+
+After restarting API/worker, verify the admin settings, run a representative text/tool/structured request, and check resolved connection/model/source metadata. Hermes agent status reflects the current chatbot policy; profile inventory is labelled as the last synchronized model, and historical runs retain their admission-time snapshots. Cached A→B→A synchronization must not change displayed or executed model A.
+
 ### Development checkout
 
 API and worker both require `jsonschema` in their default dependency groups for shared structured workloads; optional local-ML extras are not a runtime prerequisite. After updating the checkout, sync both locked Python environments before starting services:
@@ -103,9 +135,9 @@ uv sync --frozen --python 3.12 --directory apps/worker
 ```
 
 1. Preserve existing ignored `.env`; add missing keys from `.env.example` without replacing credentials.
-2. Set `OPEN_WORK_HUB_HERMES_ENABLED=true` explicitly. Generation fails unavailable when Hermes is disabled; it does not silently use the old SDK. The historical dev script can derive enablement from an OpenRouter key only when this flag is absent, so explicit configuration is required for local providers.
+2. Set `OPEN_WORK_HUB_HERMES_ENABLED=true` explicitly. Generation fails unavailable when Hermes is disabled; it does not silently use the old SDK. Dev enablement is explicit and is never inferred from a provider key.
 3. Configure distinct runtime, management and MCP control secrets. Keep declared URL/port pairs aligned.
-4. Set `OPEN_WORK_HUB_HERMES_MAX_CONCURRENT_RUNS=10` unless capacity planning requires a different positive value. It is a global OWH dispatch limit, not a per-user limit. Match worker concurrency to the intended throughput.
+4. Set `OPEN_WORK_HUB_HERMES_MAX_CONCURRENT_RUNS=10` unless capacity planning requires a different positive value. It is a global OWH dispatch ceiling, not a per-user limit or a requirement to start ten workers. The [shared worker setting](../release/README.md#persistent-development-runtime) defaults to one child for a demo deployment, so queued interactive runs execute sequentially. Size both limits against available memory and the intended throughput.
 5. Start infrastructure, migrate through the normal API startup path, and start API/web/worker:
 
 ```bash
@@ -114,7 +146,7 @@ bash scripts/dev-infra.sh status
 ./dev.sh --with-worker --no-infra
 ```
 
-6. Configure the active provider/model and workload routes in Admin LLM settings. Open the chatbot; its work/files panel exposes concurrent runs, stop, uploaded/generated files and owned legacy Terminal archives. A worker and the shared Beat scheduler are required for interactive queue recovery.
+6. Create named connections and encrypted API keys in Admin LLM settings, discover/register and approve models, test the saved connection, and enable it. Set global local/external defaults, then optional app/workload overrides. See the [model policy contract](gateway.md#contract). Open the chatbot; its work/files panel exposes concurrent runs, stop, uploaded/generated files and owned legacy Terminal archives. A worker and the shared Beat scheduler are required for interactive queue recovery.
 
 7. Complete the [sandbox execution check](#sandbox-execution-check), including the terminal call in a new chatbot conversation. Gateway health and a completed conversation alone do not prove that a tool executed successfully.
 
@@ -179,11 +211,19 @@ Retained application tool/approval steps (including `/chatbot/chat/stream` and g
 
 Session pagination orders local activity by accepted user run admission, with a stable ID tie-breaker. Listing sessions and replaying an idempotent request do not advance activity timestamps.
 
-Native tools are denied for application workloads unless the registered descriptor explicitly permits a read-only tool. `web_search.answer` permits Hermes `web_search` and `web_extract`; it retains its current administrator-controlled external model route and external-data policy. Each native call needs a durable, run-locked admission, bounded by the request budget (maximum 20 calls across search and extraction). The snapshot is intersected with the current registry before execution. Web search returns a validated answer/citations object through the common Hermes result contract; it no longer invokes the Anthropic SDK directly. Native `tool_search`/`tool_describe` inspect the current native tool assembly after authenticated interactive admission; they do not authorize execution. Native Tool Search may describe schemas, but its `tool_call` bridge still executes through this middleware and admission check.
+Native tools are denied for application workloads unless the registered descriptor explicitly permits a read-only tool. Interactive chatbot runs provide Hermes `web_search` and `web_extract` (page extraction/crawling) through the same authenticated tool middleware. The standalone Web Search app and its API/workload are retired; existing conversation and audit rows are retained, without registering the retired app or its routes. Each native call needs a durable, run-locked admission, bounded by the request budget (maximum 20 calls across search and extraction). The snapshot is intersected with the current registry before execution. Native `tool_search`/`tool_describe` inspect the current native tool assembly after authenticated interactive admission; they do not authorize execution. For application workloads, middleware uses the pinned public registry/catalog operations with only `owh_submit_result` and server-admitted native tools. The pinned Tool Search defers plugin tools, so denying all discovery also prevents schema-driven result submission. Other profile tools remain undiscoverable to these workloads. Native `tool_call` unwraps its target and still executes through the same middleware, schema validation and admission checks.
 
 Native cron controls remain available through a separate `-jobs` profile with all MCP servers removed. They use administrator policy at profile reconciliation. Jobs do not receive an OWH interactive run or sandbox identity; the managed middleware denies tool execution without that identity. Native cron scheduling is separate from the OWH run queue and is not a route to app writes.
 
 ## Durability and concurrency
+
+Run-event streams release the request's authorization/read transaction before
+opening SSE. Each event poll owns a short session and rechecks current app
+admission; an open browser stream must not retain its initial database
+connection. The shared [database connection budget](../release/README.md#database-connection-budgets)
+also isolates authentication checkout waits from the request threads needed to
+finish other requests. Verify these boundaries with the database concurrency
+regression and Hermes runtime stream/admission tests.
 
 PostgreSQL owns user/profile/session/run bindings, inputs, sanitized events, exact approvals, execution leases and the dispatch outbox. Publication is at least once; native run creation uses the durable OWH run ID as its idempotency key. Client keys are bound to request digests. Active leases fence duplicate consumers.
 
@@ -295,6 +335,14 @@ docker exec -i open-work-hub-dev-hermes-gateway python - \
 ```
 
 Require exit `0` and all PASS lines for unattended code execution, concurrent conversation isolation, native write/patch and code RPC, outside/symlink denial, timeout recovery and cancellation of detached children. The original guard must remain denied outside an admitted code call. These checks make no model calls.
+
+Check workload result discovery against the same pinned registry and Tool Search bridge, with synthetic authenticated RPC and no model call:
+
+```bash
+docker exec -i open-work-hub-dev-hermes-gateway python - < ops/hermes/check_workload_tools.py
+```
+
+Require exit `0` and the PASS line for scoped discovery, native result submission/correction, and denial of unrelated tools and missing run context.
 
 Run the offline preview check as well; it needs neither Playwright installation nor inference:
 

@@ -27,6 +27,7 @@ from open_work_hub_api.domains.ai.model_credentials import encrypt_api_key
 from open_work_hub_api.domains.ai.model_settings_models import (
     AiModelCatalogEntry,
     AiModelProviderConfig,
+    AiModelPolicyDefault,
 )
 from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.ai import agent as ai_agent
@@ -333,8 +334,9 @@ def _configure_database_local_provider() -> None:
             )
             db.add(model)
         provider.enabled = True
-        provider.endpoint_url = get_settings().llm_local_base_url
+        provider.endpoint_url = "http://127.0.0.1:12434/engines/v1"
         provider.default_model_id = model.id
+        db.merge(AiModelPolicyDefault(app_id="", route_mode=provider.route_mode, provider_id=provider.provider_id, version=1))
         db.commit()
 
 
@@ -376,6 +378,7 @@ def _configure_database_external_provider(
         provider.endpoint_url = endpoint_url
         provider.api_key_ciphertext = encrypt_api_key(f"test-{provider_id}-key")
         provider.default_model_id = model.id
+        db.merge(AiModelPolicyDefault(app_id="", route_mode=provider.route_mode, provider_id=provider.provider_id, version=1))
         db.commit()
 
 

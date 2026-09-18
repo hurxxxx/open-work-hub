@@ -6,6 +6,11 @@ from sqlalchemy.orm import Session
 from open_work_hub_api.core.db import get_db_session
 from open_work_hub_api.core.i18n import localized_http_exception
 from open_work_hub_api.domains.ai.model_settings_schemas import (
+    AiModelConnectionCreateRequest,
+    AiModelConnectionProbeRequest,
+    AiModelConnectionProbeResponse,
+    AiModelPolicyDefaultUpdateRequest,
+    AiModelRouteMode,
     AiModelCatalogCreateRequest,
     AiModelCatalogUpdateRequest,
     AiModelDiscoveryRequest,
@@ -16,6 +21,9 @@ from open_work_hub_api.domains.ai.model_settings_schemas import (
 )
 from open_work_hub_api.domains.ai.model_settings_service import (
     AiModelSettingsError,
+    create_ai_model_connection,
+    probe_ai_model_connection,
+    update_ai_model_policy_default,
     create_ai_model_catalog_entry,
     delete_ai_model_route_override,
     discover_ai_model_provider_catalog,
@@ -203,6 +211,7 @@ def put_ai_model_catalog_entry(
 def put_ai_model_route_override(
     workload_id: str,
     payload: AiModelRouteOverrideUpdateRequest,
+    app_id: str | None = Query(default=None),
     context: AuthContext = Depends(require_permission("audit.read")),
     db: Session = Depends(get_db_session),
 ) -> AiModelSettingsResponse:
@@ -211,6 +220,7 @@ def put_ai_model_route_override(
         upsert_ai_model_route_override(
             db,
             workload_id=workload_id,
+            app_id=app_id,
             payload=payload,
             actor_user_id=context.user.id,
         )
@@ -225,6 +235,7 @@ def put_ai_model_route_override(
         summary=f"Updated AI model route for {workload_id}",
         payload={
             "workload_id": workload_id,
+            "app_id": app_id,
             "route_mode": payload.route_mode,
             "provider_id": payload.provider_id,
             "model_roles": sorted(payload.model_ids),
@@ -242,6 +253,7 @@ def put_ai_model_route_override(
 )
 def reset_ai_model_route_override(
     workload_id: str,
+    app_id: str | None = Query(default=None),
     expected_registry_digest: str = Query(min_length=64, max_length=64),
     expected_version: int = Query(ge=1),
     context: AuthContext = Depends(require_permission("audit.read")),
@@ -252,6 +264,7 @@ def reset_ai_model_route_override(
         delete_ai_model_route_override(
             db,
             workload_id=workload_id,
+            app_id=app_id,
             expected_registry_digest=expected_registry_digest,
             expected_version=expected_version,
         )
@@ -271,3 +284,96 @@ def reset_ai_model_route_override(
 
 
 __all__ = ["router"]
+
+
+@router.post("/connections", response_model=AiModelSettingsResponse, status_code=201)
+def post_ai_model_connection(
+    payload: AiModelConnectionCreateRequest,
+    context: AuthContext = Depends(require_permission("audit.read")),
+    db: Session = Depends(get_db_session),
+) -> AiModelSettingsResponse:
+    _ensure_platform_admin(context, db)
+    try:
+        identifier = create_ai_model_connection(db, payload=payload, actor_user_id=context.user.id)
+    except AiModelSettingsError as exc:
+        _raise_settings_error(db, exc)
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.ai_model.connection.create",
+        entity_kind="ai_model_provider",
+        entity_id=identifier,
+        summary="Created AI connection",
+        payload={"provider_kind": payload.provider_kind, "route_mode": payload.route_mode},
+    )
+    db.commit()
+    return get_ai_model_settings_snapshot(db)
+
+
+@router.post("/connections/{provider_id}/probe", response_model=AiModelConnectionProbeResponse)
+def post_ai_model_connection_probe(
+    provider_id: AiModelProviderId,
+    payload: AiModelConnectionProbeRequest,
+    context: AuthContext = Depends(require_permission("audit.read")),
+    db: Session = Depends(get_db_session),
+) -> AiModelConnectionProbeResponse:
+    _ensure_platform_admin(context, db)
+    actor_id = context.user.id
+    try:
+        ready = probe_ai_model_connection(
+            db,
+            provider_id=provider_id,
+            expected_version=payload.expected_version,
+            expected_registry_digest=payload.expected_registry_digest,
+        )
+    except AiModelSettingsError as exc:
+        _raise_settings_error(db, exc)
+    record_audit_log(
+        db,
+        actor_user_id=actor_id,
+        action="admin.ai_model.connection.probe",
+        entity_kind="ai_model_provider",
+        entity_id=provider_id,
+        summary="Tested AI connection",
+        payload={"ready": ready},
+    )
+    db.commit()
+    return AiModelConnectionProbeResponse(
+        ready=ready,
+        code=None if ready else "admin.ai_model_provider_not_ready",
+        version=payload.expected_version,
+    )
+
+
+@router.put("/defaults/{route}", response_model=AiModelSettingsResponse)
+def put_ai_model_policy_default(
+    route: AiModelRouteMode,
+    payload: AiModelPolicyDefaultUpdateRequest,
+    app_id: str = Query(default="", max_length=64),
+    context: AuthContext = Depends(require_permission("audit.read")),
+    db: Session = Depends(get_db_session),
+) -> AiModelSettingsResponse:
+    _ensure_platform_admin(context, db)
+    try:
+        update_ai_model_policy_default(
+            db, app_id=app_id, route=route, payload=payload, actor_user_id=context.user.id
+        )
+    except AiModelSettingsError as exc:
+        _raise_settings_error(db, exc)
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.ai_model.default.update",
+        entity_kind="ai_model_policy_default",
+        entity_id=app_id or None,
+        summary="Updated AI default policy",
+        payload={
+            "app_id": app_id,
+            "route": route,
+            "provider_id": payload.provider_id,
+            "model_id": payload.model_id,
+            "max_output_tokens": payload.max_output_tokens,
+        },
+    )
+    db.commit()
+    return get_ai_model_settings_snapshot(db)
