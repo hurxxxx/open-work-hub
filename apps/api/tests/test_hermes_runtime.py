@@ -1690,6 +1690,19 @@ def test_native_tool_budget_is_durable_and_atomic_per_run(application_postgres_d
     from starlette.requests import Request
     from open_work_hub_api.domains.hermes import mcp_router
 
+    from open_work_hub_api.domains.ai.registry import AiCapabilityRegistry
+
+    registry = AiCapabilityRegistry()
+    registry.register_llm_workload(
+        workload_id="test.native_web",
+        task_kind="test_native_web",
+        owner_domain="ai",
+        app_id="chatbot",
+        description="Native tool admission contract",
+        native_tools=("web_search", "web_extract"),
+    )
+    monkeypatch.setattr(mcp_router, "get_ai_capability_registry", lambda: registry)
+
     engine = create_engine(application_postgres_dsn)
     try:
         with Session(engine) as db:
@@ -1701,7 +1714,7 @@ def test_native_tool_budget_is_durable_and_atomic_per_run(application_postgres_d
                 binding,
                 None,
                 kind="workload",
-                workload_id="web_search.answer",
+                workload_id="test.native_web",
                 runtime_options={
                     "native_tools": ["web_search", "terminal"],
                     "native_tool_limit": 1,
@@ -1761,6 +1774,31 @@ def admit_runtime_apps(db, user_id):
         db.flush()
         db.merge(AppUserGrant(app_id=app_id, user_id=user_id))
     db.flush()
+
+
+@pytest.mark.anyio
+async def test_run_event_stream_releases_request_connection_before_streaming(
+    application_postgres_dsn,
+):
+    from open_work_hub_api.domains.hermes import router
+
+    engine = create_engine(application_postgres_dsn, pool_size=1, max_overflow=0)
+    try:
+        with Session(engine) as db:
+            user, binding = seed(db)
+            admit_runtime_apps(db, user.id)
+            run = stage(db, binding, session_for(db, binding))
+            db.commit()
+            stream = router.stream_run_events(run.id, last_event_id=None, db=db, current_user=user)
+            try:
+                # The stream polls with its own short sessions. Its admission
+                # read must not reserve another connection for the SSE lifetime.
+                assert not db.in_transaction()
+                assert engine.pool.checkedout() == 0
+            finally:
+                await stream.body_iterator.aclose()
+    finally:
+        engine.dispose()
 
 
 @pytest.mark.anyio

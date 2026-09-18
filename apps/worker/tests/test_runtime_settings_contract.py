@@ -18,7 +18,6 @@ SHARED_RUNTIME_SETTING_FIELDS = (
     "asr_backend",
     "llm_external_allowed_providers",
     "ai_allowed_external_providers",
-    "ai_default_external_llm_provider",
     "ai_default_external_search_provider",
     "ai_external_llm_enabled",
     "ai_external_planner_execution_adapter",

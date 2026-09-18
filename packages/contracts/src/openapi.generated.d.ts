@@ -1378,6 +1378,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/ai-model-settings/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ai Model Connection */
+        post: operations["admin_post_ai_model_connection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ai-model-settings/connections/{provider_id}/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ai Model Connection Probe */
+        post: operations["admin_post_ai_model_connection_probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ai-model-settings/defaults/{route}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Ai Model Policy Default */
+        put: operations["admin_put_ai_model_policy_default_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/document-processing": {
         parameters: {
             query?: never;
@@ -5942,23 +5993,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/web-search/ask/stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ask Stream */
-        post: operations["web_search_ask_stream_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/mail/accounts/test": {
         parameters: {
             query?: never;
@@ -7805,6 +7839,63 @@ export interface components {
             /** Enabled */
             enabled: boolean;
         };
+        /** AiModelConnectionCreateRequest */
+        AiModelConnectionCreateRequest: {
+            /** Expected Registry Digest */
+            expected_registry_digest: string;
+            /** Expected Version */
+            expected_version?: number | null;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Endpoint Url */
+            endpoint_url?: string | null;
+            /** Default Model Id */
+            default_model_id?: string | null;
+            /** Api Key */
+            api_key?: string | null;
+            /**
+             * Clear Api Key
+             * @default false
+             */
+            clear_api_key: boolean;
+            /** Display Name */
+            display_name: string;
+            /** Credential Kind */
+            credential_kind?: ("none" | "api_key") | null;
+            /** Provider Kind */
+            provider_kind: string;
+            /**
+             * Route Mode
+             * @default external
+             * @enum {string}
+             */
+            route_mode: "local" | "external";
+            /**
+             * Preset
+             * @default
+             * @enum {string}
+             */
+            preset: "" | "vllm" | "ollama";
+        };
+        /** AiModelConnectionProbeRequest */
+        AiModelConnectionProbeRequest: {
+            /** Expected Registry Digest */
+            expected_registry_digest: string;
+            /** Expected Version */
+            expected_version: number;
+        };
+        /** AiModelConnectionProbeResponse */
+        AiModelConnectionProbeResponse: {
+            /** Ready */
+            ready: boolean;
+            /** Code */
+            code?: string | null;
+            /** Version */
+            version: number;
+        };
         /** AiModelDiscoveryRequest */
         AiModelDiscoveryRequest: {
             /** Expected Registry Digest */
@@ -7812,13 +7903,12 @@ export interface components {
         };
         /** AiModelOrphanedOverrideResponse */
         AiModelOrphanedOverrideResponse: {
+            /** App Id */
+            app_id?: string | null;
             /** Workload Id */
             workload_id: string;
-            /**
-             * Route Mode
-             * @enum {string}
-             */
-            route_mode: "local" | "external";
+            /** Route Mode */
+            route_mode: ("local" | "external") | null;
             /** Provider Id */
             provider_id?: string | null;
             /** Model Ids */
@@ -7836,10 +7926,61 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
+        /** AiModelPolicyDefaultResponse */
+        AiModelPolicyDefaultResponse: {
+            /** App Id */
+            app_id: string;
+            /**
+             * Route Mode
+             * @enum {string}
+             */
+            route_mode: "local" | "external";
+            /** Provider Id */
+            provider_id?: string | null;
+            /** Model Id */
+            model_id?: string | null;
+            /** Max Output Tokens */
+            max_output_tokens?: number | null;
+            /**
+             * Version
+             * @default 0
+             */
+            version: number;
+        };
+        /** AiModelPolicyDefaultUpdateRequest */
+        AiModelPolicyDefaultUpdateRequest: {
+            /** Expected Registry Digest */
+            expected_registry_digest: string;
+            /**
+             * Expected Version
+             * @default 0
+             */
+            expected_version: number;
+            /** Expected Provider Version */
+            expected_provider_version?: number | null;
+            /** Provider Id */
+            provider_id?: string | null;
+            /** Model Id */
+            model_id?: string | null;
+            /** Max Output Tokens */
+            max_output_tokens?: number | null;
+        };
         /** AiModelProviderResponse */
         AiModelProviderResponse: {
             /** Provider Id */
             provider_id: string;
+            /** Provider Kind */
+            provider_kind: string;
+            /**
+             * Preset
+             * @default
+             */
+            preset: string;
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
             /** Display Name */
             display_name: string;
             /**
@@ -7889,6 +8030,10 @@ export interface components {
              * @default false
              */
             clear_api_key: boolean;
+            /** Display Name */
+            display_name?: string | null;
+            /** Credential Kind */
+            credential_kind?: ("none" | "api_key") | null;
         };
         /** AiModelResolvedRouteResponse */
         AiModelResolvedRouteResponse: {
@@ -7905,19 +8050,34 @@ export interface components {
             route_source: "default" | "override";
             /**
              * Config Source
-             * @enum {string}
+             * @constant
              */
-            config_source: "database" | "legacy_env" | "database_with_legacy_env";
+            config_source: "database";
             /** Max Output Tokens */
             max_output_tokens: number;
+            /**
+             * Connection Source
+             * @default global
+             * @enum {string}
+             */
+            connection_source: "global" | "app" | "workload";
+            /**
+             * Model Source
+             * @default connection
+             * @enum {string}
+             */
+            model_source: "global" | "app" | "workload" | "connection";
+            /**
+             * Output Cap Source
+             * @default registry
+             * @enum {string}
+             */
+            output_cap_source: "global" | "app" | "workload" | "registry";
         };
         /** AiModelRouteOverrideResponse */
         AiModelRouteOverrideResponse: {
-            /**
-             * Route Mode
-             * @enum {string}
-             */
-            route_mode: "local" | "external";
+            /** Route Mode */
+            route_mode: ("local" | "external") | null;
             /** Provider Id */
             provider_id?: string | null;
             /** Model Ids */
@@ -7941,11 +8101,8 @@ export interface components {
             expected_registry_digest: string;
             /** Expected Version */
             expected_version?: number | null;
-            /**
-             * Route Mode
-             * @enum {string}
-             */
-            route_mode: "local" | "external";
+            /** Route Mode */
+            route_mode?: ("local" | "external") | null;
             /** Provider Id */
             provider_id?: string | null;
             /** Model Ids */
@@ -7971,9 +8128,15 @@ export interface components {
             workloads: components["schemas"]["AiModelWorkloadResponse"][];
             /** Orphaned Overrides */
             orphaned_overrides: components["schemas"]["AiModelOrphanedOverrideResponse"][];
+            /** Defaults */
+            defaults?: components["schemas"]["AiModelPolicyDefaultResponse"][];
+            /** Provider Kinds */
+            provider_kinds?: string[];
         };
         /** AiModelWorkloadResponse */
         AiModelWorkloadResponse: {
+            /** App Id */
+            app_id: string;
             /** Workload Id */
             workload_id: string;
             /** Task Kind */
@@ -12467,6 +12630,8 @@ export interface components {
             external?: components["schemas"]["LlmPoolHealthResponse"] | null;
             /** External Providers */
             external_providers?: components["schemas"]["LlmPoolHealthResponse"][];
+            /** Connections */
+            connections?: components["schemas"]["LlmPoolHealthResponse"][];
         };
         /** LlmPoolHealthResponse */
         LlmPoolHealthResponse: {
@@ -12474,6 +12639,8 @@ export interface components {
             pool: string;
             /** Provider */
             provider: string;
+            /** Connection Id */
+            connection_id?: string | null;
             /** Base Url */
             base_url: string;
             /** Model */
@@ -15899,18 +16066,6 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-        };
-        /** WebSearchAskRequest */
-        WebSearchAskRequest: {
-            /** Question */
-            question: string;
-            /**
-             * Max Uses
-             * @default 5
-             */
-            max_uses: number;
-            /** Conversation Id */
-            conversation_id?: string | null;
         };
         /** WhiteboardCollabSessionResponse */
         WhiteboardCollabSessionResponse: {
@@ -20519,7 +20674,9 @@ export interface operations {
     };
     admin_put_ai_model_route_override_put: {
         parameters: {
-            query?: never;
+            query?: {
+                app_id?: string | null;
+            };
             header?: never;
             path: {
                 workload_id: string;
@@ -20573,6 +20730,7 @@ export interface operations {
     admin_reset_ai_model_route_override_delete: {
         parameters: {
             query: {
+                app_id?: string | null;
                 expected_registry_digest: string;
                 expected_version: number;
             };
@@ -20583,6 +20741,165 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelSettingsResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_post_ai_model_connection_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiModelConnectionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelSettingsResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_post_ai_model_connection_probe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiModelConnectionProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiModelConnectionProbeResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_put_ai_model_policy_default_put: {
+        parameters: {
+            query?: {
+                app_id?: string;
+            };
+            header?: never;
+            path: {
+                route: "local" | "external";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiModelPolicyDefaultUpdateRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -38357,57 +38674,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    web_search_ask_stream_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WebSearchAskRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Access denied. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

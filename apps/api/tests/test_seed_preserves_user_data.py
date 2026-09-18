@@ -203,11 +203,11 @@ def test_seed_recreates_missing_app_as_disabled_without_granting_access(client: 
 
     _seed_dev_accounts()
     with get_session_factory()() as db:
-        db.delete(db.get(CompanyAppControl, "web-search"))
+        db.delete(db.get(CompanyAppControl, "recording"))
         db.commit()
         ensure_dev_login_seed_data(db)
-        assert db.get(CompanyAppControl, "web-search").enabled is False
-        assert db.get(AppAccessPolicy, "web-search").audience == "selected"
+        assert db.get(CompanyAppControl, "recording").enabled is False
+        assert db.get(AppAccessPolicy, "recording").audience == "selected"
 
 
 def test_seed_preserves_existing_master_and_audience_policy(client: TestClient) -> None:

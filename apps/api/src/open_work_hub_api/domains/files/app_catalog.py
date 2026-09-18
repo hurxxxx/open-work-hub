@@ -5,6 +5,7 @@ from open_work_hub_api.core.app_registry import (
 
 FILES_APP = app_registration(
     "files",
+    ai_capability_modules=('open_work_hub_api.domains.files',),
     backend_domain="files",
     nav_items=(
         AppNavRegistration(

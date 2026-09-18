@@ -114,7 +114,6 @@ class PlatformExtensionBootstrapError(RuntimeError):
 
 class PlatformExtensionSettings(Protocol):
     ai_allowed_external_providers: str
-    ai_default_external_llm_provider: str
     ai_default_external_search_provider: str
     ai_external_llm_enabled: bool
     ai_external_planner_execution_adapter: str
@@ -426,7 +425,6 @@ def _validate_external_provider_settings(
     ai_allowed, ai_unknown = _normalize_ai_external_provider_list(
         settings.ai_allowed_external_providers
     )
-    ai_default_llm = normalize_external_llm_provider_id(settings.ai_default_external_llm_provider)
     ai_default = _normalize_external_search_provider_id(
         settings.ai_default_external_search_provider
     )
@@ -440,17 +438,6 @@ def _validate_external_provider_settings(
             "OPEN_WORK_HUB_AI_ALLOWED_EXTERNAL_PROVIDERS must include at least one "
             "supported external provider"
         )
-    if _ai_external_llm_provider_settings_required(settings):
-        if ai_default_llm is None:
-            problems.append(
-                "OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER contains unsupported "
-                f"external provider: {settings.ai_default_external_llm_provider}"
-            )
-        elif ai_allowed and ai_default_llm not in ai_allowed:
-            problems.append(
-                "OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER must be listed in "
-                f"OPEN_WORK_HUB_AI_ALLOWED_EXTERNAL_PROVIDERS: {ai_default_llm}"
-            )
     if ai_default is None:
         problems.append(
             "OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER contains unsupported "

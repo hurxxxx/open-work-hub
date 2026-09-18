@@ -42,13 +42,14 @@ def _init_worker_db(
             connection.execute(
                 """
                 CREATE TABLE ai_model_provider_configs (
-                    provider_id TEXT PRIMARY KEY
+                    provider_id TEXT PRIMARY KEY, provider_kind TEXT, credential_kind TEXT
                 )
                 """
             )
             connection.execute("CREATE TABLE ai_model_catalog_entries (id TEXT PRIMARY KEY)")
+            connection.execute("CREATE TABLE ai_model_policy_defaults (app_id TEXT, route_mode TEXT)")
             connection.execute(
-                "CREATE TABLE ai_model_route_overrides (workload_id TEXT PRIMARY KEY)"
+                "CREATE TABLE ai_model_route_overrides (workload_id TEXT PRIMARY KEY, app_id TEXT)"
             )
         if seed_provider_rows:
             connection.executemany(
@@ -101,6 +102,26 @@ def test_celery_app_skips_llm_routing_precheck_for_non_llm_queue_group(
 
     assert celery_module.settings.queue_group == "default"
     assert celery_module.celery_app.main == "open_work_hub_worker"
+
+
+@pytest.mark.parametrize("configured, expected", [(None, 1), ("3", 3)])
+def test_native_celery_worker_uses_configured_concurrency_not_host_cpu_count(
+    monkeypatch, tmp_path, configured, expected
+):
+    from celery.worker.worker import WorkController
+
+    monkeypatch.setenv("OPEN_WORK_HUB_POSTGRES_DSN", _worker_dsn(_worker_db_path(tmp_path)))
+    monkeypatch.setenv("OPEN_WORK_HUB_WORKER_QUEUE_GROUP", "default")
+    monkeypatch.setenv("OPEN_WORK_HUB_WORKER_BROKER_URL", "memory://")
+    monkeypatch.setenv("OPEN_WORK_HUB_WORKER_RESULT_BACKEND", "cache+memory://")
+    if configured is None:
+        monkeypatch.delenv("OPEN_WORK_HUB_WORKER_CONCURRENCY", raising=False)
+    else:
+        monkeypatch.setenv("OPEN_WORK_HUB_WORKER_CONCURRENCY", configured)
+    module = _reload_worker_module("open_work_hub_worker.celery_app")
+    controller = SimpleNamespace(app=module.celery_app)
+    WorkController.setup_defaults(controller)
+    assert controller.concurrency == expected
 
 
 def test_meeting_summarize_uses_complete_chat_without_local_precheck(
@@ -242,7 +263,7 @@ def test_celery_app_initializes_platform_extensions_with_worker_settings(
 
     settings = captured["settings"]
     assert settings.__class__.__module__ == "open_work_hub_worker.settings"
-    assert settings.ai_default_external_llm_provider == "openai"
+    assert not hasattr(settings, "ai_default_external_llm_provider")
 
 
 def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeline(

@@ -64,26 +64,6 @@
       ]
     },
     {
-      "app_id": "web-search",
-      "title": "Web Search",
-      "icon_key": "globe-2",
-      "execution_context_kind": "personal",
-      "resource_scope": "personal",
-      "route_base": "/apps/web-search",
-      "entry_route_id": "web-search.root",
-      "launcher": {
-        "placement": "category",
-        "pinned_by_default": false
-      },
-      "routes": [
-        {
-          "route_id": "web-search.root",
-          "suffix": "",
-          "chrome": "containedSurface"
-        }
-      ]
-    },
-    {
       "app_id": "pms",
       "title": "PMS",
       "icon_key": "folder-kanban",

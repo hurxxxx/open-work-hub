@@ -125,9 +125,12 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         predicate_id="rag.enabled",
         predicate=_rag_enabled,
     )
-    registry.register_llm_task(
+    registry.register_llm_workload(
+        workload_id="rag_grounded_answer",
         task_kind="rag_grounded_answer",
-        default_policy="local_only",
+        owner_domain="rag",
+        default_route="local",
+        required_capabilities=("chat", "tool_calling"),
         description="Grounded answer synthesis for authorized RAG queries.",
         app_ids=("retrieval-search",),
     )

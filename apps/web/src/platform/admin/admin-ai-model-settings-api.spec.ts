@@ -26,6 +26,7 @@ function workload(
   overrides: Partial<AiModelWorkload> = {},
 ): AiModelWorkload {
   return {
+    app_id: appIds[0] ?? '',
     workload_id: workloadId,
     task_kind: workloadId,
     owner_domain: 'ai',
@@ -62,6 +63,8 @@ function settings(
 ): AdminAiModelSettings {
   return {
     registry_digest: 'a'.repeat(64),
+    defaults: [],
+    provider_kinds: [],
     providers,
     models: [],
     workloads,
@@ -74,6 +77,9 @@ function provider(
   overrides: Partial<AiModelProviderConfig> = {},
 ): AiModelProviderConfig {
   return {
+    provider_kind: providerId,
+    preset: '',
+    verified: false,
     provider_id: providerId,
     display_name: providerId,
     route_mode: providerId === 'local' ? 'local' : 'external',
@@ -90,10 +96,11 @@ function provider(
 }
 
 describe('admin AI model settings model', () => {
-  it('groups registered workloads by every owning app and keeps stable ordering', () => {
+  it('groups each shared workload policy by its own app and keeps stable ordering', () => {
     const groups = groupAiModelWorkloadsByApp([
       workload('mail.summarize', ['mail']),
       workload('shared.answer', ['docs', 'mail']),
+      workload('shared.answer', ['docs', 'mail'], { app_id: 'mail' }),
       workload('platform.health', []),
     ]);
 
@@ -106,6 +113,7 @@ describe('admin AI model settings model', () => {
       'mail.summarize',
       'shared.answer',
     ]);
+    expect(groups[0]?.workloads).toHaveLength(1);
   });
 
   it('requires every workload capability when filtering models', () => {
@@ -159,9 +167,12 @@ describe('admin AI model settings model', () => {
             {
               model_role: 'primary',
               provider_id: 'local',
-              model_key: 'legacy-local-model',
+              model_key: 'local-model',
               route_source: 'default',
-              config_source: 'legacy_env',
+              config_source: 'database',
+              connection_source: 'global',
+              model_source: 'connection',
+              output_cap_source: 'global',
               max_output_tokens: 32768,
             },
           ],
@@ -231,14 +242,19 @@ describe('admin AI model settings model', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await resetAdminAiModelWorkloadRoute('token', 'mail.summarize', {
-      expected_registry_digest: 'a'.repeat(64),
-      expected_version: 7,
-    });
+    await resetAdminAiModelWorkloadRoute(
+      'token',
+      'mail.summarize',
+      {
+        expected_registry_digest: 'a'.repeat(64),
+        expected_version: 7,
+      },
+      'mail',
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        'expected_registry_digest=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&expected_version=7',
+        'expected_registry_digest=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&expected_version=7&app_id=mail',
       ),
       expect.objectContaining({ method: 'DELETE' }),
     );
@@ -290,15 +306,24 @@ describe('admin AI model settings model', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await updateAdminAiModelWorkloadRoute('token', 'web-search.answer', {
-      expected_registry_digest: 'a'.repeat(64),
-      expected_version: null,
-      route_mode: 'external',
-      provider_id: 'anthropic',
-      model_ids: { default: 'model-1' },
-      local_max_output_tokens: 32768,
-      external_max_output_tokens: 65536,
-    });
+    await updateAdminAiModelWorkloadRoute(
+      'token',
+      'mail_summarize',
+      {
+        expected_registry_digest: 'a'.repeat(64),
+        expected_version: null,
+        route_mode: 'external',
+        provider_id: 'anthropic',
+        model_ids: { default: 'model-1' },
+        local_max_output_tokens: 32768,
+        external_max_output_tokens: 65536,
+      },
+      'mail',
+    );
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      '/api/v1/admin/ai-model-settings/workloads/mail_summarize/route?app_id=mail',
+    );
 
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(request.body))).toMatchObject({

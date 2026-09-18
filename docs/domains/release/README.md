@@ -116,6 +116,10 @@ Missing files, unknown keys/profiles, duplicate JSON keys and invalid values fai
 validation errors do not print supplied values. `pnpm check:env-contract` validates this
 document as well as the remaining env contract. Public config keys may be absent from
 env files or appear as overrides; non-config key coverage/order and duplicate checks remain.
+Sibling dev/prod checkouts are each checked against their own versioned template, typed
+settings, public defaults and retired-key declaration. Different release versions may
+therefore use different keys during a staged cutover; missing peer contracts and invalid
+peer settings still fail validation. Source-token scanning covers the active checkout.
 API and Worker Nx inputs include these files, so config-only edits invalidate their cached
 checks. Runtime config and pool regressions run in the API/Worker contract test targets.
 
@@ -179,6 +183,23 @@ excluding query text and business data. Clients identify themselves as
 must not grow the retained connection count. Investigate persistent `idle in transaction`
 separately, and never terminate arbitrary connections to conceal a leak.
 
+Authentication runs its synchronous database work through an application-scoped
+[AnyIO `CapacityLimiter`](https://anyio.readthedocs.io/en/stable/threads.html), separate from the default request-thread limiter. Its
+capacity is the existing API pool size plus overflow; it does not increase the
+database connection budget. This keeps blocked authentication checkouts from
+occupying every thread needed by authenticated requests to finish and return
+their connections. Use AnyIO's public `to_thread.run_sync(..., limiter=...)`
+interface; keep cancellation shielding enabled so a request cannot close a
+session while its authentication thread still uses it. A larger database pool
+or thread count does not fix this dependency scheduling cycle.
+
+Verify concurrent authenticated reads with
+`uv run --directory apps/api --group dev pytest tests/test_database_request_concurrency.py`.
+The regression uses a smaller connection pool than the request-thread budget,
+exercises real authentication and app admission, and checks connection return.
+Long-lived streams must also release admission-only read transactions before
+opening the stream; each later database poll owns a short session.
+
 For existing installations, explicitly review the pool keys in each protected `.env`:
 old API values of 32/64 override the new defaults. Apply reviewed values through the
 development supervisor or the guarded production deployment procedure with the required
@@ -188,7 +209,9 @@ requests. No database recreation or PostgreSQL capacity increase is required by 
 
 ## Persistent development runtime
 
-`dev.sh` is a foreground development command: its children stop when its session exits. A continuously available development address requires an independent host supervisor with restart-on-exit and persistent logs, using the same entrypoint, selected flags and checkout. For native minimal installation this is `./dev.sh --minimal-infra --no-infra`; use `./dev.sh --with-worker` when the selected configuration includes a worker. Manage that runtime through its supervisor instead of starting a second copy or stopping its children directly. Development worker concurrency is declared in `apps/worker/project.json`; include every child in the database and memory budgets. Keep host-specific service definitions outside the repository.
+`dev.sh` is a foreground development command: its children stop when its session exits. A continuously available development address requires an independent host supervisor with restart-on-exit and persistent logs, using the same entrypoint, selected flags and checkout. For native minimal installation this is `./dev.sh --minimal-infra --no-infra`; use `./dev.sh --with-worker` when the selected configuration includes a worker. Manage that runtime through its supervisor instead of starting a second copy or stopping its children directly. Keep host-specific service definitions outside the repository.
+
+Worker concurrency is the typed `OPEN_WORK_HUB_WORKER_CONCURRENCY` setting in `config/runtime.json` (default `1`, range `1..64`). Both development and the released production worker use Celery's public `worker_concurrency` configuration; the standard commands must not override it with a separate CLI count. One prefork child is the minimum for the demo deployment; the worker supervisor and single Beat scheduler remain required, and queued tasks run sequentially. CPU-count auto-detection is unsuitable for shared LXC hosts, where Python may see more CPUs than the process affinity allows. Include every child in the database and memory budgets. Raising concurrency requires a memory/throughput budget and worker restart. A source configuration change reaches production through the normal release image; Celery's targeted `pool_shrink` can reduce idle processes immediately, but is temporary and does not survive worker restart.
 
 After startup, reboot or recovery, follow the shared [development access checks](installation-operations.md#development-access-checks): verify local listeners and API readiness, then use `pnpm dev:login-smoke` plus browser login, screens and logout for HTTP development access. `pnpm dev:public-smoke` remains required for an HTTPS public-domain development origin; it rejects HTTP and IP-address origins, including HTTPS IP addresses. Remote-PC installations also require a separate client-path browser check. INSTALL uses the same conditions; a server checking its own address does not establish client reachability.
 
