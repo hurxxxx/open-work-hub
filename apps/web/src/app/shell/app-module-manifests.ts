@@ -14,7 +14,6 @@ import { recordingModule } from '@/src/app-modules/recording';
 import { retrievalSearchModule } from '@/src/app-modules/retrieval-search';
 import { settingsModule } from '@/src/app-modules/settings';
 import { videoChatModule } from '@/src/app-modules/video-chat';
-import { webSearchModule } from '@/src/app-modules/web-search';
 import { whiteboardModule } from '@/src/app-modules/whiteboard';
 import {
   agentTerminalManifest,
@@ -34,7 +33,6 @@ import {
   retrievalSearchManifest,
   settingsManifest,
   videoChatManifest,
-  webSearchManifest,
   whiteboardManifest,
 } from './app-contract-manifests';
 import type { FeatureModuleRegistryInput } from './feature-module-registry';
@@ -57,7 +55,6 @@ export {
   retrievalSearchManifest,
   settingsManifest,
   videoChatManifest,
-  webSearchManifest,
   whiteboardManifest,
 };
 
@@ -66,7 +63,6 @@ export const DEFAULT_APP_MODULES = [
   homeModule,
   agentTerminalModule,
   chatbotModule,
-  webSearchModule,
   pmsModule,
   docsModule,
   filesModule,

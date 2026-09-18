@@ -129,7 +129,7 @@ def _simulate_ai_security(
         "/api/v1/admin/ai-security/simulate",
         headers=headers,
         json={
-            "app_id": "web-search",
+            "app_id": "chatbot",
             "task_kind": "web_search",
             "capability": "web_search",
             "provider": "anthropic",
@@ -169,9 +169,9 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
     assert "task_policy_apps" not in summary
     assert client.get("/api/v1/admin/ai-security/task-policies", headers=headers).status_code == 404
     external_candidate_ids = {item["app_id"] for item in summary["external_app_candidates"]}
-    assert "web-search" in external_candidate_ids
+    assert not external_candidate_ids
     assert summary["condition_options"]["apps"]
-    assert "web-search" in {
+    assert "chatbot" in {
         option["value"] for option in summary["condition_options"]["external_apps"]
     }
     assert any(option["value"] == "llm" for option in summary["condition_options"]["capabilities"])
@@ -194,7 +194,7 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
                 "pii": "mask_and_send",
             },
             "external_app_actions": {
-                "web-search": {
+                "chatbot": {
                     "credential": "mask_and_send",
                     "pii": "mask_and_send",
                 },
@@ -206,8 +206,8 @@ def test_admin_ai_security_policy_crud_simulation_and_audit_payload(
     assert data_protection["custom_block_terms"] == [term]
     assert data_protection["blocker_actions"]["pii"] == "mask_and_send"
     assert "credential" not in data_protection["blocker_actions"]
-    assert data_protection["external_app_actions"]["web-search"]["pii"] == "mask_and_send"
-    assert "credential" not in data_protection["external_app_actions"]["web-search"]
+    assert data_protection["external_app_actions"]["chatbot"]["pii"] == "mask_and_send"
+    assert "credential" not in data_protection["external_app_actions"]["chatbot"]
 
     rule_response = client.post(
         "/api/v1/admin/ai-security/rules",
@@ -322,11 +322,11 @@ def test_admin_ai_security_monitoring_and_blocked_audit_filter(
                     actor_user_id=actor_id,
                     action="ai_external_call",
                     entity_kind="ai_external",
-                    entity_id="web-search",
+                    entity_id="chatbot",
                     summary="External web search blocked",
                     payload={
                         "status": "blocked_external",
-                        "app_id": "web-search",
+                        "app_id": "chatbot",
                         "task_kind": "web_search",
                         "policy_reason": "external_payload_blocked",
                         "blocked_entity_types": ["credential"],
@@ -338,11 +338,11 @@ def test_admin_ai_security_monitoring_and_blocked_audit_filter(
                     actor_user_id=actor_id,
                     action="llm_call",
                     entity_kind="llm",
-                    entity_id="web-search",
+                    entity_id="chatbot",
                     summary="LLM call switched to local",
                     payload={
                         "status": "success",
-                        "app_id": "web-search",
+                        "app_id": "chatbot",
                         "task_kind": "web_search",
                         "forced_local": True,
                         "ai_security_policy_effect": "local_only",
@@ -356,11 +356,11 @@ def test_admin_ai_security_monitoring_and_blocked_audit_filter(
                     actor_user_id=actor_id,
                     action="ai_external_call",
                     entity_kind="ai_external",
-                    entity_id="web-search",
+                    entity_id="chatbot",
                     summary="External web search masked",
                     payload={
                         "status": "success",
-                        "app_id": "web-search",
+                        "app_id": "chatbot",
                         "task_kind": "web_search",
                         "mask_applied": True,
                         "masked_entity_types": ["pii:email"],
@@ -402,7 +402,7 @@ def test_admin_ai_security_monitoring_and_blocked_audit_filter(
                     actor_user_id=actor_id,
                     action="ai_external_call",
                     source="api.general.web_search",
-                    app_id="web-search",
+                    app_id="chatbot",
                     task_kind="web_search",
                     capability="web_search",
                     provider="anthropic",
@@ -420,7 +420,7 @@ def test_admin_ai_security_monitoring_and_blocked_audit_filter(
                     actor_user_id=actor_id,
                     action="ai_external_call",
                     source="api.general.web_search",
-                    app_id="web-search",
+                    app_id="chatbot",
                     task_kind="web_search",
                     capability="web_search",
                     provider="anthropic",
@@ -438,7 +438,7 @@ def test_admin_ai_security_monitoring_and_blocked_audit_filter(
                     actor_user_id=actor_id,
                     action="ai_external_call",
                     source="api.general.web_search",
-                    app_id="web-search",
+                    app_id="chatbot",
                     task_kind="web_search",
                     capability="web_search",
                     provider="anthropic",
@@ -721,7 +721,7 @@ def test_admin_ai_security_simulation_uses_configured_external_app_mask_action(
     _put_ai_security_data_protection(
         client,
         headers,
-        external_app_actions={"web-search": {"pii": "mask_and_send"}},
+        external_app_actions={"chatbot": {"pii": "mask_and_send"}},
     )
 
     simulation = _simulate_ai_security(
@@ -752,7 +752,7 @@ def test_admin_ai_security_simulation_scopes_external_app_action_to_app(
     _put_ai_security_data_protection(
         client,
         headers,
-        external_app_actions={"web-search": {"pii": "mask_and_send"}},
+        external_app_actions={"chatbot": {"pii": "mask_and_send"}},
     )
 
     simulation = _simulate_ai_security(
@@ -781,7 +781,7 @@ def test_admin_ai_security_simulation_blocks_mixed_external_app_blockers(
     _put_ai_security_data_protection(
         client,
         headers,
-        external_app_actions={"web-search": {"pii": "mask_and_send"}},
+        external_app_actions={"chatbot": {"pii": "mask_and_send"}},
     )
 
     simulation = _simulate_ai_security(
@@ -812,7 +812,7 @@ def test_admin_ai_security_simulation_hard_blockers_override_external_app_mask(
         client,
         headers,
         external_app_actions={
-            "web-search": {
+            "chatbot": {
                 "sensitive_identifier": "mask_and_send",
                 "pii": "mask_and_send",
                 "internal_url": "mask_and_send",
@@ -844,7 +844,7 @@ def test_admin_ai_security_simulation_block_external_overrides_external_app_mask
     _put_ai_security_data_protection(
         client,
         headers,
-        external_app_actions={"web-search": {"pii": "mask_and_send"}},
+        external_app_actions={"chatbot": {"pii": "mask_and_send"}},
     )
     rule_response = client.post(
         "/api/v1/admin/ai-security/rules",
@@ -853,7 +853,7 @@ def test_admin_ai_security_simulation_block_external_overrides_external_app_mask
             "name": "Web search local only",
             "description": "explicit rule wins over external app masking",
             "enabled": True,
-            "app_id": "web-search",
+            "app_id": "chatbot",
             "task_kind": "web_search",
             "capability": "web_search",
             "provider": "anthropic",
@@ -962,7 +962,7 @@ def test_policy_rule_matches_any_configured_task_kind(client: TestClient) -> Non
             name="External search family deny",
             description="",
             enabled=True,
-            app_id="web-search",
+            app_id="chatbot",
             task_kinds_json=["web_search", "web_search_answer"],
             capability="web_search",
             effect="block_external",
@@ -974,7 +974,7 @@ def test_policy_rule_matches_any_configured_task_kind(client: TestClient) -> Non
         matched = resolve_ai_security_policy(
             db,
             AiSecurityPolicyContext(
-                app_id="web-search",
+                app_id="chatbot",
                 task_kind="web_search_answer",
                 capability="web_search",
             ),
@@ -982,7 +982,7 @@ def test_policy_rule_matches_any_configured_task_kind(client: TestClient) -> Non
         missed = resolve_ai_security_policy(
             db,
             AiSecurityPolicyContext(
-                app_id="web-search",
+                app_id="chatbot",
                 task_kind="files_grounded_chat",
                 capability="web_search",
             ),
@@ -1004,7 +1004,7 @@ def test_external_transfer_exception_matches_any_configured_task_kind(
             name="Approved research exports",
             description="",
             enabled=True,
-            app_id="web-search",
+            app_id="chatbot",
             task_kinds_json=["web_search", "web_search_answer"],
             capability="web_search",
             allowed_blocker_types_json=["internal_context"],
@@ -1022,7 +1022,7 @@ def test_external_transfer_exception_matches_any_configured_task_kind(
         matched = resolve_ai_security_external_transfer_exception(
             db,
             AiSecurityPolicyContext(
-                app_id="web-search",
+                app_id="chatbot",
                 task_kind="web_search_answer",
                 capability="web_search",
             ),
@@ -1031,7 +1031,7 @@ def test_external_transfer_exception_matches_any_configured_task_kind(
         missed = resolve_ai_security_external_transfer_exception(
             db,
             AiSecurityPolicyContext(
-                app_id="web-search",
+                app_id="chatbot",
                 task_kind="files_grounded_chat",
                 capability="web_search",
             ),
@@ -1305,7 +1305,7 @@ def test_external_capability_bypasses_all_ai_security_when_enforcement_disabled(
         settings = _get_or_create_data_protection_settings(db)
         settings.enforcement_enabled = False
         settings.enforcement_disabled_reason = "maintenance window"
-        settings.external_app_actions_json = {"web-search": {"pii": "mask_and_send"}}
+        settings.external_app_actions_json = {"chatbot": {"pii": "mask_and_send"}}
         db.add(
             AiSecurityPolicyRule(
                 id=new_id(),
@@ -1329,7 +1329,7 @@ def test_external_capability_bypasses_all_ai_security_when_enforcement_disabled(
                 task_kind="web_search",
                 capability="web_search",
                 provider="anthropic",
-                app="web-search",
+                app="chatbot",
                 input_texts=[raw_text],
             ),
             lambda execution: execution.sanitized_text(fallback="fallback"),
@@ -1378,7 +1378,7 @@ def test_external_capability_uses_configured_external_app_mask_action(
             db.add(settings)
         else:
             settings.enforcement_enabled = True
-        settings.external_app_actions_json = {"web-search": {"pii": "mask_and_send"}}
+        settings.external_app_actions_json = {"chatbot": {"pii": "mask_and_send"}}
         db.commit()
 
         result = execute_external_capability(
@@ -1389,7 +1389,7 @@ def test_external_capability_uses_configured_external_app_mask_action(
                 task_kind="web_search",
                 capability="web_search",
                 provider="anthropic",
-                app="web-search",
+                app="chatbot",
                 input_texts=[sensitive_text],
             ),
             lambda execution: execution.sanitized_text(fallback="fallback"),
@@ -1439,7 +1439,7 @@ def test_external_capability_mask_action_is_scoped_to_app(
             db.add(settings)
         else:
             settings.enforcement_enabled = True
-        settings.external_app_actions_json = {"web-search": {"pii": "mask_and_send"}}
+        settings.external_app_actions_json = {"chatbot": {"pii": "mask_and_send"}}
         db.commit()
 
         with pytest.raises(AiExternalCapabilityPolicyViolation) as error:
@@ -1479,7 +1479,7 @@ def test_external_capability_blocks_mixed_external_app_blockers(
     sensitive_text = "Contact owner@example.com about INTERNAL-PROJECT-2400"
     with get_session_factory()() as db:
         settings = _get_or_create_data_protection_settings(db)
-        settings.external_app_actions_json = {"web-search": {"pii": "mask_and_send"}}
+        settings.external_app_actions_json = {"chatbot": {"pii": "mask_and_send"}}
         db.commit()
 
         with pytest.raises(AiExternalCapabilityPolicyViolation):
@@ -1491,7 +1491,7 @@ def test_external_capability_blocks_mixed_external_app_blockers(
                     task_kind="web_search",
                     capability="web_search",
                     provider="anthropic",
-                    app="web-search",
+                    app="chatbot",
                     input_texts=[sensitive_text],
                 ),
                 lambda execution: execution.sanitized_text(fallback="fallback"),
@@ -1522,7 +1522,7 @@ def test_external_capability_hard_blockers_override_external_app_mask(
     with get_session_factory()() as db:
         settings = _get_or_create_data_protection_settings(db)
         settings.external_app_actions_json = {
-            "web-search": {
+            "chatbot": {
                 "sensitive_identifier": "mask_and_send",
                 "pii": "mask_and_send",
                 "internal_url": "mask_and_send",
@@ -1540,7 +1540,7 @@ def test_external_capability_hard_blockers_override_external_app_mask(
                     task_kind="web_search",
                     capability="web_search",
                     provider="anthropic",
-                    app="web-search",
+                    app="chatbot",
                     input_texts=[sensitive_text],
                 ),
                 lambda execution: execution.sanitized_text(fallback="fallback"),
@@ -1568,7 +1568,7 @@ def test_external_capability_block_external_overrides_external_app_mask(
     )
     with get_session_factory()() as db:
         settings = _get_or_create_data_protection_settings(db)
-        settings.external_app_actions_json = {"web-search": {"pii": "mask_and_send"}}
+        settings.external_app_actions_json = {"chatbot": {"pii": "mask_and_send"}}
         rule_id = new_id()
         db.add(
             AiSecurityPolicyRule(
@@ -1576,7 +1576,7 @@ def test_external_capability_block_external_overrides_external_app_mask(
                 name="Search local only",
                 description="",
                 enabled=True,
-                app_id="web-search",
+                app_id="chatbot",
                 task_kind="web_search",
                 capability="web_search",
                 provider="anthropic",
@@ -1595,7 +1595,7 @@ def test_external_capability_block_external_overrides_external_app_mask(
                     task_kind="web_search",
                     capability="web_search",
                     provider="anthropic",
-                    app="web-search",
+                    app="chatbot",
                     input_texts=["Contact owner@example.com for public news"],
                 ),
                 lambda execution: execution.sanitized_text(fallback="fallback"),

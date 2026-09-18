@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.llm_provider_registry import llm_provider_descriptor
@@ -225,23 +226,51 @@ async def collect_model_runtime_status(
         role="diagnostic",
         endpoint_url=settings.inference_gateway_base_url,
     )
-    local_runtime = _resolve_provider_runtime(
-        db,
-        provider_id="local",
-        settings=settings,
+    local_ids = (
+        list(
+            db.scalars(
+                select(AiModelProviderConfig.provider_id)
+                .where(
+                    AiModelProviderConfig.route_mode == "local",
+                    AiModelProviderConfig.enabled.is_(True),
+                )
+                .order_by(AiModelProviderConfig.provider_id)
+            ).all()
+        )
+        if db is not None
+        else []
     )
+    local_runtimes = [
+        _resolve_provider_runtime(db, provider_id=identifier, settings=settings)
+        for identifier in (local_ids or ["local"])
+    ]
     diagnostic_targets, invalid_targets = _diagnostic_targets(settings)
-    llm_targets = [
+    serving_targets = [
         RuntimeTargetDescriptor(
-            id="local-llm",
-            display_name=local_runtime.display_name,
+            id="local-llm" if runtime.provider_id == "local" else f"llm-{runtime.provider_id}",
+            display_name=runtime.display_name,
             kind="llm",
             role="serving",
-            endpoint_url=local_runtime.endpoint_url,
-            provider_id=local_runtime.provider_id,
-        ),
-        *diagnostic_targets,
+            endpoint_url=runtime.endpoint_url,
+            provider_id=runtime.provider_id,
+        )
+        for runtime in local_runtimes
     ]
+    targets_with_runtime = [
+        *zip(serving_targets, local_runtimes),
+        *(
+            (
+                target,
+                _resolve_provider_runtime(
+                    db, provider_id=target.provider_id or "", settings=settings
+                ),
+            )
+            for target in diagnostic_targets
+        ),
+    ]
+    # Materialize safe probe inputs before waiting for network responses.
+    if db is not None:
+        db.rollback()
     async with httpx.AsyncClient(
         timeout=timeout,
         transport=transport,
@@ -254,16 +283,7 @@ async def collect_model_runtime_status(
                 api_key=settings.inference_gateway_api_key,
             )
         ]
-        for target in llm_targets:
-            runtime = (
-                local_runtime
-                if target.provider_id == "local"
-                else _resolve_provider_runtime(
-                    db,
-                    provider_id=target.provider_id or "",
-                    settings=settings,
-                )
-            )
+        for target, runtime in targets_with_runtime:
             probe_tasks.append(
                 _probe_llm(
                     client,
@@ -299,25 +319,21 @@ def _resolve_provider_runtime(
     provider_id: str,
     settings: Settings,
 ) -> ProviderRuntimeConfig:
-    descriptor = llm_provider_descriptor(provider_id)
+    row = db.get(AiModelProviderConfig, provider_id) if db is not None else None
+    descriptor = llm_provider_descriptor(row.provider_kind if row else provider_id)
     if descriptor is None:
         raise ValueError(f"Unknown runtime provider: {provider_id}")
-    row = db.get(AiModelProviderConfig, provider_id) if db is not None else None
     if row is not None and not row.enabled:
         return ProviderRuntimeConfig(
             provider_id=provider_id,
-            display_name=descriptor.display_name,
+            display_name=(row.display_name or descriptor.display_name)
+            if row
+            else descriptor.display_name,
             endpoint_url="",
             api_key="",
             expected_model="",
         )
     endpoint_url = (row.endpoint_url or "").strip() if row is not None else ""
-    if not endpoint_url:
-        endpoint_url = (
-            settings.llm_local_base_url.strip()
-            if provider_id == "local"
-            else descriptor.default_endpoint_url.strip()
-        )
     configured_model: str | None = None
     selection_invalid = False
     if db is not None:
@@ -331,7 +347,7 @@ def _resolve_provider_runtime(
     expected_model = "" if selection_invalid else configured_model or ""
     if selection_invalid:
         endpoint_url = ""
-    api_key = settings.llm_local_api_key if provider_id == "local" else ""
+    api_key = ""
     if row is not None and row.api_key_ciphertext:
         try:
             api_key = decrypt_api_key(row.api_key_ciphertext).get_secret_value()
@@ -339,7 +355,9 @@ def _resolve_provider_runtime(
             api_key = ""
     return ProviderRuntimeConfig(
         provider_id=provider_id,
-        display_name=descriptor.display_name,
+        display_name=(row.display_name or descriptor.display_name)
+        if row
+        else descriptor.display_name,
         endpoint_url=endpoint_url,
         api_key=api_key,
         expected_model=expected_model,

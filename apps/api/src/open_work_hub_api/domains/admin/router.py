@@ -142,7 +142,6 @@ from open_work_hub_api.domains.groups.hr import (
     ensure_active_hr_group,
 )
 from open_work_hub_api.domains.pms.space_models import Team, TeamMember
-from open_work_hub_api.domains.web_search.service import iter_web_search_external_app_profiles
 
 AdminAppVisibilityScope = Literal["core"]
 APP_BAR_ICON_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -1425,20 +1424,6 @@ def _ai_security_app_label(app_id: str) -> str | None:
     return None
 
 
-def _ai_security_external_app_candidates() -> list[AiSecurityExternalAppCandidateResponse]:
-    return [
-        AiSecurityExternalAppCandidateResponse(
-            app_id=profile.app_id,
-            app_label=_ai_security_app_label(profile.app_id),
-            task_kind=profile.task_kind,
-            capability=profile.capability,
-            provider=profile.provider,
-            description=profile.profile_id,
-        )
-        for profile in iter_web_search_external_app_profiles()
-    ]
-
-
 def _ai_security_condition_options() -> AiSecurityConditionOptionsResponse:
     settings = get_settings()
     registry = get_ai_capability_registry()
@@ -1458,7 +1443,10 @@ def _ai_security_condition_options() -> AiSecurityConditionOptionsResponse:
             (app.app_id, app.title) for app in iter_app_catalog()
         ),
         external_apps=_ai_security_condition_option_items(
-            (item.app_id, item.app_label) for item in _ai_security_external_app_candidates()
+            (app_id, _ai_security_app_label(app_id))
+            for workload in registry.llm_workloads.values()
+            if "external" in workload.allowed_routes
+            for app_id in workload.app_ids
         ),
         task_kinds=_ai_security_condition_option_items(
             (workload.task_kind, workload.description)
@@ -4195,7 +4183,6 @@ def get_ai_security_summary(
     rules = _serialize_ai_security_rules(db)
     exceptions = _serialize_ai_security_exceptions(db)
     return AiSecuritySummaryResponse(
-        external_app_candidates=_ai_security_external_app_candidates(),
         data_protection=_serialize_ai_security_data_protection(db),
         rules=rules,
         exceptions=exceptions,

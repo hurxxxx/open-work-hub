@@ -16,6 +16,7 @@ from open_work_hub_api.domains.ai.model_credentials import encrypt_api_key
 from open_work_hub_api.domains.ai.model_settings_models import (
     AiModelCatalogEntry,
     AiModelProviderConfig,
+    AiModelPolicyDefault,
 )
 from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.auth.models import AuditLog
@@ -123,6 +124,7 @@ def _configure_external_llm(monkeypatch) -> None:
         provider.endpoint_url = "https://api.openai.com/v1"
         provider.api_key_ciphertext = encrypt_api_key("test-openai-key")
         provider.default_model_id = model.id
+        db.merge(AiModelPolicyDefault(app_id="", route_mode=provider.route_mode, provider_id=provider.provider_id, version=1))
         db.commit()
 
 
@@ -509,15 +511,15 @@ def test_readyz_uses_configured_readiness_while_ai_health_stays_live(
     )
 
     readyz_response = client.get("/readyz")
-    assert readyz_response.status_code == 503
+    assert readyz_response.status_code == 200
     readyz_payload = readyz_response.json()
-    assert readyz_payload["status"] == "degraded"
+    assert readyz_payload["status"] == "ok"
     assert readyz_payload["llm"]["ready"] is True
     assert readyz_payload["llm"]["local"]["status"] == "ready"
     assert "base_url" not in readyz_payload["llm"]["local"]
-    assert readyz_payload["llm_effective"]["ready"] is False
+    assert readyz_payload["llm_effective"]["ready"] is True
     effective_tasks = {task["task_kind"]: task for task in readyz_payload["llm_effective"]["tasks"]}
-    assert any(task["ready"] is False for task in effective_tasks.values())
+    assert all(task["ready"] for task in effective_tasks.values())
     assert effective_tasks["chatbot"]["chosen_pool"] == "local"
 
     _set_policy("chatbot", "external")

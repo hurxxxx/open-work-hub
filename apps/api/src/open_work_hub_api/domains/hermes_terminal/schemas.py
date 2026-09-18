@@ -5,7 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from open_work_hub_api.core.settings import HERMES_MODEL, HERMES_PROVIDER, HERMES_RELEASE
+from open_work_hub_api.core.settings import HERMES_PROVIDER, HERMES_RELEASE
+from open_work_hub_api.domains.hermes_terminal.legacy_policy import HERMES_MODEL
 
 HermesTerminalMode = Literal["standard", "yolo"]
 HermesTerminalStatus = Literal[

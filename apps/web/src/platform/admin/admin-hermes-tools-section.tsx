@@ -540,7 +540,7 @@ export function AdminHermesToolsSection({ token }: { token: string }) {
           <div className="space-y-5">
             {selectedProfile ? (
               <div className="app-text-caption text-app-ink/50">
-                {selectedProfile.profile_name} · {selectedProfile.provider}/
+                {t('admin.console.hermesTools.lastSynchronizedModel')} · {selectedProfile.profile_name} · {selectedProfile.provider}/
                 {selectedProfile.model}
               </div>
             ) : null}

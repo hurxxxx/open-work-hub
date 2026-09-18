@@ -5,6 +5,7 @@ from open_work_hub_api.core.app_registry import (
 
 BENTO_APP = app_registration(
     "bento",
+    ai_capability_modules=('open_work_hub_api.domains.bento',),
     nav_items=(
         AppNavRegistration(
             id="bento-all",

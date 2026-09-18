@@ -63,9 +63,9 @@ const APP_BAR_CATEGORIES: BootstrapAppBarCategory[] = [
       {
         coming_soon: false,
         position: 1,
-        app_id: 'web-search',
-        title: '웹 검색 봇',
-        route_base: '/apps/web-search',
+        app_id: 'recording',
+        title: '녹음 봇',
+        route_base: '/apps/recording',
         icon_key: 'globe-2',
         enabled: true,
       },
@@ -166,7 +166,7 @@ describe('app-bar model', () => {
     expect(visibleItems.map((item) => item.id)).toEqual([
       'home',
       'chatbot',
-      'web-search',
+      'recording',
       'pms',
       'docs',
       'mail',
@@ -285,7 +285,7 @@ describe('app-bar model', () => {
           pinned_app_ids: [
             'chatbot',
             'docs',
-            'web-search',
+            'recording',
             'pms',
             'docs',
             'mail',
@@ -300,7 +300,7 @@ describe('app-bar model', () => {
     ).toEqual([
       'chatbot',
       'docs',
-      'web-search',
+      'recording',
       'pms',
       'mail',
       'whiteboard',

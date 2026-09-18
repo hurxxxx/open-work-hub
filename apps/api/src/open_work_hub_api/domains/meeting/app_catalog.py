@@ -5,6 +5,7 @@ from open_work_hub_api.core.app_registry import (
 
 MEETING_APP = app_registration(
     "meeting",
+    ai_capability_modules=('open_work_hub_api.domains.meeting',),
     backend_domain="meeting",
     nav_items=(
         AppNavRegistration(

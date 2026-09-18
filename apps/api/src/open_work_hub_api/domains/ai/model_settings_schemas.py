@@ -23,6 +23,9 @@ AiModelCapability = Literal[
 
 class AiModelProviderResponse(BaseModel):
     provider_id: AiModelProviderId
+    provider_kind: str
+    preset: str = ""
+    verified: bool = False
     display_name: str
     route_mode: AiModelRouteMode
     credential_kind: AiModelCredentialKind
@@ -50,7 +53,7 @@ class AiModelCatalogEntryResponse(BaseModel):
 
 
 class AiModelRouteOverrideResponse(BaseModel):
-    route_mode: AiModelRouteMode
+    route_mode: AiModelRouteMode | None
     provider_id: AiModelProviderId | None = None
     model_ids: dict[str, str] = Field(default_factory=dict)
     local_max_output_tokens: int | None = None
@@ -65,8 +68,11 @@ class AiModelResolvedRouteResponse(BaseModel):
     provider_id: AiModelProviderId
     model_key: str
     route_source: Literal["default", "override"]
-    config_source: Literal["database", "legacy_env", "database_with_legacy_env"]
+    config_source: Literal["database"]
     max_output_tokens: int
+    connection_source: Literal["global", "app", "workload"] = "global"
+    model_source: Literal["global", "app", "workload", "connection"] = "connection"
+    output_cap_source: Literal["global", "app", "workload", "registry"] = "registry"
 
 
 class AiAgentRuntimeAdapterResponse(BaseModel):
@@ -77,6 +83,7 @@ class AiAgentRuntimeAdapterResponse(BaseModel):
 
 
 class AiModelWorkloadResponse(BaseModel):
+    app_id: str
     workload_id: str
     task_kind: str
     owner_domain: str
@@ -106,8 +113,9 @@ class AiModelWorkloadResponse(BaseModel):
 
 
 class AiModelOrphanedOverrideResponse(BaseModel):
+    app_id: str | None = None
     workload_id: str
-    route_mode: AiModelRouteMode
+    route_mode: AiModelRouteMode | None
     provider_id: AiModelProviderId | None = None
     model_ids: dict[str, str] = Field(default_factory=dict)
     local_max_output_tokens: int | None = None
@@ -117,12 +125,23 @@ class AiModelOrphanedOverrideResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class AiModelPolicyDefaultResponse(BaseModel):
+    app_id: str
+    route_mode: AiModelRouteMode
+    provider_id: AiModelProviderId | None = None
+    model_id: str | None = None
+    max_output_tokens: int | None = None
+    version: int = 0
+
+
 class AiModelSettingsResponse(BaseModel):
     registry_digest: str
     providers: list[AiModelProviderResponse]
     models: list[AiModelCatalogEntryResponse]
     workloads: list[AiModelWorkloadResponse]
     orphaned_overrides: list[AiModelOrphanedOverrideResponse]
+    defaults: list[AiModelPolicyDefaultResponse] = Field(default_factory=list)
+    provider_kinds: list[str] = Field(default_factory=list)
 
 
 class AiModelRegistryMutationRequest(BaseModel):
@@ -142,6 +161,8 @@ class AiModelProviderUpdateRequest(AiModelRegistryMutationRequest):
     default_model_id: str | None = Field(default=None, max_length=64)
     api_key: SecretStr | None = Field(default=None, min_length=1, max_length=8192, repr=False)
     clear_api_key: bool = False
+    display_name: str | None = Field(default=None, min_length=1, max_length=160)
+    credential_kind: AiModelCredentialKind | None = None
 
     @field_validator("endpoint_url")
     @classmethod
@@ -202,7 +223,7 @@ class AiModelCatalogUpdateRequest(AiModelRegistryMutationRequest):
 
 class AiModelRouteOverrideUpdateRequest(AiModelRegistryMutationRequest):
     expected_version: int | None = Field(default=None, ge=0)
-    route_mode: AiModelRouteMode
+    route_mode: AiModelRouteMode | None = None
     provider_id: AiModelProviderId | None = None
     model_ids: dict[str, str] = Field(default_factory=dict, max_length=10)
     local_max_output_tokens: int | None = Field(
@@ -247,3 +268,29 @@ __all__ = [
     "AiModelRouteOverrideUpdateRequest",
     "AiModelSettingsResponse",
 ]
+
+
+class AiModelConnectionCreateRequest(AiModelProviderUpdateRequest):
+    provider_kind: AiModelProviderId
+    route_mode: AiModelRouteMode = "external"
+    preset: Literal["", "vllm", "ollama"] = ""
+    enabled: bool = False
+    display_name: str = Field(min_length=1, max_length=160)
+
+
+class AiModelPolicyDefaultUpdateRequest(AiModelRegistryMutationRequest):
+    expected_version: int = Field(default=0, ge=0)
+    expected_provider_version: int | None = Field(default=None, ge=1)
+    provider_id: AiModelProviderId | None = None
+    model_id: str | None = Field(default=None, max_length=64)
+    max_output_tokens: int | None = Field(default=None, ge=1024, le=65536, multiple_of=1024)
+
+
+class AiModelConnectionProbeRequest(AiModelRegistryMutationRequest):
+    expected_version: int = Field(ge=1)
+
+
+class AiModelConnectionProbeResponse(BaseModel):
+    ready: bool
+    code: str | None = None
+    version: int

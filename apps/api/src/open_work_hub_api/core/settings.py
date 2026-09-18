@@ -30,8 +30,6 @@ DEFAULT_OPF_CHECKPOINT = "openai/privacy-filter"
 HERMES_RELEASE = "v2026.8.31"
 HERMES_IMAGE = "nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524"
 HERMES_PROVIDER = "openrouter"
-HERMES_MODEL = "qwen/qwen3.8-flash"
-HERMES_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
 PRODUCTION_ENVIRONMENT = "production"
 PREVIEW_ENVIRONMENT = "preview"
 PRODUCTION_LIKE_ENVIRONMENTS = frozenset({PREVIEW_ENVIRONMENT, PRODUCTION_ENVIRONMENT})
@@ -395,18 +393,10 @@ class Settings(BaseSettings):
         default="[]",
         validation_alias="OPEN_WORK_HUB_MODEL_STATUS_DIAGNOSTIC_TARGETS_JSON",
     )
-    # LLM — Local pool (Apple Silicon mlx-lm by default)
-    llm_local_provider: str = Field(
-        default="mlx-lm",
-        validation_alias="OPEN_WORK_HUB_LLM_LOCAL_PROVIDER",
-    )
-    llm_local_base_url: str = Field(
-        default="http://127.0.0.1:8080/v1",
-        validation_alias="OPEN_WORK_HUB_LLM_LOCAL_BASE_URL",
-    )
-    llm_local_api_key: str = Field(
-        default="mlx",
-        validation_alias="OPEN_WORK_HUB_LLM_LOCAL_API_KEY",
+    # LLM transport limits; connections, credentials and models live in PostgreSQL.
+    llm_local_allowed_hosts: str = Field(
+        default="127.0.0.1,localhost,::1,host.docker.internal",
+        validation_alias="OPEN_WORK_HUB_LLM_LOCAL_ALLOWED_HOSTS",
     )
     llm_local_long_generation_timeout_seconds: float = Field(
         default=1200.0,
@@ -688,10 +678,6 @@ class Settings(BaseSettings):
     ai_external_search_execution_adapter: str = Field(
         default="mock",
         validation_alias="OPEN_WORK_HUB_AI_EXTERNAL_SEARCH_EXECUTION_ADAPTER",
-    )
-    ai_default_external_llm_provider: str = Field(
-        default="openai",
-        validation_alias="OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER",
     )
     ai_default_external_search_provider: str = Field(
         default="openai",
@@ -1063,9 +1049,6 @@ class Settings(BaseSettings):
             )
         self.ai_allowed_external_providers = _normalize_external_provider_list_text(
             self.ai_allowed_external_providers,
-        )
-        self.ai_default_external_llm_provider = _normalize_external_provider_text(
-            self.ai_default_external_llm_provider,
         )
         self.ai_default_external_search_provider = _normalize_external_provider_text(
             self.ai_default_external_search_provider,

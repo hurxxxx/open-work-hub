@@ -20,6 +20,12 @@ ENV_FILE = WORKSPACE_ROOT / ".env"
 class Settings(BaseSettings):
     broker_url: str = "redis://127.0.0.1:6379/0"
     result_backend: str = "redis://127.0.0.1:6379/1"
+    concurrency: int = Field(
+        default=1,
+        ge=1,
+        le=64,
+        validation_alias="OPEN_WORK_HUB_WORKER_CONCURRENCY",
+    )
     postgres_dsn: str = Field(
         default="",
         validation_alias="OPEN_WORK_HUB_POSTGRES_DSN",
@@ -77,10 +83,6 @@ class Settings(BaseSettings):
     ai_allowed_external_providers: str = Field(
         default="openai,anthropic,gemini,kipris",
         validation_alias="OPEN_WORK_HUB_AI_ALLOWED_EXTERNAL_PROVIDERS",
-    )
-    ai_default_external_llm_provider: str = Field(
-        default="openai",
-        validation_alias="OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER",
     )
     ai_default_external_search_provider: str = Field(
         default="openai",

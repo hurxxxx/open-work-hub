@@ -463,7 +463,6 @@ export const resources = {
         mail: '메일',
         community: '커뮤니티',
         diagrams: '다이어그램',
-        'web-search': '웹 검색 봇',
         'retrieval-search': 'Retrieval 진단 검색',
         meeting: '회의',
         planner: '플래너',
@@ -489,7 +488,6 @@ export const resources = {
         recording: '녹음과 후속 처리 상태를 관리합니다.',
         community: '전사 커뮤니티 게시판을 확인합니다.',
         'video-chat': '브라우저 기반 화상회의를 실행합니다.',
-        'web-search': '최신 공개 웹 정보를 검색합니다.',
       },
       nav: {
         'settings-apps-access': '앱 사용 정책',
@@ -499,7 +497,6 @@ export const resources = {
         chatbot: 'AI 챗봇',
         search: 'Open Work Hub 통합검색',
         'retrieval-search': 'Retrieval 진단 검색',
-        'web-search': '웹 검색 봇',
         'docs-all': '전체 문서',
         'docs-my': '내 문서',
         'docs-shared': '공유받은 문서',
@@ -560,7 +557,6 @@ export const resources = {
         chatbot: '사내 데이터와 도구를 활용하는 대화형 어시스턴트',
         search: '사내 문서를 근거 기반으로 찾는 메인 검색 허브',
         'video-chat-room': 'LiveKit OSS 기반 화상 회의 검증',
-        'web-search': '최신 공개 웹 정보 검색',
         'retrieval-search': '통합 retrieval source와 profile 진단',
         'recording-quick': '바로 녹음을 시작하고 원본 음성을 저장',
         'recording-mine': '저장된 녹음 전체 보기',
@@ -1880,6 +1876,7 @@ export const resources = {
             },
           },
           hermesTools: {
+            lastSynchronizedModel: '마지막으로 동기화된 모델',
             extensions: {
               emptyDescription: '등록되거나 활성화된 항목이 없습니다.',
               mcp: 'MCP 서버',
@@ -2492,6 +2489,39 @@ export const resources = {
               },
               total: '등록 워크로드',
             },
+            llmDefaults: {
+              title: 'LLM 기본 설정',
+              sources: {
+                global: '공통 기본값',
+                app: '앱 기본값',
+                workload: '기능별 설정',
+              },
+              description:
+                '공통 기본값 → 앱 기본값 → 기능별 설정 순으로 상속합니다. 모델 기능과 보안 정책은 실행 시에도 검증합니다.',
+              scope: '설정 대상',
+              global: '모든 앱의 기본값',
+              inherit: '상속',
+              unconfigured: '미설정',
+              connection: '연결',
+              cap: '출력 상한 (K)',
+            },
+            llmConnections: {
+              ollama: 'Ollama',
+              title: '연결 추가',
+              add: '새 연결',
+              name: '연결 이름',
+              kind: 'API 공급자',
+              preset: '호환 서버 종류',
+              custom: '직접 설정',
+              route: '데이터 처리 경로',
+              auth: '인증 방식',
+              noAuth: '인증 없음',
+              setup:
+                '새 연결은 비활성으로 저장됩니다. 모델을 등록하고 연결을 테스트한 뒤 활성화하세요. 로컬 서버는 별도로 실행해야 합니다.',
+              probe: '저장된 연결 테스트',
+              probeReady: '연결과 모델을 확인했습니다.',
+              probeFailed: '연결 또는 모델을 확인하지 못했습니다.',
+            },
             llmProviders: {
               catalogDescription:
                 '선택한 Provider에서 사용할 수 있도록 등록된 승인 모델입니다. 모델 추가와 기능 편집은 모델 카탈로그 탭에서 관리합니다.',
@@ -2595,11 +2625,6 @@ export const resources = {
                 ready: '준비됨',
               },
               workloadCatalog: {
-                webSearchAnswer: {
-                  description:
-                    '일반 공개 웹 검색 결과를 근거와 함께 답변으로 생성합니다.',
-                  label: '웹 검색 답변',
-                },
               },
               workloads: {
                 count: '{{count}}개 워크로드',
@@ -2709,7 +2734,7 @@ export const resources = {
 
               taskSearchPlaceholder: '작업 이름 또는 설명 검색',
               placeholders: {
-                appId: '예: chatbot, web-search',
+                appId: '예: chatbot, mail',
                 capability: '예: llm, web_search',
                 provider: '예: openai, anthropic, gemini',
                 taskKind: '예: mail_reply_draft, web_search_summary',
@@ -3827,32 +3852,6 @@ export const resources = {
         voiceInput: '음성 입력',
       },
       ai: {
-        webSearch: {
-          title: '웹 검색 봇',
-          historyEyebrow: 'WEB',
-          historyTitle: '검색 히스토리',
-          newConversation: '새 검색',
-          searchHistory: '검색 기록 찾기',
-          noHistory: '검색 히스토리가 없습니다.',
-          noHistorySearchResults: '검색 결과가 없습니다.',
-          pendingTitle: '웹 검색 준비 중',
-          policyDeniedTitle: '다시 정리한 요청',
-          emptyGreeting: '실시간 웹 정보를 검색하세요.',
-          emptySubline:
-            'Claude 웹 검색으로 최신 공개 정보를 찾고 출처 링크와 함께 답변합니다.',
-          jumpToBottom: '최신 답변으로 이동',
-          sources: '출처',
-          thinking: '웹 검색 중',
-          placeholder: '검색할 질문을 입력하세요',
-          noAnswer: '웹 검색 결과로 답변을 만들지 못했습니다.',
-          errors: {
-            askFailed: '웹 검색 질문을 처리하지 못했습니다.',
-            connect: '웹 검색 서버에 연결하지 못했습니다.',
-            policyDenied:
-              '이 요청은 웹 검색으로 처리하기 어렵습니다. 공개 가능한 내용만 남겨 다시 시도하거나, 일반 AI 대화에서 이어서 진행해 주세요.',
-            requestFailed: '웹 검색 요청이 실패했습니다. ({{status}})',
-          },
-        },
         generatedResults: {
           title: '생성 결과',
           count: '미리보기 결과 {{count}}개',
@@ -4097,7 +4096,8 @@ export const resources = {
           unknown: '결과 미확인',
         },
         htmlArtifact: {
-          previewFailed: '미리보기를 실행하지 못했습니다. 필요한 파일이 저장되어 있는지 확인하거나 소스에서 오류를 확인해 주세요.',
+          previewFailed:
+            '미리보기를 실행하지 못했습니다. 필요한 파일이 저장되어 있는지 확인하거나 소스에서 오류를 확인해 주세요.',
           preview: '프리뷰',
           source: '소스',
           tabList: 'HTML 아티팩트 보기',
@@ -6520,7 +6520,6 @@ export const resources = {
         mail: 'Mail',
         community: 'Community',
         diagrams: 'Diagrams',
-        'web-search': 'Web Search Bot',
         'retrieval-search': 'Retrieval Diagnostics',
         meeting: 'Meeting',
         planner: 'Planner',
@@ -6546,7 +6545,6 @@ export const resources = {
         recording: 'Manage recordings and processing status.',
         community: 'Open company-wide community boards.',
         'video-chat': 'Run browser-based video meetings.',
-        'web-search': 'Search current public web information.',
       },
       nav: {
         'settings-apps-access': 'App access',
@@ -6556,7 +6554,6 @@ export const resources = {
         chatbot: 'AI Chatbot',
         search: 'Open Work Hub Search',
         'retrieval-search': 'Retrieval Diagnostics',
-        'web-search': 'Web Search Bot',
         'docs-all': 'All Docs',
         'docs-my': 'My Docs',
         'docs-shared': 'Shared with me',
@@ -6617,7 +6614,6 @@ export const resources = {
         chatbot: 'Conversational assistant using internal data and tools',
         search: 'Main grounded search hub for internal documents',
         'video-chat-room': 'Validate LiveKit OSS video meetings',
-        'web-search': 'Search current public web information',
         'retrieval-search': 'Inspect unified retrieval sources and profiles',
         'recording-quick': 'Start recording quickly and save original audio',
         'recording-mine': 'View all saved recordings',
@@ -7956,6 +7952,7 @@ export const resources = {
             },
           },
           hermesTools: {
+            lastSynchronizedModel: 'Last synchronized model',
             extensions: {
               emptyDescription: 'No registered or active items are available.',
               mcp: 'MCP servers',
@@ -8580,6 +8577,39 @@ export const resources = {
               },
               total: 'Registered workloads',
             },
+            llmDefaults: {
+              title: 'LLM defaults',
+              sources: {
+                global: 'Global default',
+                app: 'App default',
+                workload: 'Workload override',
+              },
+              description:
+                'Settings inherit from global defaults to app defaults to workload overrides. Model capabilities and security policy are also checked at execution.',
+              scope: 'Scope',
+              global: 'Default for all apps',
+              inherit: 'Inherit',
+              unconfigured: 'Not configured',
+              connection: 'Connection',
+              cap: 'Output limit (K)',
+            },
+            llmConnections: {
+              ollama: 'Ollama',
+              title: 'Add connection',
+              add: 'New connection',
+              name: 'Connection name',
+              kind: 'API provider',
+              preset: 'Compatible server',
+              custom: 'Custom',
+              route: 'Data processing route',
+              auth: 'Authentication',
+              noAuth: 'No authentication',
+              setup:
+                'New connections are saved disabled. Register a model, test the connection, then enable it. Run local servers separately.',
+              probe: 'Test saved connection',
+              probeReady: 'Connection and model verified.',
+              probeFailed: 'Connection or model could not be verified.',
+            },
             llmProviders: {
               catalogDescription:
                 'Approved models registered for the selected provider. Add models and edit capabilities in the model catalog tab.',
@@ -8687,11 +8717,6 @@ export const resources = {
                 ready: 'Ready',
               },
               workloadCatalog: {
-                webSearchAnswer: {
-                  description:
-                    'Turn general public web search results into an answer with supporting sources.',
-                  label: 'Web search answer',
-                },
               },
               workloads: {
                 count: '{{count}} workload(s)',
@@ -8801,7 +8826,7 @@ export const resources = {
 
               taskSearchPlaceholder: 'Search task name or description',
               placeholders: {
-                appId: 'e.g. chatbot, web-search',
+                appId: 'e.g. chatbot, mail',
                 capability: 'e.g. llm, web_search',
                 provider: 'e.g. openai, anthropic, gemini',
                 taskKind: 'e.g. mail_reply_draft, web_search_summary',
@@ -9933,32 +9958,6 @@ export const resources = {
         voiceInput: 'Voice Input',
       },
       ai: {
-        webSearch: {
-          title: 'Web Search Bot',
-          historyEyebrow: 'WEB',
-          historyTitle: 'Search history',
-          newConversation: 'New search',
-          searchHistory: 'Search history',
-          noHistory: 'No search history yet.',
-          noHistorySearchResults: 'No matching searches.',
-          pendingTitle: 'Preparing web search',
-          policyDeniedTitle: 'Request needs revision',
-          emptyGreeting: 'Search live web information.',
-          emptySubline:
-            'Uses Claude web search to answer from current public sources with links.',
-          jumpToBottom: 'Jump to latest answer',
-          sources: 'Sources',
-          thinking: 'Searching the web',
-          placeholder: 'Enter a question to search',
-          noAnswer: 'Could not produce an answer from web search results.',
-          errors: {
-            askFailed: 'Could not process the web search question.',
-            connect: 'Could not connect to the web search server.',
-            policyDenied:
-              'This request is difficult to handle with web search. Keep only public information and try again, or continue in general AI chat.',
-            requestFailed: 'Web search request failed. ({{status}})',
-          },
-        },
         generatedResults: {
           title: 'Generated results',
           count: '{{count}} preview results',
@@ -10209,7 +10208,8 @@ export const resources = {
           unknown: 'Result unavailable',
         },
         htmlArtifact: {
-          previewFailed: 'The preview could not run. Check that its required files are saved, or inspect the source for errors.',
+          previewFailed:
+            'The preview could not run. Check that its required files are saved, or inspect the source for errors.',
           preview: 'Preview',
           source: 'Source',
           tabList: 'HTML artifact view',

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 import json
 
 import httpx
@@ -21,6 +22,24 @@ from open_work_hub_api.domains.admin.model_runtime_status_service import (
 from dev_accounts import auth_headers, dev_login
 
 
+def _runtime_db(**overrides):
+    row = SimpleNamespace(
+        provider_kind="local",
+        display_name="Local LLM",
+        enabled=True,
+        endpoint_url="http://local-llm:8000/v1",
+        api_key_ciphertext="test-ciphertext",
+        default_model_id=None,
+    )
+    for key, value in overrides.items():
+        setattr(row, key, value)
+    return SimpleNamespace(
+        get=lambda *_args: row,
+        scalars=lambda *_args: SimpleNamespace(all=lambda: ["local"]),
+        rollback=lambda: None,
+    )
+
+
 def _settings(**overrides: object) -> Settings:
     values = {
         "postgres_dsn": (
@@ -28,8 +47,6 @@ def _settings(**overrides: object) -> Settings:
         ),
         "inference_gateway_base_url": "http://current-server:18080",
         "inference_gateway_api_key": "gateway-secret",
-        "llm_local_base_url": "http://local-llm:8000/v1",
-        "llm_local_api_key": "llm-secret",
         "model_status_diagnostic_targets_json": json.dumps(
             [
                 {
@@ -79,7 +96,18 @@ def _llm_models() -> dict[str, object]:
 
 
 @pytest.mark.anyio
-async def test_model_runtime_status_collects_current_server_and_local_targets() -> None:
+async def test_model_runtime_status_collects_current_server_and_local_targets(monkeypatch) -> None:
+    db = _runtime_db()
+    monkeypatch.setattr(
+        model_runtime_status_service,
+        "decrypt_api_key",
+        lambda _value: SimpleNamespace(get_secret_value=lambda: "llm-secret"),
+    )
+    monkeypatch.setattr(
+        model_runtime_status_service,
+        "get_ai_model_provider_default_model_key",
+        lambda *_args, **_kwargs: None,
+    )
     seen_authorization: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -90,6 +118,7 @@ async def test_model_runtime_status_collects_current_server_and_local_targets() 
 
     snapshot = await collect_model_runtime_status(
         _settings(),
+        db=db,
         transport=httpx.MockTransport(handler),
     )
 
@@ -126,11 +155,7 @@ async def test_model_runtime_status_prefers_admin_provider_default(
 ) -> None:
     selected_model = "unsloth/Qwen3.6-35B-A3B-NVFP4-Fast"
 
-    class FakeDb:
-        def get(self, *_args):
-            return None
-
-    db = FakeDb()
+    db = _runtime_db(api_key_ciphertext=None)
 
     monkeypatch.setattr(
         model_runtime_status_service,
@@ -164,11 +189,7 @@ async def test_model_runtime_status_preserves_partial_results_without_leaking_er
 ) -> None:
     selected_model = "admin-selected-model"
 
-    class FakeDb:
-        def get(self, *_args):
-            return None
-
-    db = FakeDb()
+    db = _runtime_db(api_key_ciphertext=None)
     monkeypatch.setattr(
         model_runtime_status_service,
         "get_ai_model_provider_default_model_key",
@@ -266,3 +287,61 @@ def test_admin_model_runtime_status_returns_snapshot(
     assert response.status_code == 200, response.text
     assert response.json()["targets"][0]["models"][0]["name"] == "embedding"
     assert received_db is not None
+
+
+@pytest.mark.anyio
+async def test_named_local_connections_are_probed_independently_without_holding_db(client):
+    from open_work_hub_api.core.db import get_session_factory
+    from open_work_hub_api.domains.ai.model_settings_models import (
+        AiModelCatalogEntry,
+        AiModelProviderConfig,
+    )
+
+    with get_session_factory()() as db:
+        for identifier, port in (("conn_gpu_a", 8001), ("conn_gpu_b", 8002)):
+            row = AiModelProviderConfig(
+                provider_id=identifier,
+                provider_kind="openai_compatible",
+                display_name=identifier,
+                route_mode="local",
+                credential_kind="none",
+                enabled=True,
+                endpoint_url=f"http://127.0.0.1:{port}/v1",
+                default_model_id=identifier + "-model",
+            )
+            db.add(row)
+            db.flush()
+            db.add(
+                AiModelCatalogEntry(
+                    id=row.default_model_id,
+                    provider_id=identifier,
+                    model_key="synthetic-model",
+                    display_name="Synthetic",
+                    capabilities_json=["chat"],
+                    enabled=True,
+                )
+            )
+        db.commit()
+        seen = []
+
+        def handler(request):
+            assert not db.in_transaction()
+            seen.append(request.url.port)
+            if request.url.port == 8002:
+                raise httpx.ConnectError("private transport detail", request=request)
+            return httpx.Response(200, json={"data": [{"id": "synthetic-model"}]})
+
+        result = await collect_model_runtime_status(
+            _settings(inference_gateway_base_url="", model_status_diagnostic_targets_json="[]"),
+            db=db,
+            transport=httpx.MockTransport(handler),
+        )
+        assert sorted(seen) == [8001, 8002]
+        assert result.status == "degraded"
+        serving = {
+            target.provider_id: target.status
+            for target in result.targets
+            if target.role == "serving"
+        }
+        assert serving == {"conn_gpu_a": "online", "conn_gpu_b": "offline"}
+        assert "private transport detail" not in result.model_dump_json()

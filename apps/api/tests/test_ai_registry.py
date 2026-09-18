@@ -99,10 +99,10 @@ def test_llm_workload_registration_fails_closed_and_rejects_duplicate_app_task()
 def test_external_only_llm_workload_contract() -> None:
     registry = AiCapabilityRegistry()
     registry.register_llm_workload(
-        workload_id="web-search.search",
+        workload_id="test.external_research",
         task_kind="web_search",
         owner_domain="web_search",
-        app_id="web-search",
+        app_id="chatbot",
         description="Search the public web",
         default_route="external",
         execution_kind="agent",
@@ -113,7 +113,7 @@ def test_external_only_llm_workload_contract() -> None:
         external_data=True,
     )
 
-    workload = registry.resolve_llm_workload("web-search.search")
+    workload = registry.resolve_llm_workload("test.external_research")
     assert workload.default_policy == "external"
     assert workload.allowed_pools == ("external",)
     assert workload.model_roles == ("default",)

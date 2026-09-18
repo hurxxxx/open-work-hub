@@ -6,6 +6,7 @@ import { Button, useFeedback } from '@open-work-hub/ui';
 
 import {
   AdminAiModelSettingsApiError,
+  probeAdminAiModelConnection,
   discoverAdminAiModelProviderModels,
   getAdminAiModelSettings,
   isAiModelProviderReady,
@@ -21,12 +22,16 @@ import {
   SurfaceCard,
 } from './admin-shared';
 
+import { AdminLlmConnectionCreate } from './admin-llm-connection-create';
+
 export interface LlmProviderDraft {
   enabled: boolean;
   endpointUrl: string;
   defaultModelId: string;
   apiKey: string;
   clearApiKey: boolean;
+  displayName: string;
+  credentialKind: 'none' | 'api_key';
 }
 
 export function buildLlmProviderUpdate(
@@ -39,6 +44,8 @@ export function buildLlmProviderUpdate(
     expected_registry_digest: registryDigest,
     expected_version: provider.version,
     enabled: draft.enabled,
+    display_name: draft.displayName,
+    credential_kind: draft.credentialKind,
     endpoint_url: draft.endpointUrl.trim() || null,
     default_model_id: draft.defaultModelId || null,
     ...(apiKey ? { api_key: apiKey } : {}),
@@ -56,6 +63,8 @@ function initialDrafts(
         enabled: provider.enabled,
         endpointUrl: provider.endpoint_url ?? '',
         defaultModelId: provider.default_model_id ?? '',
+        displayName: provider.display_name,
+        credentialKind: provider.credential_kind,
         apiKey: '',
         clearApiKey: false,
       },
@@ -218,6 +227,11 @@ export function AdminLlmProviderSettingsSection({ token }: { token: string }) {
 
   return (
     <div className="space-y-3">
+      <AdminLlmConnectionCreate
+        token={token}
+        data={data}
+        onSaved={applySnapshot}
+      />
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="app-text-title-sm text-app-ink">
@@ -310,6 +324,48 @@ export function AdminLlmProviderSettingsSection({ token }: { token: string }) {
             <div className="grid gap-3 md:grid-cols-2">
               <label className="block space-y-1">
                 <span className="app-text-caption text-app-ink/60">
+                  {t('admin.console.aiSecurity.llmConnections.name')}
+                </span>
+                <input
+                  className={fieldClassName}
+                  value={selectedDraft.displayName}
+                  required
+                  onChange={(e) =>
+                    updateDraft(selectedProvider.provider_id, {
+                      displayName: e.target.value,
+                    })
+                  }
+                />
+              </label>
+              {['local', 'openai_compatible'].includes(
+                selectedProvider.provider_kind,
+              ) ? (
+                <label className="block space-y-1">
+                  <span className="app-text-caption text-app-ink/60">
+                    {t('admin.console.aiSecurity.llmConnections.auth')}
+                  </span>
+                  <select
+                    className="app-field-input"
+                    value={selectedDraft.credentialKind}
+                    onChange={(e) =>
+                      updateDraft(selectedProvider.provider_id, {
+                        credentialKind: e.target.value as 'none' | 'api_key',
+                      })
+                    }
+                  >
+                    <option value="none">
+                      {t('admin.console.aiSecurity.llmConnections.noAuth')}
+                    </option>
+                    <option value="api_key">
+                      {t(
+                        'admin.console.aiSecurity.modelSettings.providers.apiKey',
+                      )}
+                    </option>
+                  </select>
+                </label>
+              ) : null}
+              <label className="block space-y-1">
+                <span className="app-text-caption text-app-ink/60">
                   {t(
                     'admin.console.aiSecurity.modelSettings.providers.endpoint',
                   )}
@@ -366,7 +422,7 @@ export function AdminLlmProviderSettingsSection({ token }: { token: string }) {
               </label>
             </div>
 
-            {selectedProvider.credential_kind === 'api_key' ? (
+            {selectedDraft.credentialKind === 'api_key' ? (
               <div className="space-y-1">
                 <label
                   className="app-text-caption block text-app-ink/60"
@@ -448,6 +504,49 @@ export function AdminLlmProviderSettingsSection({ token }: { token: string }) {
                 ) : null}
               </div>
               <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={
+                    savingProviderId !== null ||
+                    !selectedProvider.default_model_id
+                  }
+                  onClick={async () => {
+                    setSavingProviderId(selectedProvider.provider_id);
+                    try {
+                      const result = await probeAdminAiModelConnection(
+                        token,
+                        selectedProvider,
+                        data.registry_digest,
+                      );
+                      if (result.ready)
+                        toast.success(
+                          t(
+                            'admin.console.aiSecurity.llmConnections.probeReady',
+                          ),
+                        );
+                      else
+                        toast.error(
+                          t(
+                            'admin.console.aiSecurity.llmConnections.probeFailed',
+                          ),
+                        );
+                      await load();
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : t(
+                              'admin.console.aiSecurity.llmConnections.probeFailed',
+                            ),
+                      );
+                    } finally {
+                      setSavingProviderId(null);
+                    }
+                  }}
+                >
+                  {t('admin.console.aiSecurity.llmConnections.probe')}
+                </Button>
                 <Button
                   disabled={
                     savingProviderId !== null ||

@@ -269,9 +269,9 @@ const APP_BAR_CATEGORIES: AppBootstrapAppBarCategoryFixture[] = [
         icon_key: 'message-square',
       }),
       categoryItem({
-        app_id: 'web-search',
-        title: '웹 검색 봇',
-        route_base: '/apps/web-search',
+        app_id: 'recording',
+        title: '녹음 봇',
+        route_base: '/apps/recording',
         icon_key: 'globe-2',
       }),
     ],

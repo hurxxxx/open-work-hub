@@ -18,6 +18,65 @@ SPEC.loader.exec_module(env_contract)
 
 
 class EnvContractScannerTest(unittest.TestCase):
+    def test_rolling_cutover_validates_each_checkout_contract_without_ignoring_peer_errors(self):
+        source = MODULE_PATH.parents[1]
+        with tempfile.TemporaryDirectory() as folder:
+            parent = Path(folder)
+            for name in ("dev", "prod"):
+                root = parent / name
+                root.mkdir()
+                shutil.copytree(source / "config", root / "config")
+                for relative_path in env_contract.SETTINGS_FILE_PARTS:
+                    destination = root / relative_path
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(source / relative_path, destination)
+                template = (source / ".env.example").read_text()
+                if name == "prod":
+                    template += "\nOPEN_WORK_HUB_LLM_LOCAL_API_KEY=synthetic-only\n"
+                (root / ".env.example").write_text(template)
+                (root / ".env").write_text(template)
+                (root / "scripts").mkdir()
+                (root / "scripts/check-env-contract.py").write_text(
+                    'FORBIDDEN_ENV_KEYS = frozenset(["OLD_RETIRED_KEY"])\n'
+                )
+            report = env_contract.build_report(parent / "dev")
+            self.assertTrue(report.ok, self.messages(report))
+            peer_env = parent / "prod/.env"
+            peer_env.write_text(peer_env.read_text() + "OLD_RETIRED_KEY=synthetic-secret\n")
+            report = env_contract.build_report(parent / "dev")
+            self.assertIn("forbidden_env_key", self.codes(report))
+            self.assertIn("env_keyset_mismatch", self.codes(report))
+            self.assertIn("prod:", self.messages(report))
+            self.assertNotIn("synthetic-secret", self.messages(report))
+            (parent / "prod/scripts/check-env-contract.py").unlink()
+            self.assertIn("invalid_peer_env_contract", self.codes(env_contract.build_report(parent / "dev")))
+
+    def test_llm_env_cutover_matches_current_template_and_typed_settings(self):
+        source = MODULE_PATH.parents[1]
+        migration_spec = importlib.util.spec_from_file_location(
+            "migrate_llm_settings_contract", source / "scripts/migrate-llm-settings.py"
+        )
+        migration = importlib.util.module_from_spec(migration_spec)
+        migration_spec.loader.exec_module(migration)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            shutil.copytree(source / "config", root / "config")
+            for relative_path in env_contract.SETTINGS_FILE_PARTS:
+                destination = root / relative_path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source / relative_path, destination)
+            template = (source / ".env.example").read_text()
+            (root / ".env.example").write_text(template)
+            retired = set(migration.RETIRED) | {"OPENROUTER_API_KEY"}
+            old_env = template + "\n" + "\n".join(
+                f"{key}=synthetic-only" for key in sorted(retired)
+            ) + "\n"
+            (root / ".env").write_text(old_env)
+            self.assertIn("forbidden_env_key", self.codes(env_contract.build_report(root)))
+            (root / ".env").write_text(migration.prune_keys(old_env, retired))
+            report = env_contract.build_report(root)
+            self.assertTrue(report.ok, self.messages(report))
+
     def test_build_report_rejects_invalid_runtime_config_without_values(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

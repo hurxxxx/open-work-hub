@@ -5,6 +5,7 @@ from open_work_hub_api.core.app_registry import (
 
 DOCS_APP = app_registration(
     "docs",
+    ai_capability_modules=('open_work_hub_api.domains.docs',),
     backend_domain="docs",
     nav_items=(
         AppNavRegistration(

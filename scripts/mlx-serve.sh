@@ -5,7 +5,7 @@
 #   bash scripts/mlx-serve.sh            # foreground
 #   nohup bash scripts/mlx-serve.sh &    # background
 #
-# Default port:  8080 (matches OPEN_WORK_HUB_LLM_LOCAL_BASE_URL default)
+# Default port:  8080 (register http://127.0.0.1:8080/v1 in administrator LLM connections)
 #
 # Override via env:
 #   MLX_MODEL=mlx-community/<model> MLX_PORT=8090 bash scripts/mlx-serve.sh

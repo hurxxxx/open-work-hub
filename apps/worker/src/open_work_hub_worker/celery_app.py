@@ -115,9 +115,18 @@ def _assert_llm_routing_control_plane_ready() -> None:
     engine = create_engine(settings.postgres_dsn, pool_pre_ping=True)
     try:
         with Session(engine) as session:
-            session.execute(text("SELECT provider_id FROM ai_model_provider_configs LIMIT 1")).all()
+            session.execute(
+                text(
+                    "SELECT provider_id, provider_kind, credential_kind FROM ai_model_provider_configs LIMIT 1"
+                )
+            ).all()
             session.execute(text("SELECT id FROM ai_model_catalog_entries LIMIT 1")).all()
-            session.execute(text("SELECT workload_id FROM ai_model_route_overrides LIMIT 1")).all()
+            session.execute(
+                text("SELECT app_id, workload_id FROM ai_model_route_overrides LIMIT 1")
+            ).all()
+            session.execute(
+                text("SELECT app_id, route_mode FROM ai_model_policy_defaults LIMIT 1")
+            ).all()
     except Exception as error:
         raise RuntimeError(
             "AI model control plane is unavailable. Run API migrations before starting the worker."
@@ -136,6 +145,7 @@ celery_app = Celery(
 )
 celery_app.autodiscover_tasks(["open_work_hub_worker.tasks"])
 celery_app.conf.timezone = "UTC"
+celery_app.conf.worker_concurrency = settings.concurrency
 
 celery_app.conf.beat_schedule = {
     "republish-pending-hermes-runs": {
