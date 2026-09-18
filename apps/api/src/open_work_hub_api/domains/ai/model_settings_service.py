@@ -833,15 +833,9 @@ def delete_ai_model_route_override(
 ) -> None:
     assert_registry_digest(expected_registry_digest)
     workload = get_ai_capability_registry().get_llm_workload(workload_id)
-    # Explicit stored scope also permits cleanup after a workload or owning app
-    # is removed from the registry. Never infer the scope of an orphan.
-    if app_id is None:
-        if workload is None:
-            raise AiModelSettingsError(
-                status_code=404,
-                code="admin.ai_model_workload_not_found",
-                context={"workload_id": workload_id},
-            )
+    # Infer scope only for registered workloads. For an orphan, None targets
+    # exactly the legacy NULL scope rather than matching any owning app.
+    if app_id is None and workload is not None:
         app_id = _workload_app(workload, app_id)
     row = db.scalar(
         select(AiModelRouteOverride)
