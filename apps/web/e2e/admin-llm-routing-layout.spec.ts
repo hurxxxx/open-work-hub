@@ -213,3 +213,84 @@ test('allows changing the global external default in the administrator screen', 
       expected_provider_version: 1,
     });
 });
+
+test('serializes defaults and workload saves while a full snapshot is pending', async ({
+  page,
+}) => {
+  await stubShellBackend(page, { user: FAKE_PLATFORM_ADMIN_USER });
+  await page.route('**/api/v1/admin/ai-model-settings', (route) =>
+    route.fulfill({ json: MODEL_SETTINGS_FIXTURE }),
+  );
+  let releaseDefault: (() => void) | undefined;
+  let releaseWorkload: (() => void) | undefined;
+  const updated = {
+    ...MODEL_SETTINGS_FIXTURE,
+    defaults: [
+      {
+        app_id: '',
+        route_mode: 'external',
+        provider_id: 'anthropic',
+        model_id: null,
+        max_output_tokens: 16384,
+        version: 1,
+      },
+    ],
+  };
+  await page.route(
+    '**/api/v1/admin/ai-model-settings/defaults/external?*',
+    async (route) => {
+      await new Promise<void>((resolve) => {
+        releaseDefault = resolve;
+      });
+      await route.fulfill({ json: updated });
+    },
+  );
+  await page.route(
+    '**/api/v1/admin/ai-model-settings/workloads/*/route?*',
+    async (route) => {
+      await new Promise<void>((resolve) => {
+        releaseWorkload = resolve;
+      });
+      await route.fulfill({ json: updated });
+    },
+  );
+  await page.goto('/admin/llm');
+  const external = page.getByRole('form', {
+    name: '외부 API LLM',
+    exact: true,
+  });
+  const otherDefaultSave = page
+    .getByRole('form')
+    .first()
+    .getByRole('button', { name: '저장', exact: true });
+  const row = page.locator('main tbody tr').first();
+  const workloadSave = row.getByRole('button', { name: '저장', exact: true });
+  await row.locator('input[type="number"]').fill('8');
+  await external
+    .getByRole('combobox', { name: '연결', exact: true })
+    .selectOption('anthropic');
+  await external.getByRole('spinbutton').fill('16');
+  await external.getByRole('button', { name: '저장', exact: true }).click();
+  await expect.poll(() => Boolean(releaseDefault)).toBe(true);
+  await expect(workloadSave).toBeDisabled();
+  await expect(otherDefaultSave).toBeDisabled();
+  if (!releaseDefault) throw new Error('Default request was not received');
+  releaseDefault();
+  await expect(
+    external.getByRole('button', { name: '저장', exact: true }),
+  ).toBeEnabled();
+  await expect(external.getByRole('spinbutton')).toHaveValue('16');
+  await row.locator('input[type="number"]').fill('8');
+  await workloadSave.click();
+  await expect.poll(() => Boolean(releaseWorkload)).toBe(true);
+  await expect(
+    external.getByRole('button', { name: '저장', exact: true }),
+  ).toBeDisabled();
+  await expect(otherDefaultSave).toBeDisabled();
+  if (!releaseWorkload) throw new Error('Workload request was not received');
+  releaseWorkload();
+  await expect(
+    external.getByRole('button', { name: '저장', exact: true }),
+  ).toBeEnabled();
+  await expect(external.getByRole('spinbutton')).toHaveValue('16');
+});

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, useFeedback } from '@open-work-hub/ui';
+import { Button } from '@open-work-hub/ui';
 import {
   updateAdminAiModelDefault,
   type AdminAiModelSettings,
@@ -11,11 +11,16 @@ import { SurfaceCard, FORM_FIELD_CLASS } from './admin-shared';
 export function AdminLlmDefaults({
   token,
   data,
-  onSaved,
+  disabled,
+  onSave,
 }: {
   token: string;
   data: AdminAiModelSettings;
-  onSaved: (data: AdminAiModelSettings) => void;
+  disabled: boolean;
+  onSave: (
+    key: string,
+    mutation: () => Promise<AdminAiModelSettings>,
+  ) => Promise<void>;
 }) {
   const { t } = useTranslation('apps');
   const [appId, setAppId] = useState('');
@@ -34,6 +39,7 @@ export function AdminLlmDefaults({
         <select
           className="app-field-input"
           value={appId}
+          disabled={disabled}
           onChange={(event) => setAppId(event.target.value)}
         >
           <option value="">
@@ -53,7 +59,7 @@ export function AdminLlmDefaults({
               .filter((row) => row.route_mode === route)
               .map((row) => `${row.provider_id}:${row.version}`)
               .join(',')}:${data.registry_digest}`}
-            {...{ token, data, onSaved, appId, route }}
+            {...{ token, data, disabled, onSave, appId, route }}
           />
         ))}
       </div>
@@ -64,18 +70,22 @@ export function AdminLlmDefaults({
 function DefaultEditor({
   token,
   data,
-  onSaved,
+  disabled,
+  onSave,
   appId,
   route,
 }: {
   token: string;
   data: AdminAiModelSettings;
-  onSaved: (data: AdminAiModelSettings) => void;
+  disabled: boolean;
+  onSave: (
+    key: string,
+    mutation: () => Promise<AdminAiModelSettings>,
+  ) => Promise<void>;
   appId: string;
   route: AiModelRoute;
 }) {
   const { t } = useTranslation('apps');
-  const toast = useFeedback();
   const saved = data.defaults.find(
     (row) => row.app_id === appId && row.route_mode === route,
   );
@@ -89,7 +99,6 @@ function DefaultEditor({
   const [cap, setCap] = useState(
     saved?.max_output_tokens ? String(saved.max_output_tokens / 1024) : '',
   );
-  const [busy, setBusy] = useState(false);
   const models = data.models.filter(
     (row) =>
       row.provider_id === connectionId &&
@@ -102,28 +111,17 @@ function DefaultEditor({
       className="space-y-2 rounded-md border border-app-border p-3"
       onSubmit={async (event) => {
         event.preventDefault();
-        setBusy(true);
-        try {
-          onSaved(
-            await updateAdminAiModelDefault(token, appId, route, {
-              expected_registry_digest: data.registry_digest,
-              expected_version: saved?.version ?? 0,
-              expected_provider_version: connection?.version,
-              provider_id: connectionId || null,
-              model_id: modelId || null,
-              max_output_tokens: cap ? Number(cap) * 1024 : null,
-            }),
-          );
-          toast.success(t('admin.console.aiSecurity.modelSettings.saved'));
-        } catch (error) {
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : t('admin.console.aiSecurity.modelSettings.saveFailed'),
-          );
-        } finally {
-          setBusy(false);
-        }
+        if (disabled) return;
+        await onSave(`default:${appId}:${route}`, () =>
+          updateAdminAiModelDefault(token, appId, route, {
+            expected_registry_digest: data.registry_digest,
+            expected_version: saved?.version ?? 0,
+            expected_provider_version: connection?.version,
+            provider_id: connectionId || null,
+            model_id: modelId || null,
+            max_output_tokens: cap ? Number(cap) * 1024 : null,
+          }),
+        );
       }}
     >
       <h3 className="app-text-control text-app-ink">
@@ -136,6 +134,7 @@ function DefaultEditor({
         <select
           className="app-field-input"
           value={connectionId}
+          disabled={disabled}
           onChange={(event) => {
             setConnectionId(event.target.value);
             setModelId('');
@@ -163,7 +162,7 @@ function DefaultEditor({
         </span>
         <select
           className="app-field-input"
-          disabled={!connectionId}
+          disabled={disabled || !connectionId}
           value={modelId}
           onChange={(event) => setModelId(event.target.value)}
         >
@@ -190,11 +189,12 @@ function DefaultEditor({
           max={64}
           step={1}
           value={cap}
+          disabled={disabled}
           placeholder={t('admin.console.aiSecurity.llmDefaults.inherit')}
           onChange={(event) => setCap(event.target.value)}
         />
       </label>
-      <Button type="submit" disabled={busy} variant="primary">
+      <Button type="submit" disabled={disabled} variant="primary">
         {t('common:actions.save')}
       </Button>
     </form>

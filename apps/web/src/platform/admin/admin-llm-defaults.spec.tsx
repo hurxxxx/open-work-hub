@@ -80,13 +80,23 @@ describe('LLM defaults refresh', () => {
       <AdminLlmDefaults
         token="test"
         data={snapshot('model-a', 1)}
-        onSaved={onSaved}
+        disabled={false}
+        onSave={async (_key, mutation) => {
+          onSaved(await mutation());
+        }}
       />,
     );
     const refreshed = snapshot('model-b', 2);
     vi.mocked(updateAdminAiModelDefault).mockResolvedValue(refreshed);
     view.rerender(
-      <AdminLlmDefaults token="test" data={refreshed} onSaved={onSaved} />,
+      <AdminLlmDefaults
+        token="test"
+        data={refreshed}
+        disabled={false}
+        onSave={async (_key, mutation) => {
+          onSaved(await mutation());
+        }}
+      />,
     );
     const form = screen.getByRole('form', {
       name: 'admin.console.aiSecurity.modelSettings.routes.external',

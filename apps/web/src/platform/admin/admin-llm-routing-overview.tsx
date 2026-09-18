@@ -1,5 +1,5 @@
 import { RefreshCw, RotateCcw, Save, Search } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button, useFeedback } from '@open-work-hub/ui';
@@ -276,6 +276,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
   const [drafts, setDrafts] = useState<Record<string, WorkloadDraft>>({});
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const requestPending = useRef(false);
   const [query, setQuery] = useState('');
   const [routeFilter, setRouteFilter] = useState<RouteFilter>('all');
 
@@ -284,7 +285,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
     setDrafts(initialDrafts(snapshot));
   }, []);
 
-  const load = useCallback(async () => {
+  const refreshSnapshot = useCallback(async () => {
     setLoading(true);
     try {
       applySnapshot(await getAdminAiModelSettings(token));
@@ -295,12 +296,24 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
     }
   }, [applySnapshot, t, toast, token]);
 
+  const load = useCallback(async () => {
+    if (requestPending.current) return;
+    requestPending.current = true;
+    try {
+      await refreshSnapshot();
+    } finally {
+      requestPending.current = false;
+    }
+  }, [refreshSnapshot]);
+
   useEffect(() => {
     void load();
   }, [load]);
 
   const runMutation = useCallback(
     async (key: string, mutation: () => Promise<AdminAiModelSettings>) => {
+      if (requestPending.current) return;
+      requestPending.current = true;
       setSavingKey(key);
       try {
         applySnapshot(await mutation());
@@ -311,7 +324,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
           error.status === 409
         ) {
           toast.info(t('admin.console.aiSecurity.modelSettings.conflict'));
-          await load();
+          await refreshSnapshot();
         } else {
           toast.error(
             error instanceof AdminAiModelSettingsApiError
@@ -320,10 +333,11 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
           );
         }
       } finally {
+        requestPending.current = false;
         setSavingKey(null);
       }
     },
-    [applySnapshot, load, t, toast],
+    [applySnapshot, refreshSnapshot, t, toast],
   );
 
   const routingWorkloads = useMemo(
@@ -407,7 +421,12 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
 
   return (
     <div className="space-y-3">
-      <AdminLlmDefaults token={token} data={data} onSaved={applySnapshot} />
+      <AdminLlmDefaults
+        token={token}
+        data={data}
+        disabled={loading || savingKey !== null}
+        onSave={runMutation}
+      />
       <div className="grid gap-2 rounded-md border border-app-border bg-app-surface px-2 py-2 sm:grid-cols-[minmax(0,1fr)_140px_auto] sm:items-center xl:grid-cols-[auto_minmax(240px,1fr)_140px_auto]">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 px-1 sm:col-span-3 xl:col-span-1">
           <span className="app-text-caption shrink-0 whitespace-nowrap text-app-ink/65">
@@ -907,7 +926,7 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                           aria-label={t(
                             'admin.console.aiSecurity.modelSettings.workloads.reset',
                           )}
-                          disabled={savingKey !== null}
+                          disabled={loading || savingKey !== null}
                           onClick={() => {
                             const version = workload.override?.version;
                             if (version === undefined) return;
@@ -939,7 +958,12 @@ export function AdminLlmRoutingOverview({ token }: { token: string }) {
                         <Button
                           className="!size-7 !min-h-7 !min-w-7 !p-0"
                           aria-label={t('common:actions.save')}
-                          disabled={!ready || !capsValid || savingKey !== null}
+                          disabled={
+                            !ready ||
+                            !capsValid ||
+                            loading ||
+                            savingKey !== null
+                          }
                           onClick={() => {
                             void runMutation(
                               `${workload.app_id}:${workload.workload_id}`,
