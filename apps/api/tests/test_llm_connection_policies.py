@@ -109,6 +109,47 @@ def test_global_app_and_workload_inherit_independently_and_shared_workload_is_sc
         assert db.get(AiModelRouteOverride, "meeting-cap").model_ids == {}
 
 
+@pytest.mark.parametrize("workload_id", ["web_search.answer", "meeting_summary"])
+def test_orphaned_overrides_can_be_reset_with_exact_scope_and_version(client, workload_id):
+    headers = admin(client)
+    with get_session_factory()() as db:
+        connection, model = seed(db, "retired")
+        connection.default_model_id = None
+        model_id = model.id
+        db.add(AiModelRouteOverride(
+            id="retired-override", app_id="retired-app", workload_id=workload_id,
+            model_ids_json={"default": model_id}, version=3,
+        ))
+        db.add(AiModelRouteOverride(
+            id="other-override", app_id="another-retired-app", workload_id=workload_id,
+            model_ids_json={}, version=3,
+        ))
+        db.commit()
+    base = "/api/v1/admin/ai-model-settings"
+    snapshot = client.get(base, headers=headers).json()
+    assert any(row["app_id"] == "retired-app" for row in snapshot["orphaned_overrides"])
+    model = next(row for row in snapshot["models"] if row["id"] == model_id)
+    update = {
+        "expected_registry_digest": snapshot["registry_digest"], "expected_version": model["version"],
+        "model_key": model["model_key"], "display_name": model["display_name"],
+        "capabilities": model["capabilities"], "enabled": False,
+    }
+    assert client.put(f"{base}/models/{model_id}", headers=headers, json=update).status_code == 409
+    params = {"app_id": "retired-app", "expected_registry_digest": snapshot["registry_digest"], "expected_version": 2}
+    path = f"{base}/workloads/{workload_id}/route"
+    assert client.delete(path, headers=headers, params=params).status_code == 409
+    params["expected_version"] = 3
+    response = client.delete(path, headers=headers, params=params)
+    assert response.status_code == 200, response.text
+    assert all(row["app_id"] != "retired-app" for row in response.json()["orphaned_overrides"])
+    with get_session_factory()() as db:
+        assert db.get(AiModelRouteOverride, "retired-override") is None
+        assert db.get(AiModelRouteOverride, "other-override") is not None
+    assert client.delete(path, headers=headers, params=params).status_code == 404
+    response = client.put(f"{base}/models/{model_id}", headers=headers, json=update)
+    assert response.status_code == 200, response.text
+
+
 def test_connection_keys_are_encrypted_write_only_preserved_rotated_and_clearable(client):
     headers = admin(client)
     digest = ai_model_registry_digest()
@@ -313,6 +354,12 @@ def test_connection_migration_preserves_keys_and_forks_shared_app_overrides(post
                     updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
                 )
             )
+            connection.execute(overrides.insert().values(
+                id="retired-search", workload_id="web_search.answer", route_mode="local",
+                model_ids_json={}, version=2,
+                created_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            ))
         command.upgrade(config, "head")
         with engine.connect() as connection:
             assert (
@@ -339,6 +386,16 @@ def test_connection_migration_preserves_keys_and_forks_shared_app_overrides(post
             )
             import_all_models()
             assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
+        from sqlalchemy.orm import Session
+        from open_work_hub_api.domains.ai.model_settings_service import delete_ai_model_route_override
+
+        with Session(engine) as db:
+            assert db.get(AiModelRouteOverride, "retired-search").app_id == "web-search"
+            delete_ai_model_route_override(
+                db, workload_id="web_search.answer", app_id="web-search",
+                expected_registry_digest=ai_model_registry_digest(), expected_version=2,
+            )
+            assert db.get(AiModelRouteOverride, "retired-search") is None
     finally:
         engine.dispose()
 

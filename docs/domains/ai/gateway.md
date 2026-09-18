@@ -12,11 +12,13 @@ Approval replay, graph execution, and artifact state are owned by [AI Execution]
 - Runtime policy is DB-only: missing/disabled connections, missing credentials, inactive catalog models, incompatible capabilities and disallowed routes fail closed. No unique-provider or environment fallback is used. Provider allowlists remain infrastructure/security policy.
 - External connections must also be admitted by both `OPEN_WORK_HUB_LLM_EXTERNAL_ALLOWED_PROVIDERS` and `OPEN_WORK_HUB_AI_ALLOWED_EXTERNAL_PROVIDERS` using their provider kind (for example `openrouter` or `openai_compatible`). Saving a connection does not widen either deployment allowlist; local compatible connections use the local host policy instead.
 - App catalog registrations declare `ai_capability_modules`; the AI registry imports each hook once and fails for missing hooks. A shared workload has independent settings for each owning app.
+- Retired app/workload overrides remain visible as orphaned settings. Administrators may reset them using their stored app/workload identity, current registry digest and row version; model references remain protected until reset.
 - Credentials are encrypted per connection with `OPEN_WORK_HUB_AI_MODEL_CREDENTIAL_ENCRYPTION_KEY`. GET returns only `has_api_key`; omission preserves, replacement rotates, explicit clearing removes the key. The master key remains outside the DB and must be preserved for restores.
 - Structured output and tools require `tool_calling`, including tools/schema supplied at runtime. Model discovery does not approve capabilities automatically. Override writes validate the effective inherited route using the execution resolver before commit. Saved connection probes release the DB during I/O, recheck both connection and selected-model versions, and are invalidated by model edits/discovery.
 - `execute_llm` and `stream_llm` return safe execution metadata, never credential-bearing transport configuration. Interactive Hermes sessions retain their lifecycle while resolving the same model policy.
 - No local/external automatic fallback.
 - External transfer passes classification, masking, approval policy, and audit.
+- Graph planning egress uses the provider kind from the registered workload's resolved external execution. A local route or unresolved provider cannot activate external planning; search retains its separate configured provider.
 - Tool execution checks the current user/execution principal, owning-app admission, descriptor discoverability, and
   source ACL; write tools also require approval.
 - Audit records actor, app, workload, provider/model, token usage, trace ID.

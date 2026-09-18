@@ -1848,12 +1848,6 @@ async def _chat_stream_publisher(
         runtime_routing,
         graph_execution_enabled=settings.ai_runtime_graph_execution_enabled,
     )
-    runtime_routing = _attach_external_egress_trace_metadata(
-        runtime_routing,
-        messages=raw_messages_dict,
-        settings=settings,
-    )
-
     last_decision: PolicyDecision | None = None
     last_config: LlmPoolConfig | None = None
     chosen_model: str | None = None
@@ -2021,6 +2015,12 @@ async def _chat_stream_publisher(
         last_decision = execution.decision
         last_config = execution.config
         chosen_model = execution.chosen_model
+        runtime_routing = _attach_external_egress_trace_metadata(
+            runtime_routing,
+            messages=raw_messages_dict,
+            settings=settings,
+            planning_provider=execution.config.provider if execution.pool == "external" else None,
+        )
 
         tool_surface = _resolve_agent_tool_surface(
             db,
@@ -2328,6 +2328,7 @@ def _attach_external_egress_trace_metadata(
     *,
     messages: list[dict[str, Any]],
     settings: Any,
+    planning_provider: str | None,
 ) -> RuntimeRoutingDecision:
     if (
         runtime_routing.graph_gate != "eligible"
@@ -2341,7 +2342,7 @@ def _attach_external_egress_trace_metadata(
     decisions = [
         evaluate_external_egress(
             capability=cast(ExternalCapability, capability),
-            provider=None,
+            provider=planning_provider if capability == "planning" else None,
             text=user_text,
             settings=settings,
         ).model_dump(mode="json")

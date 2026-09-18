@@ -277,7 +277,7 @@ def reset_ai_model_route_override(
         entity_kind="ai_model_workload",
         entity_id=workload_id,
         summary=f"Reset AI model route for {workload_id}",
-        payload={"workload_id": workload_id},
+        payload={"workload_id": workload_id, "app_id": app_id},
     )
     db.commit()
     return get_ai_model_settings_snapshot(db)

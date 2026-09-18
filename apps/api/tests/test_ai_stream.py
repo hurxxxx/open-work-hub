@@ -788,12 +788,19 @@ def test_chat_stream_caller_provider_does_not_override_external_workload_provide
         [_delta(content="external response"), _delta(finish_reason="stop")]
     )
     selected_providers: list[str | None] = []
+    planning_providers: list[str | None] = []
+    original_attach = ai_router._attach_external_egress_trace_metadata
+
+    def attach_external_metadata(routing, **kwargs):
+        planning_providers.append(kwargs.get("planning_provider"))
+        return original_attach(routing, **kwargs)
 
     def get_client(config):  # type: ignore[no-untyped-def]
         selected_providers.append(config.provider)
         return pool_client
 
     monkeypatch.setattr(llm_core, "_new_async_pool_client", get_client)
+    monkeypatch.setattr(ai_router, "_attach_external_egress_trace_metadata", attach_external_metadata)
 
     status_code, events = _stream_post(
         client,
@@ -810,6 +817,7 @@ def test_chat_stream_caller_provider_does_not_override_external_workload_provide
     done = next(event for event in _chat_events(events) if event["type"] == "done")
     assert done["data"]["meta"]["chosen_pool"] == "external"
     assert selected_providers == ["openai"]
+    assert planning_providers == ["openai"]
 
 
 def test_chat_stream_external_tool_incompatibility_blocks_without_local_fallback(
