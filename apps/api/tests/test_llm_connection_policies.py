@@ -314,6 +314,45 @@ def test_env_cutover_preserves_ciphertext_and_unrelated_env_and_is_idempotent(cl
             module.backfill(None, {key: "${SHARED_PROVIDER_KEY}"})
 
 
+@pytest.mark.parametrize("missing_endpoint", [None, ""])
+def test_env_cutover_requires_explicit_endpoint_for_enabled_legacy_local_connection(
+    client, monkeypatch, tmp_path, missing_endpoint
+):
+    import subprocess
+
+    path = Path(__file__).resolve().parents[3] / "scripts/migrate-llm-settings.py"
+    spec = importlib.util.spec_from_file_location("llm_cutover", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
+    (tmp_path / ".gitignore").write_text(".env\n")
+    target = tmp_path / ".env"
+    original = "OPEN_WORK_HUB_LLM_LOCAL_API_KEY=synthetic-cutover-key\n"
+    target.write_text(original)
+    target.chmod(0o600)
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    with get_session_factory()() as db:
+        connection, _ = seed(db, "local", kind="local")
+        connection.endpoint_url = missing_endpoint
+        db.commit()
+    with pytest.raises(ValueError, match="explicit endpoint"):
+        module.migrate(apply=True)
+    assert target.read_text() == original
+    assert not list(tmp_path.glob(".env.backup-*"))
+    with get_session_factory()() as db:
+        connection = db.get(AiModelProviderConfig, "local")
+        assert connection.endpoint_url == missing_endpoint
+        assert connection.api_key_ciphertext is None
+
+    target.write_text(original + "OPEN_WORK_HUB_LLM_LOCAL_BASE_URL=http://127.0.0.1:8080/v1\n")
+    assert module.migrate(apply=True) == {
+        "OPEN_WORK_HUB_LLM_LOCAL_API_KEY", "OPEN_WORK_HUB_LLM_LOCAL_BASE_URL"
+    }
+    with get_session_factory()() as db:
+        assert db.get(AiModelProviderConfig, "local").endpoint_url == "http://127.0.0.1:8080/v1"
+    assert target.read_text() == ""
+
+
 @pytest.mark.migration
 def test_connection_migration_preserves_keys_and_forks_shared_app_overrides(postgres_dsn):
     from alembic import command

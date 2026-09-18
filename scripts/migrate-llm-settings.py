@@ -125,6 +125,8 @@ def backfill(db, values: dict[str, str | None]) -> set[str]:
         descriptor = llm_provider_descriptor(row.provider_kind)
         if not row.endpoint_url and descriptor and descriptor.default_endpoint_url:
             row.endpoint_url = descriptor.default_endpoint_url
+        if row.enabled and not row.endpoint_url:
+            raise ValueError("enabled connection requires an explicit endpoint before cutover")
         if row.api_key_ciphertext:
             decrypt_api_key(row.api_key_ciphertext)
     if "OPENROUTER_API_KEY" in values:
@@ -219,7 +221,7 @@ if __name__ == "__main__":
     except Exception:
         # Driver/credential exceptions may contain secrets: never print them.
         print(
-            "LLM cutover failed. Check migration head, DB access, master key, env mode, and legacy Terminal sessions.",
+            "LLM cutover failed. Check migration head, DB access, master key, local endpoint/allowlist, env mode, and legacy Terminal sessions.",
             file=sys.stderr,
         )
         raise SystemExit(1) from None
