@@ -61,6 +61,10 @@
               },
               "pinned_by_default": {
                 "type": "boolean"
+              },
+              "url_setting": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
               }
             }
           },

@@ -43,6 +43,7 @@ class AppCatalogItem:
     execution_context_kind: AppExecutionContextKind = "company"
     resource_scope: AppResourceScope = "company"
     entry_route_id: str = ""
+    launch_url_setting: str | None = None
     launcher_category: bool = False
     launcher_fixed: bool = False
     launcher_personal_tools: bool = False
@@ -72,6 +73,7 @@ class AppRegistration:
     title: str
     route_base: str
     icon_key: str
+    launch_url_setting: str | None = None
     launcher_category: bool = False
     launcher_fixed: bool = False
     launcher_personal_tools: bool = False
@@ -109,6 +111,7 @@ def app_registration(
         title=str(contract["title"]),
         route_base=str(contract["route_base"]),
         icon_key=str(contract["icon_key"]),
+        launch_url_setting=cast(str | None, launcher.get("url_setting")),
         launcher_category=placement == "category",
         launcher_fixed=placement == "fixed",
         launcher_personal_tools=placement == "personal_tools",
@@ -255,6 +258,7 @@ def compile_app_registry(
                 if contract is not None
                 else f"{registration.app_id}.root"
             ),
+            launch_url_setting=registration.launch_url_setting,
             launcher_category=registration.launcher_category,
             launcher_fixed=registration.launcher_fixed,
             launcher_personal_tools=registration.launcher_personal_tools,

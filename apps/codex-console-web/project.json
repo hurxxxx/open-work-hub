@@ -1,0 +1,26 @@
+{
+  "name": "codex-console-web",
+  "projectType": "application",
+  "sourceRoot": "apps/codex-console-web/src",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "cwd": "apps/codex-console-web", "command": "pnpm build" }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/codex-console-web",
+        "command": "pnpm typecheck"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "cwd": "apps/codex-console-web", "command": "pnpm test" }
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "options": { "cwd": "apps/codex-console-web", "command": "pnpm e2e" }
+    }
+  }
+}

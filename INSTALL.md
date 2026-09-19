@@ -9,6 +9,10 @@ Web·API·Worker는 저장소 소스에서 실행하고, 최초 셋업의 Postgr
 조직 최초 도입의 완료 기준은 GitLab 관리자·인증·프로젝트·Runner·CI 변수 구성, 실제 개발 MR 파이프라인 성공, 외부 접속과 개발 시드 계정 로그인이다.
 운영 배포는 [Release Domain](docs/domains/release/README.md)의 별도 절차를 따른다.
 
+README의 전체 셋업 요청에는 [Codex Console 설치](docs/apps/codex-console/README.md#설치)도 포함된다.
+현재 ChatGPT 구독 로그인을 사용하며 OWH 개발 서버와 별도 프로세스·로그인·DB로 실행한다.
+개인 앱의 **Codex 콘솔**을 클릭하면 새 탭으로 열린다. [함께 설치하는 절차](#61-codex-콘솔-함께-설치)를 완료한다.
+
 ## 설치 계정 권한
 
 네이티브 최초 설치 계정은 비밀번호 없이 `sudo`를 실행할 수 있는 `sudo` 그룹 소속 일반 사용자여야 한다. 관리자가 [README의 설치 계정 권한 설정](README.md#0-설치-계정-권한-설정)을 먼저 완료한다. 에이전트는 `sudo -n true`로 권한을 확인하고, 실패하면 권한을 자동 변경하거나 비밀번호를 요청하지 말고 관리자에게 사전 설정을 요청한다.
@@ -43,6 +47,7 @@ Codex 실행 후 `/permissions`에서 **Full access**를 선택한다.
 > API·개발 DB·Redis는 loopback 수신을 유지하고, 내 PC에서 서버 IP로 직접 접속해 시드 계정으로 로그인할 수 있게 해줘.
 > pnpm dev:login-smoke 명령과 agent-browser로 서버 IP 주소의 로그인과 화면을 확인해줘.
 > 조직 최초 도입이면 README 4절의 셋업 요청 범위로 GitLab·Runner·CI 변수와 개발 MR 파이프라인 성공까지 진행해줘. GitLab 도메인·DNS 설정은 제외하고 서버 IP를 사용해줘.
+> 6.1절의 Codex 콘솔도 전용 DB·비밀번호·지속 실행 서비스·HTTPS 접속까지 구성하고, 개인 앱에서 새 탭 열기와 구독 연결을 확인해줘.
 > 비밀값은 대화에 요청하지 말고 서버에서 입력할 방법을 안내해줘.
 > 로그인 정보는 1.1절에 따라 프로젝트 루트의 .auth_info에 기록·갱신하고, 비밀값 대신 파일 경로를 알려줘.
 > 끝나면 접속 방법, 실행한 검사, 사용 가능한 기능과 추가 설정이 필요한 기능을 알려줘.
@@ -929,6 +934,37 @@ curl --fail --silent --output /dev/null http://127.0.0.1:8001/readyz
 AI 보호 정책을 끄지 않는다. 추가 키·서버가 필요한 기능은 미설정 상태로 명시한다.
 별도의 사용자 요청 없이 준비 확인만을 위해 유료 추론을 실행하지 않는다.
 
+## 6.1. Codex 콘솔 함께 설치
+
+[Codex Console 소유 문서](docs/apps/codex-console/README.md)의 설치·서비스 실행·개인 앱 연결
+절차를 수행한다. OWH 업무 DB와 별개의 전용 PostgreSQL 역할·DB를 만들고, Codex를 구독으로
+로그인한 OS 사용자로 서비스를 실행한다. 콘솔은 고정 버전의 공식 app-server를 사용하며
+Platform API 키나 OWH AI 공급자 설정을 요구하지 않는다.
+
+- 콘솔의 `.env`와 웹 비밀번호를 준비하고 migration·정적 UI 빌드·systemd 자동 시작을 완료한다.
+- [파일 첨부 설정](docs/apps/codex-console/README.md#파일-보관과-메시지별-첨부)에 따라 원본 DB
+  백업·Git 저장소 밖의 읽기 사본 경로·업로드 용량과 HTTPS 프록시 제한을 준비한다.
+- 전용 HTTPS 주소에서 콘솔로 직접 연결해 OWH 개발 Web 재시작과 접속 경로를 분리한다.
+  앞단 프록시가 다른 호스트이면 [사설망 연결 설정](docs/apps/codex-console/README.md#tls-프록시가-다른-호스트에-있을-때)을 따른다.
+  기존 개발 사이트의 `/codex-console/`를 Vite로 연결하는 대안은 개발 Web 재시작 시 접속이 중단된다.
+  IP 기반 최초 설치에는 [HTTPS 신뢰 등록](docs/domains/release/installation-operations.md#https-trust)을 적용한다.
+  외부 HTTP origin 허용이나 Codex 인증 파일 복사로 우회하지 않는다.
+- OWH의 typed launch URL 설정과 관리자 앱 사용 설정에서 `codex-console`을 활성화한다.
+  URL 미설정·비활성화 상태에서는 개인 앱에 노출되지 않는다. 등록 대상은 플랫폼 관리자이며
+  콘솔 접근에는 별도 작업실 비밀번호가 필요하다.
+- `개인 앱 → Codex 콘솔` 클릭 시 기존 탭은 유지되고 새 탭이 열리는지, 콘솔 로그인과
+  ChatGPT 구독 연결 상태, 로그아웃 후 접근 차단, 프록시 아래의 정적 파일·API·SSE를 확인한다.
+- 파일 두 개를 보관하고 하나만 메시지에 선택해 전달한다. 전송 후 선택 해제, 첨부 기록과
+  파일 목록의 새로고침 복원, 128 KiB 초과 업로드도 확인한다.
+- 접속 주소·전용 웹 비밀번호·DB 정보는 [`.auth_info`](#11-로그인-정보-파일-관리)에 기록한다.
+  콘솔의 실제 서비스 이름·실행 계정·중지/재시작 명령을 인계한다.
+
+`dev.sh`는 콘솔을 시작하거나 종료하지 않는다. 콘솔은 자신을 수정하는 개발 체크아웃과
+분리된 릴리스에서 실행한다. 업데이트에는 새 릴리스 빌드·설정 연결·검증·전용 DB 백업과
+서비스 중지 중 migration·서비스 재시작을
+사용하며, 원본 Codex 인증과 전용 DB는 유지한다. 이미 사용 중인 전용 DB·비밀번호·서비스
+설정은 재설치 시 초기화하지 않는다.
+
 ## 7. 실행 종료·재시작과 완료 확인
 
 `dev.sh`는 전경 실행이다. `Ctrl+C` 또는 터미널 종료 시 앱 프로세스가 멈추며 네이티브 DB·Redis와 Docker 인프라는 남는다.
@@ -966,7 +1002,8 @@ Runner는 `sudo systemctl stop gitlab-runner`, `sudo systemctl start gitlab-runn
 - 세션 종료와 무관한 개발 앱 실행, PostgreSQL·Redis 인증 연결과 API readiness.
 - IP 기반 GitLab 로그인, 관리자 설정·`glab` 인증, 비공개 프로젝트와 `origin` 연결, `dev`·`main` 등록·보호와 개발·운영 체크아웃 분리.
 - Runner 등록·온라인 상태와 필요한 이미지·CI 변수·테스트 DB 준비, 검증용 `dev` 대상 MR의 최신 커밋에 대한 실제 파이프라인 성공.
-- `.auth_info`의 최신 개발·GitLab·DB 로그인 정보, 소유자 전용 권한과 Git 제외·미추적 상태.
+- Codex 콘솔의 지속 실행·HTTPS 접속과 개인 앱 새 탭 열기, 전용 로그인·구독 연결 및 메시지별 파일 선택 첨부 확인.
+- `.auth_info`의 최신 개발·GitLab·DB·Codex 콘솔 로그인 정보, 소유자 전용 권한과 Git 제외·미추적 상태.
 
 GitLab 패키지 다운로드·lint·최소 환경 실행은 중간 단계다. 실패한 필수 항목은 원인을 해결하고 재검사한다.
 필수 인증이나 외부 네트워크 권한처럼 사용자만 처리할 수 있는 항목이 남으면 정확한 미완료 항목과 필요한 조치만 요청하며, 독립적으로 가능한 설치 작업은 계속한다.

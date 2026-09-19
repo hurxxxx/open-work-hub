@@ -16,6 +16,7 @@ const FULL_SUITES = [
   'ci:contract',
   'ci:api:full',
   'ci:web',
+  'ci:codex-console',
 ];
 
 // Changes to the selector or its execution contract cannot select their own shortcut.

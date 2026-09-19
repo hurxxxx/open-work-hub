@@ -23,11 +23,14 @@ from open_work_hub_api.domains.retrieval.app_catalog import RETRIEVAL_SEARCH_APP
 from open_work_hub_api.domains.video_chat.app_catalog import VIDEO_CHAT_APP
 from open_work_hub_api.domains.whiteboard.app_catalog import WHITEBOARD_APP
 
+from open_work_hub_api.domains.codex_console.app_catalog import CODEX_CONSOLE_APP
+
 from .home_app_catalog import HOME_APP
 
 _APP_REGISTRATIONS = (
     HOME_APP,
     AGENT_TERMINAL_APP,
+    CODEX_CONSOLE_APP,
     CHATBOT_APP,
     PMS_APP,
     DOCS_APP,
