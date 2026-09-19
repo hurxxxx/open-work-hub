@@ -1,3 +1,4 @@
+import { codexConsoleManifest } from '@/src/app-modules/codex-console/manifest';
 import { agentTerminalManifest } from '@/src/app-modules/agent-terminal/manifest';
 import { announcementsManifest } from '@/src/app-modules/announcements/manifest';
 import { bentoManifest } from '@/src/app-modules/bento/manifest';
@@ -19,6 +20,7 @@ import { whiteboardManifest } from '@/src/app-modules/whiteboard/manifest';
 
 export {
   agentTerminalManifest,
+  codexConsoleManifest,
   announcementsManifest,
   bentoManifest,
   chatbotManifest,
@@ -41,6 +43,7 @@ export {
 export const DEFAULT_APP_CONTRACT_MANIFESTS = [
   homeManifest,
   agentTerminalManifest,
+  codexConsoleManifest,
   chatbotManifest,
   pmsManifest,
   docsManifest,

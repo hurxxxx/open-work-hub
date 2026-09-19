@@ -10,6 +10,7 @@ const apiProxyTarget = process.env.OPEN_WORK_HUB_WEB_API_PROXY_TARGET ?? 'http:/
 const drawioProxyTarget =
   process.env.OPEN_WORK_HUB_WEB_DRAWIO_PROXY_TARGET ??
   `http://127.0.0.1:${process.env.OPEN_WORK_HUB_DRAWIO_PORT ?? 18082}`;
+const codexConsoleProxyTarget = 'http://127.0.0.1:19365';
 const webDevPort = Number(process.env.OPEN_WORK_HUB_WEB_DEV_PORT ?? 4200);
 const webDevAllowedHosts = (process.env.OPEN_WORK_HUB_WEB_DEV_ALLOWED_HOSTS ?? '')
   .split(',')
@@ -48,6 +49,11 @@ export default defineConfig(() => ({
     host: process.env.OPEN_WORK_HUB_WEB_DEV_HOST ?? '127.0.0.1',
     allowedHosts: webDevAllowedHosts,
     proxy: {
+      '/codex-console': {
+        target: codexConsoleProxyTarget,
+        timeout: 0,
+        proxyTimeout: 0,
+      },
       '/healthz': {
         target: apiProxyTarget,
         timeout: apiProxyTimeoutMs,
@@ -80,6 +86,11 @@ export default defineConfig(() => ({
     host: process.env.OPEN_WORK_HUB_WEB_DEV_HOST ?? '127.0.0.1',
     allowedHosts: webDevAllowedHosts,
     proxy: {
+      '/codex-console': {
+        target: codexConsoleProxyTarget,
+        timeout: 0,
+        proxyTimeout: 0,
+      },
       '/healthz': {
         target: apiProxyTarget,
         timeout: apiProxyTimeoutMs,

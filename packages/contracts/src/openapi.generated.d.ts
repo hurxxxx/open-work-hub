@@ -9306,6 +9306,8 @@ export interface components {
         };
         /** BootstrapAppResponse */
         BootstrapAppResponse: {
+            /** Launch Url */
+            launch_url?: string | null;
             /** Entry Route Id */
             entry_route_id: string;
             /**

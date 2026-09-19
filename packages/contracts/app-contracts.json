@@ -33,13 +33,40 @@
         "placement": "personal_tools",
         "pinned_by_default": false
       },
-      "required_system_roles": ["platform_admin"],
+      "required_system_roles": [
+        "platform_admin"
+      ],
       "feature_flag": "agent_terminal_enabled",
       "routes": [
         {
           "route_id": "agent-terminal.root",
           "suffix": "",
           "chrome": "fullSurface"
+        }
+      ]
+    },
+    {
+      "app_id": "codex-console",
+      "title": "Codex Console",
+      "icon_key": "code-xml",
+      "execution_context_kind": "personal",
+      "resource_scope": "personal",
+      "route_base": "/apps/codex-console",
+      "entry_route_id": "codex-console.root",
+      "launcher": {
+        "placement": "personal_tools",
+        "pinned_by_default": false,
+        "url_setting": "codex_console_launch_url"
+      },
+      "required_system_roles": [
+        "platform_admin"
+      ],
+      "feature_flag": "codex_console_enabled",
+      "routes": [
+        {
+          "route_id": "codex-console.root",
+          "suffix": "",
+          "chrome": "containedSurface"
         }
       ]
     },
