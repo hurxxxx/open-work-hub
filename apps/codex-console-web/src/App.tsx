@@ -23,6 +23,7 @@ import {
   record,
   uploadAttachment,
   type Account,
+  type Model,
   type Attachment,
   type Detail,
   type DeviceLogin,
@@ -48,6 +49,11 @@ import {
   type DocumentDraft,
 } from './views';
 import { AttachmentBadges, FileLibrary } from './attachments';
+import {
+  ExecutionSettings,
+  ExecutionStatus,
+  type Execution,
+} from './execution';
 
 type Tab = 'requirements' | 'plan' | 'changes' | 'checks' | 'files';
 const tabs: { id: Tab; label: Copy }[] = [
@@ -96,7 +102,21 @@ export function App() {
   const [newOpen, setNewOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
-  const [stage, setStage] = useState<'requirements' | 'plan'>('requirements');
+  const [stage, setStage] = useState<'requirements' | 'plan' | 'implement'>(
+    'requirements',
+  );
+  const [models, setModels] = useState<Model[]>([]);
+  const [modelsFailed, setModelsFailed] = useState(false);
+  const [execution, setExecution] = useState<Execution>({
+    model: null,
+    effort: null,
+    permissions: 'ask',
+  });
+  const [approvalExecution, setApprovalExecution] =
+    useState<Execution>(execution);
+  const [approvalRecover, setApprovalRecover] = useState(false);
+  const [approvalText, setApprovalText] = useState('');
+  const initializedTask = useRef<string | null>(null);
   const [planToApprove, setPlanToApprove] = useState<Revision | null>(null);
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
   const [attachmentPicker, setAttachmentPicker] = useState(false);
@@ -146,6 +166,14 @@ export function App() {
     const value = await api<Account>('/codex/account');
     setAccount(value);
     if (value.auth_type === 'chatgpt') setDevice(null);
+  }, []);
+  const refreshModels = useCallback(async () => {
+    setModelsFailed(false);
+    try {
+      setModels(await api<Model[]>('/codex/models'));
+    } catch {
+      setModelsFailed(true);
+    }
   }, []);
   const refreshTask = useCallback(async (id: string, signal?: AbortSignal) => {
     const detail = await api<Detail>(
@@ -227,6 +255,17 @@ export function App() {
     },
     [act, attachmentIds, refreshTasks, onError],
   );
+
+  const approveImplementation = (revision: Revision, text = '') => {
+    if (!task) return;
+    setApprovalFiles(
+      task.attachments.filter((file) => attachmentIds.includes(file.id)),
+    );
+    setApprovalExecution(execution);
+    setApprovalRecover(['interrupted', 'failed'].includes(task.status));
+    setApprovalText(text);
+    setPlanToApprove(revision);
+  };
 
   const toggleAttachment = (id: string) => {
     if (attachmentIds.includes(id))
@@ -329,12 +368,13 @@ export function App() {
   useEffect(() => {
     if (!authenticated) return;
     void refreshAccount().catch(onError);
+    void refreshModels();
     const timer = window.setInterval(
       () => void refreshAccount().catch(onError),
       30000,
     );
     return () => window.clearInterval(timer);
-  }, [authenticated, refreshTasks, refreshAccount, onError]);
+  }, [authenticated, refreshTasks, refreshAccount, refreshModels, onError]);
   useEffect(() => {
     if (!authenticated) return;
     const timer = window.setTimeout(
@@ -344,6 +384,7 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [search, authenticated, refreshTasks, onError]);
   useEffect(() => {
+    initializedTask.current = null;
     setTask(null);
     setMessage('');
     uploadAbort.current?.abort();
@@ -367,6 +408,11 @@ export function App() {
       });
       void refreshTasks().catch(onError);
     };
+    const fallback = window.setInterval(refresh, 10000);
+    const visible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', visible);
     stream.addEventListener('changed', refresh);
     stream.addEventListener('open', () => {
       setConnected(true);
@@ -379,6 +425,8 @@ export function App() {
       setTask(null);
     });
     return () => {
+      window.clearInterval(fallback);
+      document.removeEventListener('visibilitychange', visible);
       controller.abort();
       uploadAbort.current?.abort();
       stream.close();
@@ -387,6 +435,23 @@ export function App() {
   useEffect(() => {
     if (nearBottom.current) chatEnd.current?.scrollIntoView({ block: 'end' });
   }, [task?.event_id]);
+
+  useEffect(() => {
+    if (!task || initializedTask.current === task.id) return;
+    initializedTask.current = task.id;
+    setStage(
+      task.stage === 'review' || task.stage === 'implement'
+        ? 'implement'
+        : task.stage === 'plan'
+          ? 'plan'
+          : 'requirements',
+    );
+    setExecution({
+      model: task.model ?? null,
+      effort: task.effort ?? null,
+      permissions: task.permissions === 'yolo' ? 'yolo' : 'ask',
+    });
+  }, [task]);
 
   const loadHistory = async (cursor: string | null = null) => {
     await act(async () => {
@@ -754,11 +819,12 @@ export function App() {
               )}
             </div>
           </div>
-          {task.error_code && (
+          {(task.error_code || task.status === 'uncertain') && (
             <div className="runtime-notice" role="status">
-              {t(errorCopy(task.error_code))}
+              {t(errorCopy(task.error_code ?? 'codex_request_uncertain'))}
               {(task.status === 'uncertain' ||
-                task.error_code === 'codex_request_uncertain') && (
+                task.error_code === 'codex_request_uncertain' ||
+                task.error_code === 'workspace_changed') && (
                 <>
                   <small>
                     {t('No request will be automatically replayed.')}
@@ -766,7 +832,8 @@ export function App() {
                   <Button
                     disabled={busy}
                     onClick={() => {
-                      const confirmWorkspace = task.stage === 'implement';
+                      const confirmWorkspace =
+                        task.stage === 'implement' || task.stage === 'review';
                       if (
                         confirmWorkspace &&
                         !window.confirm(
@@ -802,6 +869,38 @@ export function App() {
             </button>
           </div>
           <section className="conversation" aria-label={t('Conversation')}>
+            <ExecutionStatus task={task} connected={connected} t={t} />
+            {['interrupted', 'failed'].includes(task.status) && (
+              <div className="resume-task">
+                <Button
+                  disabled={busy}
+                  onClick={() => {
+                    const plan = task.revisions
+                      .filter((revision) => revision.kind === 'plan')
+                      .at(-1);
+                    if (task.approved_revision && plan) {
+                      setStage('implement');
+                      approveImplementation(
+                        plan,
+                        t(
+                          'Continue from the interruption using the existing conversation and files. Check completed work and finish the remaining approved plan.',
+                        ),
+                      );
+                    } else {
+                      void send('messages', {
+                        ...execution,
+                        stage: task.stage === 'plan' ? 'plan' : 'requirements',
+                        text: t(
+                          'Continue from the interruption using the existing conversation and files. Check completed work and finish the remaining approved plan.',
+                        ),
+                      });
+                    }
+                  }}
+                >
+                  {t('Continue from interruption')}
+                </Button>
+              </div>
+            )}
             <div
               className="messages"
               ref={scroller}
@@ -864,9 +963,21 @@ export function App() {
               }}
               onSubmit={(event) => {
                 event.preventDefault();
+                if (!active(task) && stage === 'implement') {
+                  const plan = task.revisions
+                    .filter((revision) => revision.kind === 'plan')
+                    .at(-1);
+                  if (!plan) {
+                    setError('stale_plan');
+                    setTab('plan');
+                    return;
+                  }
+                  approveImplementation(plan, message);
+                  return;
+                }
                 void send(active(task) ? 'steer' : 'messages', {
                   text: message,
-                  stage,
+                  ...(active(task) ? {} : { ...execution, stage }),
                 }).then((ok) => {
                   if (ok && selectedRef.current === task.id)
                     setMessage((current) =>
@@ -908,29 +1019,53 @@ export function App() {
                     event.currentTarget.form?.requestSubmit();
                 }}
               />
-              <div className="composer-toolbar">
-                <div>
-                  {active(task) ? (
-                    <span className="muted">
-                      {t(
-                        task.stage === 'implement'
-                          ? 'Implementation authorized'
-                          : 'Read-only planning',
-                      )}
-                    </span>
-                  ) : (
-                    <select
-                      aria-label={t('Plan')}
-                      value={stage}
-                      onChange={(event) =>
-                        setStage(event.target.value as 'requirements' | 'plan')
+              <ExecutionSettings
+                models={models}
+                value={
+                  active(task)
+                    ? {
+                        model: task.model ?? null,
+                        effort: task.effort ?? null,
+                        permissions:
+                          task.permissions === 'yolo' ? 'yolo' : 'ask',
                       }
-                    >
-                      <option value="requirements">{t('Requirements')}</option>
-                      <option value="plan">{t('Plan')}</option>
-                    </select>
-                  )}
-                </div>
+                    : execution
+                }
+                onChange={setExecution}
+                disabled={busy || locked(task)}
+                implementation={
+                  active(task)
+                    ? task.stage === 'implement'
+                    : stage === 'implement'
+                }
+                failed={modelsFailed}
+                onRetry={() => void refreshModels()}
+                t={t}
+              />
+              <div className="composer-toolbar">
+                <label className="mode-selector">
+                  {t('Execution mode')}
+                  <select
+                    aria-label={t('Execution mode')}
+                    disabled={busy || locked(task)}
+                    value={
+                      active(task)
+                        ? task.stage === 'implement'
+                          ? 'implement'
+                          : task.stage === 'plan'
+                            ? 'plan'
+                            : 'requirements'
+                        : stage
+                    }
+                    onChange={(event) =>
+                      setStage(event.target.value as typeof stage)
+                    }
+                  >
+                    <option value="requirements">{t('Requirements')}</option>
+                    <option value="plan">{t('Plan')}</option>
+                    <option value="implement">{t('Implement')}</option>
+                  </select>
+                </label>
                 <div className="actions">
                   <Button
                     variant="ghost"
@@ -1008,6 +1143,7 @@ export function App() {
                   setStage('plan');
                   setTab('plan');
                   void send('messages', {
+                    ...execution,
                     stage: 'plan',
                     text: t(
                       'Create an implementation plan from the requirements, including acceptance checks.',
@@ -1015,12 +1151,8 @@ export function App() {
                   });
                 }}
                 onImplement={(revision) => {
-                  setApprovalFiles(
-                    task.attachments.filter((file) =>
-                      attachmentIds.includes(file.id),
-                    ),
-                  );
-                  setPlanToApprove(revision);
+                  setStage('implement');
+                  approveImplementation(revision);
                 }}
               />
             )}
@@ -1113,17 +1245,50 @@ export function App() {
         onClose={() => setPlanToApprove(null)}
         onConfirm={() => {
           if (planToApprove)
-            void send('implement', {
-              revision_id: planToApprove.id,
-              attachment_ids: approvalFiles.map((file) => file.id),
-            }).then((ok) => {
+            void (async () => {
+              if (
+                approvalRecover &&
+                !(await mutate('recover', { confirm_workspace: true }))
+              )
+                return false;
+              return send('implement', {
+                ...approvalExecution,
+                text: approvalText,
+                revision_id: planToApprove.id,
+                attachment_ids: approvalFiles.map((file) => file.id),
+              });
+            })().then((ok) => {
               if (ok) {
                 setPlanToApprove(null);
+                setMessage((current) =>
+                  current === approvalText ? '' : current,
+                );
                 setTab('changes');
               }
             });
         }}
       >
+        <p>
+          {approvalExecution.model ?? t('Codex default')} ·{' '}
+          {t(
+            approvalExecution.permissions === 'yolo'
+              ? 'YOLO · Full access'
+              : 'Ask when needed',
+          )}
+        </p>
+        {approvalExecution.permissions === 'yolo' && (
+          <p className="danger">
+            {t('YOLO runs commands without approval or sandbox restrictions.')}
+          </p>
+        )}
+        {approvalRecover && (
+          <p>
+            {t(
+              'Review the current diff first. Keep these changes in this task and continue in the same workspace?',
+            )}
+          </p>
+        )}
+        {approvalText && <p className="confirmation-request">{approvalText}</p>}
         {task && approvalFiles.length > 0 && (
           <AttachmentBadges files={approvalFiles} taskId={task.id} t={t} />
         )}

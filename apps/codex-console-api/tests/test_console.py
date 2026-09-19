@@ -378,7 +378,9 @@ def test_console_inherits_native_thread_model_without_choosing_a_route(client, m
     thread = next(params for method, params in rpc.calls if method == "thread/start")
     turn = next(params for method, params in rpc.calls if method == "turn/start")
     for params in (thread, turn):
-        assert not {"model", "modelProvider", "provider", "apiKey"}.intersection(params)
+        assert not {"modelProvider", "provider", "apiKey"}.intersection(params)
+    assert "model" not in thread
+    assert turn["model"] == "native-session-model"
     assert turn["collaborationMode"]["settings"]["model"] == "native-session-model"
 
 

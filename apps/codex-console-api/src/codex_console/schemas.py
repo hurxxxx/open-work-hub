@@ -25,7 +25,13 @@ class ImportThread(Input):
     confirm_inactive: Literal[True]
 
 
-class Message(Input):
+class ExecutionOptions(Input):
+    model: str | None = Field(default=None, min_length=1, max_length=200)
+    effort: str | None = Field(default=None, min_length=1, max_length=40)
+    permissions: Literal["ask", "yolo"] = "ask"
+
+
+class MessageBody(Input):
     operation_id: UUID
     text: str = Field(default="", max_length=MESSAGE_CHAR_LIMIT)
     stage: Literal["requirements", "plan"] = "requirements"
@@ -38,9 +44,14 @@ class Message(Input):
         return self
 
 
-class Implement(Input):
+class Message(MessageBody, ExecutionOptions):
+    pass
+
+
+class Implement(ExecutionOptions):
     operation_id: UUID
     revision_id: int = Field(gt=0)
+    text: str = Field(default="", max_length=MESSAGE_CHAR_LIMIT)
     attachment_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
 
@@ -84,6 +95,18 @@ class TaskOut(BaseModel):
     approved_revision: int | None
     error_code: str | None
     updated_at: str
+    model: str | None = None
+    effort: str | None = None
+    permissions: Literal["read-only", "ask", "yolo"] = "read-only"
+    progress: dict[str, Any] | None = None
+
+
+class ModelOut(BaseModel):
+    model: str
+    name: str
+    is_default: bool
+    default_effort: str
+    efforts: list[str]
 
 
 class RequestOut(BaseModel):

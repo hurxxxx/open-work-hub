@@ -52,6 +52,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/codex/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Models */
+        get: operations["models_api_codex_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/codex/login": {
         parameters: {
             query?: never;
@@ -458,6 +475,16 @@ export interface components {
         };
         /** Implement */
         Implement: {
+            /** Model */
+            model?: string | null;
+            /** Effort */
+            effort?: string | null;
+            /**
+             * Permissions
+             * @default ask
+             * @enum {string}
+             */
+            permissions: "ask" | "yolo";
             /**
              * Operation Id
              * Format: uuid
@@ -465,6 +492,11 @@ export interface components {
             operation_id: string;
             /** Revision Id */
             revision_id: number;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
             /** Attachment Ids */
             attachment_ids?: string[];
         };
@@ -485,6 +517,16 @@ export interface components {
         };
         /** Message */
         Message: {
+            /** Model */
+            model?: string | null;
+            /** Effort */
+            effort?: string | null;
+            /**
+             * Permissions
+             * @default ask
+             * @enum {string}
+             */
+            permissions: "ask" | "yolo";
             /**
              * Operation Id
              * Format: uuid
@@ -503,6 +545,40 @@ export interface components {
             stage: "requirements" | "plan";
             /** Attachment Ids */
             attachment_ids?: string[];
+        };
+        /** MessageBody */
+        MessageBody: {
+            /**
+             * Operation Id
+             * Format: uuid
+             */
+            operation_id: string;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /**
+             * Stage
+             * @default requirements
+             * @enum {string}
+             */
+            stage: "requirements" | "plan";
+            /** Attachment Ids */
+            attachment_ids?: string[];
+        };
+        /** ModelOut */
+        ModelOut: {
+            /** Model */
+            model: string;
+            /** Name */
+            name: string;
+            /** Is Default */
+            is_default: boolean;
+            /** Default Effort */
+            default_effort: string;
+            /** Efforts */
+            efforts: string[];
         };
         /** NewTask */
         NewTask: {
@@ -578,6 +654,20 @@ export interface components {
             error_code: string | null;
             /** Updated At */
             updated_at: string;
+            /** Model */
+            model?: string | null;
+            /** Effort */
+            effort?: string | null;
+            /**
+             * Permissions
+             * @default read-only
+             * @enum {string}
+             */
+            permissions: "read-only" | "ask" | "yolo";
+            /** Progress */
+            progress?: {
+                [key: string]: unknown;
+            } | null;
             /** Revisions */
             revisions: components["schemas"]["RevisionOut"][];
             /** Items */
@@ -618,6 +708,20 @@ export interface components {
             error_code: string | null;
             /** Updated At */
             updated_at: string;
+            /** Model */
+            model?: string | null;
+            /** Effort */
+            effort?: string | null;
+            /**
+             * Permissions
+             * @default read-only
+             * @enum {string}
+             */
+            permissions: "read-only" | "ask" | "yolo";
+            /** Progress */
+            progress?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** ThreadPage */
         ThreadPage: {
@@ -768,6 +872,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccountOut"];
+                };
+            };
+        };
+    };
+    models_api_codex_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelOut"][];
                 };
             };
         };
@@ -1201,7 +1325,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Message"];
+                "application/json": components["schemas"]["MessageBody"];
             };
         };
         responses: {
