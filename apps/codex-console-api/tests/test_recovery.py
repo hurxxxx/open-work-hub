@@ -85,6 +85,90 @@ def test_recovery_can_acknowledge_native_confirmation_without_replaying(client):
     assert len([c for c in rpc.calls if c[0] == "turn/start"]) == 1
 
 
+@pytest.mark.parametrize("stage", ["requirements", "plan"])
+@pytest.mark.parametrize("lost_response", [False, True])
+def test_recovery_projects_completed_document_once_and_preserves_user_edits(
+    client, stage, lost_response
+):
+    client.get("/api/codex/account")
+    runtime = client.app.state.runtime
+    rpc = runtime.rpc
+    rpc.fail_turn = lost_response
+    key = str(uuid4())
+    task = new_task(client)
+    response = send_message(client, task, stage, operation_id=key)
+    assert response.status_code == (503 if lost_response else 200)
+    task = client.get(f"/api/tasks/{task['id']}").json()
+    turn_id = task["turn_id"] or "native-completed-turn"
+    rpc.fail_turn = False
+    rpc.threads[task["thread_id"]]["turns"] = [
+        {
+            "id": turn_id,
+            "status": "completed",
+            "items": [
+                {"id": "user", "type": "userMessage", "clientId": key, "content": []},
+                {"id": "document", "type": "plan", "text": "Recovered complete document"},
+            ],
+        }
+    ]
+    client.portal.call(runtime.on_disconnect)
+    endpoint = f"/api/tasks/{task['id']}"
+    recovered = client.post(endpoint + "/recover", json={})
+    assert recovered.status_code == 200
+    revisions = recovered.json()["revisions"]
+    assert len(revisions) == 1
+    assert revisions[0]["kind"] == stage
+    assert revisions[0]["body"] == "Recovered complete document"
+    assert client.post(endpoint + "/recover", json={}).json()["revisions"] == revisions
+    edited = client.put(
+        endpoint + "/documents",
+        json={
+            "kind": stage,
+            "base_version": 1,
+            "body": "User revised the recovered document",
+        },
+    ).json()["revisions"]
+    assert client.post(endpoint + "/recover", json={}).json()["revisions"] == edited
+    # A delayed duplicate completion must not overwrite the manual revision either.
+    client.portal.call(
+        runtime.on_message,
+        {
+            "method": "turn/completed",
+            "params": {
+                "threadId": task["thread_id"],
+                "turnId": turn_id,
+                "turn": {"id": turn_id, "status": "completed"},
+            },
+        },
+    )
+    assert client.get(endpoint).json()["revisions"] == edited
+
+
+def test_recovery_does_not_project_an_older_turn_for_an_unsubmitted_new_request(client):
+    task = plan(client)
+    runtime = client.app.state.runtime
+    rpc = runtime.rpc
+    old_id = next(
+        params["clientUserMessageId"] for method, params in rpc.calls if method == "turn/start"
+    )
+    rpc.threads[task["thread_id"]]["turns"] = [
+        {
+            "id": task["turn_id"],
+            "status": "completed",
+            "items": [
+                {"id": "old-user", "type": "userMessage", "clientId": old_id, "content": []},
+                {"id": "old-plan", "type": "plan", "text": "An actionable plan"},
+            ],
+        }
+    ]
+    rpc.fail_turn = True
+    assert send_message(client, task, "plan").status_code == 503
+    assert client.get(f"/api/tasks/{task['id']}").json()["turn_id"] is None
+    rpc.fail_turn = False
+    recovered = client.post(f"/api/tasks/{task['id']}/recover", json={}).json()
+    assert recovered["revisions"] == task["revisions"]
+
+
 def test_explicit_recovery_allows_new_request_but_never_replays_uncertain_id(client):
     client.get("/api/codex/account")
     rpc = client.app.state.runtime.rpc

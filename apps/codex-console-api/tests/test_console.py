@@ -1,11 +1,13 @@
 import json
+from importlib.util import module_from_spec, spec_from_file_location
 from uuid import uuid4
 
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from conftest import complete, new_task, notify, plan, send_message
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from codex_console import auth
 from codex_console.models import Base, PendingRequest, Task, database
@@ -25,6 +27,40 @@ def test_migration_matches_models(settings):
         )
         assert compare_metadata(context, Base.metadata) == []
     engine.dispose()
+
+
+def test_turn_provenance_migration_preserves_existing_documents(client):
+    from codex_console.cli import ROOT
+
+    task = new_task(client)
+    operation_id = str(uuid4())
+    task = send_message(client, task, "plan", operation_id=operation_id).json()
+    completed = complete(client, task, "Keep the existing approved design")
+    spec = spec_from_file_location(
+        "revision_turn", ROOT / "migrations/versions/0003_revision_turn.py"
+    )
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = client.app.state.factory.kw["bind"]
+    # Transactional PostgreSQL DDL keeps this upgrade probe isolated from the
+    # shared test schema, even when an assertion fails.
+    with engine.connect() as connection, connection.begin() as transaction:
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.downgrade()
+            migration.upgrade()
+        assert (
+            connection.scalar(
+                text("SELECT current_operation_id FROM console_tasks WHERE id = :id"),
+                {"id": task["id"]},
+            )
+            == operation_id
+        )
+        revisions = connection.execute(
+            text("SELECT body, source_turn_id FROM console_revisions WHERE task_id = :id"),
+            {"id": task["id"]},
+        ).all()
+        assert revisions == [(completed["revisions"][0]["body"], None)]
+        transaction.rollback()
 
 
 def test_authentication_csrf_origin_and_logout(client):
@@ -170,6 +206,28 @@ def test_documents_use_optimistic_version_check(client):
     body = {"kind": "plan", "base_version": 1, "body": "Revised plan"}
     assert client.put(endpoint, json=body).status_code == 200
     assert client.put(endpoint, json=body).json()["code"] == "stale_document"
+
+
+def test_task_search_reaches_older_isolated_tasks_beyond_recent_limit(client, repository):
+    from datetime import UTC, datetime
+
+    with client.app.state.factory.begin() as db:
+        old = Task(
+            title="Archived 100%_done",
+            root=str(repository.parent / "worktrees" / "archive"),
+            worktree_owned=True,
+            updated_at=datetime(2020, 1, 1, tzinfo=UTC),
+        )
+        db.add(old)
+        db.add_all(Task(title=f"Recent {i}", root=str(repository)) for i in range(201))
+        db.flush()
+        old_id = old.id
+    recent = client.get("/api/tasks").json()
+    assert len(recent) == 200
+    assert old_id not in {row["id"] for row in recent}
+    found = client.get("/api/tasks", params={"search": "ARCHIVED 100%_done"}).json()
+    assert [row["id"] for row in found] == [old_id]
+    assert client.get("/api/tasks", params={"search": "x" * 201}).status_code == 422
 
 
 def test_identical_regenerated_plan_can_approve_new_requirements(client):

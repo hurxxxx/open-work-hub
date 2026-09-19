@@ -859,7 +859,9 @@ export interface operations {
     };
     tasks_api_tasks_get: {
         parameters: {
-            query?: never;
+            query?: {
+                search?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -873,6 +875,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

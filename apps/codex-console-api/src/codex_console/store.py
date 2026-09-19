@@ -36,9 +36,17 @@ def latest_revision(db, task_id, kind):
     )
 
 
-def save_revision(db, task: Task, kind: str, body: str):
+def save_revision(db, task: Task, kind: str, body: str, *, source_turn_id=None):
+    if source_turn_id:
+        projected = db.scalar(
+            select(Revision).where(
+                Revision.task_id == task.id, Revision.source_turn_id == source_turn_id
+            )
+        )
+        if projected:
+            return projected
     previous = latest_revision(db, task.id, kind)
-    if previous and previous.body == body:
+    if previous and previous.body == body and not source_turn_id:
         requirements = latest_revision(db, task.id, "requirements") if kind == "plan" else None
         if requirements is None or requirements.created_at <= previous.created_at:
             return previous
@@ -47,12 +55,62 @@ def save_revision(db, task: Task, kind: str, body: str):
         kind=kind,
         version=previous.version + 1 if previous else 1,
         body=body[:100000],
+        source_turn_id=source_turn_id,
     )
     task.approved_revision = None
     db.add(row)
     db.flush()
     changed(db, task, "document.updated")
     return row
+
+
+def project_document(db, task, turn_id, items):
+    if task.stage not in ("requirements", "plan"):
+        return
+    final = [item for item in items if item.get("type") == "plan"]
+    if not final:
+        final = [
+            item
+            for item in items
+            if item.get("type") == "agentMessage" and item.get("phase") == "final_answer"
+        ]
+    if final and final[-1].get("text", "").strip():
+        save_revision(db, task, task.stage, final[-1]["text"], source_turn_id=turn_id)
+
+
+def recover_document(db, task, turns):
+    if task.stage not in ("requirements", "plan"):
+        return
+    operation = db.get(Operation, task.current_operation_id) if task.current_operation_id else None
+    if not operation or operation.task_id != task.id or operation.kind != task.stage:
+        return
+    submitted_at = (
+        db.scalar(
+            select(Event.created_at)
+            .where(Event.task_id == task.id, Event.kind == "turn.submitting")
+            .order_by(Event.id.desc())
+            .limit(1)
+        )
+        or operation.created_at
+    )
+    # Preserve later user edits, including records created before turn provenance
+    # was introduced. Recovery never reinterprets an older turn as a new plan.
+    if db.scalar(
+        select(Revision.id)
+        .where(Revision.task_id == task.id, Revision.created_at >= submitted_at)
+        .limit(1)
+    ):
+        return
+    for turn in reversed(turns):
+        if turn.get("status") != "completed":
+            continue
+        items = turn.get("items", [])
+        if (task.turn_id and turn.get("id") == task.turn_id) or any(
+            item.get("type") == "userMessage" and item.get("clientId") == operation.id
+            for item in items
+        ):
+            project_document(db, task, turn["id"], items)
+            return
 
 
 def changed(db, task, kind):

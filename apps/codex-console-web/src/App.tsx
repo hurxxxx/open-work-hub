@@ -83,6 +83,8 @@ export function App() {
   const [history, setHistory] = useState<Thread[]>([]);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const searchRef = useRef(search);
+  searchRef.current = search;
   const [historySearch, setHistorySearch] = useState('');
   const [importThread, setImportThread] = useState<Thread | null>(null);
   const [confirmInactive, setConfirmInactive] = useState(false);
@@ -118,8 +120,11 @@ export function App() {
     }
   }, []);
   const refreshTasks = useCallback(async () => {
-    const rows = await api<Task[]>('/tasks');
-    setTasks(rows);
+    const query = searchRef.current.trim();
+    const rows = await api<Task[]>(
+      query ? `/tasks?search=${encodeURIComponent(query)}` : '/tasks',
+    );
+    if (searchRef.current.trim() === query) setTasks(rows);
   }, []);
   const refreshAccount = useCallback(async () => {
     const value = await api<Account>('/codex/account');
@@ -295,7 +300,6 @@ export function App() {
   }, [onError]);
   useEffect(() => {
     if (!authenticated) return;
-    void refreshTasks().catch(onError);
     void refreshAccount().catch(onError);
     const timer = window.setInterval(
       () => void refreshAccount().catch(onError),
@@ -303,6 +307,14 @@ export function App() {
     );
     return () => window.clearInterval(timer);
   }, [authenticated, refreshTasks, refreshAccount, onError]);
+  useEffect(() => {
+    if (!authenticated) return;
+    const timer = window.setTimeout(
+      () => void refreshTasks().catch(onError),
+      200,
+    );
+    return () => window.clearTimeout(timer);
+  }, [search, authenticated, refreshTasks, onError]);
   useEffect(() => {
     setTask(null);
     setMessage('');
@@ -606,29 +618,26 @@ export function App() {
               aria-label={t('Search tasks')}
               placeholder={t('Search tasks')}
               value={search}
+              maxLength={200}
               onChange={(event) => setSearch(event.target.value)}
             />
             <nav className="task-list" aria-label={t('Tasks')}>
-              {tasks
-                .filter((row) =>
-                  row.title.toLowerCase().includes(search.toLowerCase()),
-                )
-                .map((row) => (
-                  <button
-                    className={`task-row ${selected === row.id ? 'selected' : ''}`}
-                    key={row.id}
-                    aria-current={selected === row.id ? 'page' : undefined}
-                    onClick={() => choose(row.id)}
-                  >
-                    <strong>{row.title}</strong>
-                    <small>
-                      <span
-                        className={`dot ${active(row) ? 'online pulse' : ''}`}
-                      />
-                      {t(statusCopy(row.status))}
-                    </small>
-                  </button>
-                ))}
+              {tasks.map((row) => (
+                <button
+                  className={`task-row ${selected === row.id ? 'selected' : ''}`}
+                  key={row.id}
+                  aria-current={selected === row.id ? 'page' : undefined}
+                  onClick={() => choose(row.id)}
+                >
+                  <strong>{row.title}</strong>
+                  <small>
+                    <span
+                      className={`dot ${active(row) ? 'online pulse' : ''}`}
+                    />
+                    {t(statusCopy(row.status))}
+                  </small>
+                </button>
+              ))}
               {!tasks.length && (
                 <p className="muted sidebar-empty">{t('No tasks yet')}</p>
               )}

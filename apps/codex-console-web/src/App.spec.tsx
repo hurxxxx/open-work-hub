@@ -28,6 +28,7 @@ const taskId = '00000000-0000-4000-8000-000000000001';
 let detail: Detail;
 let submit: (body: Record<string, unknown>) => Promise<Detail>;
 let recover: () => Promise<Detail>;
+let searchTasks: (query: string) => Promise<Detail[]>;
 
 beforeEach(() => {
   vi.stubGlobal('EventSource', Stream);
@@ -64,10 +65,12 @@ beforeEach(() => {
   };
   submit = async () => detail;
   recover = async () => detail;
+  searchTasks = async () => [];
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation(async (path, body) => {
     if (path === '/session') return { authenticated: true };
     if (path === '/tasks') return [detail];
+    if (path.startsWith('/tasks?search=')) return searchTasks(path);
     if (path === '/codex/account')
       return { connected: true, auth_type: 'chatgpt' };
     if (path === `/tasks/${taskId}`) return detail;
@@ -91,6 +94,32 @@ async function openAndCompose() {
     target: { value: 'Same request' },
   });
 }
+
+it('searches all tasks on the server without clearing the open draft or accepting stale results', async () => {
+  let resolveOld!: (rows: Detail[]) => void;
+  searchTasks = async (query) =>
+    query.endsWith('old')
+      ? new Promise((resolve) => {
+          resolveOld = resolve;
+        })
+      : [{ ...detail, id: 'other', title: 'New search result' }];
+  await openAndCompose();
+  fireEvent.change(screen.getByLabelText('작업 검색'), {
+    target: { value: 'old' },
+  });
+  await waitFor(() => expect(resolveOld).toBeTypeOf('function'));
+  fireEvent.change(screen.getByLabelText('작업 검색'), {
+    target: { value: 'new' },
+  });
+  await screen.findByRole('button', { name: /New search result/ });
+  await act(async () =>
+    resolveOld([{ ...detail, id: 'old', title: 'Old result' }]),
+  );
+  expect(screen.queryByRole('button', { name: /Old result/ })).toBeNull();
+  expect(
+    (screen.getByLabelText('요청 내용 입력') as HTMLTextAreaElement).value,
+  ).toBe('Same request');
+});
 
 it('offers explicit stop for an uncertain native thread without a saved turn ID', async () => {
   detail = {

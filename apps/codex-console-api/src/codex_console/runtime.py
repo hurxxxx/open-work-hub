@@ -168,6 +168,8 @@ class Runtime:
                         context["requirements"] = {"kind": "application", "value": document.body}
                 store.lease(db, task_id)
                 task.status, task.stage, task.error_code = "starting", stage, None
+                task.turn_id = None
+                task.current_operation_id = operation_id
                 if previous:
                     previous.state = "preparing"
                     # A failed operation was never submitted; retain its immutable file refs.
@@ -398,6 +400,7 @@ class Runtime:
             baseline = await asyncio.to_thread(git.fingerprint, root) if implementation else None
             with self.factory.begin() as db:
                 task = store.require_task(db, task_id, locked=True)
+                store.recover_document(db, task, thread.get("turns", []))
                 task.status, task.error_code, task.turn_id = "interrupted", None, None
                 if implementation:
                     task.fingerprint, task.stage = baseline, "review"
@@ -548,20 +551,11 @@ class Runtime:
                         rows = list(
                             db.scalars(
                                 select(Item)
-                                .where(Item.task_id == task.id, Item.turn_id == task.turn_id)
+                                .where(Item.task_id == task.id, Item.turn_id == turn["id"])
                                 .order_by(Item.id)
                             )
                         )
-                        final = [r.payload for r in rows if r.payload.get("type") == "plan"]
-                        if not final:
-                            final = [
-                                r.payload
-                                for r in rows
-                                if r.payload.get("type") == "agentMessage"
-                                and r.payload.get("phase") == "final_answer"
-                            ]
-                        if final and final[-1].get("text", "").strip():
-                            store.save_revision(db, task, task.stage, final[-1]["text"])
+                        store.project_document(db, task, turn["id"], [r.payload for r in rows])
                     if task.stage == "implement":
                         try:
                             task.fingerprint = await asyncio.to_thread(

@@ -57,6 +57,7 @@ class Task(Base):
     fingerprint: Mapped[str | None] = mapped_column(String(64))
     model: Mapped[str | None] = mapped_column(String(200))
     turn_id: Mapped[str | None] = mapped_column(String(160))
+    current_operation_id: Mapped[str | None] = mapped_column(String(36))
     approved_revision: Mapped[int | None] = mapped_column(Integer)
     error_code: Mapped[str | None] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
@@ -65,12 +66,16 @@ class Task(Base):
 
 class Revision(Base):
     __tablename__ = "console_revisions"
-    __table_args__ = (UniqueConstraint("task_id", "kind", "version"),)
+    __table_args__ = (
+        UniqueConstraint("task_id", "kind", "version"),
+        UniqueConstraint("task_id", "source_turn_id", name="uq_console_revision_source_turn"),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     task_id: Mapped[str] = mapped_column(ForeignKey("console_tasks.id", ondelete="CASCADE"))
     kind: Mapped[str] = mapped_column(String(24))
     version: Mapped[int] = mapped_column(Integer)
     body: Mapped[str] = mapped_column(Text)
+    source_turn_id: Mapped[str | None] = mapped_column(String(160))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 

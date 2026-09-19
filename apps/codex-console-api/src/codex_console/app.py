@@ -58,7 +58,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
             if not guard.scalar(text("SELECT pg_try_advisory_lock(18701, 1)")):
                 raise RuntimeError("Run exactly one console API process per database")
             revision = guard.scalar(text("SELECT version_num FROM console_alembic_version"))
-            if revision != "console_0002":
+            if revision != "console_0003":
                 raise RuntimeError("Run codex-console migrate before starting the server")
             store.recover_startup(factory)
             runtime = Runtime(app.state.settings, factory, rpc_factory)
@@ -287,11 +287,16 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
         return store.detail(app.state.factory, task_id, app.state.settings)
 
     @app.get("/api/tasks", dependencies=secured, response_model=list[TaskOut])
-    def tasks():
+    def tasks(search: str = Query(default="", max_length=200)):
         with app.state.factory() as db:
+            query = select(Task)
+            if search.strip():
+                query = query.where(
+                    func.lower(Task.title).contains(search.strip().lower(), autoescape=True)
+                )
             return [
                 store.task_out(task)
-                for task in db.scalars(select(Task).order_by(Task.updated_at.desc()).limit(200))
+                for task in db.scalars(query.order_by(Task.updated_at.desc(), Task.id).limit(200))
             ]
 
     @app.post("/api/tasks", dependencies=secured, response_model=TaskDetail)
