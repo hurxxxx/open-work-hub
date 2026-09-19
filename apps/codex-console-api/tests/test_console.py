@@ -313,6 +313,55 @@ def test_api_key_authentication_cannot_start_a_turn(client):
     assert send_message(client, new_task(client)).json()["code"] == "login_required"
 
 
+def test_auto_review_configuration_cannot_replace_console_owner_approval(client, monkeypatch):
+    client.get("/api/codex/account")
+    runtime = client.app.state.runtime
+    rpc = runtime.rpc
+    original = rpc.call
+    reviewers = []
+
+    async def configured_auto_review(method, params):
+        result = await original(method, params)
+        if method == "config/read":
+            result["config"]["approvals_reviewer"] = "auto_review"
+        if method in ("thread/start", "thread/resume", "turn/start"):
+            reviewers.append((method, params.get("approvalsReviewer", "auto_review")))
+        return result
+
+    monkeypatch.setattr(rpc, "call", configured_auto_review)
+    task = plan(client)
+    task = client.post(
+        f"/api/tasks/{task['id']}/implement",
+        json={"operation_id": str(uuid4()), "revision_id": task["revisions"][-1]["id"]},
+    ).json()
+    assert {method for method, _ in reviewers} == {"thread/start", "thread/resume", "turn/start"}
+    assert all(reviewer == "user" for _, reviewer in reviewers)
+    client.portal.call(
+        runtime.on_message,
+        {
+            "id": 71,
+            "method": "item/commandExecution/requestApproval",
+            "params": {
+                "threadId": task["thread_id"],
+                "turnId": task["turn_id"],
+                "itemId": "command",
+            },
+        },
+    )
+    pending = client.get(f"/api/tasks/{task['id']}").json()
+    assert pending["status"] == "waiting"
+    assert len(pending["requests"]) == 1
+    assert rpc.responses == []
+    assert (
+        client.post(
+            f"/api/tasks/{task['id']}/requests/{pending['requests'][0]['id']}",
+            json={"decision": "accept"},
+        ).status_code
+        == 200
+    )
+    assert rpc.responses == [(71, {"decision": "accept"})]
+
+
 def test_console_inherits_native_thread_model_without_choosing_a_route(client, monkeypatch):
     client.get("/api/codex/account")
     rpc = client.app.state.runtime.rpc

@@ -115,6 +115,7 @@ class Runtime:
             "cwd": root,
             "sandbox": "read-only",
             "approvalPolicy": "never",
+            "approvalsReviewer": "user",
             "developerInstructions": WORKFLOW,
             "config": config,
         }
@@ -234,6 +235,7 @@ class Runtime:
                     "additionalContext": context,
                     "cwd": root,
                     "approvalPolicy": "on-request" if stage == "implement" else "never",
+                    "approvalsReviewer": "user",
                     "sandboxPolicy": sandbox,
                     "collaborationMode": {
                         "mode": "default" if stage == "implement" else "plan",

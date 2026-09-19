@@ -288,7 +288,8 @@ systemctl --user stop codex-console
 - 첫 버전은 외부 쓰기 도구를 제공하지 않는다. 사설 app-server에서 Apps·Plugins를 끄고
   각 thread의 공식 설정 override로 MCP 서버를 비활성화한다. 원래 Codex 설정 파일은 바꾸지 않는다.
 - 구현은 작업 디렉터리의 workspace-write sandbox를 사용한다. 권한 확대는 건별 명령·파일
-  승인 또는 표시된 권한을 현재 턴에만 부여하는 승인으로 처리한다. 포괄적인 세션 승인이나
+  승인 또는 표시된 권한을 현재 턴에만 부여하는 승인으로 처리한다. 스레드 생성·재개·턴 시작에서
+  공식 `approvalsReviewer: user`를 명시해 기존 자동 검토 설정을 상속하지 않는다. 포괄적인 세션 승인이나
   임의 RPC 전달 엔드포인트는 제공하지 않는다.
 - `dev`에 무관한 변경이 있으면 `origin/dev` 기준의 detached `../worktrees/codex-<task-id>`에서
   구현한다. 원래 변경은 보존된다. 결과는 미커밋 diff로 남기며 임시 worktree도 검토를 위해
