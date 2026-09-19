@@ -33,6 +33,7 @@ class BootstrapAppProjection(TypedDict):
     enabled: bool
     coming_soon: bool
     nav_items: list[BootstrapNavItemProjection]
+    launch_url: str | None
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,8 @@ def project_bootstrap_apps(
                 "enabled": True,
                 "coming_soon": app.coming_soon,
                 "nav_items": nav_items,
+                "launch_url": getattr(settings, app.launch_url_setting, None)
+                if app.launch_url_setting else None,
             }
         )
         nav.extend(nav_items)

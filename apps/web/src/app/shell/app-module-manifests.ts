@@ -1,3 +1,4 @@
+import { codexConsoleModule } from '@/src/app-modules/codex-console';
 import { agentTerminalModule } from '@/src/app-modules/agent-terminal';
 import { bentoModule } from '@/src/app-modules/bento';
 import { chatbotModule } from '@/src/app-modules/chatbot';
@@ -17,6 +18,7 @@ import { videoChatModule } from '@/src/app-modules/video-chat';
 import { whiteboardModule } from '@/src/app-modules/whiteboard';
 import {
   agentTerminalManifest,
+  codexConsoleManifest,
   announcementsManifest,
   bentoManifest,
   chatbotManifest,
@@ -39,6 +41,7 @@ import type { FeatureModuleRegistryInput } from './feature-module-registry';
 
 export {
   agentTerminalManifest,
+  codexConsoleManifest,
   announcementsManifest,
   bentoManifest,
   chatbotManifest,
@@ -62,6 +65,7 @@ export {
 export const DEFAULT_APP_MODULES = [
   homeModule,
   agentTerminalModule,
+  codexConsoleModule,
   chatbotModule,
   pmsModule,
   docsModule,

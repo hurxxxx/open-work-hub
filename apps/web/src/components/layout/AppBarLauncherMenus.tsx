@@ -1,3 +1,4 @@
+import { appLaunchLinkProps } from '@/src/app/shell/app-launch-destination';
 import { Check, Search, SlidersHorizontal, Star } from 'lucide-react';
 import {
   useEffect,
@@ -545,6 +546,7 @@ function FavoriteLauncherItem({
   const link = resolveAppLink(item.id);
   return (
     <LauncherLink
+      appId={item.id}
       accessibleLabel={resolveAppLabel(item.id, item.title)}
       active={isLauncherPathActive({ currentPathname, link })}
       icon={item.icon}
@@ -582,6 +584,7 @@ function CategoryLauncherItem({
   const link = resolveAppLink(appId);
   return (
     <LauncherLink
+      appId={appId}
       accessibleLabel={resolveAppLabel(appId, title)}
       active={isLauncherPathActive({ currentPathname, link })}
       comingSoon={item.coming_soon}
@@ -596,6 +599,7 @@ function CategoryLauncherItem({
 }
 
 function LauncherLink({
+  appId,
   accessibleLabel,
   active,
   comingSoon = false,
@@ -606,6 +610,7 @@ function LauncherLink({
   to,
   t,
 }: {
+  appId: string;
   accessibleLabel: string;
   active: boolean;
   comingSoon?: boolean | null;
@@ -629,6 +634,7 @@ function LauncherLink({
       onClick={onClose}
       role="menuitem"
       to={to}
+      {...appLaunchLinkProps(appId)}
     >
       <span
         className={cn(

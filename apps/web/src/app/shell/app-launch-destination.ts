@@ -8,7 +8,11 @@ import type { LauncherGlobalPaths } from './navigation-types';
 
 export type AppLaunchDestination =
   | { displayScope: null; href: '/'; kind: 'unavailable' }
-  | { displayScope: 'company' | 'personal'; href: string; kind: 'app' };
+  | {
+      displayScope: 'company' | 'personal';
+      href: string;
+      kind: 'app' | 'external';
+    };
 export type AppLaunchDestinationResolver = (
   appId: string,
 ) => AppLaunchDestination;
@@ -29,6 +33,16 @@ export function resolveAppLaunchDestination({
   const contract = APP_CONTRACT_BY_ID.get(appId as AppId);
   if (!app?.enabled || !contract)
     return { displayScope: null, href: '/', kind: 'unavailable' };
+  if ('url_setting' in contract.launcher) {
+    const url = app.launch_url;
+    if (!url || !safeLaunchUrl(url))
+      return { displayScope: null, href: '/', kind: 'unavailable' };
+    return {
+      displayScope: contract.execution_context_kind,
+      href: url,
+      kind: 'external',
+    };
+  }
   return {
     displayScope: contract.execution_context_kind,
     href:
@@ -44,6 +58,7 @@ export function translateAppLaunchContext(
 ): string {
   if (destination.kind === 'unavailable')
     return t('shell:launcher.appUnavailable');
+  if (destination.kind === 'external') return t('shell:launcher.opensInNewTab');
   return t(
     destination.displayScope === 'personal'
       ? 'shell:launcher.personalScope'
@@ -58,10 +73,38 @@ export function translateAppLaunchLabel(
 ): string {
   if (destination.kind === 'unavailable')
     return t('shell:launcher.unavailableAppLabel', { app: appTitle });
+  if (destination.kind === 'external')
+    return t('shell:launcher.openAppInNewTab', { app: appTitle });
   return t(
     destination.displayScope === 'personal'
       ? 'shell:launcher.openPersonalApp'
       : 'shell:launcher.openCompanyApp',
     { app: appTitle },
   );
+}
+
+export function appLaunchLinkProps(appId: string) {
+  const contract = APP_CONTRACT_BY_ID.get(appId as AppId);
+  return contract && 'url_setting' in contract.launcher
+    ? { target: '_blank' as const, rel: 'noopener noreferrer' }
+    : {};
+}
+
+function safeLaunchUrl(value: string): boolean {
+  if (/[\\\s\u0000-\u001f]/.test(value)) return false;
+  if (value.startsWith('/')) return !value.startsWith('//');
+  try {
+    const url = new URL(value);
+    return (
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash &&
+      (url.protocol === 'https:' ||
+        (url.protocol === 'http:' &&
+          ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))
+    );
+  } catch {
+    return false;
+  }
 }

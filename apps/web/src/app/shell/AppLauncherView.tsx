@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { appIconForKey } from '@/src/platform/apps/app-icons';
 import type { AppsBootstrapResponse } from '@/src/platform/apps/apps-api';
 import {
+  appLaunchLinkProps,
   resolveAppLaunchDestination,
   translateAppLaunchContext,
   translateAppLaunchLabel,
@@ -98,6 +99,7 @@ export function AppLauncherView({
                   className="group rounded-2xl border border-app-border bg-app-surface p-4 transition hover:-translate-y-0.5 hover:border-app-accent/40 hover:shadow-lg"
                   key={app.app_id}
                   to={destination.href}
+                  {...appLaunchLinkProps(app.app_id)}
                 >
                   <span className="flex size-11 items-center justify-center rounded-xl bg-app-accent/12 text-app-accent">
                     <Icon aria-hidden size={21} />

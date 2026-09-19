@@ -1,0 +1,10 @@
+{
+  "name": "codex-console-api",
+  "projectType": "application",
+  "sourceRoot": "apps/codex-console-api/src",
+  "targets": {
+    "test": {"executor": "nx:run-commands", "options": {"cwd": "apps/codex-console-api", "command": "uv run --frozen --group dev pytest -q"}},
+    "lint": {"executor": "nx:run-commands", "options": {"cwd": "apps/codex-console-api", "command": "uv run --frozen --group dev ruff check ."}},
+    "serve": {"executor": "nx:run-commands", "options": {"cwd": "apps/codex-console-api", "command": "uv run --frozen codex-console serve"}}
+  }
+}

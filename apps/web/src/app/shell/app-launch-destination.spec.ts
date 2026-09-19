@@ -42,3 +42,27 @@ describe('company app destinations', () => {
     ).toEqual({ href: '/', kind: 'unavailable', displayScope: null });
   });
 });
+
+it('opens configured console destinations and rejects missing or unsafe URLs', () => {
+  const resolve = (launch_url: string | null, enabled = true) =>
+    resolveAppLaunchDestination({
+      app: { app_id: 'codex-console', enabled, launch_url } as AppsBootstrapApp,
+      appId: 'codex-console',
+      launcherGlobalPaths: new Map(),
+    });
+  expect(resolve('/codex-console/')).toEqual({
+    href: '/codex-console/',
+    kind: 'external',
+    displayScope: 'personal',
+  });
+  expect(resolve('https://console.example.test/').kind).toBe('external');
+  for (const url of [
+    null,
+    'javascript:alert(1)',
+    '//evil.test/',
+    '/\\evil.test/',
+  ]) {
+    expect(resolve(url).kind).toBe('unavailable');
+  }
+  expect(resolve('/codex-console/', false).kind).toBe('unavailable');
+});

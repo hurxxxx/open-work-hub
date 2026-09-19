@@ -18,6 +18,7 @@ class BootstrapNavItemResponse(BaseModel):
 
 
 class BootstrapAppResponse(BaseModel):
+    launch_url: str | None = None
     entry_route_id: str
     execution_context_kind: Literal["personal", "company"]
     resource_scope: Literal["personal", "company", "hybrid"]

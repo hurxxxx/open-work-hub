@@ -402,6 +402,9 @@ export const resources = {
         openPersonalApp: '{{app}} — 개인 범위에서 열기',
 
         personalApp: '개인 앱',
+        opensInNewTab: '새 탭에서 열기',
+        openAppInNewTab: '{{app}} 새 탭에서 열기',
+        consoleSignIn: 'Codex 콘솔은 작업실 전용 비밀번호로 로그인합니다.',
         personalScope: '개인 범위',
         title: '앱 런처',
         unavailableAppLabel: '{{app}} — 사용할 수 없음',
@@ -451,6 +454,7 @@ export const resources = {
       },
       apps: {
         'agent-terminal': 'Codex 터미널',
+        'codex-console': 'Codex 콘솔',
         'hermes-terminal': 'Hermes 터미널',
         ai: 'AI',
         bento: 'bento/slides',
@@ -6460,6 +6464,9 @@ export const resources = {
         openPersonalApp: 'Open {{app}} in personal scope',
 
         personalApp: 'Personal app',
+        opensInNewTab: 'Opens in a new tab',
+        openAppInNewTab: 'Open {{app}} in a new tab',
+        consoleSignIn: 'Sign in to Codex Console with your private console password.',
         personalScope: 'Personal scope',
         title: 'App launcher',
         unavailableAppLabel: '{{app}} — unavailable',
@@ -6508,6 +6515,7 @@ export const resources = {
       },
       apps: {
         'agent-terminal': 'Codex Terminal',
+        'codex-console': 'Codex Console',
         'hermes-terminal': 'Hermes Terminal',
         ai: 'AI',
         bento: 'bento/slides',

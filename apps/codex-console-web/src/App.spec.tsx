@@ -1,0 +1,310 @@
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { App } from './App';
+import { api, ApiError, type Detail } from './api';
+
+vi.mock('./api', async (original) => ({
+  ...(await original<typeof import('./api')>()),
+  api: vi.fn(),
+}));
+vi.mock('@pierre/diffs/react', () => ({ MultiFileDiff: () => <div /> }));
+
+class Stream extends EventTarget {
+  static current: Stream;
+  constructor() {
+    super();
+    Stream.current = this;
+  }
+  close() {}
+}
+
+const taskId = '00000000-0000-4000-8000-000000000001';
+let detail: Detail;
+let submit: (body: Record<string, unknown>) => Promise<Detail>;
+let recover: () => Promise<Detail>;
+let searchTasks: (query: string) => Promise<Detail[]>;
+
+beforeEach(() => {
+  vi.stubGlobal('EventSource', Stream);
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+  window.history.replaceState(null, '', `?task=${taskId}`);
+  detail = {
+    id: taskId,
+    title: 'Test task',
+    stage: 'requirements',
+    status: 'idle',
+    thread_id: 'thread',
+    turn_id: null,
+    root: '/repo/dev',
+    isolated: false,
+    approved_revision: null,
+    error_code: null,
+    updated_at: '2026-09-19T00:00:00Z',
+    event_id: 1,
+    attachments: [],
+    attachment_limits: {
+      file_bytes: 52428800,
+      task_bytes: 524288000,
+      files: 200,
+      selection: 20,
+    },
+    items: [],
+    history_truncated: false,
+    requests: [],
+    revisions: [],
+  };
+  submit = async () => detail;
+  recover = async () => detail;
+  searchTasks = async () => [];
+  vi.mocked(api).mockReset();
+  vi.mocked(api).mockImplementation(async (path, body) => {
+    if (path === '/session') return { authenticated: true };
+    if (path === '/tasks') return [detail];
+    if (path.startsWith('/tasks?search=')) return searchTasks(path);
+    if (path === '/codex/account')
+      return { connected: true, auth_type: 'chatgpt' };
+    if (path === `/tasks/${taskId}`) return detail;
+    if (path === `/tasks/${taskId}/messages`)
+      return submit(body as Record<string, unknown>);
+    if (path === `/tasks/${taskId}/recover`) return recover();
+    if (path === `/tasks/${taskId}/interrupt`) return detail;
+    throw new Error(`Unexpected test endpoint: ${path}`);
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  window.history.replaceState(null, '', '/');
+});
+
+async function openAndCompose() {
+  render(<App />);
+  await screen.findByRole('heading', { name: 'Test task' });
+  fireEvent.change(screen.getByLabelText('요청 내용 입력'), {
+    target: { value: 'Same request' },
+  });
+}
+
+it('retries an unavailable initial session check without a page reload', async () => {
+  vi.mocked(api).mockRejectedValueOnce(new ApiError('request_failed'));
+  render(<App />);
+  const retry = await screen.findByRole('button', { name: '연결 다시 시도' });
+  expect(
+    (screen.getByRole('button', { name: '로그인' }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  fireEvent.click(retry);
+  await screen.findByRole('heading', { name: 'Test task' });
+  expect(screen.queryByRole('button', { name: '연결 다시 시도' })).toBeNull();
+});
+
+it('preserves separate document drafts across result tabs and tasks and warns before leaving the page', async () => {
+  const other = {
+    ...detail,
+    id: '00000000-0000-4000-8000-000000000002',
+    title: 'Another task',
+  };
+  const original = vi.mocked(api).getMockImplementation()!;
+  vi.mocked(api).mockImplementation(async (path, ...args) => {
+    if (path === '/tasks') return [detail, other];
+    if (path === `/tasks/${other.id}`) return other;
+    return original(path, ...args);
+  });
+  await openAndCompose();
+  fireEvent.click(screen.getByRole('button', { name: '문서 편집' }));
+  fireEvent.change(screen.getByRole('textbox', { name: '문서 편집' }), {
+    target: { value: 'Requirements draft' },
+  });
+  const results = within(screen.getByRole('navigation', { name: '결과물' }));
+  fireEvent.click(results.getByRole('button', { name: '구현 계획' }));
+  fireEvent.click(screen.getByRole('button', { name: '문서 편집' }));
+  fireEvent.change(screen.getByRole('textbox', { name: '문서 편집' }), {
+    target: { value: 'Plan draft' },
+  });
+  fireEvent.click(results.getByRole('button', { name: '파일' }));
+  fireEvent.click(results.getByRole('button', { name: '요구사항' }));
+  expect(screen.getByText('Requirements draft')).toBeTruthy();
+  fireEvent.click(await screen.findByRole('button', { name: /Another task/ }));
+  await screen.findByRole('heading', { name: 'Another task' });
+  expect(screen.queryByText('Requirements draft')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /Test task/ }));
+  await screen.findByText('Requirements draft');
+  fireEvent.click(
+    within(screen.getByRole('navigation', { name: '결과물' })).getByRole(
+      'button',
+      { name: '구현 계획' },
+    ),
+  );
+  expect(screen.getByText('Plan draft')).toBeTruthy();
+  const leaving = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(leaving);
+  expect(leaving.defaultPrevented).toBe(true);
+});
+
+it('searches all tasks on the server without clearing the open draft or accepting stale results', async () => {
+  let resolveOld!: (rows: Detail[]) => void;
+  searchTasks = async (query) =>
+    query.endsWith('old')
+      ? new Promise((resolve) => {
+          resolveOld = resolve;
+        })
+      : [{ ...detail, id: 'other', title: 'New search result' }];
+  await openAndCompose();
+  fireEvent.change(screen.getByLabelText('작업 검색'), {
+    target: { value: 'old' },
+  });
+  await waitFor(() => expect(resolveOld).toBeTypeOf('function'));
+  fireEvent.change(screen.getByLabelText('작업 검색'), {
+    target: { value: 'new' },
+  });
+  await screen.findByRole('button', { name: /New search result/ });
+  await act(async () =>
+    resolveOld([{ ...detail, id: 'old', title: 'Old result' }]),
+  );
+  expect(screen.queryByRole('button', { name: /Old result/ })).toBeNull();
+  expect(
+    (screen.getByLabelText('요청 내용 입력') as HTMLTextAreaElement).value,
+  ).toBe('Same request');
+});
+
+it('offers explicit stop for an uncertain native thread without a saved turn ID', async () => {
+  detail = {
+    ...detail,
+    status: 'uncertain',
+    error_code: 'codex_request_uncertain',
+  };
+  render(<App />);
+  const stop = await screen.findByRole('button', { name: '중단' });
+  expect(
+    vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/interrupt')),
+  ).toBe(false);
+  fireEvent.click(stop);
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      `/tasks/${taskId}/interrupt`,
+      {},
+      undefined,
+    ),
+  );
+});
+
+it('keeps a newer SSE result when an older submission response arrives last', async () => {
+  let resolve!: (value: Detail) => void;
+  submit = () =>
+    new Promise((done) => {
+      resolve = done;
+    });
+  await openAndCompose();
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  await waitFor(() => expect(resolve).toBeTypeOf('function'));
+  const older = { ...detail, status: 'running', event_id: 2 };
+  detail = {
+    ...detail,
+    event_id: 3,
+    items: [{ id: 'final', type: 'agentMessage', text: 'Completed result' }],
+  };
+  act(() => Stream.current.dispatchEvent(new Event('changed')));
+  await screen.findByText('Completed result');
+  await act(async () => resolve(older));
+  expect(screen.getByText('Completed result')).toBeTruthy();
+  fireEvent.change(screen.getByLabelText('요청 내용 입력'), {
+    target: { value: 'Next request' },
+  });
+  expect(
+    (
+      screen.getByRole('button', {
+        name: '보내기',
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(false);
+});
+
+it('retains retry identity on failed recovery and creates a new one only after successful explicit recovery', async () => {
+  const attempts: string[] = [];
+  submit = async (body) => {
+    attempts.push(body.operation_id as string);
+    detail = {
+      ...detail,
+      status: 'uncertain',
+      error_code: 'codex_request_uncertain',
+      event_id: detail.event_id + 1,
+    };
+    Stream.current.dispatchEvent(new Event('changed'));
+    throw new ApiError('codex_request_uncertain');
+  };
+  recover = async () => {
+    throw new ApiError('turn_not_finished');
+  };
+  await openAndCompose();
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  await screen.findByRole('button', { name: '실행 상태 확인' });
+  fireEvent.click(screen.getByRole('button', { name: '실행 상태 확인' }));
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole('button', {
+          name: '실행 상태 확인',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false),
+  );
+  // An ordinary state refresh does not authorize a new identity.
+  detail = {
+    ...detail,
+    status: 'interrupted',
+    error_code: null,
+    event_id: detail.event_id + 1,
+  };
+  act(() => Stream.current.dispatchEvent(new Event('changed')));
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole('button', {
+          name: '보내기',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  await waitFor(() => expect(attempts).toHaveLength(2));
+  expect(attempts[1]).toBe(attempts[0]);
+  recover = async () => {
+    detail = {
+      ...detail,
+      status: 'interrupted',
+      error_code: null,
+      event_id: detail.event_id + 1,
+    };
+    return detail;
+  };
+  fireEvent.click(
+    await screen.findByRole('button', { name: '실행 상태 확인' }),
+  );
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole('button', {
+          name: '보내기',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false),
+  );
+  expect(attempts).toHaveLength(2);
+  expect(
+    (screen.getByLabelText('요청 내용 입력') as HTMLTextAreaElement).value,
+  ).toBe('Same request');
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  await waitFor(() => expect(attempts).toHaveLength(3));
+  expect(attempts[2]).not.toBe(attempts[0]);
+});

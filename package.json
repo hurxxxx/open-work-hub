@@ -96,7 +96,7 @@
     "ci:core-web": "pnpm check:core-web-boundaries && pnpm nx typecheck core-web && pnpm nx test core-web && pnpm nx build core-web",
     "ci:web": "pnpm ci:core-web && pnpm check:api-contract && pnpm check:web-architecture && pnpm nx typecheck web && pnpm nx lint web && pnpm nx test web && pnpm nx build web && pnpm nx e2e-shell web",
     "ci:harness": "pnpm test:skill-harness && pnpm test:skill-scripts && pnpm test:codex-hooks && pnpm check:skills && pnpm test:claude-skills && pnpm test:live-uat-preflight && pnpm test:prod-app && pnpm test:gitlab-pipeline && pnpm test:codex-review-ci && pnpm test:contracts-publish-tag && pnpm test:mr-target-policy && pnpm test:mr-contract-evidence && pnpm check:gitlab-pipeline",
-    "ci:all": "pnpm ci:harness && pnpm ci:python-contract-guardrails && pnpm ci:contract && pnpm ci:api:full && pnpm ci:web",
+    "ci:all": "pnpm ci:harness && pnpm ci:python-contract-guardrails && pnpm ci:contract && pnpm ci:api:full && pnpm ci:web && pnpm ci:codex-console",
     "test:api:vm": "bash scripts/api-test-vm.sh",
     "test:api:vm:collect": "bash scripts/api-test-vm.sh --collect-only",
     "lint": "nx run-many -t lint --all",
@@ -105,7 +105,10 @@
     "e2e": "playwright test --config apps/web/playwright.config.ts",
     "e2e:shell": "playwright test --config apps/web/playwright.config.ts apps/web/e2e/app-boundary-smoke.spec.ts",
     "e2e:ui": "playwright test --config apps/web/playwright.config.ts --ui",
-    "e2e:install": "playwright install chromium"
+    "e2e:install": "playwright install chromium",
+    "generate:codex-console-contract": "node apps/codex-console-web/scripts/generate-contract.mjs",
+    "check:codex-console-contract": "node apps/codex-console-web/scripts/generate-contract.mjs --check",
+    "ci:codex-console": "uv sync --frozen --directory apps/codex-console-api --group dev && pnpm check:codex-console-contract && pnpm --dir apps/codex-console-web test && pnpm --dir apps/codex-console-web typecheck && uv run --frozen --directory apps/codex-console-api --group dev ruff check . && uv run --frozen --directory apps/codex-console-api --group dev pytest -q && pnpm --dir apps/codex-console-web build && pnpm --dir apps/codex-console-web e2e"
   },
   "devDependencies": {
     "@babel/core": "^7.14.5",

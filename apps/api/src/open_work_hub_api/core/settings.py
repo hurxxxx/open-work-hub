@@ -2,9 +2,10 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from open_work_hub_api.core.runtime_config_source import RuntimeConfigSettingsSource
@@ -249,6 +250,30 @@ class Settings(BaseSettings):
         default=str(WORKSPACE_ROOT / ".local-recording-spool"),
         validation_alias="OPEN_WORK_HUB_API_RECORDING_SPOOL_DIR",
     )
+    codex_console_launch_url: str = Field(
+        default="", validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_LAUNCH_URL"
+    )
+
+    @field_validator("codex_console_launch_url")
+    @classmethod
+    def _console_launch_url(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            return value
+        parsed = urlsplit(value)
+        if any(c.isspace() or ord(c) < 32 for c in value) or "\\" in value:
+            raise ValueError("Invalid console launch URL")
+        relative = value.startswith("/") and not value.startswith("//")
+        secure = parsed.scheme == "https" and bool(parsed.hostname)
+        local = parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1", "::1")
+        if not (relative or secure or local) or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError("Use HTTPS, a loopback URL or an absolute same-origin path")
+        return value
+
+    @property
+    def codex_console_enabled(self) -> bool:
+        return bool(self.codex_console_launch_url)
+
     agent_terminal_enabled: bool = Field(
         default=False,
         validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_ENABLED",
