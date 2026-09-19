@@ -83,6 +83,20 @@ def test_recovery_can_acknowledge_native_confirmation_without_replaying(client):
     assert len([c for c in rpc.calls if c[0] == "turn/start"]) == 1
 
 
+def test_explicit_recovery_allows_new_request_but_never_replays_uncertain_id(client):
+    client.get("/api/codex/account")
+    rpc = client.app.state.runtime.rpc
+    rpc.fail_turn = True
+    task, key = new_task(client), str(uuid4())
+    assert send_message(client, task, operation_id=key).status_code == 503
+    rpc.fail_turn = False
+    assert client.post(f"/api/tasks/{task['id']}/recover", json={}).status_code == 200
+    assert send_message(client, task, operation_id=key).json()["code"] == "codex_request_uncertain"
+    assert len([c for c in rpc.calls if c[0] == "turn/start"]) == 1
+    assert send_message(client, task, operation_id=str(uuid4())).status_code == 200
+    assert len([c for c in rpc.calls if c[0] == "turn/start"]) == 2
+
+
 @pytest.mark.parametrize("state", ["preparing", "pending"])
 def test_restart_before_thread_creation_can_release_workspace(client, state):
     task, key = new_task(client), str(uuid4())

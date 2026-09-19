@@ -22,6 +22,19 @@
 공식 근거: [App server](https://developers.openai.com/codex/app-server),
 [Authentication](https://developers.openai.com/codex/auth).
 
+### 개인 CLI 클라이언트와 제품 AI의 연결 경계
+
+OWH API의 콘솔 연결 기능은 허용된 소유자에게 브라우저 launch URL만 반환한다. 제품 API나
+worker가 콘솔에 생성 요청을 위임하는 경로는 없다. 콘솔은 별도 로그인·설치·DB를 사용하는
+공식 [App Server 클라이언트](https://learn.chatgpt.com/docs/app-server)이며 소유자가 직접
+입력한 개발 작업을 기존 ChatGPT 구독 세션에 전달한다. 제품 도메인 서비스의 workload와
+공통 실행 계약은 [ADR 0005](../../../adr/0005-registered-llm-workload.md)를 따른다.
+
+콘솔은 모델이나 공급자를 선택하지 않는다. `thread/start`·`thread/resume`에서 Codex가
+결정한 모델을 0.154.0 공식 스키마의 필수 `collaborationMode.settings.model` 필드에
+그대로 전달한다. API key 인증과 다른 공급자는 거부하며 API 과금 경로로 전환하지 않는다.
+해당 경계는 API key 거부, 요청의 임의 실행 설정 거부, native 모델 상속 테스트로 검증한다.
+
 ## 설치
 
 사전 준비는 [INSTALL.md](../../../INSTALL.md)를 따른다. Node·pnpm과 Python·uv 버전은
@@ -283,6 +296,8 @@ systemctl --user stop codex-console
 - 백엔드·Codex 종료 또는 제출 후 접수 응답 유실은 `uncertain`이다. workspace lease를 유지하고
   승인 요청을 폐기한다. **실행 상태 확인**은 공식 thread를 재개·조회한다. 스레드 생성 전에
   중단된 이전 버전의 작업도 실행되지 않았음을 확인한 뒤 잠금을 해제할 수 있다.
+  복구가 성공하면 다음에 사용자가 직접 보내는 요청은 새 요청 ID를 사용한다. 복구 실패나
+  단순 화면 갱신으로는 ID를 바꾸지 않으며 불확실한 기존 요청을 자동으로 재전송하지 않는다.
   구현 도중 중단되었다면 먼저 diff를 확인하고 현재 변경을 해당 작업에 포함하는 데 동의한다.
   복구는 같은 작업 디렉터리와 변경사항을 유지하고 이후 외부 편집은 다시 검사한다.
   변경 지문을 읽을 수 없으면 복구 상태를 유지한다. 이전 CLI 대화는 원래 실행을 종료한 후에만 가져온다.

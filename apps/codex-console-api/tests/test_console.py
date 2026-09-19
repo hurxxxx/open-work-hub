@@ -158,6 +158,26 @@ def test_api_key_authentication_cannot_start_a_turn(client):
     assert send_message(client, new_task(client)).json()["code"] == "login_required"
 
 
+def test_console_inherits_native_thread_model_without_choosing_a_route(client, monkeypatch):
+    client.get("/api/codex/account")
+    rpc = client.app.state.runtime.rpc
+    original = rpc.call
+
+    async def native_model(method, params):
+        result = await original(method, params)
+        if method in ("thread/start", "thread/resume"):
+            result["model"] = "native-session-model"
+        return result
+
+    monkeypatch.setattr(rpc, "call", native_model)
+    assert send_message(client, new_task(client)).status_code == 200
+    thread = next(params for method, params in rpc.calls if method == "thread/start")
+    turn = next(params for method, params in rpc.calls if method == "turn/start")
+    for params in (thread, turn):
+        assert not {"model", "modelProvider", "provider", "apiKey"}.intersection(params)
+    assert turn["collaborationMode"]["settings"]["model"] == "native-session-model"
+
+
 def test_questions_require_exact_live_task_and_turn(client):
     task = send_message(client, new_task(client)).json()
     runtime = client.app.state.runtime
@@ -372,6 +392,17 @@ def test_diff_blocks_secrets_and_symlink_escape(client, repository, tmp_path):
         client.get(f"/api/tasks/{task['id']}/diff", params={"path": "../outside.txt"}).status_code
         != 200
     )
+
+
+def test_untracked_file_boundaries_are_included_in_workspace_fingerprint(repository):
+    from codex_console.git import fingerprint
+
+    (repository / "a.txt").write_bytes(b"a")
+    (repository / "b.txt").write_bytes(b"bc")
+    previous = fingerprint(repository)
+    (repository / "a.txt").write_bytes(b"ab")
+    (repository / "b.txt").write_bytes(b"c")
+    assert fingerprint(repository) != previous
 
 
 def test_failed_turn_never_becomes_success(client):

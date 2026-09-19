@@ -101,7 +101,8 @@ def fingerprint(root: Path) -> str:
             if path.is_file():
                 if path.stat().st_size > MAX_BYTES:
                     raise ConsoleError("output_too_large")
-                result.update(path.read_bytes())
+                result.update(item["path"].encode() + b"\0")
+                result.update(hashlib.sha256(path.read_bytes()).digest())
     return result.hexdigest()
 
 

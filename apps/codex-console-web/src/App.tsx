@@ -165,6 +165,13 @@ export function App() {
       if (!id) return false;
       return act(async () => {
         await api(`/tasks/${id}/${suffix}`, body, method);
+        if (suffix === 'recover') {
+          // Only explicit, successful recovery permits a fresh submission. Keep
+          // other tasks' retry identities and never replay an uncertain request.
+          for (const key of requestKeys.current.keys()) {
+            if (JSON.parse(key)[0] === id) requestKeys.current.delete(key);
+          }
+        }
         await refreshTask(id);
         await refreshTasks();
       });
@@ -186,7 +193,11 @@ export function App() {
         });
         requestKeys.current.delete(key);
         if (selectedRef.current === taskId) {
-          setTask(detail);
+          setTask((current) =>
+            current?.id === taskId && current.event_id > detail.event_id
+              ? current
+              : detail,
+          );
           setAttachmentIds([]);
         }
         await refreshTasks().catch(onError);

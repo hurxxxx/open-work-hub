@@ -210,7 +210,8 @@ class Runtime:
                     with self.factory.begin() as db:
                         store.require_task(db, task_id, locked=True).fingerprint = baseline
                 result = await self.ensure_thread(task_id, rpc)
-                thread_id, model, root = result["thread"]["id"], result["model"], result["cwd"]
+                thread_id = result["thread"]["id"]
+                session_model, root = result["model"], result["cwd"]
                 sandbox = (
                     {
                         "type": "workspaceWrite",
@@ -234,7 +235,10 @@ class Runtime:
                     "sandboxPolicy": sandbox,
                     "collaborationMode": {
                         "mode": "default" if stage == "implement" else "plan",
-                        "settings": {"model": model, "developer_instructions": None},
+                        # 0.154.0 requires this field in CollaborationMode.settings.
+                        # Echo the native thread's resolved model; the console has
+                        # no model/provider/credential selector or fallback route.
+                        "settings": {"model": session_model, "developer_instructions": None},
                     },
                 }
                 # Commit the submission boundary before any turn can reach app-server.
