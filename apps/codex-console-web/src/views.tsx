@@ -8,7 +8,13 @@ import {
   Save,
   SquareTerminal,
 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+  type ReactNode,
+} from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -263,6 +269,8 @@ export function RequestForm({
   );
 }
 
+export type DocumentDraft = { body: string; base: Revision | undefined };
+
 export function Documents({
   task,
   kind,
@@ -271,6 +279,8 @@ export function Documents({
   onSave,
   onPlan,
   onImplement,
+  draft: savedDraft,
+  onDraftChange,
 }: {
   task: Detail;
   kind: 'requirements' | 'plan';
@@ -279,22 +289,23 @@ export function Documents({
   onSave: (body: unknown) => Promise<boolean>;
   onPlan: () => void;
   onImplement: (revision: Revision) => void;
+  draft?: DocumentDraft | null;
+  onDraftChange?: Dispatch<SetStateAction<DocumentDraft | null>>;
 }) {
   const versions = task.revisions.filter((row) => row.kind === kind);
   const latest = versions.at(-1);
   const [selected, setSelected] = useState<number | null>(null);
   const revision = versions.find((row) => row.id === selected) ?? latest;
-  const [draft, setDraft] = useState<{
-    body: string;
-    base: Revision | undefined;
-  } | null>(null);
+  const [localDraft, setLocalDraft] = useState<DocumentDraft | null>(null);
+  const draft = onDraftChange ? savedDraft : localDraft;
+  const setDraft = onDraftChange ?? setLocalDraft;
   const base = draft ? draft.base : revision;
   const body = draft?.body ?? revision?.body ?? '';
   const [editing, setEditing] = useState(false);
   useEffect(() => {
     setSelected(null);
     setEditing(false);
-    setDraft(null);
+    setLocalDraft(null);
   }, [kind, task.id]);
   const modified = body !== (base?.body ?? '');
   const conflict = !!draft && base?.id !== latest?.id;

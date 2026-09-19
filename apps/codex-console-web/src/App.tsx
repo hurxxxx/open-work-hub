@@ -45,6 +45,7 @@ import {
   Documents,
   MessageItem,
   RequestForm,
+  type DocumentDraft,
 } from './views';
 import { AttachmentBadges, FileLibrary } from './attachments';
 
@@ -65,6 +66,9 @@ export function App() {
   const [password, setPassword] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [task, setTask] = useState<Detail | null>(null);
+  const [documentDrafts, setDocumentDrafts] = useState<
+    Record<string, DocumentDraft>
+  >({});
   const [selected, setSelected] = useState<string | null>(() => {
     const id = new URLSearchParams(window.location.search).get('task');
     return id && /^[0-9a-f-]{36}$/.test(id) ? id : null;
@@ -297,6 +301,20 @@ export function App() {
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+  useEffect(() => {
+    if (
+      !Object.values(documentDrafts).some(
+        (draft) => draft.body !== (draft.base?.body ?? ''),
+      )
+    )
+      return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [documentDrafts]);
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const update = () =>
@@ -539,6 +557,7 @@ export function App() {
                 setTask(null);
                 setSelected(null);
                 setTasks([]);
+                setDocumentDrafts({});
               })
             }
           >
@@ -968,6 +987,20 @@ export function App() {
                 key={`${task.id}-${tab}`}
                 task={task}
                 kind={tab}
+                draft={documentDrafts[`${task.id}:${tab}`] ?? null}
+                onDraftChange={(next) => {
+                  const key = `${task.id}:${tab}`;
+                  setDocumentDrafts((current) => {
+                    const draft =
+                      typeof next === 'function'
+                        ? next(current[key] ?? null)
+                        : next;
+                    const result = { ...current };
+                    if (draft) result[key] = draft;
+                    else delete result[key];
+                    return result;
+                  });
+                }}
                 t={t}
                 busy={busy}
                 onSave={(body) => mutate('documents', body, 'PUT')}

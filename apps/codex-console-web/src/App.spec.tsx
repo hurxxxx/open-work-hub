@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -106,6 +107,49 @@ it('retries an unavailable initial session check without a page reload', async (
   fireEvent.click(retry);
   await screen.findByRole('heading', { name: 'Test task' });
   expect(screen.queryByRole('button', { name: '연결 다시 시도' })).toBeNull();
+});
+
+it('preserves separate document drafts across result tabs and tasks and warns before leaving the page', async () => {
+  const other = {
+    ...detail,
+    id: '00000000-0000-4000-8000-000000000002',
+    title: 'Another task',
+  };
+  const original = vi.mocked(api).getMockImplementation()!;
+  vi.mocked(api).mockImplementation(async (path, ...args) => {
+    if (path === '/tasks') return [detail, other];
+    if (path === `/tasks/${other.id}`) return other;
+    return original(path, ...args);
+  });
+  await openAndCompose();
+  fireEvent.click(screen.getByRole('button', { name: '문서 편집' }));
+  fireEvent.change(screen.getByRole('textbox', { name: '문서 편집' }), {
+    target: { value: 'Requirements draft' },
+  });
+  const results = within(screen.getByRole('navigation', { name: '결과물' }));
+  fireEvent.click(results.getByRole('button', { name: '구현 계획' }));
+  fireEvent.click(screen.getByRole('button', { name: '문서 편집' }));
+  fireEvent.change(screen.getByRole('textbox', { name: '문서 편집' }), {
+    target: { value: 'Plan draft' },
+  });
+  fireEvent.click(results.getByRole('button', { name: '파일' }));
+  fireEvent.click(results.getByRole('button', { name: '요구사항' }));
+  expect(screen.getByText('Requirements draft')).toBeTruthy();
+  fireEvent.click(await screen.findByRole('button', { name: /Another task/ }));
+  await screen.findByRole('heading', { name: 'Another task' });
+  expect(screen.queryByText('Requirements draft')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /Test task/ }));
+  await screen.findByText('Requirements draft');
+  fireEvent.click(
+    within(screen.getByRole('navigation', { name: '결과물' })).getByRole(
+      'button',
+      { name: '구현 계획' },
+    ),
+  );
+  expect(screen.getByText('Plan draft')).toBeTruthy();
+  const leaving = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(leaving);
+  expect(leaving.defaultPrevented).toBe(true);
 });
 
 it('searches all tasks on the server without clearing the open draft or accepting stale results', async () => {
