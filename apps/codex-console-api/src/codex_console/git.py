@@ -3,8 +3,10 @@
 import hashlib
 import os
 import selectors
+import stat
 import subprocess
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
 from .errors import ConsoleError
@@ -62,9 +64,42 @@ def safe_path(root: Path, relative: str) -> Path:
     ):
         raise ConsoleError("path_denied", 403)
     candidate = root / path
-    if candidate.is_symlink() or not candidate.resolve().is_relative_to(root.resolve()):
+    current = root
+    for part in path.parts:
+        current /= part
+        if current.is_symlink():
+            raise ConsoleError("path_denied", 403)
+    if not candidate.resolve().is_relative_to(root.resolve()):
         raise ConsoleError("path_denied", 403)
     return candidate
+
+
+def read_worktree_file(root: Path, relative: str) -> bytes:
+    safe_path(root, relative)
+    # Pin each directory and reject links at open time too: an agent may replace
+    # a path between the status scan and the file read.
+    try:
+        with ExitStack() as stack:
+            flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+            directory = os.open(root, flags)
+            stack.callback(os.close, directory)
+            parts = Path(relative).parts
+            for part in parts[:-1]:
+                directory = os.open(part, flags, dir_fd=directory)
+                stack.callback(os.close, directory)
+            fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+            with os.fdopen(fd, "rb") as source:
+                metadata = os.fstat(source.fileno())
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > MAX_BYTES:
+                    raise ConsoleError("output_too_large")
+                data = source.read(MAX_BYTES + 1)
+                if len(data) > MAX_BYTES:
+                    raise ConsoleError("output_too_large")
+                return data
+    except FileNotFoundError:
+        return b""  # A tracked deletion has an empty worktree side.
+    except OSError:
+        raise ConsoleError("path_denied", 403) from None
 
 
 def changes(root: Path) -> list[dict]:
@@ -97,12 +132,8 @@ def fingerprint(root: Path) -> str:
     result.update(git(root, "diff", "--no-ext-diff", "--no-textconv", "--binary", "HEAD"))
     for item in changes(root):
         if item["status"] == "??":
-            path = safe_path(root, item["path"])
-            if path.is_file():
-                if path.stat().st_size > MAX_BYTES:
-                    raise ConsoleError("output_too_large")
-                result.update(item["path"].encode() + b"\0")
-                result.update(hashlib.sha256(path.read_bytes()).digest())
+            result.update(item["path"].encode() + b"\0")
+            result.update(hashlib.sha256(read_worktree_file(root, item["path"])).digest())
     return result.hexdigest()
 
 
@@ -125,10 +156,7 @@ def diff(root: Path, relative: str) -> dict:
     if relative not in candidates:
         raise ConsoleError("file_not_changed", 404)
     item = candidates[relative]
-    path = safe_path(root, relative)
-    if path.exists() and (not path.is_file() or path.stat().st_size > MAX_BYTES):
-        raise ConsoleError("output_too_large")
-    new = path.read_bytes() if path.is_file() else b""
+    new = read_worktree_file(root, relative)
     old = b""
     if item["status"] != "??":
         try:

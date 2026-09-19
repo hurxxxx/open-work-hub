@@ -1,9 +1,11 @@
+import asyncio
+import threading
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from conftest import complete, new_task, plan, send_message
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from codex_console import attachments, git, store
 from codex_console.errors import ConsoleError
@@ -241,6 +243,65 @@ def test_completion_fingerprint_failure_requires_recovery_without_moving_root(cl
     with client.app.state.factory() as db:
         assert db.get(Task, task["id"]).fingerprint is not None
         assert db.get(WorkspaceLease, 1).task_id == task["id"]
+
+
+def test_disconnect_waits_for_completion_without_blocking_event_loop(client, monkeypatch):
+    task = plan(client)
+    task = client.post(
+        f"/api/tasks/{task['id']}/implement",
+        json={"operation_id": str(uuid4()), "revision_id": task["revisions"][-1]["id"]},
+    ).json()
+    runtime = client.app.state.runtime
+    started, release = threading.Event(), threading.Event()
+    original = git.fingerprint
+
+    def slow_fingerprint(root):
+        started.set()
+        assert release.wait(3)
+        return original(root)
+
+    def limit_locks(connection):
+        # Make a regression fail within a bounded time instead of hanging pytest.
+        connection.exec_driver_sql("SET LOCAL lock_timeout = '500ms'")
+
+    monkeypatch.setattr(git, "fingerprint", slow_fingerprint)
+    engine = runtime.factory.kw["bind"]
+    event.listen(engine, "begin", limit_locks)
+
+    async def scenario():
+        completion = asyncio.create_task(
+            runtime.on_message(
+                {
+                    "method": "turn/completed",
+                    "params": {
+                        "threadId": task["thread_id"],
+                        "turnId": task["turn_id"],
+                        "turn": {"id": task["turn_id"], "status": "completed"},
+                    },
+                }
+            )
+        )
+        assert await asyncio.to_thread(started.wait, 2)
+        disconnected = asyncio.create_task(runtime.on_disconnect())
+        try:
+            await asyncio.sleep(0.05)
+            assert not disconnected.done()
+        finally:
+            release.set()
+            results = await asyncio.wait_for(
+                asyncio.gather(completion, disconnected, return_exceptions=True), 2
+            )
+        assert results == [None, None]
+
+    try:
+        client.portal.call(scenario)
+    finally:
+        release.set()
+        event.remove(engine, "begin", limit_locks)
+    assert client.get("/healthz").status_code == 200
+    detail = client.get(f"/api/tasks/{task['id']}").json()
+    assert detail["status"] == "idle"
+    assert detail["stage"] == "review"
 
 
 def test_failed_steer_preparation_can_retry_but_uncertain_steer_cannot(client, monkeypatch):

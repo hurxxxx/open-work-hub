@@ -475,12 +475,13 @@ class Runtime:
                 store.changed(db, task, "request.sent")
 
     async def on_disconnect(self):
-        self.error = "codex_disconnected"
-        with self.factory.begin() as db:
-            for task in db.scalars(select(Task).where(Task.status.in_(store.ACTIVE))):
-                task.status, task.error_code = "uncertain", "codex_disconnected"
-                store.invalidate_pending(db, task.id)
-                store.changed(db, task, "runtime.disconnected")
+        async with self.gate:
+            self.error = "codex_disconnected"
+            with self.factory.begin() as db:
+                for task in db.scalars(select(Task).where(Task.status.in_(store.ACTIVE))):
+                    task.status, task.error_code = "uncertain", "codex_disconnected"
+                    store.invalidate_pending(db, task.id)
+                    store.changed(db, task, "runtime.disconnected")
 
     async def on_message(self, message):
         method, params = message.get("method", ""), message.get("params") or {}
