@@ -95,6 +95,19 @@ async function openAndCompose() {
   });
 }
 
+it('retries an unavailable initial session check without a page reload', async () => {
+  vi.mocked(api).mockRejectedValueOnce(new ApiError('request_failed'));
+  render(<App />);
+  const retry = await screen.findByRole('button', { name: '연결 다시 시도' });
+  expect(
+    (screen.getByRole('button', { name: '로그인' }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  fireEvent.click(retry);
+  await screen.findByRole('heading', { name: 'Test task' });
+  expect(screen.queryByRole('button', { name: '연결 다시 시도' })).toBeNull();
+});
+
 it('searches all tasks on the server without clearing the open draft or accepting stale results', async () => {
   let resolveOld!: (rows: Detail[]) => void;
   searchTasks = async (query) =>

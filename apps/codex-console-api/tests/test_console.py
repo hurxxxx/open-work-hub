@@ -29,6 +29,36 @@ def test_migration_matches_models(settings):
     engine.dispose()
 
 
+def test_command_output_stream_accepts_native_initial_null_output(client):
+    task = send_message(client, new_task(client)).json()
+    notify(
+        client,
+        task,
+        "item/started",
+        {
+            "item": {
+                "id": "command",
+                "type": "commandExecution",
+                "command": "pwd",
+                "status": "inProgress",
+                "aggregatedOutput": None,
+            }
+        },
+    )
+    notify(
+        client,
+        task,
+        "item/commandExecution/outputDelta",
+        {"itemId": "command", "delta": "/workspace\n"},
+    )
+    current = client.get(f"/api/tasks/{task['id']}").json()
+    assert current["status"] == "running"
+    assert (
+        next(item for item in current["items"] if item["id"] == "command")["aggregatedOutput"]
+        == "/workspace\n"
+    )
+
+
 def test_turn_provenance_migration_preserves_existing_documents(client):
     from codex_console.cli import ROOT
 

@@ -1,8 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { Detail, Pending } from './api';
+import { api, type Detail, type Pending } from './api';
 import { translate } from './i18n';
-import { Documents, Markdown, RequestForm } from './views';
+import { Changes, Documents, Markdown, RequestForm } from './views';
+
+vi.mock('./api', async (original) => ({
+  ...(await original<typeof import('./api')>()),
+  api: vi.fn(),
+}));
 
 vi.mock('@pierre/diffs/react', () => ({ MultiFileDiff: () => <div /> }));
 const t = translate('en-US');
@@ -39,6 +44,35 @@ const task: Detail = {
     },
   ],
 };
+
+it('distinguishes loading and failed changes from a successful empty result and retries', async () => {
+  const onError = vi.fn();
+  vi.mocked(api)
+    .mockReset()
+    .mockRejectedValueOnce(new Error('unavailable'))
+    .mockResolvedValueOnce([]);
+  render(<Changes task={task} t={t} onError={onError} />);
+  expect(screen.getByRole('status').textContent).toBe('Loading changes…');
+  expect(screen.queryByText('No file changes')).toBeNull();
+  await screen.findByText('Could not load changes.');
+  expect(screen.queryByText('No file changes')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  await screen.findByText('No file changes');
+  expect(onError).toHaveBeenCalledTimes(1);
+});
+
+it('offers retry for a failed file diff', async () => {
+  vi.mocked(api)
+    .mockReset()
+    .mockResolvedValueOnce([{ path: 'file.txt', status: 'M' }])
+    .mockRejectedValueOnce(new Error('timeout'))
+    .mockResolvedValueOnce({ path: 'file.txt', binary: true });
+  render(<Changes task={task} t={t} onError={vi.fn()} />);
+  await screen.findByText('Could not load this diff.');
+  expect(screen.queryByText('No file changes')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  await screen.findByText('Binary file changed');
+});
 
 describe('plan authorization UI', () => {
   it('requires saving changed plan text before implementation', async () => {

@@ -49,6 +49,11 @@ export const korean = {
     '지금 사용하는 Codex 구독으로 아이디어를 정리하고, 구현하고, 변경사항을 검토하세요.',
   'Owner password': '본인 전용 비밀번호',
   'Sign in': '로그인',
+  'Retry connection': '연결 다시 시도',
+  Retry: '다시 시도',
+  'Loading changes…': '변경사항을 불러오는 중…',
+  'Could not load changes.': '변경사항을 불러오지 못했습니다.',
+  'Could not load this diff.': '이 파일의 변경 내용을 불러오지 못했습니다.',
   'Sign out': '로그아웃',
   'This password protects the console. Your ChatGPT login stays with Codex.':
     '작업실 접속용 비밀번호입니다. ChatGPT 로그인은 Codex에서 관리합니다.',

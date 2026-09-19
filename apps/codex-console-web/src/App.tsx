@@ -61,6 +61,7 @@ export function App() {
   const [locale, setLocale] = useState<Locale>('ko-KR');
   const t = useMemo(() => translate(locale), [locale]);
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [sessionFailed, setSessionFailed] = useState(false);
   const [password, setPassword] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [task, setTask] = useState<Detail | null>(null);
@@ -119,6 +120,17 @@ export function App() {
       setTasks([]);
     }
   }, []);
+  const checkSession = useCallback(async () => {
+    setSessionFailed(false);
+    setError(null);
+    try {
+      const value = await api<{ authenticated: boolean }>('/session');
+      setAuthenticated(value.authenticated);
+    } catch (error) {
+      setSessionFailed(true);
+      onError(error);
+    }
+  }, [onError]);
   const refreshTasks = useCallback(async () => {
     const query = searchRef.current.trim();
     const rows = await api<Task[]>(
@@ -294,10 +306,8 @@ export function App() {
     return () => media.removeEventListener('change', update);
   }, []);
   useEffect(() => {
-    void api<{ authenticated: boolean }>('/session')
-      .then((value) => setAuthenticated(value.authenticated))
-      .catch(onError);
-  }, [onError]);
+    void checkSession();
+  }, [checkSession]);
   useEffect(() => {
     if (!authenticated) return;
     void refreshAccount().catch(onError);
@@ -443,6 +453,11 @@ export function App() {
               'Use your existing Codex subscription to turn an idea into a reviewed change.',
             )}
           </p>
+          {sessionFailed && (
+            <Button onClick={() => void checkSession()}>
+              {t('Retry connection')}
+            </Button>
+          )}
           <form
             onSubmit={(event) => {
               event.preventDefault();

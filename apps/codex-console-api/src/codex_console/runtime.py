@@ -518,7 +518,7 @@ class Runtime:
                         key = "aggregatedOutput" if method.endswith("outputDelta") else "text"
                         row.payload = {
                             **row.payload,
-                            key: (row.payload.get(key, "") + params.get("delta", ""))[-100000:],
+                            key: ((row.payload.get(key) or "") + params.get("delta", ""))[-100000:],
                         }
                 elif method == "serverRequest/resolved":
                     db.execute(

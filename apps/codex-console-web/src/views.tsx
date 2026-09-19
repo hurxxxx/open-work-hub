@@ -441,8 +441,15 @@ export function Changes({
   const [changes, setChanges] = useState<Change[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [diff, setDiff] = useState<Diff | null>(null);
+  const [listState, setListState] = useState('loading');
+  const [diffState, setDiffState] = useState('loading');
+  const [listAttempt, setListAttempt] = useState(0);
+  const [diffAttempt, setDiffAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
+    setListState('loading');
+    setChanges([]);
+    setSelected(null);
     void api<Change[]>(
       `/tasks/${task.id}/changes`,
       undefined,
@@ -450,6 +457,8 @@ export function Changes({
       controller.signal,
     )
       .then((rows) => {
+        if (controller.signal.aborted) return;
+        setListState('ready');
         setChanges(rows);
         setSelected((current) =>
           rows.some((row) => row.path === current)
@@ -458,12 +467,16 @@ export function Changes({
         );
       })
       .catch((error) => {
-        if (!controller.signal.aborted) onError(error);
+        if (!controller.signal.aborted) {
+          setListState('error');
+          onError(error);
+        }
       });
     return () => controller.abort();
-  }, [task.id, task.status, onError]);
+  }, [task.id, task.status, onError, listAttempt]);
   useEffect(() => {
     setDiff(null);
+    setDiffState('loading');
     if (!selected) return;
     const controller = new AbortController();
     void api<Diff>(
@@ -472,12 +485,19 @@ export function Changes({
       undefined,
       controller.signal,
     )
-      .then(setDiff)
+      .then((value) => {
+        if (controller.signal.aborted) return;
+        setDiff(value);
+        setDiffState('ready');
+      })
       .catch((error) => {
-        if (!controller.signal.aborted) onError(error);
+        if (!controller.signal.aborted) {
+          setDiffState('error');
+          onError(error);
+        }
       });
     return () => controller.abort();
-  }, [task.id, task.status, selected, onError]);
+  }, [task.id, task.status, selected, onError, diffAttempt]);
   return (
     <div className="changes-pane">
       {task.isolated && (
@@ -499,14 +519,34 @@ export function Changes({
           </button>
         ))}
       </nav>
-      {!changes.length ? (
+      {listState === 'loading' ? (
+        <p role="status">{t('Loading changes…')}</p>
+      ) : listState === 'error' ? (
+        <div role="alert">
+          <p>{t('Could not load changes.')}</p>
+          <Button onClick={() => setListAttempt((value) => value + 1)}>
+            {t('Retry')}
+          </Button>
+        </div>
+      ) : !changes.length ? (
         <div className="empty-result">
           <Check size={24} />
           <p>{t('No file changes')}</p>
         </div>
+      ) : diffState === 'error' ? (
+        <div role="alert">
+          <p>{t('Could not load this diff.')}</p>
+          <Button onClick={() => setDiffAttempt((value) => value + 1)}>
+            {t('Retry')}
+          </Button>
+        </div>
       ) : !diff ? (
         <p className="context-note">
-          {t('Select a file to inspect its diff.')}
+          {t(
+            selected
+              ? 'Loading changes…'
+              : 'Select a file to inspect its diff.',
+          )}
         </p>
       ) : diff.binary ? (
         <p className="context-note">{t('Binary file changed')}</p>
