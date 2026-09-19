@@ -34,7 +34,7 @@
 - Shared/auditable state belongs in PostgreSQL or object storage, not UI hiding, browser storage, `/tmp`, process memory, or JSON load-modify-write.
 - Server enforcement owns auth, user/execution identity, company app admission, resource ACL, and fail-closed AI write approval.
 - External file/URL input needs size, type, scheme, host, redirect, timeout, SSRF, cleanup, and failure boundaries.
-- Generative calls use registered workloads and the common execution interface; app code never chooses provider, model, pool, credential, or fallback.
+- Generative calls use registered workloads and the common execution interface; app code never chooses provider, model, pool, credential, or fallback. Exception: standalone, owner-operated coding clients may use official subscription-authenticated agent protocols, but must not execute AI workloads for product APIs/workers or bypass product authentication, auditing, or workload routing.
 - Retrieval partitions narrow candidates, never authorization; apply source ACL and versioned projection/cutover contracts.
 
 ## Validation And Handoff
