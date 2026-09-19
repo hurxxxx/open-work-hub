@@ -34,7 +34,7 @@
       "executor": "nx:run-commands",
       "cache": false,
       "options": {
-        "command": "pnpm exec playwright test --config apps/web/playwright.config.ts apps/web/e2e/app-boundary-smoke.spec.ts apps/web/e2e/docs-content-format.spec.ts apps/web/e2e/release-note-announcement-layout.spec.ts apps/web/e2e/hermes-static-preview.spec.ts",
+        "command": "pnpm exec playwright test --config apps/web/playwright.config.ts apps/web/e2e/app-boundary-smoke.spec.ts apps/web/e2e/docs-content-format.spec.ts apps/web/e2e/release-note-announcement-layout.spec.ts apps/web/e2e/hermes-static-preview.spec.ts apps/web/e2e/tetris.spec.ts",
         "cwd": "."
       }
     }

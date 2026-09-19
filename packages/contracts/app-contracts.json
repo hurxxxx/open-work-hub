@@ -454,6 +454,26 @@
           "chrome": "standard"
         }
       ]
+    },
+    {
+      "app_id": "tetris",
+      "title": "Tetris",
+      "icon_key": "boxes",
+      "execution_context_kind": "personal",
+      "resource_scope": "personal",
+      "route_base": "/apps/tetris",
+      "entry_route_id": "tetris.root",
+      "launcher": {
+        "placement": "personal_tools",
+        "pinned_by_default": false
+      },
+      "routes": [
+        {
+          "route_id": "tetris.root",
+          "suffix": "",
+          "chrome": "containedSurface"
+        }
+      ]
     }
   ]
 }
