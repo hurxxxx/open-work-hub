@@ -3,6 +3,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+DOCUMENT_CHAR_LIMIT = 100000
+MESSAGE_CHAR_LIMIT = 32000
+
 
 class Input(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -24,7 +27,7 @@ class ImportThread(Input):
 
 class Message(Input):
     operation_id: UUID
-    text: str = Field(default="", max_length=32000)
+    text: str = Field(default="", max_length=MESSAGE_CHAR_LIMIT)
     stage: Literal["requirements", "plan"] = "requirements"
     attachment_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
@@ -44,7 +47,7 @@ class Implement(Input):
 class DocumentInput(Input):
     kind: Literal["requirements", "plan"]
     base_version: int = Field(ge=0)
-    body: str = Field(min_length=1, max_length=100000)
+    body: str = Field(min_length=1, max_length=DOCUMENT_CHAR_LIMIT)
 
 
 class Recover(Input):

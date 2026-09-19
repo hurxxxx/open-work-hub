@@ -1,6 +1,7 @@
 import json
 from uuid import uuid4
 
+import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from conftest import complete, new_task, notify, plan, send_message
@@ -57,6 +58,63 @@ def test_validation_does_not_echo_password(client):
 def test_body_size_boundary(client):
     result = client.post("/api/tasks", content=b"x" * (128 * 1024 + 1))
     assert result.status_code == 413
+
+
+@pytest.mark.parametrize("character", ["한", "😀"])
+@pytest.mark.parametrize("escaped", [False, True])
+def test_document_json_supports_full_unicode_character_limit(client, character, escaped):
+    task = new_task(client)
+    endpoint = f"/api/tasks/{task['id']}/documents"
+    body = {"kind": "requirements", "base_version": 0, "body": character * 100000}
+    response = client.put(
+        endpoint,
+        content=json.dumps(body, ensure_ascii=escaped).encode(),
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 200
+    assert response.json()["revisions"][-1]["body"] == body["body"]
+    body["body"] += character
+    assert client.put(endpoint, json=body).status_code == 422
+    assert client.put(endpoint, content=b"x" * (100000 * 12 + 4097)).status_code == 413
+
+
+def test_message_json_supports_escaped_unicode_at_character_limit(client):
+    task = new_task(client)
+    body = {"operation_id": str(uuid4()), "text": "😀" * 32000}
+    assert (
+        client.post(
+            f"/api/tasks/{task['id']}/messages",
+            content=json.dumps(body).encode(),
+            headers={"content-type": "application/json"},
+        ).status_code
+        == 200
+    )
+
+
+def test_detail_cursor_and_projection_share_a_database_snapshot(client, monkeypatch):
+    from codex_console import store
+
+    factory = client.app.state.factory
+    task = new_task(client)
+    before = client.get(f"/api/tasks/{task['id']}").json()
+    original = store.require_task
+
+    def commit_between_reads(db, task_id, **kwargs):
+        row = original(db, task_id, **kwargs)
+        with factory.begin() as writer:
+            changed = writer.get(Task, task_id)
+            changed.status = "interrupted"
+            store.changed(writer, changed, "test.concurrent_change")
+        return row
+
+    monkeypatch.setattr(store, "require_task", commit_between_reads)
+    during = store.detail(factory, task["id"], client.app.state.settings)
+    assert during["status"] == before["status"]
+    assert during["event_id"] == before["event_id"]
+    monkeypatch.setattr(store, "require_task", original)
+    after = store.detail(factory, task["id"], client.app.state.settings)
+    assert after["status"] == "interrupted"
+    assert after["event_id"] > during["event_id"]
 
 
 def test_requirements_and_plan_turns_are_read_only(client):
@@ -118,24 +176,33 @@ def test_identical_regenerated_plan_can_approve_new_requirements(client):
     task = plan(client)
     previous = task["revisions"][-1]
     endpoint = f"/api/tasks/{task['id']}"
-    assert client.put(
-        endpoint + "/documents",
-        json={"kind": "requirements", "base_version": 0, "body": "Clarified scope"},
-    ).status_code == 200
-    assert client.post(
-        endpoint + "/implement",
-        json={"operation_id": str(uuid4()), "revision_id": previous["id"]},
-    ).json()["code"] == "stale_plan"
+    assert (
+        client.put(
+            endpoint + "/documents",
+            json={"kind": "requirements", "base_version": 0, "body": "Clarified scope"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            endpoint + "/implement",
+            json={"operation_id": str(uuid4()), "revision_id": previous["id"]},
+        ).json()["code"]
+        == "stale_plan"
+    )
     task = send_message(client, task, "plan").json()
     task = complete(client, task, previous["body"])
     revised = [row for row in task["revisions"] if row["kind"] == "plan"][-1]
     assert revised["version"] == previous["version"] + 1
     assert revised["body"] == previous["body"]
     assert revised["created_at"] > previous["created_at"]
-    assert client.post(
-        endpoint + "/implement",
-        json={"operation_id": str(uuid4()), "revision_id": revised["id"]},
-    ).status_code == 200
+    assert (
+        client.post(
+            endpoint + "/implement",
+            json={"operation_id": str(uuid4()), "revision_id": revised["id"]},
+        ).status_code
+        == 200
+    )
 
 
 def test_workspace_lease_prevents_parallel_turns(client):

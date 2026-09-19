@@ -74,6 +74,7 @@ beforeEach(() => {
     if (path === `/tasks/${taskId}/messages`)
       return submit(body as Record<string, unknown>);
     if (path === `/tasks/${taskId}/recover`) return recover();
+    if (path === `/tasks/${taskId}/interrupt`) return detail;
     throw new Error(`Unexpected test endpoint: ${path}`);
   });
 });
@@ -90,6 +91,27 @@ async function openAndCompose() {
     target: { value: 'Same request' },
   });
 }
+
+it('offers explicit stop for an uncertain native thread without a saved turn ID', async () => {
+  detail = {
+    ...detail,
+    status: 'uncertain',
+    error_code: 'codex_request_uncertain',
+  };
+  render(<App />);
+  const stop = await screen.findByRole('button', { name: '중단' });
+  expect(
+    vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/interrupt')),
+  ).toBe(false);
+  fireEvent.click(stop);
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      `/tasks/${taskId}/interrupt`,
+      {},
+      undefined,
+    ),
+  );
+});
 
 it('keeps a newer SSE result when an older submission response arrives last', async () => {
   let resolve!: (value: Detail) => void;

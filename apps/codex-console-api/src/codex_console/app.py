@@ -21,6 +21,8 @@ from .models import Event, Task, database
 from .rpc import CodexRPC
 from .runtime import Runtime
 from .schemas import (
+    DOCUMENT_CHAR_LIMIT,
+    MESSAGE_CHAR_LIMIT,
     AccountOut,
     Answer,
     AttachmentOut,
@@ -116,10 +118,23 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
                 request.url.path.removeprefix(cfg.base_path),
             )
             if not upload:
+                path = request.url.path.removeprefix(cfg.base_path)
+                char_limit = (
+                    DOCUMENT_CHAR_LIMIT
+                    if request.method == "PUT"
+                    and re.fullmatch(r"/api/tasks/[0-9a-f-]{36}/documents", path)
+                    else MESSAGE_CHAR_LIMIT
+                    if request.method == "POST"
+                    and re.fullmatch(r"/api/tasks/[0-9a-f-]{36}/(messages|steer)", path)
+                    else None
+                )
+                # A Unicode code point can occupy 12 JSON bytes as an escaped
+                # surrogate pair. Reserve bounded space for the remaining fields.
+                byte_limit = char_limit * 12 + 4096 if char_limit else 128 * 1024
                 body = bytearray()
                 async for chunk in request.stream():
                     body.extend(chunk)
-                    if len(body) > 128 * 1024:
+                    if len(body) > byte_limit:
                         return JSONResponse({"code": "input_too_large"}, status_code=413)
                 request._body = bytes(body)
         response = await call_next(request)

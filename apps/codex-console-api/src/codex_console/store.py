@@ -103,6 +103,8 @@ def detail(factory, task_id, settings):
     from .attachments import limits
 
     with factory() as db:
+        # The event cursor must describe the same snapshot as every projected row.
+        db.connection(execution_options={"isolation_level": "REPEATABLE READ"})
         task = require_task(db, task_id)
         recent = list(
             db.scalars(

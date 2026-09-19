@@ -97,6 +97,54 @@ def test_explicit_recovery_allows_new_request_but_never_replays_uncertain_id(cli
     assert len([c for c in rpc.calls if c[0] == "turn/start"]) == 2
 
 
+def test_lost_start_response_can_interrupt_verified_native_turn(client):
+    client.get("/api/codex/account")
+    rpc = client.app.state.runtime.rpc
+    rpc.fail_turn = True
+    task = new_task(client)
+    assert send_message(client, task).status_code == 503
+    task = client.get(f"/api/tasks/{task['id']}").json()
+    assert task["turn_id"] is None
+    thread = rpc.threads[task["thread_id"]]
+    thread["status"] = {"type": "active"}
+    thread["turns"] = [{"id": "actual-running-turn", "status": "inProgress", "items": []}]
+    assert (
+        client.post(f"/api/tasks/{task['id']}/recover", json={}).json()["code"]
+        == "turn_not_finished"
+    )
+    response = client.post(f"/api/tasks/{task['id']}/interrupt", json={})
+    assert response.status_code == 200
+    assert rpc.calls[-1] == (
+        "turn/interrupt",
+        {
+            "threadId": task["thread_id"],
+            "turnId": "actual-running-turn",
+        },
+    )
+    with client.app.state.factory() as db:
+        assert db.get(WorkspaceLease, 1).task_id == task["id"]
+        assert db.get(Task, task["id"]).status == "uncertain"
+    task["turn_id"] = "actual-running-turn"
+    assert complete(client, task, status="interrupted")["status"] == "interrupted"
+    with client.app.state.factory() as db:
+        assert db.get(WorkspaceLease, 1).task_id is None
+
+
+def test_uncertain_interrupt_rejects_unverified_native_turn(client):
+    client.get("/api/codex/account")
+    rpc = client.app.state.runtime.rpc
+    rpc.fail_turn = True
+    task = new_task(client)
+    assert send_message(client, task).status_code == 503
+    assert (
+        client.post(f"/api/tasks/{task['id']}/interrupt", json={}).json()["code"]
+        == "turn_not_active"
+    )
+    assert not any(method == "turn/interrupt" for method, _ in rpc.calls)
+    with client.app.state.factory() as db:
+        assert db.get(WorkspaceLease, 1).task_id == task["id"]
+
+
 @pytest.mark.parametrize("state", ["preparing", "pending"])
 def test_restart_before_thread_creation_can_release_workspace(client, state):
     task, key = new_task(client), str(uuid4())

@@ -714,7 +714,8 @@ export function App() {
           {task.error_code && (
             <div className="runtime-notice" role="status">
               {t(errorCopy(task.error_code))}
-              {task.status === 'uncertain' && (
+              {(task.status === 'uncertain' ||
+                task.error_code === 'codex_request_uncertain') && (
                 <>
                   <small>
                     {t('No request will be automatically replayed.')}
@@ -897,7 +898,8 @@ export function App() {
                   >
                     <Paperclip size={17} />
                   </Button>
-                  {active(task) && (
+                  {(active(task) ||
+                    (task.status === 'uncertain' && task.thread_id)) && (
                     <Button
                       variant="ghost"
                       disabled={busy}

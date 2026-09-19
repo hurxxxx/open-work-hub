@@ -327,12 +327,32 @@ class Runtime:
 
     async def interrupt(self, task_id):
         async with self.gate:
-            rpc = await self.connect()
+            rpc = await self.authenticated_rpc()
             with self.factory() as db:
                 task = store.require_task(db, task_id)
-                if task.status not in store.ACTIVE or not task.turn_id:
+                uncertain = task.status == "uncertain"
+                if not uncertain and (task.status not in store.ACTIVE or not task.turn_id):
                     raise ConsoleError("turn_not_active")
                 params = {"threadId": task.thread_id, "turnId": task.turn_id}
+                root = task.root
+            if uncertain:
+                if not params["threadId"]:
+                    raise ConsoleError("turn_not_active")
+                result = await rpc.call(
+                    "thread/read", {"threadId": params["threadId"], "includeTurns": True}
+                )
+                thread = result["thread"]
+                if thread.get("id") != params["threadId"] or thread.get("cwd") != root:
+                    raise ConsoleError("thread_unavailable")
+                turns = [t for t in thread.get("turns", []) if t.get("status") == "inProgress"]
+                if (thread.get("status") or {}).get("type") != "active" or len(turns) != 1:
+                    raise ConsoleError("turn_not_active")
+                params["turnId"] = turns[0]["id"]
+                with self.factory.begin() as db:
+                    task = store.require_task(db, task_id, locked=True)
+                    task.turn_id = params["turnId"]
+                    store.changed(db, task, "turn.interrupt_requested")
+                # Retain uncertainty and the lease until completion or explicit recovery.
             await rpc.call("turn/interrupt", params)
 
     async def recover(self, task_id, *, confirm_workspace=False):
