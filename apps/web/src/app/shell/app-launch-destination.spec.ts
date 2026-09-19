@@ -61,6 +61,10 @@ it('opens configured console destinations and rejects missing or unsafe URLs', (
     'javascript:alert(1)',
     '//evil.test/',
     '/\\evil.test/',
+    ...Array.from(
+      { length: 32 },
+      (_, code) => `https://console.example.test/${String.fromCharCode(code)}`,
+    ),
   ]) {
     expect(resolve(url).kind).toBe('unavailable');
   }

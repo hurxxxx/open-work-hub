@@ -91,7 +91,11 @@ export function appLaunchLinkProps(appId: string) {
 }
 
 function safeLaunchUrl(value: string): boolean {
-  if (/[\\\s\u0000-\u001f]/.test(value)) return false;
+  if (
+    /[\\\s]/.test(value) ||
+    Array.from(value).some((character) => character.charCodeAt(0) < 32)
+  )
+    return false;
   if (value.startsWith('/')) return !value.startsWith('//');
   try {
     const url = new URL(value);
