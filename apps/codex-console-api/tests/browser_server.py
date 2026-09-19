@@ -44,6 +44,20 @@ class BrowserRPC(FakeRPC):
             "content": params["input"],
         }
         await self.on_message({"method": "item/completed", "params": {**envelope, "item": user}})
+        await self.on_message(
+            {
+                "method": "turn/plan/updated",
+                "params": {
+                    **envelope,
+                    "explanation": None,
+                    "plan": [
+                        {"step": "Inspect files", "status": "completed"},
+                        {"step": "Check result", "status": "inProgress"},
+                    ],
+                },
+            }
+        )
+        await asyncio.sleep(3)
         if params["collaborationMode"]["mode"] == "plan":
             item = {
                 "id": str(uuid4()),
@@ -119,6 +133,11 @@ def main():
                 subprocess.run(["git", "-C", str(root), "add", "."], check=True)
                 subprocess.run(
                     ["git", "-C", str(root), "commit", "-m", "fixture"],
+                    check=True,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "-C", str(root), "update-ref", "refs/remotes/origin/dev", "HEAD"],
                     check=True,
                     capture_output=True,
                 )

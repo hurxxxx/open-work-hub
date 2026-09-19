@@ -7,6 +7,7 @@ responses. Codex owns execution and OAuth; this adapter never inspects credentia
 import asyncio
 import contextlib
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -23,7 +24,9 @@ METHOD_SCHEMAS = {
     "turn/start": "TurnStartParams",
     "turn/steer": "TurnSteerParams",
     "turn/interrupt": "TurnInterruptParams",
+    "model/list": "ModelListParams",
 }
+logger = logging.getLogger(__name__)
 
 
 class CodexRPC:
@@ -39,6 +42,7 @@ class CodexRPC:
         self.events = asyncio.Queue(maxsize=2048)
         self.write_lock = asyncio.Lock()
         self.closing = False
+        self.failure_task = None
 
     @property
     def connected(self):
@@ -124,9 +128,12 @@ class CodexRPC:
         await self.send({"id": request_id, "result": result})
 
     async def _read(self):
+        reason = "codex_disconnected"
         try:
             while line := await self.process.stdout.readline():
                 message = json.loads(line)
+                if not isinstance(message, dict):
+                    raise TypeError("Invalid protocol envelope")
                 if "method" not in message and "id" in message:
                     future = self.pending.get(message["id"])
                     if future and not future.done():
@@ -137,17 +144,16 @@ class CodexRPC:
                             future.set_result(message.get("result", {}))
                 else:
                     self.events.put_nowait(message)
-        except (ValueError, asyncio.QueueFull, OSError):
-            pass
+        except (json.JSONDecodeError, TypeError):
+            reason = "codex_protocol_error"
+        except ValueError:
+            reason = "codex_output_limit"
+        except asyncio.QueueFull:
+            reason = "codex_event_overflow"
+        except OSError:
+            reason = "codex_disconnected"
         finally:
-            for future in self.pending.values():
-                if not future.done():
-                    future.set_exception(ConsoleError("codex_disconnected", 503))
-            if not self.closing:
-                self.closing = True
-                if self.process.returncode is None:
-                    self.process.terminate()
-                await self.on_disconnect()
+            await self._failed(reason)
 
     async def _dispatch(self):
         try:
@@ -156,11 +162,34 @@ class CodexRPC:
                 await self.on_message(message)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
             # Fail closed if durable event handling fails. Never let an unobserved turn continue.
-            await self.on_disconnect()
-            if self.process and self.process.returncode is None:
+            # Log only the exception class; its text and event payload can contain secrets.
+            await self._failed("codex_event_failed", type(exc).__name__)
+
+    async def _failed(self, reason, exception_type=None):
+        if self.closing:
+            return
+        self.closing = True
+        logger.warning(
+            "Codex transport stopped: reason=%s exception_type=%s returncode=%s",
+            reason,
+            exception_type,
+            self.process.returncode if self.process else None,
+        )
+        for future in self.pending.values():
+            if not future.done():
+                future.set_exception(ConsoleError("codex_disconnected", 503))
+        for task in (self.reader, self.dispatcher):
+            if task and task is not asyncio.current_task():
+                task.cancel()
+        if self.process and self.process.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
                 self.process.terminate()
+        # Reconnecting may close/cancel this reader while the durable callback is
+        # waiting for the runtime gate. Preserve that callback across transport teardown.
+        self.failure_task = asyncio.create_task(self.on_disconnect(reason))
+        await asyncio.shield(self.failure_task)
 
     async def close(self):
         self.closing = True

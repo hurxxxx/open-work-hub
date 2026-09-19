@@ -50,6 +50,22 @@ class FakeRPC:
             return {"account": {"type": self.auth_type, "planType": "test"}}
         if method == "account/rateLimits/read":
             return {"rateLimits": {"primary": {"usedPercent": 10}}}
+        if method == "model/list":
+            return {
+                "data": [
+                    {
+                        "model": name,
+                        "displayName": name,
+                        "isDefault": i == 0,
+                        "defaultReasoningEffort": "medium",
+                        "supportedReasoningEfforts": [
+                            {"reasoningEffort": effort} for effort in ("low", "medium", "high")
+                        ],
+                    }
+                    for i, name in enumerate(("account-default", "another-model"))
+                ],
+                "nextCursor": None,
+            }
         if method == "config/read":
             return {"config": {"model_provider": None, "mcp_servers": {"example": {}}}}
         if method in ("thread/start", "thread/resume"):

@@ -1,4 +1,5 @@
 import { codexConsoleModule } from '@/src/app-modules/codex-console';
+import { tetrisModule } from '@/src/app-modules/tetris';
 import { agentTerminalModule } from '@/src/app-modules/agent-terminal';
 import { bentoModule } from '@/src/app-modules/bento';
 import { chatbotModule } from '@/src/app-modules/chatbot';
@@ -17,6 +18,7 @@ import { settingsModule } from '@/src/app-modules/settings';
 import { videoChatModule } from '@/src/app-modules/video-chat';
 import { whiteboardModule } from '@/src/app-modules/whiteboard';
 import {
+  tetrisManifest,
   agentTerminalManifest,
   codexConsoleManifest,
   announcementsManifest,
@@ -40,6 +42,7 @@ import {
 import type { FeatureModuleRegistryInput } from './feature-module-registry';
 
 export {
+  tetrisManifest,
   agentTerminalManifest,
   codexConsoleManifest,
   announcementsManifest,
@@ -80,6 +83,7 @@ export const DEFAULT_APP_MODULES = [
   videoChatModule,
   recordingModule,
   retrievalSearchModule,
+  tetrisModule,
 ] as const;
 
 /** Shell-owned navigation surfaces are not executable app identities. */

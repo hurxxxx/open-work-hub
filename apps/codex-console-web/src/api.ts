@@ -5,6 +5,7 @@ export type Task = Schemas['TaskOut'];
 export type Detail = Schemas['TaskDetail'];
 export type Revision = Schemas['RevisionOut'];
 export type Account = Schemas['AccountOut'];
+export type Model = Schemas['ModelOut'];
 export type Thread = Schemas['ThreadSummary'];
 export type ThreadPage = Schemas['ThreadPage'];
 export type Change = Schemas['ChangeOut'];

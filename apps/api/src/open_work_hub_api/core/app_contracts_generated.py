@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-APP_CONTRACT_REVISION: Final = "sha256:6458bb972c6d824edfad1b08ca46bbe7e5ef3a722283ef59e9910126431a79e0"
+APP_CONTRACT_REVISION: Final = "sha256:dc7af621dbfb839406491f331635208dfa7242e58975c1092854f4f7dafc3b10"
 APP_CONTRACTS: Final = [
   {
     "app_id": "home",
@@ -457,6 +457,26 @@ APP_CONTRACTS: Final = [
         "route_id": "retrieval-search.root",
         "suffix": "",
         "chrome": "standard"
+      }
+    ]
+  },
+  {
+    "app_id": "tetris",
+    "title": "Tetris",
+    "icon_key": "boxes",
+    "execution_context_kind": "personal",
+    "resource_scope": "personal",
+    "route_base": "/apps/tetris",
+    "entry_route_id": "tetris.root",
+    "launcher": {
+      "placement": "personal_tools",
+      "pinned_by_default": False
+    },
+    "routes": [
+      {
+        "route_id": "tetris.root",
+        "suffix": "",
+        "chrome": "containedSurface"
       }
     ]
   }

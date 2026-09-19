@@ -194,3 +194,23 @@ textarea {color: inherit; background: transparent; resize: vertical; border: 0; 
 .upload-status {display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 11px;}
 .upload-status > span {overflow-wrap: anywhere; min-width: 0; flex: 1;}
 .upload-status progress {max-width: 70px;}
+
+.execution-settings {margin: 0; padding: 8px 12px; border: 0; border-top: 1px solid var(--ui-color-border); display: flex; flex-wrap: wrap; gap: 8px; min-width: 0;}
+.execution-settings legend {font-size: 10px; color: var(--ui-color-ink-subtle); padding: 0 4px;}
+.execution-settings label, .mode-selector {display: grid; gap: 3px; font-size: 10px; min-width: 0;}
+.execution-settings select {font-size: 11px; max-width: 190px;}
+.execution-settings p {margin: 0; width: 100%; font-size: 11px;}
+.execution-status {padding: 10px 20px; border-bottom: 1px solid var(--ui-color-border); background: var(--ui-color-surface-subtle); flex-shrink: 0; max-height: 25vh; overflow: auto;}
+.execution-status-heading {display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 11px; align-items: center;}
+.execution-status p {font-size: 11px; margin: 6px 0 0;}
+.execution-status summary {cursor: pointer; margin-top: 8px; font-size: 12px;}
+.execution-status ol {list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 5px;}
+.execution-status li {display: flex; align-items: center; gap: 8px; font-size: 12px;}
+.execution-status li > span {flex: 1; min-width: 0; overflow-wrap: anywhere;}
+.execution-status li > svg {flex-shrink: 0;}
+.execution-status li[data-state='completed'] {color: var(--ui-color-success-text);}
+.execution-status li[data-state='inProgress'] {font-weight: 650;}
+.current-command {display: block; margin-top: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px;}
+.resume-task {padding: 8px 20px;}
+.confirmation-request {white-space: pre-wrap; max-height: 30vh; overflow: auto;}
+@media (max-width: 640px) {.execution-status {padding: 8px 16px; max-height: 20vh;} .execution-settings {gap: 6px;} .execution-settings select {max-width: 160px;}}

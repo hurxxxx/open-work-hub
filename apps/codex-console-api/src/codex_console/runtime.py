@@ -46,8 +46,15 @@ class Runtime:
                 return self.rpc
             if self.rpc:
                 await self.rpc.close()
+
+            async def receive(message):
+                await self.on_message(message, generation=rpc.generation)
+
+            async def disconnected(reason="codex_disconnected"):
+                await self.on_disconnect(reason, generation=rpc.generation)
+
             rpc = self.rpc_factory(
-                self.settings.binary, self.settings.workspace, self.on_message, self.on_disconnect
+                self.settings.binary, self.settings.workspace, receive, disconnected
             )
             try:
                 await rpc.start()
@@ -86,6 +93,33 @@ class Runtime:
         if (result.get("account") or {}).get("type") != "chatgpt":
             raise ConsoleError("login_required", 403)
         return rpc
+
+    async def models(self, rpc=None):
+        rpc = rpc or await self.authenticated_rpc()
+        rows, cursor, seen = [], None, set()
+        for _ in range(20):
+            page = await rpc.call(
+                "model/list", {"limit": 100, "cursor": cursor, "includeHidden": False}
+            )
+            for row in page.get("data", []):
+                rows.append(
+                    {
+                        "model": row["model"],
+                        "name": row["displayName"],
+                        "is_default": row["isDefault"],
+                        "default_effort": row["defaultReasoningEffort"],
+                        "efforts": [
+                            item["reasoningEffort"] for item in row["supportedReasoningEfforts"]
+                        ],
+                    }
+                )
+            cursor = page.get("nextCursor")
+            if not cursor:
+                return rows
+            if cursor in seen:
+                break
+            seen.add(cursor)
+        raise ConsoleError("model_catalog_unavailable", 503)
 
     async def configuration(self, rpc, root):
         config = (await rpc.call("config/read", {"cwd": str(root), "includeLayers": False}))[
@@ -131,10 +165,26 @@ class Runtime:
             task.thread_id, task.model = result["thread"]["id"], result["model"]
         return result
 
-    async def start(self, task_id, operation_id, text, stage, revision_id=None, attachment_ids=()):
+    async def start(
+        self,
+        task_id,
+        operation_id,
+        text,
+        stage,
+        revision_id=None,
+        attachment_ids=(),
+        *,
+        model=None,
+        effort=None,
+        permissions="ask",
+    ):
         operation_id = str(operation_id)
         attachment_ids = [str(id) for id in attachment_ids]
-        operation_digest = digest(json.dumps([task_id, text, stage, revision_id, attachment_ids]))
+        identity = [task_id, text, stage, revision_id, attachment_ids]
+        # Preserve retry identities created by the previous console release.
+        if model is not None or effort is not None or permissions != "ask":
+            identity.extend([model, effort, permissions])
+        operation_digest = digest(json.dumps(identity))
         context = {"workflow": {"kind": "application", "value": f"Workflow stage: {stage}."}}
         async with self.gate:
             rpc = await self.authenticated_rpc()
@@ -160,7 +210,7 @@ class Runtime:
                     ):
                         raise ConsoleError("stale_plan")
                     context["approved_plan"] = {"kind": "application", "value": plan.body}
-                    text = "Implement the approved plan."
+                    text = text or "Implement the approved plan."
                     task.approved_revision = plan.id
                 else:
                     task.approved_revision = None
@@ -170,6 +220,7 @@ class Runtime:
                 store.lease(db, task_id)
                 task.status, task.stage, task.error_code = "starting", stage, None
                 task.turn_id = None
+                task.progress = None
                 task.current_operation_id = operation_id
                 if previous:
                     previous.state = "preparing"
@@ -215,8 +266,21 @@ class Runtime:
                 result = await self.ensure_thread(task_id, rpc)
                 thread_id = result["thread"]["id"]
                 session_model, root = result["model"], result["cwd"]
+                chosen_model = model or session_model
+                if model is not None or effort is not None:
+                    available = next(
+                        (row for row in await self.models(rpc) if row["model"] == chosen_model),
+                        None,
+                    )
+                    if not available:
+                        raise ConsoleError("model_unavailable", 422)
+                    if effort is not None and effort not in available["efforts"]:
+                        raise ConsoleError("effort_unavailable", 422)
+                yolo = stage == "implement" and permissions == "yolo"
                 sandbox = (
-                    {
+                    {"type": "dangerFullAccess"}
+                    if yolo
+                    else {
                         "type": "workspaceWrite",
                         "writableRoots": [root],
                         "networkAccess": False,
@@ -234,19 +298,29 @@ class Runtime:
                     "clientUserMessageId": operation_id,
                     "additionalContext": context,
                     "cwd": root,
-                    "approvalPolicy": "on-request" if stage == "implement" else "never",
+                    "approvalPolicy": "on-request"
+                    if stage == "implement" and not yolo
+                    else "never",
                     "approvalsReviewer": "user",
                     "sandboxPolicy": sandbox,
                     "collaborationMode": {
                         "mode": "default" if stage == "implement" else "plan",
                         # 0.154.0 requires this field in CollaborationMode.settings.
-                        # Echo the native thread's resolved model; the console has
-                        # no model/provider/credential selector or fallback route.
-                        "settings": {"model": session_model, "developer_instructions": None},
+                        "settings": {
+                            "model": chosen_model,
+                            "reasoning_effort": effort,
+                            "developer_instructions": None,
+                        },
                     },
+                    "model": chosen_model,
+                    "effort": effort,
                 }
                 # Commit the submission boundary before any turn can reach app-server.
                 with self.factory.begin() as db:
+                    task = store.require_task(db, task_id, locked=True)
+                    task.model, task.effort = chosen_model, effort
+                    task.permissions = permissions if stage == "implement" else "read-only"
+                    task.runtime_generation = rpc.generation
                     db.get(Operation, operation_id).state = "submitting"
                 submitted = True
                 response = await rpc.call("turn/start", params)
@@ -390,7 +464,7 @@ class Runtime:
                     store.release(db, task_id)
                     store.changed(db, task, "submission.recovered")
                     return
-                implementation = task.stage == "implement"
+                implementation = task.stage in ("implement", "review")
                 root = Path(task.root)
                 if implementation and not confirm_workspace:
                     raise ConsoleError("workspace_confirmation_required")
@@ -479,24 +553,30 @@ class Runtime:
                 task.status = "running"
                 store.changed(db, task, "request.sent")
 
-    async def on_disconnect(self):
+    async def on_disconnect(self, reason="codex_disconnected", *, generation=None):
         async with self.gate:
-            self.error = "codex_disconnected"
+            if not generation or (self.rpc and self.rpc.generation == generation):
+                self.error = reason
             with self.factory.begin() as db:
-                for task in db.scalars(select(Task).where(Task.status.in_(store.ACTIVE))):
-                    task.status, task.error_code = "uncertain", "codex_disconnected"
+                query = select(Task).where(Task.status.in_(store.ACTIVE))
+                if generation:
+                    query = query.where(Task.runtime_generation == generation)
+                for task in db.scalars(query):
+                    task.status, task.error_code = "uncertain", reason
                     store.invalidate_pending(db, task.id)
                     store.changed(db, task, "runtime.disconnected")
 
-    async def on_message(self, message):
+    async def on_message(self, message, *, generation=None):
         method, params = message.get("method", ""), message.get("params") or {}
         thread_id = params.get("threadId")
         if "id" in message:
-            await self.server_request(message)
+            await self.server_request(message, generation=generation)
             return
         if not thread_id:
             return
         async with self.gate:
+            if generation and (not self.rpc or generation != self.rpc.generation):
+                return
             with self.factory.begin() as db:
                 task = db.scalar(select(Task).where(Task.thread_id == thread_id).with_for_update())
                 if task is None:
@@ -522,6 +602,17 @@ class Runtime:
                             **row.payload,
                             key: ((row.payload.get(key) or "") + params.get("delta", ""))[-100000:],
                         }
+                elif method == "turn/plan/updated":
+                    task.progress = {
+                        "turn_id": turn_id,
+                        "explanation": (params.get("explanation") or "")[:4000],
+                        "steps": [
+                            {"step": row["step"][:2000], "status": row["status"]}
+                            for row in params.get("plan", [])[:100]
+                            if row.get("status") in ("pending", "inProgress", "completed")
+                            and isinstance(row.get("step"), str)
+                        ],
+                    }
                 elif method == "serverRequest/resolved":
                     db.execute(
                         update(PendingRequest)
@@ -574,9 +665,11 @@ class Runtime:
                     return
                 store.changed(db, task, method)
 
-    async def server_request(self, message):
+    async def server_request(self, message, *, generation=None):
         method, params, request_id = message["method"], message.get("params", {}), message["id"]
         async with self.gate:
+            if generation and (not self.rpc or generation != self.rpc.generation):
+                return
             with self.factory.begin() as db:
                 task = db.scalar(
                     select(Task).where(Task.thread_id == params.get("threadId")).with_for_update()

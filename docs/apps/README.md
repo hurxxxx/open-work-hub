@@ -10,6 +10,7 @@ platform contract.
 | Diagrams | [diagrams/README.md](diagrams/README.md) |
 | PMS | [pms/README.md](pms/README.md) |
 | Recording | [recording/README.md](recording/README.md) |
+| Tetris | [tetris/README.md](tetris/README.md) |
 
 Independent development tools: [Codex Console](codex-console/README.md) is an owner-only
 web client for the local Codex subscription, with its own process, login, and database.

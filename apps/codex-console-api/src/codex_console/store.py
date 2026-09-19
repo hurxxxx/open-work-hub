@@ -150,6 +150,10 @@ def task_out(task):
         "approved_revision": task.approved_revision,
         "error_code": task.error_code,
         "updated_at": task.updated_at.isoformat(),
+        "model": task.model,
+        "effort": task.effort,
+        "permissions": task.permissions,
+        "progress": task.progress,
     }
 
 
@@ -169,7 +173,7 @@ def detail(factory, task_id, settings):
                 select(Item).where(Item.task_id == task_id).order_by(Item.id.desc()).limit(2001)
             )
         )
-        items = [dict(row.payload) for row in reversed(recent[:2000])]
+        items = [{**row.payload, "turn_id": row.turn_id} for row in reversed(recent[:2000])]
         message_ids = [
             i["clientId"] for i in items if i.get("type") == "userMessage" and i.get("clientId")
         ]
