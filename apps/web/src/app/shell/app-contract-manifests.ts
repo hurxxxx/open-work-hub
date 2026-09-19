@@ -1,4 +1,5 @@
 import { codexConsoleManifest } from '@/src/app-modules/codex-console/manifest';
+import { tetrisManifest } from '@/src/app-modules/tetris/manifest';
 import { agentTerminalManifest } from '@/src/app-modules/agent-terminal/manifest';
 import { announcementsManifest } from '@/src/app-modules/announcements/manifest';
 import { bentoManifest } from '@/src/app-modules/bento/manifest';
@@ -19,6 +20,7 @@ import { videoChatManifest } from '@/src/app-modules/video-chat/manifest';
 import { whiteboardManifest } from '@/src/app-modules/whiteboard/manifest';
 
 export {
+  tetrisManifest,
   agentTerminalManifest,
   codexConsoleManifest,
   announcementsManifest,
@@ -58,6 +60,7 @@ export const DEFAULT_APP_CONTRACT_MANIFESTS = [
   videoChatManifest,
   recordingManifest,
   retrievalSearchManifest,
+  tetrisManifest,
 ] as const;
 
 export const DEFAULT_FEATURE_CONTRACT_MANIFESTS = [
