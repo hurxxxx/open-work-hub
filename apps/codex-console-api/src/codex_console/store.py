@@ -39,7 +39,9 @@ def latest_revision(db, task_id, kind):
 def save_revision(db, task: Task, kind: str, body: str):
     previous = latest_revision(db, task.id, kind)
     if previous and previous.body == body:
-        return previous
+        requirements = latest_revision(db, task.id, "requirements") if kind == "plan" else None
+        if requirements is None or requirements.created_at <= previous.created_at:
+            return previous
     row = Revision(
         task_id=task.id,
         kind=kind,

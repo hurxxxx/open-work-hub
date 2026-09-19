@@ -109,6 +109,128 @@ describe('plan authorization UI', () => {
       ).disabled,
     ).toBe(true);
   });
+
+  it('preserves the draft and its base across server updates and preview', () => {
+    const onSave = vi.fn();
+    const props = {
+      kind: 'plan' as const,
+      t,
+      busy: false,
+      onSave,
+      onPlan: vi.fn(),
+      onImplement: vi.fn(),
+    };
+    const { rerender } = render(<Documents {...props} task={task} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit document' }));
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'My draft' },
+    });
+    const changed = {
+      ...task,
+      revisions: [
+        ...task.revisions,
+        {
+          ...task.revisions[0]!,
+          id: 2,
+          version: 2,
+          body: 'Another saved plan',
+        },
+      ],
+    };
+    rerender(<Documents {...props} task={changed} />);
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+      'My draft',
+    );
+    expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('1');
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Your edits are preserved',
+    );
+    expect(
+      (
+        screen.getByRole('button', {
+          name: 'Save document',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    expect(screen.getByText('My draft')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit document' }));
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+      'My draft',
+    );
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Discard edits and load latest version',
+      }),
+    );
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+      'Another saved plan',
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('keeps failed saves and clears the draft only after a successful save', async () => {
+    const onSave = vi.fn().mockResolvedValue(false);
+    const props = {
+      kind: 'plan' as const,
+      t,
+      busy: false,
+      onSave,
+      onPlan: vi.fn(),
+      onImplement: vi.fn(),
+    };
+    const { rerender } = render(<Documents {...props} task={task} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit document' }));
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'My saved plan' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save document' }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
+      'My saved plan',
+    );
+    onSave.mockImplementation(async () => {
+      rerender(
+        <Documents
+          {...props}
+          task={{
+            ...task,
+            revisions: [
+              ...task.revisions,
+              {
+                ...task.revisions[0]!,
+                id: 2,
+                version: 2,
+                body: 'My saved plan',
+              },
+            ],
+          }}
+        />,
+      );
+      return true;
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save document' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Save document' }),
+      ).toBeNull(),
+    );
+    expect(onSave).toHaveBeenLastCalledWith({
+      kind: 'plan',
+      base_version: 1,
+      body: 'My saved plan',
+    });
+    expect(screen.getByText('My saved plan')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(
+      (
+        screen.getByRole('button', {
+          name: 'Implement this plan',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+  });
 });
 
 it('requires answers for all questions without auto-submitting an option', () => {

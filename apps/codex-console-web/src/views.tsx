@@ -284,18 +284,21 @@ export function Documents({
   const latest = versions.at(-1);
   const [selected, setSelected] = useState<number | null>(null);
   const revision = versions.find((row) => row.id === selected) ?? latest;
-  const [body, setBody] = useState(revision?.body ?? '');
+  const [draft, setDraft] = useState<{
+    body: string;
+    base: Revision | undefined;
+  } | null>(null);
+  const base = draft ? draft.base : revision;
+  const body = draft?.body ?? revision?.body ?? '';
   const [editing, setEditing] = useState(false);
   useEffect(() => {
     setSelected(null);
     setEditing(false);
+    setDraft(null);
   }, [kind, task.id]);
-  useEffect(() => {
-    setBody(revision?.body ?? '');
-  }, [revision?.id, revision?.body]);
-  const modified = body !== (revision?.body ?? '');
-  const disabled =
-    busy || locked(task) || (revision && revision.id !== latest?.id);
+  const modified = body !== (base?.body ?? '');
+  const conflict = !!draft && base?.id !== latest?.id;
+  const disabled = busy || locked(task) || base?.id !== latest?.id;
   const requirements = task.revisions
     .filter((r) => r.kind === 'requirements')
     .at(-1);
@@ -312,10 +315,12 @@ export function Documents({
           {versions.length > 0 && (
             <select
               aria-label={t('Version')}
-              value={revision?.id}
+              value={base?.id}
+              disabled={!!draft}
               onChange={(event) => {
                 setSelected(Number(event.target.value));
                 setEditing(false);
+                setDraft(null);
               }}
             >
               {versions.map((row) => (
@@ -327,7 +332,7 @@ export function Documents({
           )}
           <Button
             variant="ghost"
-            disabled={!!disabled}
+            disabled={busy || locked(task) || (!draft && !!disabled)}
             onClick={() => setEditing(!editing)}
           >
             {t(editing ? 'Preview' : 'Edit document')}
@@ -341,10 +346,11 @@ export function Documents({
             aria-label={t('Edit document')}
             value={body}
             maxLength={100000}
-            onChange={(event) => setBody(event.target.value)}
+            disabled={busy || locked(task)}
+            onChange={(event) => setDraft({ body: event.target.value, base })}
           />
-        ) : revision ? (
-          <Markdown text={revision.body} />
+        ) : revision || draft ? (
+          <Markdown text={body} />
         ) : (
           <div className="empty-result">
             <FileText size={24} />
@@ -355,14 +361,36 @@ export function Documents({
         )}
       </div>
       <div className="document-footer">
+        {conflict && (
+          <small role="alert">
+            {t(
+              'The document changed in another tab. Your edits are preserved. Copy them before loading the latest version.',
+            )}
+          </small>
+        )}
+        {draft && (
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={() => {
+              setDraft(null);
+              setSelected(null);
+            }}
+          >
+            {t('Discard edits and load latest version')}
+          </Button>
+        )}
         {modified && (
           <Button
             disabled={!!disabled || !body.trim()}
             onClick={async () => {
               if (
-                await onSave({ kind, base_version: latest?.version ?? 0, body })
-              )
+                await onSave({ kind, base_version: base?.version ?? 0, body })
+              ) {
+                setDraft((current) => (current === draft ? null : current));
+                setSelected(null);
                 setEditing(false);
+              }
             }}
           >
             <Save size={14} />

@@ -104,6 +104,10 @@ export const korean = {
   Document: '문서',
   'Edit document': '문서 편집',
   'Save document': '문서 저장',
+  'Discard edits and load latest version':
+    '편집 내용 버리고 최신 버전 불러오기',
+  'The document changed in another tab. Your edits are preserved. Copy them before loading the latest version.':
+    '다른 곳에서 문서가 변경되었습니다. 편집 내용은 유지되며 최신 버전을 불러오기 전에 복사할 수 있습니다.',
   Preview: '미리보기',
   Version: '버전',
   'No document yet. Continue the conversation to create one.':

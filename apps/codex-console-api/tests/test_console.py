@@ -114,6 +114,30 @@ def test_documents_use_optimistic_version_check(client):
     assert client.put(endpoint, json=body).json()["code"] == "stale_document"
 
 
+def test_identical_regenerated_plan_can_approve_new_requirements(client):
+    task = plan(client)
+    previous = task["revisions"][-1]
+    endpoint = f"/api/tasks/{task['id']}"
+    assert client.put(
+        endpoint + "/documents",
+        json={"kind": "requirements", "base_version": 0, "body": "Clarified scope"},
+    ).status_code == 200
+    assert client.post(
+        endpoint + "/implement",
+        json={"operation_id": str(uuid4()), "revision_id": previous["id"]},
+    ).json()["code"] == "stale_plan"
+    task = send_message(client, task, "plan").json()
+    task = complete(client, task, previous["body"])
+    revised = [row for row in task["revisions"] if row["kind"] == "plan"][-1]
+    assert revised["version"] == previous["version"] + 1
+    assert revised["body"] == previous["body"]
+    assert revised["created_at"] > previous["created_at"]
+    assert client.post(
+        endpoint + "/implement",
+        json={"operation_id": str(uuid4()), "revision_id": revised["id"]},
+    ).status_code == 200
+
+
 def test_workspace_lease_prevents_parallel_turns(client):
     first, second = new_task(client), new_task(client)
     running = send_message(client, first).json()
