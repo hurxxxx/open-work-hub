@@ -1,4 +1,35 @@
 export const korean = {
+  'Next execution': '다음 실행 설정',
+  Model: '모델',
+  'Codex default': 'Codex 기본 설정',
+  'Reasoning effort': '추론 강도',
+  Default: '기본값',
+  Permissions: '실행 권한',
+  'Read-only': '읽기 전용',
+  'Ask when needed': '필요할 때 승인 요청',
+  'YOLO · Full access': 'YOLO · 전체 권한',
+  'Reload models': '모델 목록 다시 불러오기',
+  'YOLO runs commands without approval or sandbox restrictions.':
+    'YOLO는 승인 요청과 샌드박스 제한 없이 명령을 실행합니다.',
+  'Execution mode': '실행 모드',
+  'Execution status': '현재 실행 상태',
+  'Execution steps': '작업 진행 단계',
+  Completed: '완료',
+  Pending: '대기',
+  'Work continues on the server when you leave this page.':
+    '페이지를 이동하거나 닫아도 서버에서 작업을 계속합니다.',
+  'Reconnecting live updates. Leaving this page does not stop the server task.':
+    '실시간 표시를 다시 연결하고 있습니다. 페이지 연결과 서버 작업 실행은 별개입니다.',
+  'Continue from interruption': '중단 지점부터 계속',
+  'Continue from the interruption using the existing conversation and files. Check completed work and finish the remaining approved plan.':
+    '기존 대화와 작업 파일을 유지하고 중단 지점부터 이어서 진행해 주세요. 완료된 작업을 확인하고 승인한 계획의 남은 작업을 끝내 주세요.',
+  'The selected model or reasoning effort is unavailable. Refresh the model list.':
+    '선택한 모델이나 추론 강도를 사용할 수 없습니다. 모델 목록을 새로 불러오세요.',
+  'The console stopped after a processing error. Recover the task and check server diagnostics.':
+    '콘솔 처리 오류로 실행이 중단되었습니다. 작업 상태를 복구하고 서버 진단을 확인하세요.',
+  'Codex output exceeded the connection limit. Recover the existing task.':
+    'Codex 출력이 연결 처리 한도를 초과했습니다. 기존 작업 상태를 복구하세요.',
+
   Files: '파일',
   'Task files': '작업 파일',
   'Attached files': '첨부한 파일',
@@ -206,6 +237,21 @@ export const translate =
     locale === 'ko-KR' ? korean[key] : key;
 
 const errors: Record<string, Copy> = {
+  model_unavailable:
+    'The selected model or reasoning effort is unavailable. Refresh the model list.',
+  effort_unavailable:
+    'The selected model or reasoning effort is unavailable. Refresh the model list.',
+  model_catalog_unavailable:
+    'The selected model or reasoning effort is unavailable. Refresh the model list.',
+  codex_event_failed:
+    'The console stopped after a processing error. Recover the task and check server diagnostics.',
+  codex_protocol_error:
+    'The console stopped after a processing error. Recover the task and check server diagnostics.',
+  codex_event_overflow:
+    'Codex output exceeded the connection limit. Recover the existing task.',
+  codex_output_limit:
+    'Codex output exceeded the connection limit. Recover the existing task.',
+
   attachment_too_large: 'The file exceeds the upload size limit.',
   attachment_quota_exceeded: 'The task file storage limit has been reached.',
   attachment_selection_limit: 'Select fewer files for this message.',

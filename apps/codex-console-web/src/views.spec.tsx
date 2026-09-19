@@ -16,6 +16,7 @@ const task: Detail = {
   title: 'Useful change',
   stage: 'plan',
   status: 'idle',
+  permissions: 'read-only',
   thread_id: 'thread',
   turn_id: null,
   root: '/repo/dev',

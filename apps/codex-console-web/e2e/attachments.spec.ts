@@ -144,6 +144,7 @@ test('composer uploads select files, attachment-only messages work, and tasks do
   await expect(page.locator('.composer .attachment-badge')).toContainText(
     '끌어놓기.xyz',
   );
+  await expect(page.getByLabel('현재 실행 상태')).toContainText('준비됨');
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(

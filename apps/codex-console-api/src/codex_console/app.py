@@ -34,6 +34,8 @@ from .schemas import (
     ImportThread,
     LoginInput,
     Message,
+    MessageBody,
+    ModelOut,
     NewTask,
     Ok,
     Recover,
@@ -58,7 +60,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
             if not guard.scalar(text("SELECT pg_try_advisory_lock(18701, 1)")):
                 raise RuntimeError("Run exactly one console API process per database")
             revision = guard.scalar(text("SELECT version_num FROM console_alembic_version"))
-            if revision != "console_0003":
+            if revision != "console_0004":
                 raise RuntimeError("Run codex-console migrate before starting the server")
             store.recover_startup(factory)
             runtime = Runtime(app.state.settings, factory, rpc_factory)
@@ -125,7 +127,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
                     and re.fullmatch(r"/api/tasks/[0-9a-f-]{36}/documents", path)
                     else MESSAGE_CHAR_LIMIT
                     if request.method == "POST"
-                    and re.fullmatch(r"/api/tasks/[0-9a-f-]{36}/(messages|steer)", path)
+                    and re.fullmatch(r"/api/tasks/[0-9a-f-]{36}/(messages|steer|implement)", path)
                     else None
                 )
                 # A Unicode code point can occupy 12 JSON bytes as an escaped
@@ -210,6 +212,10 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
     @app.get("/api/codex/account", dependencies=secured, response_model=AccountOut)
     async def account():
         return await app.state.runtime.account()
+
+    @app.get("/api/codex/models", dependencies=secured, response_model=list[ModelOut])
+    async def models():
+        return await app.state.runtime.models()
 
     @app.post("/api/codex/login", dependencies=secured, response_model=DeviceLoginOut)
     async def codex_login():
@@ -416,19 +422,34 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
     @app.post("/api/tasks/{task_id}/messages", dependencies=secured, response_model=TaskDetail)
     async def message(task_id: str, body: Message):
         await app.state.runtime.start(
-            task_id, body.operation_id, body.text, body.stage, attachment_ids=body.attachment_ids
+            task_id,
+            body.operation_id,
+            body.text,
+            body.stage,
+            attachment_ids=body.attachment_ids,
+            model=body.model,
+            effort=body.effort,
+            permissions=body.permissions,
         )
         return store.detail(app.state.factory, task_id, app.state.settings)
 
     @app.post("/api/tasks/{task_id}/implement", dependencies=secured, response_model=TaskDetail)
     async def implement(task_id: str, body: Implement):
         await app.state.runtime.start(
-            task_id, body.operation_id, "", "implement", body.revision_id, body.attachment_ids
+            task_id,
+            body.operation_id,
+            body.text,
+            "implement",
+            body.revision_id,
+            body.attachment_ids,
+            model=body.model,
+            effort=body.effort,
+            permissions=body.permissions,
         )
         return store.detail(app.state.factory, task_id, app.state.settings)
 
     @app.post("/api/tasks/{task_id}/steer", dependencies=secured, response_model=TaskDetail)
-    async def steer(task_id: str, body: Message):
+    async def steer(task_id: str, body: MessageBody):
         await app.state.runtime.steer(task_id, body.operation_id, body.text, body.attachment_ids)
         return store.detail(app.state.factory, task_id, app.state.settings)
 

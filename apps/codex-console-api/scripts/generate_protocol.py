@@ -13,6 +13,7 @@ NAMES = (
     "TurnStartParams",
     "TurnSteerParams",
     "TurnInterruptParams",
+    "ModelListParams",
     "CommandExecutionRequestApprovalResponse",
     "FileChangeRequestApprovalResponse",
     "ToolRequestUserInputResponse",
