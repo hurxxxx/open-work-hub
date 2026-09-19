@@ -47,6 +47,10 @@ class DocumentInput(Input):
     body: str = Field(min_length=1, max_length=100000)
 
 
+class Recover(Input):
+    confirm_workspace: bool = False
+
+
 class Answer(Input):
     decision: Literal["accept", "decline", "cancel"] | None = None
     answers: dict[str, list[str]] | None = None

@@ -517,6 +517,14 @@ export interface components {
              */
             ok: boolean;
         };
+        /** Recover */
+        Recover: {
+            /**
+             * Confirm Workspace
+             * @default false
+             */
+            confirm_workspace: boolean;
+        };
         /** RequestOut */
         RequestOut: {
             /** Id */
@@ -1246,7 +1254,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Recover"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

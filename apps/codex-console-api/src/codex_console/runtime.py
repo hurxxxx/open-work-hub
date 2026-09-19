@@ -143,7 +143,10 @@ class Runtime:
                 if previous:
                     if previous.task_id != task_id or previous.digest != operation_digest:
                         raise ConsoleError("duplicate_request")
-                    return
+                    if previous.state == "accepted":
+                        return
+                    if previous.state != "failed":
+                        raise ConsoleError("codex_request_uncertain")
                 if task.status in (*store.ACTIVE, "uncertain"):
                     raise ConsoleError("task_busy")
                 if stage == "implement":
@@ -165,17 +168,24 @@ class Runtime:
                         context["requirements"] = {"kind": "application", "value": document.body}
                 store.lease(db, task_id)
                 task.status, task.stage, task.error_code = "starting", stage, None
-                db.add(
-                    Operation(
-                        id=operation_id,
-                        task_id=task_id,
-                        kind=stage,
-                        digest=operation_digest,
-                        display_text=text,
+                if previous:
+                    previous.state = "preparing"
+                    # A failed operation was never submitted; retain its immutable file refs.
+                    for attachment_id in attachment_ids:
+                        attachments.require(db, task_id, attachment_id)
+                else:
+                    db.add(
+                        Operation(
+                            id=operation_id,
+                            task_id=task_id,
+                            kind=stage,
+                            digest=operation_digest,
+                            display_text=text,
+                            state="preparing",
+                        )
                     )
-                )
-                db.flush()
-                attachments.snapshot(db, task_id, operation_id, attachment_ids)
+                    db.flush()
+                    attachments.snapshot(db, task_id, operation_id, attachment_ids)
                 store.changed(db, task, "turn.submitting")
             submitted = False
             try:
@@ -196,6 +206,9 @@ class Runtime:
                             task.root, task.worktree_owned = str(root), isolated
                     elif previous and await asyncio.to_thread(git.fingerprint, root) != previous:
                         raise ConsoleError("workspace_changed")
+                    baseline = await asyncio.to_thread(git.fingerprint, root)
+                    with self.factory.begin() as db:
+                        store.require_task(db, task_id, locked=True).fingerprint = baseline
                 result = await self.ensure_thread(task_id, rpc)
                 thread_id, model, root = result["thread"]["id"], result["model"], result["cwd"]
                 sandbox = (
@@ -224,6 +237,9 @@ class Runtime:
                         "settings": {"model": model, "developer_instructions": None},
                     },
                 }
+                # Commit the submission boundary before any turn can reach app-server.
+                with self.factory.begin() as db:
+                    db.get(Operation, operation_id).state = "submitting"
                 submitted = True
                 response = await rpc.call("turn/start", params)
                 with self.factory.begin() as db:
@@ -258,7 +274,10 @@ class Runtime:
                 if existing:
                     if existing.task_id != task_id or existing.digest != request_digest:
                         raise ConsoleError("duplicate_request")
-                    return
+                    if existing.state == "accepted":
+                        return
+                    if existing.state != "failed":
+                        raise ConsoleError("codex_request_uncertain")
                 if task.status not in ("running", "waiting") or not task.turn_id:
                     raise ConsoleError("turn_not_active")
                 params = {
@@ -266,27 +285,39 @@ class Runtime:
                     "expectedTurnId": task.turn_id,
                     "clientUserMessageId": key,
                 }
-                db.add(
-                    Operation(
-                        id=key,
-                        task_id=task_id,
-                        kind="steer",
-                        digest=request_digest,
-                        display_text=text,
+                if existing:
+                    existing.state = "preparing"
+                    for attachment_id in attachment_ids:
+                        attachments.require(db, task_id, attachment_id)
+                else:
+                    db.add(
+                        Operation(
+                            id=key,
+                            task_id=task_id,
+                            kind="steer",
+                            digest=request_digest,
+                            display_text=text,
+                            state="preparing",
+                        )
                     )
-                )
-                db.flush()
-                attachments.snapshot(db, task_id, key, attachment_ids)
+                    db.flush()
+                    attachments.snapshot(db, task_id, key, attachment_ids)
+            submitted = False
             try:
                 await asyncio.to_thread(attachments.prepare, self.factory, self.settings, task_id)
                 params["input"] = attachments.inputs(
                     self.factory, self.settings, task_id, key, text
                 )
-                await rpc.call("turn/steer", params)
-            except ConsoleError:
                 with self.factory.begin() as db:
-                    db.get(Operation, key).state = "uncertain"
-                raise
+                    db.get(Operation, key).state = "submitting"
+                submitted = True
+                await rpc.call("turn/steer", params)
+            except Exception as exc:
+                with self.factory.begin() as db:
+                    db.get(Operation, key).state = "uncertain" if submitted else "failed"
+                if isinstance(exc, ConsoleError):
+                    raise
+                raise ConsoleError("execution_failed", 503) from None
             with self.factory.begin() as db:
                 db.get(Operation, key).state = "accepted"
 
@@ -300,22 +331,52 @@ class Runtime:
                 params = {"threadId": task.thread_id, "turnId": task.turn_id}
             await rpc.call("turn/interrupt", params)
 
-    async def recover(self, task_id):
+    async def recover(self, task_id, *, confirm_workspace=False):
         async with self.gate:
-            rpc = await self.authenticated_rpc()
-            with self.factory() as db:
-                task = store.require_task(db, task_id)
+            with self.factory.begin() as db:
+                task = store.require_task(db, task_id, locked=True)
                 if task.status in store.ACTIVE:
                     raise ConsoleError("task_busy")
                 if not task.thread_id:
-                    raise ConsoleError("thread_unavailable")
+                    # Thread identity is committed before turn submission. This also
+                    # recovers pre-upgrade crashes with a legacy pending operation.
+                    if task.turn_id or db.scalar(
+                        select(Operation.id)
+                        .where(
+                            Operation.task_id == task_id,
+                            Operation.state.in_(("accepted", "submitting")),
+                        )
+                        .limit(1)
+                    ):
+                        raise ConsoleError("thread_unavailable")
+                    db.execute(
+                        update(Operation)
+                        .where(
+                            Operation.task_id == task_id,
+                            Operation.state.in_(("pending", "preparing", "uncertain")),
+                        )
+                        .values(state="failed")
+                    )
+                    task.status, task.error_code = "interrupted", None
+                    store.invalidate_pending(db, task_id)
+                    store.release(db, task_id)
+                    store.changed(db, task, "submission.recovered")
+                    return
+                implementation = task.stage == "implement"
+                root = Path(task.root)
+                if implementation and not confirm_workspace:
+                    raise ConsoleError("workspace_confirmation_required")
+            rpc = await self.authenticated_rpc()
             result = await self.ensure_thread(task_id, rpc)
             thread = result["thread"]
             if (thread.get("status") or {}).get("type") == "active":
                 raise ConsoleError("turn_not_finished")
+            baseline = await asyncio.to_thread(git.fingerprint, root) if implementation else None
             with self.factory.begin() as db:
                 task = store.require_task(db, task_id, locked=True)
                 task.status, task.error_code, task.turn_id = "interrupted", None, None
+                if implementation:
+                    task.fingerprint, task.stage = baseline, "review"
                 store.invalidate_pending(db, task_id)
                 store.reconcile_history(db, task, thread.get("turns", []))
                 store.release(db, task_id)
@@ -482,10 +543,12 @@ class Runtime:
                                 git.fingerprint, Path(task.root)
                             )
                         except ConsoleError:
-                            task.fingerprint = None
-                        task.stage = "review"
+                            task.status, task.error_code = "uncertain", "workspace_changed"
+                        else:
+                            task.stage = "review"
                     store.invalidate_pending(db, task.id)
-                    store.release(db, task.id)
+                    if task.status != "uncertain":
+                        store.release(db, task.id)
                 else:
                     return
                 store.changed(db, task, method)

@@ -216,12 +216,41 @@ def reconcile_history(db, task, turns):
     for turn in turns[-100:]:
         for item in turn.get("items", []):
             upsert_item(db, task, turn["id"], item)
+            if item.get("type") == "userMessage" and item.get("clientId"):
+                db.execute(
+                    update(Operation)
+                    .where(
+                        Operation.id == item["clientId"],
+                        Operation.task_id == task.id,
+                    )
+                    .values(state="accepted")
+                )
 
 
 def recover_startup(factory):
     with factory.begin() as db:
         for task in db.scalars(select(Task).where(Task.status.in_(ACTIVE))):
-            task.status, task.error_code = "uncertain", "runtime_restarted"
+            preparing = db.scalar(
+                select(Operation.id)
+                .where(
+                    Operation.task_id == task.id,
+                    Operation.state == "preparing",
+                    Operation.kind != "steer",
+                )
+                .limit(1)
+            )
+            if task.status == "starting" and preparing:
+                task.status, task.error_code = "failed", "execution_failed"
+                release(db, task.id)
+            else:
+                task.status, task.error_code = "uncertain", "runtime_restarted"
             invalidate_pending(db, task.id)
             changed(db, task, "runtime.restarted")
-        db.execute(update(Operation).where(Operation.state == "pending").values(state="uncertain"))
+        db.execute(update(Operation).where(Operation.state == "preparing").values(state="failed"))
+        db.execute(
+            update(Operation)
+            .where(
+                Operation.state.in_(("pending", "submitting")),
+            )
+            .values(state="uncertain")
+        )

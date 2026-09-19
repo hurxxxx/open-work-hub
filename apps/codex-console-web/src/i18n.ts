@@ -142,6 +142,10 @@ export const korean = {
   'Confirm before resuming a CLI conversation.':
     'CLI 대화를 이어가기 전에 확인해 주세요.',
   'Recover state': '실행 상태 확인',
+  'Review the current diff first. Keep these changes in this task and continue in the same workspace?':
+    '먼저 현재 변경사항을 확인하세요. 이 변경을 작업에 포함하고 같은 작업 디렉터리에서 이어가시겠습니까?',
+  'Review and confirm the current workspace changes before recovery.':
+    '현재 작업 디렉터리의 변경사항을 확인하고 동의한 뒤 복구하세요.',
   'No request will be automatically replayed.':
     '이전 실행 요청을 자동으로 다시 보내지 않습니다.',
   'Isolated checkout': '분리된 작업 디렉터리',
@@ -213,6 +217,8 @@ const errors: Record<string, Copy> = {
   request_expired: 'This request has already been resolved or expired.',
   workspace_changed:
     'The repository changed outside this task. Review it before continuing.',
+  workspace_confirmation_required:
+    'Review and confirm the current workspace changes before recovery.',
   codex_disconnected:
     'The Codex connection was lost. Check the task state before retrying.',
   runtime_restarted:

@@ -34,6 +34,7 @@ from .schemas import (
     Message,
     NewTask,
     Ok,
+    Recover,
     SessionOut,
     TaskDetail,
     TaskOut,
@@ -417,8 +418,8 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
         return {"ok": True}
 
     @app.post("/api/tasks/{task_id}/recover", dependencies=secured, response_model=TaskDetail)
-    async def recover(task_id: str):
-        await app.state.runtime.recover(task_id)
+    async def recover(task_id: str, body: Recover):
+        await app.state.runtime.recover(task_id, confirm_workspace=body.confirm_workspace)
         return store.detail(app.state.factory, task_id, app.state.settings)
 
     @app.post(
