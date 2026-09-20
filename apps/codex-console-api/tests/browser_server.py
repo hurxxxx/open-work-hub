@@ -69,6 +69,13 @@ class BrowserRPC(FakeRPC):
                     "**Acceptance:** the greeting is visible and the check passes."
                 ),
             }
+        elif params["sandboxPolicy"]["type"] == "readOnly":
+            item = {
+                "id": str(uuid4()),
+                "type": "agentMessage",
+                "phase": "final_answer",
+                "text": "This is a general answer; saved documents are unchanged.",
+            }
         else:
             (Path(params["cwd"]) / "greeting.txt").write_text("Hello from the Codex console.\n")
             command = {

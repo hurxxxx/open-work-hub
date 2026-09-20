@@ -137,6 +137,20 @@ def invalidate_pending(db, task_id):
     )
 
 
+def implementation_authorized(db, task):
+    if task.stage != "implement":
+        return False
+    if task.approved_revision:
+        return True
+    operation = db.get(Operation, task.current_operation_id) if task.current_operation_id else None
+    return bool(
+        operation
+        and operation.task_id == task.id
+        and operation.kind in ("git_create", "git_merge")
+        and operation.state == "accepted"
+    )
+
+
 def task_out(task):
     return {
         "id": task.id,
@@ -201,8 +215,12 @@ def detail(factory, task_id, settings):
                 if operation.display_text is not None:
                     item["content"] = [{"type": "text", "text": operation.display_text}]
                 item["attachments"] = references.get(operation.id, [])
+        failed = db.get(Operation, task.current_operation_id) if task.current_operation_id else None
         return {
             **task_out(task),
+            "failed_request_text": failed.display_text
+            if failed and failed.state == "failed" and task.status == "failed"
+            else None,
             "revisions": [
                 {
                     "id": r.id,

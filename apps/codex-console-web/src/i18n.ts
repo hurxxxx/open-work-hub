@@ -1,4 +1,47 @@
 export const korean = {
+  'General chat': '일반 대화',
+  'General chat is read-only and does not update saved requirements or plans.':
+    '일반 대화는 읽기 전용이며 저장된 요구사항·계획 문서를 변경하지 않습니다.',
+  'Git workspace': 'Git 작업 공간',
+  'Detached HEAD': '브랜치 없음 (detached HEAD)',
+  'No commits': '커밋 없음',
+  'Changed files': '변경 파일',
+  Staged: '스테이징',
+  Unstaged: '미스테이징',
+  Untracked: '새 파일',
+  Conflicts: '충돌',
+  'No tracking branch': '원격 추적 브랜치 없음',
+  'Could not load Git state.': 'Git 상태를 불러오지 못했습니다.',
+  'Loading Git state…': 'Git 상태 확인 중…',
+  'Refresh Git state': 'Git 상태 새로고침',
+  'Request merge': '병합 요청',
+  'Remote counts use local tracking refs; no automatic fetch.':
+    '원격 비교는 로컬 추적 정보 기준입니다. 자동 fetch는 하지 않습니다.',
+  Checked: '확인 시각',
+  'Choose the target and scope. Review the draft in chat before sending.':
+    '대상과 범위를 선택하세요. 요청문을 채팅창에서 확인한 뒤 전송합니다.',
+  'Target branch': '대상 브랜치',
+  'Select a target branch': '대상 브랜치 선택',
+  'Request scope': '요청 범위',
+  'Create MR/PR only': 'MR/PR 생성까지',
+  'Merge after checks and review': '검사·리뷰 후 병합까지',
+  'Detached or target-branch work will need a separate source branch. Already integrated changes must be checked first.':
+    '브랜치가 없거나 대상 브랜치에서 작업 중이면 별도 작업 브랜치가 필요합니다. 이미 반영된 변경인지 먼저 확인합니다.',
+  'Insert request into chat': '채팅창에 요청문 넣기',
+  'Clear merge selection': '병합 선택 해제',
+  'Restore unsent request': '전송하지 못한 요청 불러오기',
+  'Send this Git request?': '이 Git 작업을 요청할까요?',
+  'This authorizes the selected Git scope. Required checks and reviews still apply. Deployment is excluded.':
+    '선택한 범위의 Git 작업을 승인합니다. 필수 검사·리뷰를 거치며 운영 배포는 포함하지 않습니다.',
+  'Send Git request': 'Git 작업 요청',
+  'Git state changed. Refresh and prepare the merge request again.':
+    'Git 상태가 바뀌었습니다. 새로고침한 뒤 병합 요청을 다시 작성해 주세요.',
+  'Resolve Git conflicts before requesting a merge.':
+    '충돌을 해결한 뒤 병합을 요청해 주세요.',
+  'The selected target branch is unavailable.':
+    '선택한 대상 브랜치를 사용할 수 없습니다.',
+  'The resumed permissions do not match this console. No new request was executed.':
+    '재개한 세션의 권한이 콘솔 기록과 일치하지 않습니다. 새 요청은 실행되지 않았습니다.',
   'Next execution': '다음 실행 설정',
   Model: '모델',
   'Codex default': 'Codex 기본 설정',
@@ -237,6 +280,12 @@ export const translate =
     locale === 'ko-KR' ? korean[key] : key;
 
 const errors: Record<string, Copy> = {
+  git_state_changed:
+    'Git state changed. Refresh and prepare the merge request again.',
+  git_conflicts: 'Resolve Git conflicts before requesting a merge.',
+  git_target_unavailable: 'The selected target branch is unavailable.',
+  sandbox_policy_mismatch:
+    'The resumed permissions do not match this console. No new request was executed.',
   model_unavailable:
     'The selected model or reasoning effort is unavailable. Refresh the model list.',
   effort_unavailable:

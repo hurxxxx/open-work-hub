@@ -8,7 +8,7 @@ import {
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from './App';
-import { api, ApiError, type Detail } from './api';
+import { api, ApiError, type Detail, type GitState } from './api';
 
 vi.mock('./api', async (original) => ({
   ...(await original<typeof import('./api')>()),
@@ -27,6 +27,7 @@ class Stream extends EventTarget {
 
 const taskId = '00000000-0000-4000-8000-000000000001';
 let detail: Detail;
+let gitState: GitState;
 let submit: (body: Record<string, unknown>) => Promise<Detail>;
 let recover: () => Promise<Detail>;
 let searchTasks: (query: string) => Promise<Detail[]>;
@@ -42,7 +43,7 @@ beforeEach(() => {
   detail = {
     id: taskId,
     title: 'Test task',
-    stage: 'requirements',
+    stage: 'chat',
     status: 'idle',
     permissions: 'read-only',
     thread_id: 'thread',
@@ -65,6 +66,29 @@ beforeEach(() => {
     requests: [],
     revisions: [],
   };
+  gitState = {
+    root: '/repo/dev',
+    branch: 'dev',
+    head: 'a'.repeat(40),
+    detached: false,
+    upstream: 'origin/dev',
+    ahead: 1,
+    behind: 0,
+    staged: 0,
+    unstaged: 2,
+    untracked: 1,
+    conflicts: 0,
+    changed: 3,
+    checked_at: '2026-09-20T00:00:00Z',
+    snapshot: 'b'.repeat(64),
+    targets: [
+      {
+        ref: 'refs/remotes/origin/dev',
+        name: 'origin/dev',
+        head: 'c'.repeat(40),
+      },
+    ],
+  };
   submit = async () => detail;
   recover = async () => detail;
   searchTasks = async () => [];
@@ -86,6 +110,9 @@ beforeEach(() => {
     if (path === '/codex/account')
       return { connected: true, auth_type: 'chatgpt' };
     if (path === `/tasks/${taskId}`) return detail;
+    if (path === `/tasks/${taskId}/git`) return gitState;
+    if (path === `/tasks/${taskId}/implement`)
+      return submit(body as Record<string, unknown>);
     if (path === `/tasks/${taskId}/messages`)
       return submit(body as Record<string, unknown>);
     if (path === `/tasks/${taskId}/recover`) return recover();
@@ -464,4 +491,94 @@ it('shows native progress and keeps execution settings fixed while steering', as
   expect(request.text).toBe('Same request');
   expect(request).not.toHaveProperty('model');
   expect(request).not.toHaveProperty('stage');
+});
+
+it('uses general chat by default without changing the saved requirements or plan', async () => {
+  await openAndCompose();
+  expect((screen.getByLabelText('실행 모드') as HTMLSelectElement).value).toBe(
+    'chat',
+  );
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  await waitFor(() =>
+    expect(
+      vi
+        .mocked(api)
+        .mock.calls.some(
+          ([path, body]) =>
+            path.endsWith('/messages') &&
+            (body as Record<string, unknown>).stage === 'chat',
+        ),
+    ).toBe(true),
+  );
+  expect(
+    vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/documents')),
+  ).toBe(false);
+});
+
+it('inserts a scoped merge draft without overwriting text or submitting before confirmation', async () => {
+  gitState.branch = null;
+  gitState.detached = true;
+  gitState.upstream = null;
+  await openAndCompose();
+  await screen.findByText('브랜치 없음 (detached HEAD)');
+  fireEvent.click(screen.getByRole('button', { name: '병합 요청' }));
+  fireEvent.change(screen.getByLabelText('대상 브랜치'), {
+    target: { value: 'refs/remotes/origin/dev' },
+  });
+  fireEvent.change(screen.getByLabelText('요청 범위'), {
+    target: { value: 'merge' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '채팅창에 요청문 넣기' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  const textarea = screen.getByLabelText(
+    '요청 내용 입력',
+  ) as HTMLTextAreaElement;
+  expect(textarea.value).toContain('Same request');
+  expect(textarea.value).toContain('origin/dev');
+  expect(textarea.value).toContain('병합까지 완료');
+  expect(
+    vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/implement')),
+  ).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  expect((await screen.findByRole('dialog')).textContent).toContain(
+    '검사·리뷰 후 병합까지',
+  );
+  fireEvent.click(
+    within(screen.getByRole('dialog')).getByRole('button', {
+      name: 'Git 작업 요청',
+    }),
+  );
+  await waitFor(() =>
+    expect(
+      vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/implement')),
+    ).toBe(true),
+  );
+  const body = vi
+    .mocked(api)
+    .mock.calls.find(([path]) => path.endsWith('/implement'))![1] as Record<
+    string,
+    unknown
+  >;
+  expect(body.git_request).toEqual({
+    snapshot: gitState.snapshot,
+    target_ref: 'refs/remotes/origin/dev',
+    scope: 'merge',
+  });
+  expect(body).not.toHaveProperty('revision_id');
+});
+
+it('restores a request rejected before execution without automatically sending it', async () => {
+  detail.status = 'failed';
+  detail.error_code = 'sandbox_policy_mismatch';
+  detail.failed_request_text = 'An unsent ordinary question';
+  render(<App />);
+  fireEvent.click(
+    await screen.findByRole('button', { name: '전송하지 못한 요청 불러오기' }),
+  );
+  expect(
+    (screen.getByLabelText('요청 내용 입력') as HTMLTextAreaElement).value,
+  ).toBe('An unsent ordinary question');
+  expect(
+    vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/messages')),
+  ).toBe(false);
 });

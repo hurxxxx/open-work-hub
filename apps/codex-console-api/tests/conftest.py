@@ -31,6 +31,7 @@ class FakeRPC:
         self.on_disconnect = on_disconnect
         self.auth_type = "chatgpt"
         self.fail_turn = False
+        self.policies = {}
 
     async def start(self):
         self.connected = True
@@ -78,12 +79,21 @@ class FakeRPC:
                 "thread": self.threads[thread_id],
                 "model": "account-default",
                 "modelProvider": "openai",
-                "cwd": params["cwd"],
-                "sandbox": {"type": "readOnly"},
+                "cwd": self.threads[thread_id]["cwd"],
+                "sandbox": self.policies.get(thread_id, {"type": "readOnly"}),
             }
         if method == "turn/start":
             if self.fail_turn:
                 raise ConsoleError("codex_request_uncertain", 503)
+            self.policies[params["threadId"]] = {
+                **params["sandboxPolicy"],
+                **(
+                    {"writableRoots": []}
+                    if params["sandboxPolicy"].get("writableRoots") == [params["cwd"]]
+                    else {}
+                ),
+            }
+            self.threads[params["threadId"]]["cwd"] = params["cwd"]
             return {"turn": {"id": str(uuid4()), "status": "inProgress", "items": []}}
         if method == "thread/read":
             return {"thread": self.threads[params["threadId"]]}

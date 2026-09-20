@@ -60,6 +60,13 @@ textarea {color: inherit; background: transparent; resize: vertical; border: 0; 
 .task-header {grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding: 20px 26px; gap: 16px; border-bottom: 1px solid var(--ui-color-border);}
 .task-header h1 {margin: 0 0 7px; font-size: 17px;}
 .task-meta {display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--ui-color-ink-subtle);}
+.task-header > div:first-child {min-width: 0; flex: 1;}
+.task-meta {flex-wrap: wrap;}
+.git-workspace {margin-top: 10px; min-width: 0; overflow-wrap: anywhere;}
+.git-summary, .git-draft {display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px;}
+.git-workspace small {display: block; margin-top: 4px;}
+.git-draft {padding: 8px 12px; background: var(--ui-color-surface-subtle);}
+.composer-help {margin: 0; padding: 0 12px 8px; color: var(--ui-color-ink-subtle); font-size: 12px;}
 .connection {display: flex; gap: 5px; align-items: center;}
 .steps {display: flex; gap: 12px; color: var(--ui-color-ink-subtle); font-size: 10px;}
 .steps > span {display: flex; align-items: center; gap: 5px;}

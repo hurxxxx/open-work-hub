@@ -50,7 +50,7 @@ class Task(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     title: Mapped[str] = mapped_column(String(200))
     thread_id: Mapped[str | None] = mapped_column(String(160), unique=True)
-    stage: Mapped[str] = mapped_column(String(24), default="requirements")
+    stage: Mapped[str] = mapped_column(String(24), default="chat")
     status: Mapped[str] = mapped_column(String(24), default="idle")
     root: Mapped[str] = mapped_column(Text)
     worktree_owned: Mapped[bool] = mapped_column(default=False)

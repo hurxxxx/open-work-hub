@@ -30,6 +30,7 @@ from .schemas import (
     DeviceLoginOut,
     DiffOut,
     DocumentInput,
+    GitStatusOut,
     Implement,
     ImportThread,
     LoginInput,
@@ -445,6 +446,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
             model=body.model,
             effort=body.effort,
             permissions=body.permissions,
+            git_request=body.git_request.model_dump() if body.git_request else None,
         )
         return store.detail(app.state.factory, task_id, app.state.settings)
 
@@ -477,6 +479,12 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
         with app.state.factory() as db:
             root = Path(store.require_task(db, task_id).root)
         return git.changes(root)
+
+    @app.get("/api/tasks/{task_id}/git", dependencies=secured, response_model=GitStatusOut)
+    def git_status(task_id: str):
+        with app.state.factory() as db:
+            root = Path(store.require_task(db, task_id).root)
+        return git.status(root)
 
     @app.get("/api/tasks/{task_id}/diff", dependencies=secured, response_model=DiffOut)
     def diff(task_id: str, path: str = Query(max_length=2048)):

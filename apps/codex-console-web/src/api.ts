@@ -13,6 +13,8 @@ export type Diff = Schemas['DiffOut'];
 export type Pending = Schemas['RequestOut'];
 export type DeviceLogin = Schemas['DeviceLoginOut'];
 export type Attachment = Schemas['AttachmentOut'];
+export type GitState = Schemas['GitStatusOut'];
+export type GitRequest = Schemas['GitRequest'];
 
 export const apiBasePath = new URL(
   'api/',

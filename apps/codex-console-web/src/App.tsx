@@ -49,6 +49,7 @@ import {
   type DocumentDraft,
 } from './views';
 import { AttachmentBadges, FileLibrary } from './attachments';
+import { GitWorkspace, type GitDraft } from './git';
 import {
   ExecutionSettings,
   ExecutionStatus,
@@ -102,9 +103,11 @@ export function App() {
   const [newOpen, setNewOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
-  const [stage, setStage] = useState<'requirements' | 'plan' | 'implement'>(
-    'requirements',
-  );
+  const [stage, setStage] = useState<
+    'chat' | 'requirements' | 'plan' | 'implement'
+  >('chat');
+  const [gitDraft, setGitDraft] = useState<GitDraft | null>(null);
+  const [approvalGit, setApprovalGit] = useState<GitDraft | null>(null);
   const [models, setModels] = useState<Model[]>([]);
   const [modelsFailed, setModelsFailed] = useState(false);
   const [execution, setExecution] = useState<Execution>({
@@ -395,6 +398,8 @@ export function App() {
     setApprovalFiles([]);
     setConnected(false);
     setPlanToApprove(null);
+    setGitDraft(null);
+    setApprovalGit(null);
     nearBottom.current = true;
     if (!selected || !authenticated) return;
     const controller = new AbortController();
@@ -444,7 +449,9 @@ export function App() {
         ? 'implement'
         : task.stage === 'plan'
           ? 'plan'
-          : 'requirements',
+          : task.stage === 'requirements'
+            ? 'requirements'
+            : 'chat',
     );
     setExecution({
       model: task.model ?? null,
@@ -790,15 +797,29 @@ export function App() {
                 <span>{t(statusCopy(task.status))}</span>
                 <span>·</span>
                 <span title={task.root}>
-                  {task.isolated
-                    ? t('Isolated checkout')
-                    : task.root.split('/').at(-1)}
+                  {task.root.split('/').at(-1)}
+                  {task.isolated && ` · ${t('Isolated checkout')}`}
                 </span>
                 <span className="connection">
                   <span className={`dot ${connected ? 'online' : ''}`} />
                   {t(connected ? 'Connected' : 'Reconnecting')}
                 </span>
               </div>
+              <GitWorkspace
+                key={task.id}
+                task={task}
+                busy={busy}
+                locale={locale}
+                t={t}
+                onCompose={(draft, text) => {
+                  setGitDraft(draft);
+                  setMessage((current) =>
+                    current.trim() ? `${current}\n\n${text}` : text,
+                  );
+                  setStage('implement');
+                  setMobileView('conversation');
+                }}
+              />
             </div>
             <div className="steps" role="group" aria-label={t('Plan')}>
               {(['Requirements', 'Plan', 'Implement', 'Review'] as Copy[]).map(
@@ -963,6 +984,18 @@ export function App() {
               }}
               onSubmit={(event) => {
                 event.preventDefault();
+                if (!active(task) && gitDraft && stage === 'implement') {
+                  setApprovalGit(gitDraft);
+                  setApprovalExecution(execution);
+                  setApprovalText(message);
+                  setApprovalRecover(false);
+                  setApprovalFiles(
+                    task.attachments.filter((file) =>
+                      attachmentIds.includes(file.id),
+                    ),
+                  );
+                  return;
+                }
                 if (!active(task) && stage === 'implement') {
                   const plan = task.revisions
                     .filter((revision) => revision.kind === 'plan')
@@ -986,6 +1019,40 @@ export function App() {
                 });
               }}
             >
+              {task.failed_request_text && !message && (
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={() => setMessage(task.failed_request_text ?? '')}
+                >
+                  {t('Restore unsent request')}
+                </Button>
+              )}
+              {gitDraft && (
+                <div className="git-draft">
+                  <span>
+                    {t('Request merge')} ·{' '}
+                    {
+                      gitDraft.state.targets.find(
+                        (row) => row.ref === gitDraft.request.target_ref,
+                      )?.name
+                    }{' '}
+                    ·{' '}
+                    {t(
+                      gitDraft.request.scope === 'merge'
+                        ? 'Merge after checks and review'
+                        : 'Create MR/PR only',
+                    )}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    onClick={() => setGitDraft(null)}
+                  >
+                    {t('Clear merge selection')}
+                  </Button>
+                </div>
+              )}
               {attachmentIds.length > 0 && (
                 <AttachmentBadges
                   files={task.attachments.filter((file) =>
@@ -1054,13 +1121,17 @@ export function App() {
                           ? 'implement'
                           : task.stage === 'plan'
                             ? 'plan'
-                            : 'requirements'
+                            : task.stage === 'requirements'
+                              ? 'requirements'
+                              : 'chat'
                         : stage
                     }
-                    onChange={(event) =>
-                      setStage(event.target.value as typeof stage)
-                    }
+                    onChange={(event) => {
+                      setStage(event.target.value as typeof stage);
+                      if (event.target.value !== 'implement') setGitDraft(null);
+                    }}
                   >
+                    <option value="chat">{t('General chat')}</option>
                     <option value="requirements">{t('Requirements')}</option>
                     <option value="plan">{t('Plan')}</option>
                     <option value="implement">{t('Implement')}</option>
@@ -1103,6 +1174,13 @@ export function App() {
                   </Button>
                 </div>
               </div>
+              {stage === 'chat' && !active(task) && (
+                <p className="composer-help">
+                  {t(
+                    'General chat is read-only and does not update saved requirements or plans.',
+                  )}
+                </p>
+              )}
             </form>
           </section>
           <aside className="results" aria-label={t('Results')}>
@@ -1237,14 +1315,24 @@ export function App() {
         </form>
       </Dialog>
       <Confirm
-        open={!!planToApprove}
-        title="Implement the saved plan?"
-        description="Codex may edit this checkout and run checks. The approved plan does not authorize publishing or deployment."
+        open={!!planToApprove || !!approvalGit}
+        title={
+          approvalGit ? 'Send this Git request?' : 'Implement the saved plan?'
+        }
+        description={
+          approvalGit
+            ? 'This authorizes the selected Git scope. Required checks and reviews still apply. Deployment is excluded.'
+            : 'Codex may edit this checkout and run checks. The approved plan does not authorize publishing or deployment.'
+        }
+        action={approvalGit ? 'Send Git request' : 'Implement this plan'}
         t={t}
         busy={busy}
-        onClose={() => setPlanToApprove(null)}
+        onClose={() => {
+          setPlanToApprove(null);
+          setApprovalGit(null);
+        }}
         onConfirm={() => {
-          if (planToApprove)
+          if (planToApprove || approvalGit)
             void (async () => {
               if (
                 approvalRecover &&
@@ -1254,12 +1342,16 @@ export function App() {
               return send('implement', {
                 ...approvalExecution,
                 text: approvalText,
-                revision_id: planToApprove.id,
+                ...(approvalGit
+                  ? { git_request: approvalGit.request }
+                  : { revision_id: planToApprove!.id }),
                 attachment_ids: approvalFiles.map((file) => file.id),
               });
             })().then((ok) => {
               if (ok) {
                 setPlanToApprove(null);
+                setApprovalGit(null);
+                setGitDraft(null);
                 setMessage((current) =>
                   current === approvalText ? '' : current,
                 );
@@ -1268,6 +1360,27 @@ export function App() {
             });
         }}
       >
+        {approvalGit && error && (
+          <p role="alert" className="danger">
+            {t(errorCopy(error))}
+          </p>
+        )}
+        {approvalGit && (
+          <p>
+            {approvalGit.state.branch ?? t('Detached HEAD')} →{' '}
+            {
+              approvalGit.state.targets.find(
+                (row) => row.ref === approvalGit.request.target_ref,
+              )?.name
+            }{' '}
+            ·{' '}
+            {t(
+              approvalGit.request.scope === 'merge'
+                ? 'Merge after checks and review'
+                : 'Create MR/PR only',
+            )}
+          </p>
+        )}
         <p>
           {approvalExecution.model ?? t('Codex default')} ·{' '}
           {t(

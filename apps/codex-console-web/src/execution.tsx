@@ -136,7 +136,11 @@ export function ExecutionStatus({
           {t(
             task.stage === 'implement' || task.stage === 'review'
               ? 'Implement'
-              : 'Plan',
+              : task.stage === 'chat'
+                ? 'General chat'
+                : task.stage === 'requirements'
+                  ? 'Requirements'
+                  : 'Plan',
           )}
         </span>
         {task.model && (

@@ -343,6 +343,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tasks/{task_id}/git": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Git Status */
+        get: operations["git_status_api_tasks__task_id__git_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks/{task_id}/diff": {
         parameters: {
             query?: never;
@@ -468,6 +485,60 @@ export interface components {
             /** Body */
             body: string;
         };
+        /** GitRequest */
+        GitRequest: {
+            /** Snapshot */
+            snapshot: string;
+            /** Target Ref */
+            target_ref: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "create" | "merge";
+        };
+        /** GitStatusOut */
+        GitStatusOut: {
+            /** Root */
+            root: string;
+            /** Branch */
+            branch: string | null;
+            /** Head */
+            head: string | null;
+            /** Detached */
+            detached: boolean;
+            /** Upstream */
+            upstream: string | null;
+            /** Ahead */
+            ahead: number | null;
+            /** Behind */
+            behind: number | null;
+            /** Staged */
+            staged: number;
+            /** Unstaged */
+            unstaged: number;
+            /** Untracked */
+            untracked: number;
+            /** Conflicts */
+            conflicts: number;
+            /** Changed */
+            changed: number;
+            /** Targets */
+            targets: components["schemas"]["GitTarget"][];
+            /** Checked At */
+            checked_at: string;
+            /** Snapshot */
+            snapshot: string;
+        };
+        /** GitTarget */
+        GitTarget: {
+            /** Ref */
+            ref: string;
+            /** Name */
+            name: string;
+            /** Head */
+            head: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -491,7 +562,8 @@ export interface components {
              */
             operation_id: string;
             /** Revision Id */
-            revision_id: number;
+            revision_id?: number | null;
+            git_request?: components["schemas"]["GitRequest"] | null;
             /**
              * Text
              * @default
@@ -539,10 +611,10 @@ export interface components {
             text: string;
             /**
              * Stage
-             * @default requirements
+             * @default chat
              * @enum {string}
              */
-            stage: "requirements" | "plan";
+            stage: "chat" | "requirements" | "plan";
             /** Attachment Ids */
             attachment_ids?: string[];
         };
@@ -560,10 +632,10 @@ export interface components {
             text: string;
             /**
              * Stage
-             * @default requirements
+             * @default chat
              * @enum {string}
              */
-            stage: "requirements" | "plan";
+            stage: "chat" | "requirements" | "plan";
             /** Attachment Ids */
             attachment_ids?: string[];
         };
@@ -668,6 +740,8 @@ export interface components {
             progress?: {
                 [key: string]: unknown;
             } | null;
+            /** Failed Request Text */
+            failed_request_text?: string | null;
             /** Revisions */
             revisions: components["schemas"]["RevisionOut"][];
             /** Items */
@@ -1469,6 +1543,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChangeOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    git_status_api_tasks__task_id__git_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitStatusOut"];
                 };
             };
             /** @description Validation Error */
