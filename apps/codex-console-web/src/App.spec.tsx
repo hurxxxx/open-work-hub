@@ -92,9 +92,16 @@ beforeEach(() => {
     if (path === '/codex/models')
       return [
         {
+          model: 'gpt-5.6-sol',
+          name: 'GPT-5.6-Sol',
+          is_default: false,
+          default_effort: 'high',
+          efforts: ['low', 'medium', 'high'],
+        },
+        {
           model: 'alternate',
           name: 'Alternate',
-          is_default: false,
+          is_default: true,
           default_effort: 'medium',
           efforts: ['low', 'medium', 'high'],
         },
@@ -341,6 +348,7 @@ it('retains retry identity on failed recovery and creates a new one only after s
 
 it('executes an explicit prompt with selected model and YOLO without requiring a document', async () => {
   await openAndCompose();
+  fireEvent.click(await screen.findByRole('button', { name: '설정 변경' }));
   await screen.findByRole('option', { name: 'Alternate' });
   fireEvent.change(screen.getByLabelText('모델'), {
     target: { value: 'alternate' },
@@ -375,18 +383,55 @@ it('executes an explicit prompt with selected model and YOLO without requiring a
 it('resets a saved effort absent from the catalog before the next message', async () => {
   detail = { ...detail, model: 'alternate', effort: 'max' };
   await openAndCompose();
+  fireEvent.click(await screen.findByRole('button', { name: '설정 변경' }));
   await screen.findByRole('option', { name: 'Alternate' });
   expect((screen.getByLabelText('추론 강도') as HTMLSelectElement).value).toBe(
-    '',
+    'medium',
   );
   expect(screen.queryByRole('option', { name: 'max' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '보내기' }));
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith(
       `/tasks/${taskId}/messages`,
-      expect.objectContaining({ model: 'alternate', effort: null }),
+      expect.objectContaining({ model: 'alternate', effort: 'medium' }),
     ),
   );
+});
+
+it('uses GPT-5.6-Sol with medium reasoning instead of an ambiguous default', async () => {
+  await openAndCompose();
+  expect(await screen.findByText('GPT-5.6-Sol · medium')).toBeTruthy();
+  expect(screen.queryByText('Codex 기본 설정')).toBeNull();
+  expect(screen.queryByText('기본값')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      `/tasks/${taskId}/messages`,
+      expect.objectContaining({
+        model: 'gpt-5.6-sol',
+        effort: 'medium',
+      }),
+    ),
+  );
+});
+
+it('falls back to the catalog default when GPT-5.6-Sol is unavailable', async () => {
+  const original = vi.mocked(api).getMockImplementation()!;
+  vi.mocked(api).mockImplementation(async (path, ...args) =>
+    path === '/codex/models'
+      ? [
+          {
+            model: 'alternate',
+            name: 'Alternate',
+            is_default: true,
+            default_effort: 'medium',
+            efforts: ['low', 'medium', 'high'],
+          },
+        ]
+      : original(path, ...args),
+  );
+  await openAndCompose();
+  expect(await screen.findByText('Alternate · medium')).toBeTruthy();
 });
 
 it('allows an explicit continuation prompt after interruption without a dedicated resume button', async () => {
@@ -430,12 +475,22 @@ it('shows native progress and keeps execution settings fixed while steering', as
   await openAndCompose();
   expect(screen.getByText('Inspect source')).toBeTruthy();
   expect(screen.getByText('Check gameplay')).toBeTruthy();
+  const progress = screen
+    .getByText('Inspect source')
+    .closest('details') as HTMLDetailsElement | null;
+  expect(progress?.open).toBe(false);
+  expect(
+    screen
+      .getByText('YOLO는 승인 요청과 샌드박스 제한 없이 명령을 실행합니다.')
+      .closest('.composer-help'),
+  ).toBeTruthy();
   expect(
     (screen.getByLabelText('실행 모드') as HTMLSelectElement).disabled,
   ).toBe(true);
-  expect(screen.getByLabelText('모델').closest('fieldset')?.disabled).toBe(
-    true,
-  );
+  expect(
+    (screen.getByRole('button', { name: '설정 변경' }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: '보충 지시 보내기' }));
   await waitFor(() =>
     expect(
