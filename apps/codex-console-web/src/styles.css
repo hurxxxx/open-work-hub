@@ -199,7 +199,7 @@ textarea {color: inherit; background: transparent; resize: vertical; border: 0; 
 .attachment-row small {font-size: 10px; color: var(--ui-color-ink-subtle);}
 .attachment-action {padding: 8px; color: inherit; flex-shrink: 0;}
 .attachment-badges {display: flex; flex-wrap: wrap; gap: 6px; min-width: 0;}
-.composer > .attachment-badges {padding: 10px 12px 0;}
+.composer > .attachment-badges {max-height: 72px; padding: 10px 12px 0; overflow-y: auto; overscroll-behavior: contain; flex-shrink: 0;}
 .attachment-badge {display: inline-flex; align-items: center; gap: 5px; max-width: 100%; border: 1px solid var(--ui-color-border-strong); background: var(--ui-color-surface-subtle); border-radius: 6px; padding: 4px 7px; font-size: 11px;}
 .attachment-badge > a, .attachment-badge > span {overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: inherit;}
 .attachment-badge > svg, .attachment-badge > button {flex-shrink: 0;}
