@@ -578,6 +578,7 @@ class Runtime:
             return False
         if not self.settings.workspace.is_dir():
             raise ConsoleError("workspace_unavailable")
+        git.remove_missing_worktree(self.settings.workspace, Path(task.root))
         task.root = str(self.settings.workspace)
         task.worktree_owned = False
         task.fingerprint = None
@@ -691,10 +692,10 @@ class Runtime:
                 if expected_submission is not None:
                     if self.submission_state(db, task) != expected_submission:
                         raise ConsoleError("task_busy")
-                    if reset_missing:
-                        self.reset_removed_workspace(db, task)
                 if task.status in store.ACTIVE:
                     raise ConsoleError("task_busy")
+                if reset_missing:
+                    self.reset_removed_workspace(db, task)
                 if not task.thread_id:
                     # Thread identity is committed before turn submission. This also
                     # recovers pre-upgrade crashes with a legacy pending operation.

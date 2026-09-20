@@ -239,7 +239,8 @@ def test_new_prompt_steers_a_verified_active_uncertain_turn_without_replaying(cl
     assert methods.count("turn/steer") == 1
 
 
-def test_removed_owned_worktree_keeps_thread_but_resets_file_ownership(client, repository):
+@pytest.mark.parametrize("removal", ["git", "directory"])
+def test_removed_owned_worktree_keeps_thread_but_resets_file_ownership(client, repository, removal):
     from codex_console.models import Task
 
     (repository / "unrelated.txt").write_text("must stay")
@@ -253,12 +254,36 @@ def test_removed_owned_worktree_keeps_thread_but_resets_file_ownership(client, r
     assert task["isolated"]
     task = complete(client, task)
     old_root, thread = task["root"], task["thread_id"]
-    run(repository, "worktree", "remove", old_root)
+    if removal == "directory":
+        import shutil
+        from pathlib import Path
+
+        other_paths = [
+            repository.parent / name for name in ("other-missing", "other-locked", "other-active")
+        ]
+        for path in other_paths:
+            run(repository, "worktree", "add", "--detach", str(path), "HEAD")
+        run(repository, "worktree", "lock", str(other_paths[1]))
+        (other_paths[2] / "preserve.txt").write_text("keep this active worktree")
+        shutil.rmtree(other_paths[0])
+        shutil.rmtree(other_paths[1])
+        shutil.rmtree(Path(old_root))
+        before = git.git(repository, "worktree", "list", "--porcelain", "-z")
+    else:
+        run(repository, "worktree", "remove", old_root)
     response = send_message(client, task, text="Explain the completed work")
     assert response.status_code == 200
     assert response.json()["thread_id"] == thread
     assert response.json()["root"] == str(repository)
     assert not response.json()["isolated"]
+    if removal == "directory":
+        after = git.git(repository, "worktree", "list", "--porcelain", "-z")
+        for path in other_paths:
+            marker = b"worktree " + str(path).encode()
+            previous = next(record for record in before.split(b"\0\0") if record.startswith(marker))
+            assert previous in after.split(b"\0\0")
+        assert (other_paths[2] / "preserve.txt").read_text() == "keep this active worktree"
+        assert b"worktree " + old_root.encode() not in after
     with client.app.state.factory() as db:
         assert db.get(Task, task["id"]).fingerprint is None
     complete(client, response.json(), documents=[])
@@ -825,3 +850,29 @@ def test_retry_of_submission_steered_after_recovery_is_also_idempotent(client):
         assert client.post(f"/api/tasks/{task['id']}/messages", json=body).status_code == 200
     assert sum(method == "turn/steer" for method, _ in runtime.rpc.calls) == 1
     assert sum(method == "turn/start" for method, _ in runtime.rpc.calls) == 1
+
+
+def test_removed_locked_owned_worktree_is_not_forced_or_relocated(client, repository):
+    import shutil
+
+    from codex_console.models import Task
+
+    (repository / "unrelated.txt").write_text("keep this file")
+    task = client.post(
+        f"/api/tasks/{new_task(client)['id']}/implement",
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Inspect the workspace",
+        },
+    ).json()
+    complete(client, task)
+    run(repository, "worktree", "lock", task["root"])
+    shutil.rmtree(task["root"])
+    before = git.git(repository, "worktree", "list", "--porcelain", "-z")
+    response = send_message(client, task, text="Explain the result")
+    assert response.status_code == 409 and response.json()["code"] == "worktree_exists"
+    assert git.git(repository, "worktree", "list", "--porcelain", "-z") == before
+    with client.app.state.factory() as db:
+        saved = db.get(Task, task["id"])
+        assert saved.worktree_owned and saved.root == task["root"]
+    assert (repository / "unrelated.txt").read_text() == "keep this file"

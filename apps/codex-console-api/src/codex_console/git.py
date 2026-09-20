@@ -189,6 +189,25 @@ def status(root: Path) -> dict:
     }
 
 
+def remove_missing_worktree(workspace: Path, target: Path) -> None:
+    """Remove only this absent owned worktree's registration, never prune or force."""
+    if target.exists() or target.is_symlink():
+        raise ConsoleError("worktree_exists")
+    expected = b"worktree " + os.fsencode(target.resolve())
+    records = git(workspace, "worktree", "list", "--porcelain", "-z").split(b"\0\0")
+    for record in records:
+        fields = record.split(b"\0")
+        if not fields or fields[0] != expected:
+            continue
+        if any(field == b"locked" or field.startswith(b"locked ") for field in fields):
+            raise ConsoleError("worktree_exists")
+        if target.exists() or target.is_symlink():
+            raise ConsoleError("worktree_exists")
+        # Git validates the exact registration and retains its own lock/dirty checks.
+        git(workspace, "worktree", "remove", str(target))
+        return
+
+
 def prepare_workspace(
     workspace: Path, task_id: str, previous: str | None, *, base_ref: str, worktree_root: Path
 ) -> tuple[Path, bool]:
