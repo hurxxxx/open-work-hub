@@ -26,10 +26,14 @@
 | --- | --- |
 | Known Markdown docs/instructions only | Whitespace, skills checker, skill-harness and Claude bridge tests; omit application suites |
 | Skills, native agent setup/hooks, tested Codex review tooling | Whitespace and `pnpm ci:harness`; omit API, generated contract, web build/test and browser E2E suites |
-| App/test code, dependencies/lockfiles, DB, env, dev/runtime startup, Compose, images, release selector/CI routing/gates, or unknown paths | Full `pnpm ci:all` |
+| Web source/E2E or core-web source | `pnpm ci:web`; omit API and Codex Console suites |
+| Shared UI source/styles | `pnpm ci:web` and `pnpm ci:codex-console`; omit API suites |
+| Codex Console source/tests | `pnpm ci:codex-console`; omit OWH API and Web suites |
+| Mixed known focused surfaces | Stable union of their checks; omit unrelated suites |
+| Dependencies/lockfiles, worker, shared/generated contracts, OWH DB migrations, env, dev/runtime startup, Compose, images, release selector/CI routing/gates, or unknown paths | Full `pnpm ci:all` |
 | More than 40 files or 1,000 added/deleted lines; binary, symlink/submodule or mode changes | Full `pnpm ci:all` |
 
-The size limits are conservative routing policy, not measured correctness thresholds. The executable allowlist is narrow: a `.sh`, `.yml`, or “setup/CI” name alone does not prove low impact. Release-control changes, including introducing this selector, cannot choose their own abbreviated validation.
+The size limits are conservative routing policy, not measured correctness thresholds. Focused application routing is an allowlist of Web and Codex Console source and test trees, not a generic extension rule: API/worker code, dependency manifests, generated/shared contracts, database migrations, runtime configuration/topology and unknown paths remain full. Shared UI runs both of its consumers' suites. A `.sh`, `.yml`, or “setup/CI” name alone does not prove low impact. Release-control changes, including introducing or changing this selector, cannot choose their own abbreviated validation.
 
 For an authorized release with an explicit fast request:
 

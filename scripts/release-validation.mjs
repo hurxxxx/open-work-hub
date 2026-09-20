@@ -18,6 +18,14 @@ const FULL_SUITES = [
   'ci:web',
   'ci:codex-console',
 ];
+const FOCUSED_CHECKS = Object.freeze({
+  docs: ['check:skills', 'test:skill-harness', 'test:claude-skills'],
+  harness: ['ci:harness'],
+  web: ['ci:web'],
+  sharedUi: ['ci:web', 'ci:codex-console'],
+  console: ['ci:codex-console'],
+});
+const FOCUSED_ORDER = ['docs', 'harness', 'web', 'sharedUi', 'console'];
 
 // Changes to the selector or its execution contract cannot select their own shortcut.
 const RELEASE_CONTROLS = new Set([
@@ -66,6 +74,22 @@ function surface(file) {
     /^(?:docs|adr|\.gitlab)\/.+\.md$/.test(file)
   )
     return 'docs';
+  if (/^(?:apps\/web\/(?:src|e2e)|packages\/core-web\/src)\//.test(file))
+    return 'web';
+  if (file === 'packages/ui/styles.css' || /^packages\/ui\/src\//.test(file))
+    return 'sharedUi';
+  if (
+    /^apps\/codex-console-api\/src\/codex_console\/(?:config|runtime)\.py$/.test(
+      file,
+    )
+  )
+    return null;
+  if (
+    /^(?:apps\/codex-console-(?:api|web)\/(?:src|tests)|apps\/codex-console-web\/e2e)\//.test(
+      file,
+    )
+  )
+    return 'console';
   return null;
 }
 
@@ -176,9 +200,13 @@ export function selectValidation({ mode = 'full', changes = [] } = {}) {
   const checks =
     effectiveMode === 'full'
       ? ['ci:all']
-      : changes.some((change) => surface(change.path) === 'harness')
-        ? ['ci:harness']
-        : ['check:skills', 'test:skill-harness', 'test:claude-skills'];
+      : [
+          ...new Set(
+            FOCUSED_ORDER.filter((name) =>
+              changes.some((change) => surface(change.path) === name),
+            ).flatMap((name) => FOCUSED_CHECKS[name]),
+          ),
+        ];
   return {
     requestedMode: mode,
     mode: effectiveMode,
