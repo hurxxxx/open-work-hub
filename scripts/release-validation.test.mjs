@@ -67,15 +67,23 @@ for (const file of [
 }
 
 for (const file of [
-  'apps/api/src/app.py',
-  'apps/web/src/app.tsx',
   'apps/worker/src/task.py',
+  'apps/api/src/app.py',
   'apps/api/alembic/versions/new.py',
   'apps/api/tests/test_api.py',
   'packages/contracts/README.ts',
   'package.json',
   'pnpm-lock.yaml',
   'apps/api/pyproject.toml',
+  'apps/api/src/open_work_hub_api/core/settings.py',
+  'apps/api/src/open_work_hub_api/core/runtime_config.py',
+  'apps/api/src/open_work_hub_api/core/app_contracts_generated.py',
+  'apps/api/src/open_work_hub_api/domains/auth/realtime_contract_generated.py',
+  'apps/web/package.json',
+  'apps/codex-console-api/pyproject.toml',
+  'apps/codex-console-api/src/codex_console/config.py',
+  'apps/codex-console-api/src/codex_console/runtime.py',
+  'apps/codex-console-api/migrations/versions/new.py',
   'apps/worker/uv.lock',
   'dev.sh',
   'ops/compose/open-work-hub-prod.app.yml',
@@ -101,6 +109,47 @@ for (const file of [
     assert.deepEqual(plan.skipped, []);
   });
 }
+
+test('bounded app-local changes select only their affected suites', () => {
+  assert.deepEqual(planFor([change('apps/web/src/app.tsx')]).checks, [
+    'ci:web',
+  ]);
+  assert.deepEqual(planFor([change('apps/web/e2e/shell.spec.ts')]).checks, [
+    'ci:web',
+  ]);
+  assert.deepEqual(planFor([change('packages/ui/src/button.tsx')]).checks, [
+    'ci:web',
+    'ci:codex-console',
+  ]);
+  assert.deepEqual(
+    planFor([change('packages/core-web/src/app-registry.ts')]).checks,
+    ['ci:web'],
+  );
+  assert.deepEqual(
+    planFor([
+      change('apps/codex-console-api/src/codex_console/app.py'),
+      change('apps/codex-console-web/src/App.tsx'),
+    ]).checks,
+    ['ci:codex-console'],
+  );
+});
+
+test('mixed focused surfaces run the stable union without unrelated suites', () => {
+  const plan = planFor([
+    change('docs/apps/web.md'),
+    change('packages/ui/src/button.tsx'),
+    change('apps/web/src/app.tsx'),
+  ]);
+  assert.equal(plan.mode, 'fast');
+  assert.deepEqual(plan.checks, [
+    'check:skills',
+    'test:skill-harness',
+    'test:claude-skills',
+    'ci:web',
+    'ci:codex-console',
+  ]);
+  assert.ok(plan.skipped.includes('ci:api:full'));
+});
 
 test('binary, symlink, submodule, mode and unsafe path changes fail closed', () => {
   for (const item of [
