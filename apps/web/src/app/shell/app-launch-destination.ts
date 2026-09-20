@@ -114,8 +114,11 @@ async function launchCodexConsole(href: string): Promise<void> {
   const popup = window.open('about:blank', '_blank');
   if (popup) popup.opener = null;
   const navigate = (destination: string) => {
-    if (popup && !popup.closed) popup.location.replace(destination);
-    else window.location.assign(destination);
+    if (popup === null) {
+      window.location.assign(destination);
+      return;
+    }
+    if (!popup.closed) popup.location.replace(destination);
   };
   const token = readStoredAuthToken();
   if (!token) {

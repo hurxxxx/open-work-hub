@@ -12,6 +12,7 @@ vi.mock('@/src/platform/auth/auth-api', () => ({
 
 afterEach(() => {
   localStorage.clear();
+  vi.mocked(createCodexConsoleSessionLink).mockReset();
   vi.restoreAllMocks();
 });
 const destination = (appId: string, enabled = true) =>
@@ -128,4 +129,41 @@ it('keeps the launcher close callback on internal app links', () => {
   props.onClick({ preventDefault: vi.fn() });
 
   expect(onClose).toHaveBeenCalledOnce();
+});
+
+it('does not navigate the original tab after the user closes the pending popup', async () => {
+  localStorage.setItem('open-work-hub.auth.token', 'owh-token');
+  let resolveLink!: (value: { code: string; expires_at: string }) => void;
+  vi.mocked(createCodexConsoleSessionLink).mockReturnValue(
+    new Promise((resolve) => {
+      resolveLink = resolve;
+    }),
+  );
+  const replace = vi.fn();
+  const popup = {
+    closed: false,
+    location: { replace },
+    opener: window,
+  } as unknown as Window;
+  vi.spyOn(window, 'open').mockReturnValue(popup);
+  const props = appLaunchLinkProps(
+    'codex-console',
+    'https://console.example.test/',
+  );
+  if (!('onClick' in props) || typeof props.onClick !== 'function')
+    throw new Error('Missing console launch handler');
+
+  props.onClick({ preventDefault: vi.fn() });
+  Object.defineProperty(popup, 'closed', { value: true });
+  resolveLink({
+    code: `cc1_${'c'.repeat(32)}`,
+    expires_at: '2026-09-20T00:00:00Z',
+  });
+  await vi.waitFor(() =>
+    expect(createCodexConsoleSessionLink).toHaveBeenCalledOnce(),
+  );
+  await Promise.resolve();
+
+  expect(replace).not.toHaveBeenCalled();
+  expect(window.location.pathname).toBe('/');
 });
