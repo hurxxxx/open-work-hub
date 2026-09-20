@@ -55,6 +55,10 @@ test('uses target-owned developer instructions with the structured base review',
   );
   assert.match(
     runnerSource,
+    /Review its proposed future\n  contract as code/,
+  );
+  assert.match(
+    runnerSource,
     /Report every independent concrete blocker found in one/,
   );
 });
