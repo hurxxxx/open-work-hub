@@ -9,7 +9,7 @@ from sqlalchemy.engine import make_url
 
 from .errors import ConsoleError
 
-CODEX_VERSION = "0.154.0"
+CODEX_VERSION = "0.155.1"
 
 
 class Settings(BaseSettings):

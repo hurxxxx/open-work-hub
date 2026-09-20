@@ -184,7 +184,7 @@ class Runtime:
         policy = result.get("sandbox") or {}
         if result.get("cwd") not in {root, *(path for _, path in granted)}:
             raise ConsoleError("thread_unavailable")
-        # 0.154.0 resumes loaded threads with their previous effective settings.
+        # 0.155.1 resumes loaded threads with their previous effective settings.
         # Only accept a policy this console previously granted; turn/start below
         # always supplies the new mode's complete sandbox, approval policy and cwd.
         prior_write = thread_id and any(
@@ -454,7 +454,7 @@ class Runtime:
                     "sandboxPolicy": sandbox,
                     "collaborationMode": {
                         "mode": "plan" if stage == "plan" else "default",
-                        # 0.154.0 requires this field in CollaborationMode.settings.
+                        # 0.155.1 requires this field in CollaborationMode.settings.
                         "settings": {
                             "model": chosen_model,
                             "reasoning_effort": effort,

@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-VERSION = "0.154.0"
+VERSION = "0.155.1"
 NAMES = (
     "ThreadStartParams",
     "ThreadResumeParams",

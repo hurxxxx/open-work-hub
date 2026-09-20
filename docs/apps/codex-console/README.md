@@ -8,7 +8,7 @@
 ## 실행 경계
 
 - 소유자 한 명, 설정한 Git 개발 체크아웃 하나를 대상으로 한다. 공개 가입이나 팀 공유는 없다.
-- 공식 `codex app-server` **0.154.0**의 stdio 프로토콜을 사용한다. Codex가 구독 인증,
+- 공식 `codex app-server` **0.155.1**의 stdio 프로토콜을 사용한다. Codex가 구독 인증,
   토큰 갱신, 원본 대화와 도구 실행을 관리한다. 클라이언트는 인증 파일을 읽거나 복사하지 않는다.
 - 이 도구는 개인 코딩 에이전트 클라이언트다. OWH 제품 앱의 생성형 호출, 공용 AI 공급자,
   사용자·회사 권한을 대신하지 않는다. 제품 AI 기능에는 기존 등록 workload 계약을 적용한다.
@@ -42,7 +42,7 @@ native thread의 모델을 이어받는다. 공급자·인증·fallback 설정�
 
 추론 강도는 콘솔의 허용 목록과 해당 모델의 `supportedReasoningEfforts`가 겹치는 값만
 표시·허용한다. 기본 목록은 `none, minimal, low, medium, high, xhigh`이므로 `max`, `ultra`와
-새로 추가된 이름은 자동으로 노출되지 않는다. Codex 0.154.0의 강도는 문자열이며 공식
+새로 추가된 이름은 자동으로 노출되지 않는다. Codex 0.155.1의 강도는 문자열이며 공식
 `model/list`에는 수치 순위나 정렬 보장이 없으므로 응답 순서로 상한을 추정하지 않는다.
 허용 목록은 낮은 강도부터 높은 강도 순서의 JSON 배열로 설정한다.
 
@@ -98,7 +98,7 @@ native thread의 모델을 이어받는다. 공급자·인증·fallback 설정�
 **실행 상태 확인**으로 상태만 확인할 수도 있다. 전송 전 실패한 본문은
 **전송하지 못한 요청 불러오기**로 복원한다. 필요한 첨부는 다시 선택한다.
 
-Codex 0.154.0은 `thread/resume`에 이전 sandbox와 cwd를 반환할 수 있다. 콘솔이 이전에 부여한
+Codex 0.155.1은 `thread/resume`에 이전 sandbox와 cwd를 반환할 수 있다. 콘솔이 이전에 부여한
 권한만 받아들이고 새 `turn/start`에 현재 경로와 선택 모드의 전체 권한을 지정한다.
 권한 전환의 접수가 불확실하면 직전 확인된 sandbox도 DB에 보존해 기존 턴의 복구를 허용한다. 알 수
 없거나 기록보다 넓은 권한은 차단한다. 소유한 워크트리가 정리된 경우 native 실행이 끝났음을
@@ -139,7 +139,7 @@ OWH 서버에서는 기준 ref를 `origin/dev`, 워크트리 경로를 체크아
 
 사전 준비는 [INSTALL.md](../../../INSTALL.md)를 따른다. Node·pnpm과 Python·uv 버전은
 저장소의 package.json 및 각 앱의 pyproject.toml/lock을 사용한다. PostgreSQL 18과
-현재 사용자로 `codex login status`가 성공하는 Codex 0.154.0이 필요하다.
+현재 사용자로 `codex login status`가 성공하는 Codex 0.155.1이 필요하다.
 
 1. PostgreSQL에 **전용 역할과 전용 DB** `codex_console`을 준비한다. OWH 업무 DB와 그
    migration을 재사용하지 않는다. DB 관리자는 전용 DB에만 소유권을 부여한다.
