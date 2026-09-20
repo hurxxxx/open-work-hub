@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -5,14 +6,48 @@ from jsonschema import Draft7Validator
 from pydantic import ValidationError
 
 from codex_console.auth import password_hash, verify
-from codex_console.config import CODEX_VERSION, Settings
+from codex_console.config import Settings
+from codex_console.protocol_contract import (
+    COMPATIBILITY_SCHEMA_NAMES,
+    build_contract,
+    schemas_are_compatible,
+    supports_contract_version,
+)
 from codex_console.rpc import CONTRACT
 
 
 def test_generated_protocol_schemas_are_valid():
-    assert CONTRACT["codexVersion"] == CODEX_VERSION
+    assert supports_contract_version("codex-cli 0.155.1", CONTRACT["codexVersion"])
     for schema in CONTRACT["schemas"].values():
         Draft7Validator.check_schema(schema)
+
+
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        ("codex-cli 0.155.1", True),
+        ("codex-cli 0.156.0", True),
+        ("codex-cli 1.0.0", True),
+        ("codex-cli 0.155.0", False),
+        ("codex-cli 0.156.0-alpha.1", False),
+        ("codex-cli latest", False),
+    ],
+)
+def test_codex_contract_requires_a_stable_minimum_version(output, expected):
+    assert supports_contract_version(output, CONTRACT["codexVersion"]) is expected
+
+
+def test_codex_contract_accepts_only_matching_selected_schemas(tmp_path):
+    schema = {"type": "object", "properties": {"value": {"type": "string"}}}
+    for name in COMPATIBILITY_SCHEMA_NAMES:
+        (tmp_path / f"{name}.json").write_text(json.dumps(schema))
+    contract = build_contract("0.155.1", tmp_path)
+    assert schemas_are_compatible(contract, tmp_path)
+
+    changed = json.loads((tmp_path / "ModelListParams.json").read_text())
+    changed["required"] = ["incompatible"]
+    (tmp_path / "ModelListParams.json").write_text(json.dumps(changed))
+    assert not schemas_are_compatible(contract, tmp_path)
 
 
 def test_password_salts_and_whitespace_are_significant():

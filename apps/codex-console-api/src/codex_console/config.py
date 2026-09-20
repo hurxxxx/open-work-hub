@@ -9,8 +9,6 @@ from sqlalchemy.engine import make_url
 
 from .errors import ConsoleError
 
-CODEX_VERSION = "0.154.0"
-
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
