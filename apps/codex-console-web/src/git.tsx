@@ -130,7 +130,13 @@ export function GitWorkspace({
             {t('Checked')}{' '}
             {new Date(state.checked_at).toLocaleTimeString(locale)}
           </small>
-          <Changes key={task.id} task={task} t={t} onError={onError} />
+          <Changes
+            key={`${task.id}:${task.root}`}
+            task={task}
+            refreshToken={state.checked_at}
+            t={t}
+            onError={onError}
+          />
         </>
       ) : (
         <p role={failed ? 'alert' : undefined}>

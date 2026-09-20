@@ -191,7 +191,9 @@ for (const viewport of [
   test(`branch workspace scrolls through 18 files and the full diff at ${viewport.width}px`, async ({
     page,
   }) => {
+    await page.clock.install();
     await page.setViewportSize(viewport);
+    let diffReads = 0;
     const files = Array.from({ length: 18 }, (_, index) => ({
       path: `src/changed-file-${String(index + 1).padStart(2, '0')}.txt`,
       status: 'M',
@@ -200,8 +202,9 @@ for (const viewport of [
     await page.route('**/api/tasks/*/changes', (route) =>
       route.fulfill({ json: files }),
     );
-    await page.route('**/api/tasks/*/diff?*', (route) =>
-      route.fulfill({
+    await page.route('**/api/tasks/*/diff?*', (route) => {
+      diffReads++;
+      return route.fulfill({
         json: {
           path: new URL(route.request().url()).searchParams.get('path'),
           binary: false,
@@ -212,8 +215,8 @@ for (const viewport of [
               (_, index) => `changed line ${index + 1}`,
             ).join('\n') + '\nEND-OF-SELECTED-DIFF\n',
         },
-      }),
-    );
+      });
+    });
     await page.goto('./');
     await page
       .getByLabel('본인 전용 비밀번호')
@@ -248,6 +251,10 @@ for (const viewport of [
     await panel.hover({ position: { x: 12, y: 12 } });
     await page.mouse.wheel(0, 10000);
     await expect(end).toBeInViewport();
+    const beforePolling = diffReads;
+    await page.clock.fastForward(10001);
+    await expect.poll(() => diffReads).toBeGreaterThan(beforePolling);
+    await expect(end).toBeInViewport();
     await expect
       .poll(() => panel.evaluate((element) => element.scrollTop))
       .toBeGreaterThan(0);
@@ -262,3 +269,74 @@ for (const viewport of [
     ).toBe(true);
   });
 }
+
+test('Git refresh updates files and the selected diff without a task state change', async ({
+  page,
+}) => {
+  await page.clock.install();
+  let version = 1;
+  await page.route('**/api/tasks/*/changes', (route) =>
+    route.fulfill({
+      json: [
+        { path: 'selected.txt', status: 'M', old_path: null },
+        { path: `version-${version}.txt`, status: 'M', old_path: null },
+      ],
+    }),
+  );
+  await page.route('**/api/tasks/*/diff?*', (route) =>
+    route.fulfill({
+      json: {
+        path: new URL(route.request().url()).searchParams.get('path'),
+        binary: false,
+        old: 'original\n',
+        new: `refreshed content ${version}\n`,
+      },
+    }),
+  );
+  await page.goto('./');
+  await page
+    .getByLabel('본인 전용 비밀번호')
+    .fill('console-tests-only-password');
+  await page.getByRole('button', { name: '로그인', exact: true }).click();
+  await page
+    .getByRole('button', { name: '새 작업', exact: true })
+    .first()
+    .click();
+  await page.getByLabel('작업 제목').fill('Refresh files and diff');
+  await page.getByRole('button', { name: '작업 만들기' }).click();
+  await page.getByRole('button', { name: '브랜치', exact: true }).click();
+  const panel = page.locator('.git-workspace');
+  const selected = panel.getByRole('button', { name: /selected.txt/ });
+  await selected.click();
+  await expect(
+    panel.getByText('refreshed content 1', { exact: true }),
+  ).toBeVisible();
+  const taskId = new URL(page.url()).searchParams.get('task');
+  const before = await (await page.request.get(`api/tasks/${taskId}`)).json();
+  version = 2;
+  await panel.getByRole('button', { name: 'Git 상태 새로고침' }).click();
+  await expect(
+    panel.getByRole('button', { name: /version-2.txt/ }),
+  ).toBeVisible();
+  await expect(
+    panel.getByRole('button', { name: /version-1.txt/ }),
+  ).toHaveCount(0);
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    panel.getByText('refreshed content 2', { exact: true }),
+  ).toBeVisible();
+  version = 3;
+  await page.clock.fastForward(10001);
+  await expect(
+    panel.getByRole('button', { name: /version-3.txt/ }),
+  ).toBeVisible();
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    panel.getByText('refreshed content 3', { exact: true }),
+  ).toBeVisible();
+  const after = await (await page.request.get(`api/tasks/${taskId}`)).json();
+  expect({ id: after.id, status: after.status }).toEqual({
+    id: before.id,
+    status: before.status,
+  });
+});
