@@ -81,6 +81,8 @@ for (const file of [
   'apps/api/src/open_work_hub_api/domains/auth/realtime_contract_generated.py',
   'apps/web/package.json',
   'apps/codex-console-api/pyproject.toml',
+  'apps/codex-console-api/src/codex_console/config.py',
+  'apps/codex-console-api/src/codex_console/runtime.py',
   'apps/codex-console-api/migrations/versions/new.py',
   'apps/worker/uv.lock',
   'dev.sh',

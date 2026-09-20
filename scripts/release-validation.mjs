@@ -79,6 +79,12 @@ function surface(file) {
   if (file === 'packages/ui/styles.css' || /^packages\/ui\/src\//.test(file))
     return 'sharedUi';
   if (
+    /^apps\/codex-console-api\/src\/codex_console\/(?:config|runtime)\.py$/.test(
+      file,
+    )
+  )
+    return null;
+  if (
     /^(?:apps\/codex-console-(?:api|web)\/(?:src|tests)|apps\/codex-console-web\/e2e)\//.test(
       file,
     )
