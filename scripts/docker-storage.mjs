@@ -10,12 +10,16 @@ const CACHE_LABELS = [
   'io.open-work-hub.build-cache=true',
   'org.opencontainers.image.title=Open Work Hub',
 ];
+const CURRENT_APP_TAG = 'open-work-hub-app:prod';
+const CANONICAL_VALIDATION_TAG = 'open-work-hub-validation:node22-python312';
 const KEEP_TAGS = [
-  'open-work-hub-app:prod',
+  CURRENT_APP_TAG,
   'open-work-hub-app:prod-previous',
-  'open-work-hub-validation:node22-python312',
+  'open-work-hub-app:candidate',
+  CANONICAL_VALIDATION_TAG,
 ];
-const RELEASE_TAG = /^open-work-hub-app:[0-9a-f]{12}$/;
+const RELEASE_TAG =
+  /^open-work-hub-app:(?:[0-9a-f]{12}|candidate-[0-9a-f]{12})$/;
 const VALIDATION_TAG =
   /^open-work-hub-validation:(?:deps-[0-9a-f]{12}|(?:before-)?agents-[0-9a-f]{8}|redis64-impact-release)$/;
 
@@ -51,10 +55,10 @@ export function retirementPlan(images, containers, now = Date.now()) {
       pinned.add(image.Id);
   }
   const currentApp = images.find((image) =>
-    (image.RepoTags ?? []).includes(KEEP_TAGS[0]),
+    (image.RepoTags ?? []).includes(CURRENT_APP_TAG),
   );
   const currentCi = images.find((image) =>
-    (image.RepoTags ?? []).includes(KEEP_TAGS[2]),
+    (image.RepoTags ?? []).includes(CANONICAL_VALIDATION_TAG),
   );
   return images
     .filter((image) => {

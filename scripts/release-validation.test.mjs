@@ -82,6 +82,8 @@ for (const file of [
   'ops/app/Dockerfile',
   '.env.example',
   'scripts/prod-app.sh',
+  'scripts/prod-app-release.mjs',
+  'scripts/prod-app-release.test.mjs',
   'scripts/ci/prepare-validation-runtime.sh',
   'ops/ci/validation-runner/Dockerfile',
   '.gitlab-ci.yml',

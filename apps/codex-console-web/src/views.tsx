@@ -372,67 +372,75 @@ export function Documents({
         )}
       </div>
       <div className="document-footer">
-        {conflict && (
-          <small role="alert">
-            {t(
-              'The document changed in another tab. Your edits are preserved. Copy them before loading the latest version.',
-            )}
-          </small>
-        )}
-        {draft && (
-          <Button
-            variant="ghost"
-            disabled={busy}
-            onClick={() => {
-              setDraft(null);
-              setSelected(null);
-            }}
-          >
-            {t('Discard edits and load latest version')}
-          </Button>
-        )}
-        {modified && (
-          <Button
-            disabled={!!disabled || !body.trim()}
-            onClick={async () => {
-              if (
-                await onSave({ kind, base_version: base?.version ?? 0, body })
-              ) {
-                setDraft((current) => (current === draft ? null : current));
+        <div className="document-footer-status" aria-live="polite">
+          {conflict ? (
+            <small role="alert">
+              {t(
+                'The document changed in another tab. Your edits are preserved. Copy them before loading the latest version.',
+              )}
+            </small>
+          ) : modified ? (
+            <small>{t('Save your changes before execution.')}</small>
+          ) : stale ? (
+            <small>
+              {t('The saved plan changed. Review the latest version.')}
+            </small>
+          ) : null}
+        </div>
+        <div className="document-footer-actions">
+          {draft && (
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                setDraft(null);
                 setSelected(null);
-                setEditing(false);
-              }
-            }}
-          >
-            <Save size={14} />
-            {t('Save document')}
-          </Button>
-        )}
-        {kind === 'requirements' ? (
-          <Button
-            variant="primary"
-            disabled={!!disabled || modified || !latest}
-            onClick={onPlan}
-          >
-            <FileText size={14} />
-            {t('Create execution plan')}
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            disabled={!!disabled || modified || !latest || !!stale}
-            onClick={() => latest && onImplement(latest)}
-          >
-            <Play size={14} />
-            {t('Execute this plan')}
-          </Button>
-        )}
-        {modified && <small>{t('Save your changes before execution.')}</small>}
-        {stale && (
-          <small>
-            {t('The saved plan changed. Review the latest version.')}
-          </small>
-        )}
+              }}
+            >
+              {t('Discard edits and load latest version')}
+            </Button>
+          )}
+          {modified && (
+            <Button
+              disabled={!!disabled || !body.trim()}
+              onClick={async () => {
+                if (
+                  await onSave({
+                    kind,
+                    base_version: base?.version ?? 0,
+                    body,
+                  })
+                ) {
+                  setDraft((current) => (current === draft ? null : current));
+                  setSelected(null);
+                  setEditing(false);
+                }
+              }}
+            >
+              <Save size={14} />
+              {t('Save document')}
+            </Button>
+          )}
+          {kind === 'requirements' ? (
+            <Button
+              variant="primary"
+              disabled={!!disabled || modified || !latest}
+              onClick={onPlan}
+            >
+              <FileText size={14} />
+              {t('Create execution plan')}
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              disabled={!!disabled || modified || !latest || !!stale}
+              onClick={() => latest && onImplement(latest)}
+            >
+              <Play size={14} />
+              {t('Execute this plan')}
+            </Button>
+          )}
+        </div>
       </div>
     </section>
   );

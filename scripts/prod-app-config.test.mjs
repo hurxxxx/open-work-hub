@@ -15,37 +15,189 @@ const oldImage = (id, tags, extra = {}) => ({
 });
 const appTag = (id) => `open-work-hub-app:${id.repeat(12)}`;
 
-test('build command substitution stops on storage, build or image-verification failure', async () => {
+test('pipeline retries for the same release do not change the image contract', async () => {
   const script = await readFile(
     new URL('./prod-app.sh', import.meta.url),
     'utf8',
   );
-  const build = script.slice(
-    script.indexOf('build_release_image()'),
-    script.indexOf('verify_release_image()'),
+  const load = script.slice(
+    script.indexOf('load_release_contract()'),
+    script.indexOf('candidate_matches_contract()'),
   );
-  for (const failed of ['storage', 'build', 'verify']) {
-    const result = spawnSync(
-      'bash',
-      [
-        '-c',
-        `
-      set -euo pipefail
-      ROOT_DIR=/synthetic ENV_FILE=/synthetic/env IMAGE_REPOSITORY=synthetic
-      node() { return ${failed === 'storage' ? 1 : 0}; }
-      git() { printf 'aaaaaaaaaaaa'; }
-      docker() { return ${failed === 'build' ? 1 : 0}; }
-      verify_release_image() { return ${failed === 'verify' ? 1 : 0}; }
-      ${build}
-      image="$(build_release_image)"
-      exit 99
-    `,
-      ],
-      { encoding: 'utf8', env: { PATH: process.env.PATH } },
-    );
-    assert.equal(result.status, 1, `${failed}: ${result.stderr}`);
-    assert.equal(result.stdout, '');
-  }
+  const result = spawnSync(
+    'bash',
+    [
+      '-c',
+      `
+set -euo pipefail
+ROOT_DIR=/synthetic ENV_FILE=/synthetic/env PIPELINE=141
+SOURCE=${'a'.repeat(40)} MERGE=${'b'.repeat(40)} TREE=${'c'.repeat(40)}
+${load}
+node() {
+  if [[ "$1" == *prod-app-release.mjs ]]; then
+    printf '%s\\n%s\\n%s\\n' "$SOURCE" "$MERGE" "$PIPELINE"
+  else
+    printf 'https://bento.example.com/\\n'
+  fi
+}
+git() { printf '%s\\n' "$TREE"; }
+docker() { printf 'linux/amd64\\n'; }
+load_release_contract 49
+first="$RELEASE_CONTRACT"
+PIPELINE=142
+load_release_contract 49
+[[ "$first" == "$RELEASE_CONTRACT" && "$RELEASE_PIPELINE" == 142 ]]
+`,
+    ],
+    { encoding: 'utf8', env: { PATH: process.env.PATH } },
+  );
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('candidate preparation reuses a matching verified image without rebuilding', async () => {
+  const script = await readFile(
+    new URL('./prod-app.sh', import.meta.url),
+    'utf8',
+  );
+  const prepare = script.slice(
+    script.indexOf('prepare_candidate_image()'),
+    script.indexOf('require_deploy_image()'),
+  );
+  const result = spawnSync(
+    'bash',
+    [
+      '-c',
+      `
+set -euo pipefail
+ROOT_DIR=/synthetic ENV_FILE=/synthetic/env IMAGE_REPOSITORY=synthetic CANDIDATE_IMAGE=synthetic:candidate
+RELEASE_PLATFORM=linux/amd64 RELEASE_REVISION=${'a'.repeat(40)}
+RELEASE_CONTRACT=${'b'.repeat(64)} RELEASE_SOURCE_REVISION=${'c'.repeat(40)}
+RELEASE_TREE=${'d'.repeat(40)} RELEASE_BENTO_URL_SHA256=${'e'.repeat(64)}
+RELEASE_MR=49 RELEASE_PIPELINE=141
+${prepare}
+docker() { [[ "$1 $2" == 'image inspect' ]]; }
+candidate_matches_contract() { return 0; }
+verify_candidate_image() { return 0; }
+image_id() { printf 'sha256:%064d\n' 0; }
+node() { printf 'unexpected node call\n' >&2; return 9; }
+git() { printf 'unexpected git call\n' >&2; return 9; }
+prepare_candidate_image
+`,
+    ],
+    { encoding: 'utf8', env: { PATH: process.env.PATH } },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, `sha256:${'0'.repeat(64)}\n`);
+});
+
+test('candidate preparation builds once from the committed archive when the contract changed', async () => {
+  const script = await readFile(
+    new URL('./prod-app.sh', import.meta.url),
+    'utf8',
+  );
+  const prepare = script.slice(
+    script.indexOf('prepare_candidate_image()'),
+    script.indexOf('require_deploy_image()'),
+  );
+  const result = spawnSync(
+    'bash',
+    [
+      '-c',
+      `
+set -euo pipefail
+ROOT_DIR=/synthetic ENV_FILE=/synthetic/env IMAGE_REPOSITORY=synthetic CANDIDATE_IMAGE=synthetic:candidate
+RELEASE_PLATFORM=linux/amd64 RELEASE_REVISION=${'a'.repeat(40)}
+RELEASE_CONTRACT=${'b'.repeat(64)} RELEASE_SOURCE_REVISION=${'c'.repeat(40)}
+RELEASE_TREE=${'d'.repeat(40)} RELEASE_BENTO_URL_SHA256=${'e'.repeat(64)}
+RELEASE_MR=49 RELEASE_PIPELINE=141
+${prepare}
+docker() {
+  if [[ "$1 $2" == 'image inspect' ]]; then
+    [[ "$3" == "$CANDIDATE_IMAGE" ]]
+    return
+  fi
+  if [[ "$1" == build ]]; then cat >/dev/null; printf 'built\\n' >&2; return 0; fi
+  if [[ "$1" == tag ]]; then return 0; fi
+  return 9
+}
+candidate_matches_contract() { return 1; }
+verify_candidate_image() { return 0; }
+image_id() { printf 'sha256:%064d\\n' 1; }
+node() {
+  if [[ "$1" == *docker-storage.mjs ]]; then return 0; fi
+  printf 'https://bento.example.com/\\n'
+}
+git() { printf 'committed-archive'; }
+prepare_candidate_image
+`,
+    ],
+    { encoding: 'utf8', env: { PATH: process.env.PATH } },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, `sha256:${'0'.repeat(63)}1\n`);
+  assert.equal(result.stderr.match(/built/g)?.length, 1);
+});
+
+test('a matching candidate that fails verification is not rebuilt', async () => {
+  const script = await readFile(
+    new URL('./prod-app.sh', import.meta.url),
+    'utf8',
+  );
+  const prepare = script.slice(
+    script.indexOf('prepare_candidate_image()'),
+    script.indexOf('require_deploy_image()'),
+  );
+  const result = spawnSync(
+    'bash',
+    [
+      '-c',
+      `
+set -euo pipefail
+CANDIDATE_IMAGE=synthetic:candidate
+${prepare}
+docker() { [[ "$1 $2" == 'image inspect' ]]; }
+candidate_matches_contract() { return 0; }
+verify_candidate_image() { return 7; }
+node() { return 9; }
+git() { return 9; }
+prepare_candidate_image
+`,
+    ],
+    { encoding: 'utf8', env: { PATH: process.env.PATH } },
+  );
+  assert.equal(result.status, 1, result.stderr);
+});
+
+test('promoting the already-current image preserves the rollback tag', async () => {
+  const script = await readFile(
+    new URL('./prod-app.sh', import.meta.url),
+    'utf8',
+  );
+  const promote = script.slice(
+    script.indexOf('promote_image()'),
+    script.indexOf('run_migrations()'),
+  );
+  const result = spawnSync(
+    'bash',
+    [
+      '-c',
+      `
+set -euo pipefail
+CURRENT_IMAGE=synthetic:prod PREVIOUS_IMAGE=synthetic:previous
+${promote}
+image_id() { printf 'sha256:%064d\\n' 2; }
+docker() {
+  if [[ "$1 $2" == 'image inspect' ]]; then return 0; fi
+  printf 'unexpected tag mutation\\n' >&2
+  return 9
+}
+promote_image sha256:${'0'.repeat(63)}2
+`,
+    ],
+    { encoding: 'utf8', env: { PATH: process.env.PATH } },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
 });
 const storageImages = () => [
   oldImage('current', ['open-work-hub-app:prod', appTag('a')]),
@@ -74,6 +226,7 @@ test('storage requires both absolute and proportional disk headroom', () => {
 test('retention preserves current, rollback, CI, container refs, recent and unknown images', () => {
   const images = [
     ...storageImages(),
+    oldImage('candidate', ['open-work-hub-app:candidate']),
     oldImage('running', [appTag('d')]),
     oldImage('stopped', [appTag('e')]),
     oldImage('manual', [
@@ -258,6 +411,8 @@ test('production dependency layers exclude revision churn, uv cache and local te
     runtime,
     /org.opencontainers.image.revision="\$\{OPEN_WORK_HUB_BUILD_REVISION\}"/,
   );
+  assert.match(runtime, /io.open-work-hub.release.contract=/);
+  assert.match(runtime, /io.open-work-hub.release.pipeline=/);
   assert.doesNotMatch(runtime, /io.open-work-hub.build-cache/);
   for (const entry of [
     '.runtime',
@@ -277,18 +432,26 @@ test('production dependency layers exclude revision churn, uv cache and local te
     new URL('./prod-app.sh', import.meta.url),
     'utf8',
   );
-  const build = release.slice(
-    release.indexOf('build_release_image()'),
-    release.indexOf('verify_release_image()'),
+  const prepare = release.slice(
+    release.indexOf('prepare_candidate_image()'),
+    release.indexOf('require_deploy_image()'),
   );
   assert.ok(
-    build.indexOf('docker-storage.mjs" check') < build.indexOf('docker build'),
+    prepare.indexOf('docker-storage.mjs" check') <
+      prepare.indexOf('docker build'),
   );
+  assert.match(prepare, /git -C "\$ROOT_DIR" archive --format=tar HEAD/);
+  assert.match(prepare, /--tag "\$build_image"/);
+  assert.match(prepare, /docker tag "\$build_image" "\$CANDIDATE_IMAGE"/);
   const deploy = release.slice(
     release.indexOf('deploy()'),
     release.indexOf('COMMAND='),
   );
-  assert.match(deploy, /cleanup --apply[\s\S]+build_release_image/);
+  assert.doesNotMatch(deploy, /docker build|build_release_image/);
+  assert.doesNotMatch(
+    deploy.slice(0, deploy.indexOf('passed public smoke')),
+    /cleanup --apply/,
+  );
   assert.match(deploy, /passed public smoke[\s\S]+cleanup --apply/);
 });
 
@@ -591,7 +754,10 @@ test('production runtime checks the fixed terminal broker port before mutation',
     'utf8',
   );
   assert.match(releaseScript, /require_terminal_broker_port_available/);
-  assert.match(releaseScript, /refusing before build or migration/);
+  assert.match(
+    releaseScript,
+    /refusing before release preparation or migration/,
+  );
   assert.match(releaseScript, /expected_binding" == "127\.0\.0\.1:\$port"/);
 });
 

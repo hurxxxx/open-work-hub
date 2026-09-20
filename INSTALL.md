@@ -518,7 +518,7 @@ free -h
 
 | 도구 | 버전 기준 및 설치 방법 |
 | --- | --- |
-| Bash, Git, curl, CA 인증서, 시스템 `python3`, `lsof`, `pgrep` | 해당 Linux 배포판의 패키지 관리자로 준비. 개발 스크립트와 환경설정 도구가 사용한다. |
+| Bash, Git, curl, CA 인증서, 시스템 `python3`, `lsof`, `pgrep`, `flock`(`util-linux`) | 해당 Linux 배포판의 패키지 관리자로 준비. 개발 스크립트와 환경설정 도구가 사용하며, `flock`은 운영 후보 준비·배포·롤백의 동시 실행을 막는다. |
 | Node.js와 npm | Codex 실행 전에 [README](README.md)의 nvm 설치·Bash 재로드·`nvm install 24` 명령을 따른다. 버전 범위는 [package.json](package.json)의 `engines.node`가 기준이다. |
 | bubblewrap (Linux Codex) | Codex 실행 전에 설치한다. [README](README.md) · [공식 샌드박스 요건](https://developers.openai.com/codex/concepts/sandboxing#prerequisites) |
 | pnpm | 루트 `package.json`의 `packageManager`에 지정된 버전을 사용한다. [공식 설치 안내](https://pnpm.io/installation) |

@@ -52,6 +52,7 @@ import { GitWorkspace, GitSummary, useGitState } from './git';
 import {
   ExecutionSettings,
   ExecutionStatus,
+  resolveExecution,
   type Execution,
 } from './execution';
 
@@ -111,6 +112,10 @@ export function App() {
     effort: null,
     permissions: 'ask',
   });
+  const selectedExecution = useMemo(
+    () => resolveExecution(execution, models),
+    [execution, models],
+  );
   const [approvalExecution, setApprovalExecution] =
     useState<Execution>(execution);
   const [approvalText, setApprovalText] = useState('');
@@ -259,7 +264,7 @@ export function App() {
     setApprovalFiles(
       task.attachments.filter((file) => attachmentIds.includes(file.id)),
     );
-    setApprovalExecution(execution);
+    setApprovalExecution(selectedExecution);
     setApprovalText(text);
     setPlanToApprove(revision);
   };
@@ -448,15 +453,6 @@ export function App() {
     });
   }, [task]);
 
-  useEffect(() => {
-    setExecution((current) => {
-      const model = models.find((row) => row.model === current.model);
-      return model && current.effort && !model.efforts.includes(current.effort)
-        ? { ...current, effort: null }
-        : current;
-    });
-  }, [models, task?.id]);
-
   const loadHistory = async (cursor: string | null = null) => {
     await act(async () => {
       const result = await api<ThreadPage>(
@@ -524,6 +520,19 @@ export function App() {
       </Button>
     </div>
   );
+  const taskIsActive = active(task);
+  const composerImplementation = task
+    ? taskIsActive
+      ? task.stage === 'implement'
+      : stage === 'implement'
+    : false;
+  const composerYolo = task
+    ? composerImplementation &&
+      (taskIsActive
+        ? task.permissions === 'yolo'
+        : execution.permissions === 'yolo')
+    : false;
+  const composerPlanningHelp = !!task && stage === 'plan' && !taskIsActive;
 
   if (!authenticated)
     return (
@@ -804,42 +813,42 @@ export function App() {
               </div>
               <GitSummary state={git.state} t={t} />
             </div>
-          </div>
-          {(task.error_code || task.status === 'uncertain') && (
-            <div className="runtime-notice" role="status">
-              {t(errorCopy(task.error_code ?? 'codex_request_uncertain'))}
-              {(task.status === 'uncertain' ||
-                task.error_code === 'codex_request_uncertain' ||
-                task.error_code === 'workspace_changed') && (
-                <>
-                  <small>
-                    {t('No request will be automatically replayed.')}
-                  </small>
-                  <Button
-                    disabled={busy}
-                    onClick={() => {
-                      const confirmWorkspace =
-                        task.stage === 'implement' || task.stage === 'review';
-                      if (
-                        confirmWorkspace &&
-                        !window.confirm(
-                          t(
-                            'Review the current diff first. Keep these changes in this task and continue in the same workspace?',
-                          ),
+            {(task.error_code || task.status === 'uncertain') && (
+              <div className="runtime-notice" role="status">
+                {t(errorCopy(task.error_code ?? 'codex_request_uncertain'))}
+                {(task.status === 'uncertain' ||
+                  task.error_code === 'codex_request_uncertain' ||
+                  task.error_code === 'workspace_changed') && (
+                  <>
+                    <small>
+                      {t('No request will be automatically replayed.')}
+                    </small>
+                    <Button
+                      disabled={busy}
+                      onClick={() => {
+                        const confirmWorkspace =
+                          task.stage === 'implement' || task.stage === 'review';
+                        if (
+                          confirmWorkspace &&
+                          !window.confirm(
+                            t(
+                              'Review the current diff first. Keep these changes in this task and continue in the same workspace?',
+                            ),
+                          )
                         )
-                      )
-                        return;
-                      void mutate('recover', {
-                        confirm_workspace: confirmWorkspace,
-                      });
-                    }}
-                  >
-                    {t('Recover state')}
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
+                          return;
+                        void mutate('recover', {
+                          confirm_workspace: confirmWorkspace,
+                        });
+                      }}
+                    >
+                      {t('Recover state')}
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
           <div className="mobile-tabs">
             <button
               aria-pressed={mobileView === 'conversation'}
@@ -859,6 +868,7 @@ export function App() {
             <div
               className="messages"
               ref={scroller}
+              tabIndex={0}
               onScroll={() => {
                 const element = scroller.current;
                 if (element)
@@ -929,7 +939,7 @@ export function App() {
                     ...(active(task)
                       ? {}
                       : {
-                          ...execution,
+                          ...selectedExecution,
                           ...(stage === 'plan' ? { stage } : {}),
                         }),
                   },
@@ -992,7 +1002,7 @@ export function App() {
                         permissions:
                           task.permissions === 'yolo' ? 'yolo' : 'ask',
                       }
-                    : execution
+                    : selectedExecution
                 }
                 onChange={setExecution}
                 disabled={busy || locked(task)}
@@ -1063,13 +1073,22 @@ export function App() {
                   </Button>
                 </div>
               </div>
-              {stage === 'plan' && !active(task) && (
-                <p className="composer-help">
-                  {t(
-                    'Planning is read-only. Documents are updated only when requested or when agreed changes affect an existing document.',
-                  )}
-                </p>
-              )}
+              <p
+                className={`composer-help ${
+                  composerYolo
+                    ? 'danger'
+                    : composerPlanningHelp
+                      ? ''
+                      : 'layout-placeholder'
+                }`}
+                aria-hidden={!(composerYolo || composerPlanningHelp)}
+              >
+                {t(
+                  composerYolo
+                    ? 'YOLO runs commands without approval or sandbox restrictions.'
+                    : 'Planning is read-only. Documents are updated only when requested or when agreed changes affect an existing document.',
+                )}
+              </p>
             </form>
           </section>
           <aside className="results" aria-label={t('Results')}>
@@ -1110,7 +1129,7 @@ export function App() {
                   setStage('plan');
                   setTab('plan');
                   void send('messages', {
-                    ...execution,
+                    ...selectedExecution,
                     stage: 'plan',
                     text: t(
                       'Create an execution plan from the requirements, including acceptance checks.',
@@ -1245,7 +1264,10 @@ export function App() {
           </p>
         )}
         <p>
-          {approvalExecution.model ?? t('Codex default')} ·{' '}
+          {approvalExecution.model ?? t('Loading model catalog…')}
+          {approvalExecution.effort
+            ? ` · ${approvalExecution.effort}`
+            : ''} ·{' '}
           {t(
             approvalExecution.permissions === 'yolo'
               ? 'YOLO · Full access'
