@@ -992,50 +992,52 @@ export function App() {
                     event.currentTarget.form?.requestSubmit();
                 }}
               />
-              <ExecutionSettings
-                models={models}
-                value={
-                  active(task)
-                    ? {
-                        model: task.model ?? null,
-                        effort: task.effort ?? null,
-                        permissions:
-                          task.permissions === 'yolo' ? 'yolo' : 'ask',
-                      }
-                    : selectedExecution
-                }
-                onChange={setExecution}
-                disabled={busy || locked(task)}
-                implementation={
-                  active(task)
-                    ? task.stage === 'implement'
-                    : stage === 'implement'
-                }
-                failed={modelsFailed}
-                onRetry={() => void refreshModels()}
-                t={t}
-              />
               <div className="composer-toolbar">
-                <label className="mode-selector">
-                  {t('Execution mode')}
-                  <select
-                    aria-label={t('Execution mode')}
-                    disabled={busy || locked(task)}
+                <div className="composer-controls">
+                  <label className="mode-selector">
+                    <span className="sr-only">{t('Execution mode')}</span>
+                    <select
+                      aria-label={t('Execution mode')}
+                      disabled={busy || locked(task)}
+                      value={
+                        active(task)
+                          ? task.stage === 'implement'
+                            ? 'implement'
+                            : 'plan'
+                          : stage
+                      }
+                      onChange={(event) => {
+                        setStage(event.target.value as typeof stage);
+                      }}
+                    >
+                      <option value="plan">{t('Plan')}</option>
+                      <option value="implement">{t('Execute')}</option>
+                    </select>
+                  </label>
+                  <ExecutionSettings
+                    models={models}
                     value={
                       active(task)
-                        ? task.stage === 'implement'
-                          ? 'implement'
-                          : 'plan'
-                        : stage
+                        ? {
+                            model: task.model ?? null,
+                            effort: task.effort ?? null,
+                            permissions:
+                              task.permissions === 'yolo' ? 'yolo' : 'ask',
+                          }
+                        : selectedExecution
                     }
-                    onChange={(event) => {
-                      setStage(event.target.value as typeof stage);
-                    }}
-                  >
-                    <option value="plan">{t('Plan')}</option>
-                    <option value="implement">{t('Execute')}</option>
-                  </select>
-                </label>
+                    onChange={setExecution}
+                    disabled={busy || locked(task)}
+                    implementation={
+                      active(task)
+                        ? task.stage === 'implement'
+                        : stage === 'implement'
+                    }
+                    failed={modelsFailed}
+                    onRetry={() => void refreshModels()}
+                    t={t}
+                  />
+                </div>
                 <div className="actions">
                   <Button
                     variant="ghost"

@@ -181,6 +181,26 @@ test('late status, guidance, and recovery surfaces do not reflow the workspace',
   await page.getByLabel('작업 제목').fill('레이아웃 안정성 확인');
   await page.getByRole('button', { name: '작업 만들기' }).click();
 
+  const closedSettings = await layout();
+  const promptBefore = await box('.composer textarea');
+  const toolbarBefore = await box('.composer-toolbar');
+  await page.getByRole('button', { name: '설정 변경' }).click();
+  await expect(page.locator('.execution-settings-popover')).toBeVisible();
+  expectStable(closedSettings, await layout());
+  const promptAfter = await box('.composer textarea');
+  const toolbarAfter = await box('.composer-toolbar');
+  expect(Math.abs(promptAfter.y - promptBefore.y)).toBeLessThan(1);
+  expect(Math.abs(promptAfter.height - promptBefore.height)).toBeLessThan(1);
+  expect(Math.abs(toolbarAfter.y - toolbarBefore.y)).toBeLessThan(1);
+  expect(Math.abs(toolbarAfter.height - toolbarBefore.height)).toBeLessThan(1);
+  expect(
+    await page
+      .locator('.composer')
+      .evaluate((element) => getComputedStyle(element).overflowY),
+  ).toBe('visible');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.execution-settings-popover')).toBeHidden();
+
   const idle = await layout();
   await page.getByLabel('요청 내용 입력').fill('Explain the workspace.');
   await page.getByRole('button', { name: '보내기', exact: true }).click();
@@ -221,6 +241,54 @@ test('late status, guidance, and recovery surfaces do not reflow the workspace',
   await page.reload();
   await expect(page.locator('.runtime-notice')).toBeVisible();
   expectStable(beforeNotice, await layout());
+});
+
+test('execution controls stay separated on a narrow desktop workspace', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 844 });
+  await page.goto('./');
+  await page
+    .getByLabel('본인 전용 비밀번호')
+    .fill('console-tests-only-password');
+  await page.getByRole('button', { name: '로그인', exact: true }).click();
+  await page
+    .getByRole('button', { name: '새 작업', exact: true })
+    .first()
+    .click();
+  await page.getByLabel('작업 제목').fill('좁은 화면 컨트롤 확인');
+  await page.getByRole('button', { name: '작업 만들기' }).click();
+
+  const expectSeparated = async () => {
+    const composer = await page.locator('.composer').boundingBox();
+    const controls = await page.locator('.composer-controls').boundingBox();
+    const actions = await page
+      .locator('.composer-toolbar > .actions')
+      .boundingBox();
+    const model = await page
+      .getByRole('button', { name: '설정 변경' })
+      .boundingBox();
+    const permissions = await page.getByLabel('실행 권한').boundingBox();
+    for (const box of [composer, controls, actions, model, permissions])
+      expect(box).not.toBeNull();
+    expect(model!.x + model!.width).toBeLessThanOrEqual(
+      permissions!.x + 1,
+    );
+    expect(controls!.y + controls!.height).toBeLessThanOrEqual(actions!.y + 1);
+    expect(actions!.x + actions!.width).toBeLessThanOrEqual(
+      composer!.x + composer!.width + 1,
+    );
+    expect(actions!.y + actions!.height).toBeLessThanOrEqual(
+      composer!.y + composer!.height + 1,
+    );
+  };
+
+  await expectSeparated();
+  await page.getByLabel('요청 내용 입력').fill('좁은 화면 실행 상태 확인');
+  await page.getByRole('button', { name: '보내기', exact: true }).click();
+  await expect(page.getByRole('button', { name: '중단' })).toBeVisible();
+  await expectSeparated();
+  await expect(page.getByLabel('현재 실행 상태')).toContainText('준비됨');
 });
 
 test('planning answers ordinary questions without creating documents and shows a read-only branch tab', async ({
