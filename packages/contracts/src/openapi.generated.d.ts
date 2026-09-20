@@ -9729,6 +9729,11 @@ export interface components {
              * @constant
              */
             authenticated: true;
+            /**
+             * Subject
+             * Format: uuid
+             */
+            subject: string;
         };
         /** CommunityChannelCreateRequest */
         CommunityChannelCreateRequest: {

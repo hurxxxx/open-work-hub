@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -56,9 +57,9 @@ class Settings(BaseSettings):
     session_hours: int = Field(
         default=12, ge=1, le=24, validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_SESSION_HOURS"
     )
-    sso_origins: list[str] = Field(
-        default_factory=list,
-        validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_SSO_ORIGINS",
+    sso_subjects: dict[str, UUID] = Field(
+        default_factory=dict,
+        validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_SSO_SUBJECTS",
     )
     attachment_cache: Path = Field(
         default_factory=lambda: Path.home() / ".local/share/owh-codex-console/attachments",
@@ -98,12 +99,12 @@ class Settings(BaseSettings):
     def validate_origin(cls, value: str) -> str:
         return cls._validated_origin(value)
 
-    @field_validator("sso_origins")
+    @field_validator("sso_subjects")
     @classmethod
-    def validate_sso_origins(cls, values: list[str]) -> list[str]:
-        normalized = [cls._validated_origin(value) for value in values]
-        if len(normalized) != len(set(normalized)):
-            raise ValueError("SSO origins must be unique")
+    def validate_sso_subjects(cls, values: dict[str, UUID]) -> dict[str, UUID]:
+        normalized = {cls._validated_origin(origin): subject for origin, subject in values.items()}
+        if len(normalized) != len(values):
+            raise ValueError("SSO origins must be unique after normalization")
         return normalized
 
     @staticmethod

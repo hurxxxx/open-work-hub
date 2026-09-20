@@ -206,11 +206,11 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
     @app.post("/api/session/owh", response_model=SessionOut)
     def login_from_open_work_hub(body: OwhSessionInput):
         cfg = app.state.settings
-        if not owh_sso.exchange_code(
-            issuer=body.issuer,
-            code=body.code,
-            allowed_origins=cfg.sso_origins,
-        ):
+        expected_subject = cfg.sso_subjects.get(body.issuer)
+        if expected_subject is None:
+            raise ConsoleError("login_failed", 401)
+        subject = owh_sso.exchange_code(issuer=body.issuer, code=body.code)
+        if subject != str(expected_subject):
             raise ConsoleError("login_failed", 401)
         token, csrf = auth.create_session(app.state.factory, cfg.session_hours)
         return _authenticated_response(cfg, token, csrf)

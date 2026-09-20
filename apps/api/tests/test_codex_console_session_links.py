@@ -27,7 +27,7 @@ def test_codex_console_session_link_exchanges_once(
     assert desktop_exchange.status_code == 401
 
     exchange = _exchange(client, code=link["code"])
-    assert exchange == {"authenticated": True}
+    assert exchange == {"authenticated": True, "subject": web_session["user"]["id"]}
     assert client.post(
         "/api/v1/auth/codex-console-session-links/exchange",
         json={"code": link["code"]},

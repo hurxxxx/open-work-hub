@@ -91,7 +91,8 @@ export function appLaunchLinkProps(
   onBeforeLaunch?: () => void,
 ) {
   const contract = APP_CONTRACT_BY_ID.get(appId as AppId);
-  if (!contract || !('url_setting' in contract.launcher)) return {};
+  if (!contract || !('url_setting' in contract.launcher))
+    return onBeforeLaunch ? { onClick: onBeforeLaunch } : {};
   return {
     target: '_blank' as const,
     rel: 'noopener noreferrer',

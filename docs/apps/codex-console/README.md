@@ -190,17 +190,19 @@ OWH 루트 `.env`의 `OPEN_WORK_HUB_CODEX_CONSOLE_LAUNCH_URL`은 브라우저가
 토큰을 넣지 않는다. 설정 변경 후 **개발** API·Web 서비스를 해당 호스트의 감독 서비스로
 재시작한다. 운영 OWH에 적용하는 작업은 별도 릴리스·배포 절차를 따른다.
 
-콘솔 `.env`의 `OPEN_WORK_HUB_CODEX_CONSOLE_SSO_ORIGINS`에는 자동 로그인을 허용할 OWH의
-정확한 origin을 등록한다. OWH 앱 링크는 현재 OWH 세션과 Codex Console 앱 권한을 확인해
+콘솔 `.env`의 `OPEN_WORK_HUB_CODEX_CONSOLE_SSO_SUBJECTS`에는 자동 로그인을 허용할 OWH의
+정확한 origin과 그 환경에서 콘솔을 소유한 OWH 사용자 UUID를 JSON 객체로 등록한다. OWH 앱
+링크는 현재 OWH 세션과 Codex Console 앱 권한을 확인해
 60초짜리 `cc1_` 코드를 만들고 URL fragment로 전달한다. 콘솔은 fragment를 즉시 지우고
 허용 목록의 origin에 있는 고정 교환 API만 호출한다. 코드는 한 번만 사용할 수 있으며 OWH
-세션이 종료되었거나 앱 권한이 회수되면 실패한다. OWH bearer token과 사용자 정보는 콘솔에
-전달하지 않는다. 직접 콘솔 주소를 열거나 교환이 실패하면 기존 소유자 비밀번호 로그인을
-사용한다.
+세션이 종료되었거나 앱 권한이 회수되면 실패한다. 교환 응답의 안정적인 사용자 UUID가 해당
+origin에 설정된 소유자 UUID와 일치할 때만 콘솔 세션을 발급한다. OWH bearer token과 사용자
+프로필은 콘솔에 전달하지 않는다. 직접 콘솔 주소를 열거나 교환이 실패하면 기존 소유자
+비밀번호 로그인을 사용한다.
 
 | 설정 | 기본값 | 용도 |
 | --- | --- | --- |
-| `OPEN_WORK_HUB_CODEX_CONSOLE_SSO_ORIGINS` | `[]` | 자동 로그인을 허용할 개발·운영 OWH HTTPS origin의 JSON 배열. loopback HTTP는 로컬 개발에서만 허용한다. |
+| `OPEN_WORK_HUB_CODEX_CONSOLE_SSO_SUBJECTS` | `{}` | 자동 로그인을 허용할 개발·운영 OWH HTTPS origin을 소유자 사용자 UUID에 연결한 JSON 객체. loopback HTTP는 로컬 개발에서만 허용한다. |
 
 개발 Web 재시작과 무관하게 접속하려면 **전용 HTTPS 도메인**을 사용하고 앞단 프록시를
 콘솔에 직접 연결한다. DNS 등록뿐 아니라 프록시의 upstream 주소·포트도 준비해야 한다.

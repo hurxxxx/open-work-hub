@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from jsonschema import Draft7Validator
@@ -102,7 +103,7 @@ def test_reasoning_policy_is_configurable_and_rejects_empty_efforts(repository, 
             Settings(**data)
 
 
-def test_sso_origins_are_exact_secure_origins(repository):
+def test_sso_subjects_bind_exact_secure_origins_to_owner_ids(repository):
     data = {
         "database_url": "postgresql+psycopg://test@localhost/console_test",
         "workspace": repository,
@@ -111,17 +112,27 @@ def test_sso_origins_are_exact_secure_origins(repository):
     }
     assert Settings(
         **data,
-        sso_origins=["https://dev.example.com/", "http://127.0.0.1:4200"],
-    ).sso_origins == ["https://dev.example.com", "http://127.0.0.1:4200"]
-    for origins in (
-        ["http://example.com"],
-        ["https://example.com/path"],
-        ["https://user@example.com"],
-        ["https://:password@example.com"],
-        ["https://example.com", "https://example.com/"],
+        sso_subjects={
+            "https://dev.example.com/": "11111111-1111-4111-8111-111111111111",
+            "http://127.0.0.1:4200": "22222222-2222-4222-8222-222222222222",
+        },
+    ).sso_subjects == {
+        "https://dev.example.com": UUID("11111111-1111-4111-8111-111111111111"),
+        "http://127.0.0.1:4200": UUID("22222222-2222-4222-8222-222222222222"),
+    }
+    for subjects in (
+        {"http://example.com": "11111111-1111-4111-8111-111111111111"},
+        {"https://example.com/path": "11111111-1111-4111-8111-111111111111"},
+        {"https://user@example.com": "11111111-1111-4111-8111-111111111111"},
+        {"https://:password@example.com": "11111111-1111-4111-8111-111111111111"},
+        {
+            "https://example.com": "11111111-1111-4111-8111-111111111111",
+            "https://example.com/": "22222222-2222-4222-8222-222222222222",
+        },
+        {"https://example.com": "not-a-uuid"},
     ):
         with pytest.raises(ValidationError):
-            Settings(**data, sso_origins=origins)
+            Settings(**data, sso_subjects=subjects)
 
 
 def test_protected_workspace_and_storage_paths_are_rejected(repository):

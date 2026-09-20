@@ -117,3 +117,13 @@ it('opens Codex Console with a one-time handoff in the fragment', async () => {
     }),
   );
 });
+
+it('keeps the launcher close callback on internal app links', () => {
+  const onClose = vi.fn();
+  const props = appLaunchLinkProps('docs', '/apps/docs', onClose);
+  if (!('onClick' in props)) throw new Error('Missing internal launch handler');
+
+  props.onClick();
+
+  expect(onClose).toHaveBeenCalledOnce();
+});

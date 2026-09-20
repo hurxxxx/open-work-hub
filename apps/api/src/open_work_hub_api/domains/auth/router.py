@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -184,6 +185,7 @@ class DesktopSessionLinkExchangeRequest(BaseModel):
 
 class CodexConsoleSessionLinkExchangeResponse(BaseModel):
     authenticated: Literal[True] = True
+    subject: UUID
 
 
 class SessionListItemResponse(BaseModel):
@@ -889,7 +891,7 @@ def exchange_codex_console_session_link(
         summary=f"Codex Console session link exchanged for {user.email}",
     )
     db.commit()
-    return CodexConsoleSessionLinkExchangeResponse()
+    return CodexConsoleSessionLinkExchangeResponse(subject=UUID(user.id))
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
