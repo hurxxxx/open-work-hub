@@ -51,6 +51,22 @@ def test_remote_http_and_product_database_are_rejected(repository):
         Settings(**data)
 
 
+def test_reasoning_policy_is_configurable_and_rejects_empty_efforts(repository, monkeypatch):
+    data = {
+        "database_url": "postgresql+psycopg://test@localhost/console_test",
+        "workspace": repository,
+        "origin": "http://localhost",
+        "_env_file": None,
+    }
+    key = "OPEN_WORK_HUB_CODEX_CONSOLE_ALLOWED_REASONING_EFFORTS"
+    monkeypatch.setenv(key, '["low","high"]')
+    assert Settings(**data).allowed_reasoning_efforts == ["low", "high"]
+    for invalid in ("[]", '[""]', '[" "]', '["two words"]'):
+        monkeypatch.setenv(key, invalid)
+        with pytest.raises(ValidationError):
+            Settings(**data)
+
+
 def test_protected_workspace_and_storage_paths_are_rejected(repository):
     data = {
         "database_url": "postgresql+psycopg://test@localhost/console_test",
