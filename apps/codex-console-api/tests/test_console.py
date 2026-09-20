@@ -121,6 +121,46 @@ def test_authentication_csrf_origin_and_logout(client):
     assert client.get("/api/tasks").status_code == 401
 
 
+def test_open_work_hub_handoff_creates_console_session(client, monkeypatch):
+    from codex_console import owh_sso
+
+    assert client.delete("/api/session").status_code == 200
+    client.app.state.settings.sso_origins = ["https://dev.example.test"]
+    exchange = monkeypatch.setattr(
+        owh_sso,
+        "exchange_code",
+        lambda **values: values
+        == {
+            "issuer": "https://dev.example.test",
+            "code": "cc1_" + "a" * 32,
+            "allowed_origins": ["https://dev.example.test"],
+        },
+    )
+    assert exchange is None
+
+    response = client.post(
+        "/api/session/owh",
+        json={"issuer": "https://dev.example.test", "code": "cc1_" + "a" * 32},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"authenticated": True}
+    assert client.get("/api/tasks").status_code == 200
+
+
+def test_open_work_hub_handoff_fails_closed(client, monkeypatch):
+    from codex_console import owh_sso
+
+    assert client.delete("/api/session").status_code == 200
+    monkeypatch.setattr(owh_sso, "exchange_code", lambda **values: False)
+    response = client.post(
+        "/api/session/owh",
+        json={"issuer": "https://evil.example", "code": "cc1_" + "a" * 32},
+    )
+    assert response.status_code == 401
+    assert response.json() == {"code": "login_failed"}
+    assert client.get("/api/tasks").status_code == 401
+
+
 def test_validation_does_not_echo_password(client):
     sentinel = "private-password-do-not-echo"
     result = client.post("/api/session", json={"password": sentinel, "extra": sentinel})

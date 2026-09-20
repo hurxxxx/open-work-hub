@@ -1,4 +1,6 @@
 import type { AppsBootstrapApp } from '@/src/platform/apps/apps-api';
+import { createCodexConsoleSessionLink } from '@/src/platform/auth/auth-api';
+import { readStoredAuthToken } from '@/src/platform/auth/auth-storage';
 import {
   APP_CONTRACT_BY_ID,
   type AppId,
@@ -83,11 +85,53 @@ export function translateAppLaunchLabel(
   );
 }
 
-export function appLaunchLinkProps(appId: string) {
+export function appLaunchLinkProps(
+  appId: string,
+  href?: string,
+  onBeforeLaunch?: () => void,
+) {
   const contract = APP_CONTRACT_BY_ID.get(appId as AppId);
-  return contract && 'url_setting' in contract.launcher
-    ? { target: '_blank' as const, rel: 'noopener noreferrer' }
-    : {};
+  if (!contract || !('url_setting' in contract.launcher)) return {};
+  return {
+    target: '_blank' as const,
+    rel: 'noopener noreferrer',
+    ...(appId === 'codex-console' && href
+      ? {
+          onClick: (event: { preventDefault: () => void }) => {
+            event.preventDefault();
+            onBeforeLaunch?.();
+            void launchCodexConsole(href);
+          },
+        }
+      : onBeforeLaunch
+        ? { onClick: onBeforeLaunch }
+        : {}),
+  };
+}
+
+async function launchCodexConsole(href: string): Promise<void> {
+  const popup = window.open('about:blank', '_blank');
+  if (popup) popup.opener = null;
+  const navigate = (destination: string) => {
+    if (popup && !popup.closed) popup.location.replace(destination);
+    else window.location.assign(destination);
+  };
+  const token = readStoredAuthToken();
+  if (!token) {
+    navigate(href);
+    return;
+  }
+  try {
+    const link = await createCodexConsoleSessionLink(token);
+    const destination = new URL(href, window.location.origin);
+    destination.hash = new URLSearchParams({
+      owh_issuer: window.location.origin,
+      owh_code: link.code,
+    }).toString();
+    navigate(destination.toString());
+  } catch {
+    navigate(href);
+  }
 }
 
 function safeLaunchUrl(value: string): boolean {

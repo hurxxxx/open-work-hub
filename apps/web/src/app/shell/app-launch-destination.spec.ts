@@ -1,6 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppsBootstrapApp } from '@/src/platform/apps/apps-api';
-import { resolveAppLaunchDestination } from './app-launch-destination';
+import { createCodexConsoleSessionLink } from '@/src/platform/auth/auth-api';
+import {
+  appLaunchLinkProps,
+  resolveAppLaunchDestination,
+} from './app-launch-destination';
+
+vi.mock('@/src/platform/auth/auth-api', () => ({
+  createCodexConsoleSessionLink: vi.fn(),
+}));
+
+afterEach(() => {
+  localStorage.clear();
+  vi.restoreAllMocks();
+});
 const destination = (appId: string, enabled = true) =>
   resolveAppLaunchDestination({
     app: { app_id: appId, enabled } as AppsBootstrapApp,
@@ -69,4 +82,38 @@ it('opens configured console destinations and rejects missing or unsafe URLs', (
     expect(resolve(url).kind).toBe('unavailable');
   }
   expect(resolve('/codex-console/', false).kind).toBe('unavailable');
+});
+
+it('opens Codex Console with a one-time handoff in the fragment', async () => {
+  localStorage.setItem('open-work-hub.auth.token', 'owh-token');
+  vi.mocked(createCodexConsoleSessionLink).mockResolvedValue({
+    code: `cc1_${'a'.repeat(32)}`,
+    expires_at: '2026-09-20T00:00:00Z',
+  });
+  const replace = vi.fn();
+  vi.spyOn(window, 'open').mockReturnValue({
+    closed: false,
+    location: { replace },
+    opener: window,
+  } as unknown as Window);
+  const preventDefault = vi.fn();
+  const props = appLaunchLinkProps(
+    'codex-console',
+    'https://console.example.test/',
+  );
+  if (!('onClick' in props)) throw new Error('Missing console launch handler');
+
+  props.onClick({ preventDefault });
+
+  await vi.waitFor(() => expect(replace).toHaveBeenCalledOnce());
+  expect(preventDefault).toHaveBeenCalledOnce();
+  expect(createCodexConsoleSessionLink).toHaveBeenCalledWith('owh-token');
+  const destination = new URL(replace.mock.calls[0][0]);
+  expect(destination.origin).toBe('https://console.example.test');
+  expect(new URLSearchParams(destination.hash.slice(1))).toEqual(
+    new URLSearchParams({
+      owh_issuer: window.location.origin,
+      owh_code: `cc1_${'a'.repeat(32)}`,
+    }),
+  );
 });

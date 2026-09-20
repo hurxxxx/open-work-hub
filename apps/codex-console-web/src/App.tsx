@@ -19,6 +19,7 @@ import {
   api,
   apiBasePath,
   ApiError,
+  consumeOwhSessionHandoff,
   locked,
   record,
   uploadAttachment,
@@ -158,6 +159,24 @@ export function App() {
       onError(error);
     }
   }, [onError]);
+  const initializeSession = useCallback(async () => {
+    const handoff = consumeOwhSessionHandoff();
+    if (!handoff) {
+      await checkSession();
+      return;
+    }
+    setSessionFailed(false);
+    setError(null);
+    try {
+      const value = await api<{ authenticated: boolean }>(
+        '/session/owh',
+        handoff,
+      );
+      setAuthenticated(value.authenticated);
+    } catch {
+      await checkSession();
+    }
+  }, [checkSession]);
   const refreshTasks = useCallback(async () => {
     const query = searchRef.current.trim();
     const rows = await api<Task[]>(
@@ -365,8 +384,8 @@ export function App() {
     return () => media.removeEventListener('change', update);
   }, []);
   useEffect(() => {
-    void checkSession();
-  }, [checkSession]);
+    void initializeSession();
+  }, [initializeSession]);
   useEffect(() => {
     if (!authenticated) return;
     void refreshAccount().catch(onError);

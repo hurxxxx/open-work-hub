@@ -631,10 +631,9 @@ function LauncherLink({
           : 'border-transparent',
         comingSoon && 'opacity-70',
       )}
-      onClick={onClose}
       role="menuitem"
       to={to}
-      {...appLaunchLinkProps(appId)}
+      {...appLaunchLinkProps(appId, to, onClose)}
     >
       <span
         className={cn(

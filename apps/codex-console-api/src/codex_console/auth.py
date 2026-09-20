@@ -32,6 +32,24 @@ def verify(password: str, encoded: str) -> bool:
         return False
 
 
+def _create_session(db, hours: int) -> tuple[str, str]:
+    token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+    db.execute(delete(WebSession).where(WebSession.expires_at <= now()))
+    db.add(
+        WebSession(
+            token_hash=digest(token),
+            csrf_hash=digest(csrf),
+            expires_at=now() + timedelta(hours=hours),
+        )
+    )
+    return token, csrf
+
+
+def create_session(factory, hours: int) -> tuple[str, str]:
+    with factory.begin() as db:
+        return _create_session(db, hours)
+
+
 def login(factory, password: str, hours: int) -> tuple[str, str] | None:
     with factory.begin() as db:
         owner = db.scalar(select(Owner).where(Owner.id == 1).with_for_update())
@@ -48,16 +66,7 @@ def login(factory, password: str, hours: int) -> tuple[str, str] | None:
             return None
         owner.failed_logins = 0
         owner.locked_until = None
-        token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
-        db.execute(delete(WebSession).where(WebSession.expires_at <= now()))
-        db.add(
-            WebSession(
-                token_hash=digest(token),
-                csrf_hash=digest(csrf),
-                expires_at=now() + timedelta(hours=hours),
-            )
-        )
-        return token, csrf
+        return _create_session(db, hours)
 
 
 def authenticate(factory, token: str | None, csrf: str | None = None) -> bool:

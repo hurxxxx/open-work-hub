@@ -14,7 +14,7 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from starlette.requests import ClientDisconnect
 
-from . import attachments, auth, git, store
+from . import attachments, auth, git, owh_sso, store
 from .config import Settings
 from .errors import ConsoleError
 from .models import Event, Task, database
@@ -39,12 +39,33 @@ from .schemas import (
     ModelOut,
     NewTask,
     Ok,
+    OwhSessionInput,
     Recover,
     SessionOut,
     TaskDetail,
     TaskOut,
     ThreadPage,
 )
+
+
+def _authenticated_response(settings, token: str, csrf: str) -> JSONResponse:
+    response = JSONResponse({"authenticated": True})
+    if settings.base_path:
+        # Clear cookies left by a previous root-path installation. Browsers send both
+        # paths, and duplicate cookie names otherwise make session selection ambiguous.
+        response.delete_cookie(auth.COOKIE, path="/")
+        response.delete_cookie(auth.CSRF_COOKIE, path="/")
+    for name, value, httponly in ((auth.COOKIE, token, True), (auth.CSRF_COOKIE, csrf, False)):
+        response.set_cookie(
+            name,
+            value,
+            max_age=settings.session_hours * 3600,
+            httponly=httponly,
+            secure=settings.secure_cookies,
+            samesite="strict",
+            path=settings.base_path or "/",
+        )
+    return response
 
 
 def create_app(settings=None, *, rpc_factory=CodexRPC):
@@ -144,6 +165,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
@@ -179,23 +201,19 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
         if result is None:
             raise ConsoleError("login_failed", 401)
         token, csrf = result
-        response = JSONResponse({"authenticated": True})
-        if cfg.base_path:
-            # Clear cookies left by a previous root-path installation. Browsers send both
-            # paths, and duplicate cookie names otherwise make session selection ambiguous.
-            response.delete_cookie(auth.COOKIE, path="/")
-            response.delete_cookie(auth.CSRF_COOKIE, path="/")
-        for name, value, httponly in ((auth.COOKIE, token, True), (auth.CSRF_COOKIE, csrf, False)):
-            response.set_cookie(
-                name,
-                value,
-                max_age=cfg.session_hours * 3600,
-                httponly=httponly,
-                secure=cfg.secure_cookies,
-                samesite="strict",
-                path=cfg.base_path or "/",
-            )
-        return response
+        return _authenticated_response(cfg, token, csrf)
+
+    @app.post("/api/session/owh", response_model=SessionOut)
+    def login_from_open_work_hub(body: OwhSessionInput):
+        cfg = app.state.settings
+        if not owh_sso.exchange_code(
+            issuer=body.issuer,
+            code=body.code,
+            allowed_origins=cfg.sso_origins,
+        ):
+            raise ConsoleError("login_failed", 401)
+        token, csrf = auth.create_session(app.state.factory, cfg.session_hours)
+        return _authenticated_response(cfg, token, csrf)
 
     @app.delete("/api/session", dependencies=secured, response_model=Ok)
     def logout(request: Request):

@@ -102,6 +102,28 @@ def test_reasoning_policy_is_configurable_and_rejects_empty_efforts(repository, 
             Settings(**data)
 
 
+def test_sso_origins_are_exact_secure_origins(repository):
+    data = {
+        "database_url": "postgresql+psycopg://test@localhost/console_test",
+        "workspace": repository,
+        "origin": "http://localhost",
+        "_env_file": None,
+    }
+    assert Settings(
+        **data,
+        sso_origins=["https://dev.example.com/", "http://127.0.0.1:4200"],
+    ).sso_origins == ["https://dev.example.com", "http://127.0.0.1:4200"]
+    for origins in (
+        ["http://example.com"],
+        ["https://example.com/path"],
+        ["https://user@example.com"],
+        ["https://:password@example.com"],
+        ["https://example.com", "https://example.com/"],
+    ):
+        with pytest.raises(ValidationError):
+            Settings(**data, sso_origins=origins)
+
+
 def test_protected_workspace_and_storage_paths_are_rejected(repository):
     data = {
         "database_url": "postgresql+psycopg://test@localhost/console_test",
