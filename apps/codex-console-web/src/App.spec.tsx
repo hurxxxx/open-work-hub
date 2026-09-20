@@ -7,6 +7,7 @@ import {
   within,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
 import { App } from './App';
 import { api, ApiError, type Detail, type GitState } from './api';
 
@@ -176,6 +177,43 @@ it('exchanges an Open Work Hub handoff before checking the existing session', as
     issuer: 'https://dev.example.test',
     code,
   });
+  expect(api).not.toHaveBeenCalledWith('/session');
+});
+
+it('runs handoff initialization once when StrictMode replays effects', async () => {
+  const code = `cc1_${'b'.repeat(32)}`;
+  window.history.replaceState(
+    null,
+    '',
+    `/?task=${taskId}#${new URLSearchParams({
+      owh_issuer: 'https://dev.example.test',
+      owh_code: code,
+    })}`,
+  );
+  let finishHandoff!: (value: { authenticated: boolean }) => void;
+  const handoff = new Promise<{ authenticated: boolean }>((resolve) => {
+    finishHandoff = resolve;
+  });
+  const original = vi.mocked(api).getMockImplementation()!;
+  vi.mocked(api).mockImplementation(async (path, ...args) => {
+    if (path === '/session/owh') return handoff;
+    return original(path, ...args);
+  });
+
+  render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+
+  await waitFor(() =>
+    expect(
+      vi.mocked(api).mock.calls.filter(([path]) => path === '/session/owh'),
+    ).toHaveLength(1),
+  );
+  expect(api).not.toHaveBeenCalledWith('/session');
+  await act(async () => finishHandoff({ authenticated: true }));
+  await screen.findByRole('heading', { name: 'Test task' });
   expect(api).not.toHaveBeenCalledWith('/session');
 });
 

@@ -135,6 +135,7 @@ export function App() {
   const [device, setDevice] = useState<DeviceLogin | null>(null);
   const [usageOpen, setUsageOpen] = useState(false);
   const requestKeys = useRef(new Map<string, string>());
+  const sessionInitialization = useRef<Promise<void> | null>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
@@ -384,7 +385,8 @@ export function App() {
     return () => media.removeEventListener('change', update);
   }, []);
   useEffect(() => {
-    void initializeSession();
+    sessionInitialization.current ??= initializeSession();
+    void sessionInitialization.current;
   }, [initializeSession]);
   useEffect(() => {
     if (!authenticated) return;
