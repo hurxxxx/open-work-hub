@@ -25,6 +25,8 @@ const RELEASE_CONTROLS = new Set([
   'ops/ci/ci-first.gitlab-ci.yml',
   'scripts/release-validation.mjs',
   'scripts/release-validation.test.mjs',
+  'scripts/prod-app-release.mjs',
+  'scripts/prod-app-release.test.mjs',
   'scripts/check-gitlab-pipeline.mjs',
   'scripts/check-gitlab-pipeline.test.mjs',
   'scripts/check-mr-target-policy.mjs',
