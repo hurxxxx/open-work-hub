@@ -126,6 +126,46 @@ test('cleanup is read-only by default and uses only scoped non-force image remov
   ]);
 });
 
+test('replaced validation images are retired by identity without touching unknown or referenced images', () => {
+  const validation = (id, extra = {}) =>
+    oldImage(id, [], {
+      Config: {
+        Labels: { 'io.open-work-hub.validation.contract': 'a'.repeat(64) },
+      },
+      ...extra,
+    });
+  const state = {
+    images: [
+      ...storageImages().slice(0, 3),
+      validation('obsolete-ci'),
+      validation('running-ci'),
+      validation('stopped-ci'),
+      validation('recent-ci', { Created: new Date().toISOString() }),
+      validation('manual-ci', { RepoTags: ['manual:preserve'] }),
+      validation('invalid-label', {
+        Config: { Labels: { 'io.open-work-hub.validation.contract': '' } },
+      }),
+      oldImage('unknown-dangling', [], { Config: {} }),
+    ],
+    containers: [{ Image: 'running-ci' }, { Image: 'stopped-ci' }],
+  };
+  assert.deepEqual(
+    retirementPlan(state.images, state.containers).map((i) => i.id),
+    ['obsolete-ci'],
+  );
+  assert.deepEqual(retirementPlan([validation('obsolete-ci')], []), []);
+  const calls = [];
+  cleanup({
+    apply: true,
+    inspect: () => state,
+    invoke: (args) => calls.push(args),
+  });
+  assert.deepEqual(
+    calls.filter((args) => args[1] === 'rm'),
+    [['image', 'rm', '--no-prune', 'obsolete-ci']],
+  );
+});
+
 test('cleanup stops if a candidate gains a reference or tag after inspection', () => {
   for (const change of ['container', 'tag']) {
     let count = 0;
@@ -163,11 +203,34 @@ test('production dependency layers exclude revision churn, uv cache and local te
     'utf8',
   );
   const [buildStages, runtime] = dockerfile.split('AS runtime');
-  assert.match(runtime, /COPY --chown=open-work-hub:open-work-hub config config/);
+  assert.match(
+    runtime,
+    /COPY --chown=open-work-hub:open-work-hub config config/,
+  );
   assert.ok(!ignore.split('\n').includes('config'));
   assert.equal(
     (buildStages.match(/uv sync --no-cache --frozen/g) ?? []).length,
-    4,
+    2,
+  );
+  const dependencies = buildStages.slice(
+    0,
+    buildStages.indexOf('FROM python-build AS python-packages'),
+  );
+  assert.doesNotMatch(dependencies, /COPY apps\/(?:api|worker)\/src/);
+  assert.match(
+    runtime,
+    /COPY --from=python-build \/opt\/open-work-hub\/apps\/api\/\.venv/,
+  );
+  assert.match(
+    runtime,
+    /--mount=type=bind,from=python-packages,source=\/wheels/,
+  );
+  assert.match(
+    runtime,
+    /uv pip install --no-cache --no-deps --python apps\/api\/\.venv\/bin\/python/,
+  );
+  assert.ok(
+    buildStages.indexOf('RUN pnpm --filter') < buildStages.indexOf('COPY . .'),
   );
   assert.ok(
     buildStages.indexOf('ARG OPEN_WORK_HUB_BENTO_SERVER_URL') >
