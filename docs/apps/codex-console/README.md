@@ -84,8 +84,11 @@ native thread의 모델을 이어받는다. 공급자·인증·fallback 설정�
 
 실행 권한의 기본값은 **필요할 때 승인 요청**이다. **YOLO · 전체 권한**을 선택하면 공식
 `approvalPolicy: never`, `sandboxPolicy: dangerFullAccess`로 실행한다. YOLO는 서버 계정의
-파일·네트워크 접근에 대한 샌드박스 제한과 개별 승인 요청을 없앤다. 계획 모드는 YOLO 선택과
-관계없이 읽기 전용이다. 마지막 모델·강도·실효 권한은 DB에 저장된다.
+파일·네트워크 접근에 대한 샌드박스 제한과 개별 승인 요청을 없앤다. 서비스 unit은
+`NoNewPrivileges=false`로 실행해 해당 OS 계정에 이미 부여된 비대화형 sudo와 그룹 권한도
+YOLO에서 사용할 수 있게 한다. 이는 새 OS 권한이나 자격증명을 부여하지 않으므로 설치 계정의
+sudoers·그룹·파일 ACL은 호스트에서 별도로 관리한다. 계획 모드는 YOLO 선택과 관계없이 읽기
+전용이다. 마지막 모델·강도·실효 권한은 DB에 저장된다.
 
 **현재 실행 상태**는 모드·모델·권한, 현재 명령과 Codex가 보고한 단계별 진행 상황을 표시한다.
 페이지 이동·탭 종료·웹 로그아웃 후에도 서버 작업은 계속된다. **중단**으로 실행을 멈출 수 있다.
@@ -386,6 +389,12 @@ systemctl --user restart codex-console
 systemctl --user stop codex-console
 ```
 
+unit의 `NoNewPrivileges=false`는 공식 app-server의 YOLO가 서비스 계정의 기존 호스트 권한을
+그대로 사용할 수 있게 하는 실행 계약이다. `true`로 바꾸면 `dangerFullAccess`를 전달해도
+`sudo` 같은 setuid 권한 상승이 차단된다. unit을 갱신한 뒤에는 `daemon-reload`와 서비스
+재시작 후 메인 PID의 `/proc/<PID>/status`에서 `NoNewPrivs: 0`을 확인하고, YOLO 턴에서
+설치 계정에 허용된 비대화형 sudo와 필요한 그룹 자원 접근을 검사한다. 계획/승인 실행의
+샌드박스 계약은 Codex app-server가 계속 적용한다.
 
 개발 서버의 `./dev.sh`와 이 서비스는 서로 제어하지 않는다. 업데이트는 새 릴리스를 검증한 뒤
 실행 중인 작업을 완료·중단하고 전용 DB를 백업한다. 서비스를 중지한 뒤 새 릴리스의

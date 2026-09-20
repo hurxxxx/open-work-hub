@@ -12,7 +12,9 @@ RestartSec=5
 TimeoutStopSec=15
 KillMode=control-group
 UMask=0077
-NoNewPrivileges=true
+# Native YOLO turns must retain the service account's existing sudo/group privileges.
+# Plan and approval-based turns are still sandboxed by the official Codex app-server.
+NoNewPrivileges=false
 
 [Install]
 WantedBy=default.target
