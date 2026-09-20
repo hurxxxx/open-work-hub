@@ -152,3 +152,42 @@ test('composer uploads select files, attachment-only messages work, and tasks do
     ),
   ).toBe(true);
 });
+
+test('many selected files scroll inside the composer without hiding its controls', async ({
+  page,
+}) => {
+  await newTask(page, '다중 첨부 레이아웃');
+  await page.getByRole('button', { name: '파일 첨부', exact: true }).click();
+  await page
+    .getByRole('dialog')
+    .locator('input[type=file]')
+    .setInputFiles(
+      Array.from({ length: 20 }, (_, index) => ({
+        name: `참고-${String(index + 1).padStart(2, '0')}.txt`,
+        mimeType: 'text/plain',
+        buffer: Buffer.from(`Reference ${index + 1}`),
+      })),
+    );
+  await expect(
+    page.getByRole('dialog').getByRole('checkbox'),
+  ).toHaveCount(20);
+  await page.getByRole('button', { name: '선택 완료' }).click();
+
+  const badges = page.locator('.composer > .attachment-badges');
+  const toolbar = page.locator('.composer-toolbar');
+  await expect(badges.locator('.attachment-badge')).toHaveCount(20);
+  await expect(toolbar).toBeVisible();
+  expect(
+    await badges.evaluate((element) => ({
+      scrollable: element.scrollHeight > element.clientHeight,
+      overflowY: getComputedStyle(element).overflowY,
+    })),
+  ).toEqual({ scrollable: true, overflowY: 'auto' });
+  const composerBox = await page.locator('.composer').boundingBox();
+  const toolbarBox = await toolbar.boundingBox();
+  expect(composerBox).not.toBeNull();
+  expect(toolbarBox).not.toBeNull();
+  expect(toolbarBox!.y + toolbarBox!.height).toBeLessThanOrEqual(
+    composerBox!.y + composerBox!.height + 1,
+  );
+});

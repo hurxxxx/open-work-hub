@@ -91,8 +91,22 @@ USER open-work-hub
 
 # Revision metadata must not invalidate dependency copies or OS package layers.
 ARG OPEN_WORK_HUB_BUILD_REVISION=unmanaged
+ARG OPEN_WORK_HUB_RELEASE_CONTRACT=unmanaged
+ARG OPEN_WORK_HUB_RELEASE_SOURCE_REVISION=unmanaged
+ARG OPEN_WORK_HUB_RELEASE_TREE=unmanaged
+ARG OPEN_WORK_HUB_RELEASE_PLATFORM=unmanaged
+ARG OPEN_WORK_HUB_RELEASE_BENTO_URL_SHA256=unmanaged
+ARG OPEN_WORK_HUB_RELEASE_MR=unmanaged
+ARG OPEN_WORK_HUB_RELEASE_PIPELINE=unmanaged
 LABEL org.opencontainers.image.title="Open Work Hub" \
-  org.opencontainers.image.revision="${OPEN_WORK_HUB_BUILD_REVISION}"
+  org.opencontainers.image.revision="${OPEN_WORK_HUB_BUILD_REVISION}" \
+  io.open-work-hub.release.contract="${OPEN_WORK_HUB_RELEASE_CONTRACT}" \
+  io.open-work-hub.release.source-revision="${OPEN_WORK_HUB_RELEASE_SOURCE_REVISION}" \
+  io.open-work-hub.release.tree="${OPEN_WORK_HUB_RELEASE_TREE}" \
+  io.open-work-hub.release.platform="${OPEN_WORK_HUB_RELEASE_PLATFORM}" \
+  io.open-work-hub.release.bento-url-sha256="${OPEN_WORK_HUB_RELEASE_BENTO_URL_SHA256}" \
+  io.open-work-hub.release.merge-request="${OPEN_WORK_HUB_RELEASE_MR}" \
+  io.open-work-hub.release.pipeline="${OPEN_WORK_HUB_RELEASE_PIPELINE}"
 ENV OPEN_WORK_HUB_RUNTIME_REVISION="${OPEN_WORK_HUB_BUILD_REVISION}"
 
 CMD ["apps/api/.venv/bin/uvicorn", "open_work_hub_api.main:app", "--app-dir", "apps/api/src", "--host", "127.0.0.1", "--port", "8000"]

@@ -354,7 +354,7 @@ node() {
   if [[ "$1" == *docker-storage.mjs ]]; then
     CLEANUP_COUNT=$((CLEANUP_COUNT + 1))
     printf 'cleanup:%s\\n' "$CLEANUP_COUNT" >> "$EVENTS"
-    [[ "$FAIL_STAGE:$CLEANUP_COUNT" != post-cleanup:2 ]] || return 4
+    [[ "$FAIL_STAGE:$CLEANUP_COUNT" != post-cleanup:1 ]] || return 4
   elif [[ "$*" == *' restore-env '* ]]; then
     printf 'restore-env\\n' >> "$EVENTS"
     [[ "$FAIL_STAGE" != env ]] || return 4
@@ -363,11 +363,6 @@ node() {
     printf 'smoke:%s:%s\\n' "$1" "$OPEN_WORK_HUB_EXPECTED_REVISION" >> "$EVENTS"
     [[ "$FAIL_STAGE" != smoke ]] || return 4
   else return 9; fi
-}
-build_release_image() {
-  printf 'build\\n' >> "$EVENTS"
-  [[ "$FAIL_STAGE" != build ]] || return 4
-  printf 'candidate-image\\n'
 }
 promote_image() {
   printf 'promote\\n' >> "$EVENTS"
@@ -381,7 +376,7 @@ run_smoke() {
   printf 'candidate-smoke\\n' >> "$EVENTS"
   [[ "$FAIL_STAGE" != candidate-smoke ]] || return 4
 }
-if ${action === 'deploy' ? 'deploy' : 'restore_previous_runtime'}; then printf 'success\\n'; else printf 'failed\\n'; fi
+if ${action === 'deploy' ? 'deploy candidate-image' : 'restore_previous_runtime'}; then printf 'success\\n'; else printf 'failed\\n'; fi
 `,
     ],
     { encoding: 'utf8', env: { PATH: process.env.PATH } },
@@ -446,7 +441,6 @@ test('default compatible-image rollback also stops after retag failure', (t) => 
 });
 
 for (const stage of [
-  'build',
   'promote',
   'migration',
   'candidate-start',
@@ -469,7 +463,7 @@ for (const stage of [
     const restoration = f.events.slice(
       f.events.indexOf('down --remove-orphans'),
     );
-    assert.doesNotMatch(restoration, /migration|candidate-smoke|cleanup:2/);
+    assert.doesNotMatch(restoration, /migration|candidate-smoke|cleanup:/);
   });
 }
 
@@ -560,8 +554,11 @@ CURRENT_IMAGE=open-work-hub-app:prod
 PREVIOUS_IMAGE=open-work-hub-app:prod-previous
 ROLLBACK_IMAGE=""
 ROLLBACK_ENV_FILE=""
+RELEASE_MR=""
+DEPLOY_IMAGE=""
 require_prod_checkout() { printf 'checkout\\n'; }
 require_release_source() { printf 'release\\n'; }
+acquire_operation_lock() { printf 'lock\\n'; }
 prepare_rollback_runtime() { printf 'prepare:%s\\n' "$1"; return 6; }
 validate_environment() { printf 'unexpected-validation\\n'; }
 deploy() { printf 'unexpected-deployment\\n'; }
@@ -570,6 +567,9 @@ ${dispatcher}
 `,
         'test',
         command,
+        ...(command === 'deploy'
+          ? ['--release-mr', '49', '--image', IMAGE]
+          : []),
         '--rollback-env-file',
         '/synthetic/backup.env',
         '--rollback-image',
@@ -580,7 +580,7 @@ ${dispatcher}
     assert.equal(result.status, 6);
     assert.equal(
       result.stdout,
-      `checkout\nrelease\nprepare:open-work-hub-app:${command === 'deploy' ? 'prod' : 'prod-previous'}\n`,
+      `checkout\nrelease\nlock\nprepare:open-work-hub-app:${command === 'deploy' ? 'prod' : 'prod-previous'}\n`,
     );
   });
 }
