@@ -17,6 +17,8 @@ COPY packages/collab-codec-runtime/package.json packages/collab-codec-runtime/pa
 COPY packages/core-web/package.json packages/core-web/package.json
 COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @open-work-hub/collab-codec-runtime deploy \
+    --prod --legacy /opt/collab-codec-runtime
 
 COPY . .
 ARG OPEN_WORK_HUB_BENTO_SERVER_URL
@@ -24,8 +26,6 @@ RUN test -n "${OPEN_WORK_HUB_BENTO_SERVER_URL}" \
   && OPEN_WORK_HUB_BENTO_SERVER_URL="${OPEN_WORK_HUB_BENTO_SERVER_URL}" \
     NODE_OPTIONS=--max-old-space-size=3072 \
     pnpm nx build web --skip-nx-cache
-RUN pnpm --filter @open-work-hub/collab-codec-runtime deploy \
-    --prod --legacy /opt/collab-codec-runtime
 
 FROM ${PYTHON_IMAGE} AS python-build
 LABEL io.open-work-hub.build-cache="true"
@@ -45,14 +45,13 @@ RUN UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
   && UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
     uv sync --no-cache --frozen --no-dev --no-install-project --directory apps/worker
 
+# Keep the multi-gigabyte third-party environments independent of app source.
+# Build only the small application wheels after source changes.
+FROM python-build AS python-packages
 COPY apps/api/src apps/api/src
-COPY apps/api/alembic apps/api/alembic
-COPY apps/api/alembic.ini apps/api/alembic.ini
 COPY apps/worker/src apps/worker/src
-RUN UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
-    uv sync --no-cache --frozen --no-dev --no-editable --directory apps/api \
-  && UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy \
-    uv sync --no-cache --frozen --no-dev --no-editable --directory apps/worker
+RUN uv build --no-cache --wheel --out-dir /wheels --directory apps/api \
+  && uv build --no-cache --wheel --out-dir /wheels --directory apps/worker
 
 FROM ${PYTHON_IMAGE} AS runtime
 
@@ -73,6 +72,10 @@ COPY --chown=open-work-hub:open-work-hub apps/api/src apps/api/src
 COPY --chown=open-work-hub:open-work-hub apps/api/alembic apps/api/alembic
 COPY --chown=open-work-hub:open-work-hub apps/api/alembic.ini apps/api/alembic.ini
 COPY --chown=open-work-hub:open-work-hub apps/worker/src apps/worker/src
+RUN --mount=type=bind,from=python-build,source=/usr/local/bin/uv,target=/usr/local/bin/uv \
+    --mount=type=bind,from=python-packages,source=/wheels,target=/wheels \
+    uv pip install --no-cache --no-deps --python apps/api/.venv/bin/python /wheels/open_work_hub_api-*.whl \
+  && uv pip install --no-cache --no-deps --python apps/worker/.venv/bin/python /wheels/open_work_hub_worker-*.whl
 COPY --chown=open-work-hub:open-work-hub pnpm-workspace.yaml pnpm-workspace.yaml
 COPY --chown=open-work-hub:open-work-hub config config
 COPY --chown=open-work-hub:open-work-hub packages/contracts/open-work-hub-desktop-update-feed.manifest.json packages/contracts/open-work-hub-desktop-update-feed.manifest.json

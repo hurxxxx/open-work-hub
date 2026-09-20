@@ -448,6 +448,15 @@ export function App() {
     });
   }, [task]);
 
+  useEffect(() => {
+    setExecution((current) => {
+      const model = models.find((row) => row.model === current.model);
+      return model && current.effort && !model.efforts.includes(current.effort)
+        ? { ...current, effort: null }
+        : current;
+    });
+  }, [models, task?.id]);
+
   const loadHistory = async (cursor: string | null = null) => {
     await act(async () => {
       const result = await api<ThreadPage>(
