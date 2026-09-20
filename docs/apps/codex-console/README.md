@@ -8,7 +8,10 @@
 ## 실행 경계
 
 - 소유자 한 명, 설정한 Git 개발 체크아웃 하나를 대상으로 한다. 공개 가입이나 팀 공유는 없다.
-- 공식 `codex app-server` **0.155.1**의 stdio 프로토콜을 사용한다. Codex가 구독 인증,
+- 공식 `codex app-server`의 stdio 프로토콜을 사용한다. 기준 계약은 **0.155.1**이며,
+  그 이상의 안정 CLI는 콘솔이 사용하는 요청·응답·알림 RPC 스키마가 기준 계약과 같을 때
+  자동으로 허용한다.
+  더 오래된 버전·시험판·스키마가 달라진 버전은 실행 전에 차단한다. Codex가 구독 인증,
   토큰 갱신, 원본 대화와 도구 실행을 관리한다. 클라이언트는 인증 파일을 읽거나 복사하지 않는다.
 - 이 도구는 개인 코딩 에이전트 클라이언트다. OWH 제품 앱의 생성형 호출, 공용 AI 공급자,
   사용자·회사 권한을 대신하지 않는다. 제품 AI 기능에는 기존 등록 workload 계약을 적용한다.
@@ -139,7 +142,8 @@ OWH 서버에서는 기준 ref를 `origin/dev`, 워크트리 경로를 체크아
 
 사전 준비는 [INSTALL.md](../../../INSTALL.md)를 따른다. Node·pnpm과 Python·uv 버전은
 저장소의 package.json 및 각 앱의 pyproject.toml/lock을 사용한다. PostgreSQL 18과
-현재 사용자로 `codex login status`가 성공하는 Codex 0.155.1이 필요하다.
+현재 사용자로 `codex login status`가 성공하는 Codex 0.155.1 이상의 안정 버전이 필요하다.
+서비스는 Codex 프로세스를 연결할 때 설치된 CLI가 기준 RPC 계약과 호환되는지 검사한다.
 
 1. PostgreSQL에 **전용 역할과 전용 DB** `codex_console`을 준비한다. OWH 업무 DB와 그
    migration을 재사용하지 않는다. DB 관리자는 전용 DB에만 소유권을 부여한다.
@@ -485,7 +489,9 @@ pytest가 skip되며 전체 검증 통과로 취급하면 안 된다. E2E는 실
 uv run --frozen --directory apps/codex-console-api --group dev python tests/live_attachment_smoke.py
 ```
 
-Codex 업그레이드 계약은 설치된 고정 버전으로 검사한다.
+Codex 업그레이드 계약은 설치된 안정 CLI가 최소 버전 이상이고 선택된 RPC 스키마와 호환되는지
+검사한다. 스키마가 같으면 소스 변경 없이 새 CLI를 사용할 수 있다. 스키마가 다르면 이 검사가
+실패하며, 기준 버전과 생성 계약을 함께 검토·갱신해야 한다.
 
 ```bash
 uv run --frozen --directory apps/codex-console-api python scripts/generate_protocol.py --check
@@ -505,5 +511,6 @@ E2E 대역 통과는 실제 구독 실행
 인증 파일을 UI로 업로드하거나 내용을 공유하지 않는다.
 
 장애 확인은 `/healthz`, 서비스 상태, UI 오류 코드로 시작한다. DB migration 실패를 `stamp`나
-테이블 재생성으로 우회하지 않는다. 버전 불일치는 고정 Codex 바이너리 경로를 복구한다.
+테이블 재생성으로 우회하지 않는다. Codex 호환성 오류는 안정 버전과 생성된 RPC 스키마를
+확인하고, 스키마가 바뀐 경우 기준 계약을 검토해 갱신한다.
 사용량 제한에는 API fallback을 두지 않는다. 비밀번호 분실은 서버의 `set-password`로 복구한다.

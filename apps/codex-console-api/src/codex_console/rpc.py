@@ -9,13 +9,14 @@ import contextlib
 import json
 import logging
 import os
+import tempfile
 from pathlib import Path
 
 from jsonschema import Draft7Validator
 
-from .config import CODEX_VERSION
 from .errors import ConsoleError
 from .models import uid
+from .protocol_contract import schemas_are_compatible, supports_contract_version
 
 MAX_MESSAGE_BYTES = 4 * 1024 * 1024
 
@@ -69,8 +70,31 @@ class CodexRPC:
             version.kill()
             await version.wait()
             raise ConsoleError("codex_unavailable", 503) from None
-        if output.decode().strip() != f"codex-cli {CODEX_VERSION}":
+        if version.returncode or not supports_contract_version(
+            output.decode(), CONTRACT["codexVersion"]
+        ):
             raise ConsoleError("codex_version_mismatch", 503)
+        with tempfile.TemporaryDirectory(prefix="codex-console-schema-") as directory:
+            schema = await asyncio.create_subprocess_exec(
+                self.binary,
+                "app-server",
+                "generate-json-schema",
+                "--experimental",
+                "--out",
+                directory,
+                cwd=self.cwd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+                env=environment,
+            )
+            try:
+                await asyncio.wait_for(schema.wait(), 30)
+            except TimeoutError:
+                schema.kill()
+                await schema.wait()
+                raise ConsoleError("codex_version_mismatch", 503) from None
+            if schema.returncode or not schemas_are_compatible(CONTRACT, Path(directory)):
+                raise ConsoleError("codex_version_mismatch", 503)
         self.process = await asyncio.create_subprocess_exec(
             self.binary,
             "app-server",
