@@ -49,6 +49,14 @@ test('uses target-owned developer instructions with the structured base review',
     runnerSource,
     /git show "\$\{target_sha\}:\$\{instruction_path\}"/,
   );
+  assert.match(
+    runnerSource,
+    /Do not invent an additional required check or block only because no additional job\/status exists\./,
+  );
+  assert.match(
+    runnerSource,
+    /Report every independent concrete blocker found in one/,
+  );
 });
 
 test('reviews in a credential-free checkout without source instructions', () => {

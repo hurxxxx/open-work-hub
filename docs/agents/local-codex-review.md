@@ -18,6 +18,7 @@
 - Only selected, validated identifiers and gate results enter the trusted review instructions. API bodies, MR descriptions and authentication values do not. API errors, missing fields and incomplete job lists fail closed. The Codex child still receives a cleared environment and no Git remotes.
 - Verification performed outside GitLab jobs can be published through GitLab's commit-status API only after the named command succeeds on the exact clean source SHA. Attach it to the existing MR pipeline with `pipeline_id`, not a separate branch pipeline. The helper also checks these authenticated commit statuses and passes bounded check names, source SHAs and outcomes; stale or failed required checks block review. Such status is external validation evidence, not a claim that Codex executed the command.
 - The current running review job evaluates its own source-review result. Every other required job must already have succeeded; GitLab's final successful-pipeline requirement remains mandatory for a later merge. A changed authenticated snapshot after review fails the job even if Codex reported readiness.
+- Authenticated metadata defines the configured jobs and commit statuses. The reviewer does not invent additional required checks or block only because no extra job/status exists; unavailable commands are reported as residual risk. It reviews the complete diff and returns all independent concrete blockers found in one response.
 
 ## Gate
 
