@@ -26,6 +26,23 @@ export class ApiError extends Error {
   }
 }
 
+export type OwhSessionHandoff = { issuer: string; code: string };
+
+export function consumeOwhSessionHandoff(): OwhSessionHandoff | null {
+  const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const issuer = fragment.get('owh_issuer');
+  const code = fragment.get('owh_code');
+  if (!issuer && !code) return null;
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${window.location.pathname}${window.location.search}`,
+  );
+  if (!issuer || !code || !/^cc1_[A-Za-z0-9_-]{20,252}$/.test(code))
+    return null;
+  return { issuer, code };
+}
+
 function csrfToken() {
   return decodeURIComponent(
     document.cookie

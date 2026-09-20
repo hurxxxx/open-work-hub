@@ -28,6 +28,12 @@ describe('auth route contract', () => {
     expect(authRoutes.desktopSessionLinkExchange()).toBe(
       '/api/v1/auth/desktop-session-links/exchange',
     );
+    expect(authRoutes.codexConsoleSessionLinks()).toBe(
+      '/api/v1/auth/codex-console-session-links',
+    );
+    expect(authRoutes.codexConsoleSessionLinkExchange()).toBe(
+      '/api/v1/auth/codex-console-session-links/exchange',
+    );
     expect(authRoutes.preferences()).toBe('/api/v1/auth/preferences');
     expect(authRoutes.changePassword()).toBe('/api/v1/auth/change-password');
     expect(authRoutes.sessions()).toBe('/api/v1/auth/sessions');

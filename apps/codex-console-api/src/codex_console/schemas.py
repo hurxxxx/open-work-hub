@@ -16,6 +16,11 @@ class LoginInput(Input):
     password: str = Field(min_length=1, max_length=1024)
 
 
+class OwhSessionInput(Input):
+    issuer: str = Field(min_length=8, max_length=2048)
+    code: str = Field(min_length=20, max_length=256, pattern=r"^cc1_[A-Za-z0-9_-]+$")
+
+
 class NewTask(Input):
     title: str = Field(min_length=1, max_length=200)
 

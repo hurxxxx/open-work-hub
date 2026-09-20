@@ -1,6 +1,7 @@
 import { getAppRoutePattern } from '@open-work-hub/contracts/app-routes';
 import { useTranslation } from 'react-i18next';
 import { useAppBootstrapContext } from '@/src/platform/apps/app-bootstrap-context';
+import { appLaunchLinkProps } from '@/src/app/shell/app-launch-destination';
 import { codexConsoleManifest } from './manifest';
 
 function CodexConsoleEntry() {
@@ -17,8 +18,7 @@ function CodexConsoleEntry() {
         <a
           className="text-app-accent underline"
           href={app.launch_url}
-          target="_blank"
-          rel="noopener noreferrer"
+          {...appLaunchLinkProps('codex-console', app.launch_url)}
         >
           {t('launcher.openAppInNewTab', { app: t('apps.codex-console') })}
         </a>

@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -56,6 +57,10 @@ class Settings(BaseSettings):
     session_hours: int = Field(
         default=12, ge=1, le=24, validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_SESSION_HOURS"
     )
+    sso_subjects: dict[str, UUID] = Field(
+        default_factory=dict,
+        validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_SSO_SUBJECTS",
+    )
     attachment_cache: Path = Field(
         default_factory=lambda: Path.home() / ".local/share/owh-codex-console/attachments",
         validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_ATTACHMENT_CACHE",
@@ -92,12 +97,25 @@ class Settings(BaseSettings):
     @field_validator("origin")
     @classmethod
     def validate_origin(cls, value: str) -> str:
+        return cls._validated_origin(value)
+
+    @field_validator("sso_subjects")
+    @classmethod
+    def validate_sso_subjects(cls, values: dict[str, UUID]) -> dict[str, UUID]:
+        normalized = {cls._validated_origin(origin): subject for origin, subject in values.items()}
+        if len(normalized) != len(values):
+            raise ValueError("SSO origins must be unique after normalization")
+        return normalized
+
+    @staticmethod
+    def _validated_origin(value: str) -> str:
         parsed = urlsplit(value)
         if (
             parsed.path not in ("", "/")
             or parsed.query
             or parsed.fragment
-            or parsed.username
+            or parsed.username is not None
+            or parsed.password is not None
             or not parsed.hostname
         ):
             raise ValueError("Expected an origin without a path or credentials")

@@ -348,7 +348,7 @@ function MobileNavigationDrawer({
                 )}
                 key={item.id}
                 to={item.destination.href}
-                {...appLaunchLinkProps(item.linkAppId)}
+                {...appLaunchLinkProps(item.linkAppId, item.destination.href)}
                 className={cn(
                   'flex items-center gap-3 rounded-xl px-3 py-2 text-app-ink transition-colors hover:bg-app-surface-hover',
                   item.activeAppIds.includes(
