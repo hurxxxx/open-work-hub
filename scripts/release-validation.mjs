@@ -79,6 +79,13 @@ function surface(file) {
     /^(?:apps\/web\/(?:src|e2e)|packages\/(?:ui|core-web)\/src)\//.test(file)
   )
     return 'web';
+  if (
+    /^apps\/api\/src\/open_work_hub_api\/core\/(?:settings|runtime_config(?:_source)?)\.py$/.test(
+      file,
+    ) ||
+    /^apps\/api\/src\/.+_generated\.py$/.test(file)
+  )
+    return null;
   if (/^apps\/api\/(?:src|tests)\//.test(file)) return 'api';
   if (
     /^(?:apps\/codex-console-(?:api|web)\/(?:src|tests|migrations)|apps\/codex-console-web\/e2e)\//.test(
