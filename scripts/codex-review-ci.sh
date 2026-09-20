@@ -226,8 +226,17 @@ Scope:
   Do not require this job to succeed before producing its own review result. All other required
   jobs must already have succeeded. GitLab still requires the final successful pipeline before
   any later merge; this review does not authorize or perform a merge.
-- Fail closed on missing verified metadata, stale refs, other failed/pending required checks,
+- The authenticated metadata is authoritative for which jobs and commit statuses are configured.
+  Do not invent an additional required check or block only because no additional job/status exists.
+  A command unavailable in this credential-free review checkout is residual risk, not by itself a blocker.
+- A policy or CI change may intentionally replace target-branch behavior. Review its proposed future
+  contract as code against the target policy's safety and authority objectives; do not reject it solely
+  because validation breadth changes. Block bypasses, trust inversions, untested routing, or omitted
+  affected consumers.
+- Fail closed on missing verified metadata, stale refs, configured failed/pending required checks,
   conflicts, unresolved blocking discussions, or concrete source defects.
+- Review the complete diff before deciding. Report every independent concrete blocker found in one
+  response instead of stopping after the first finding.
 
 Focus:
 - Bugs, regressions, missing tests, security/auth/RBAC/app and source ACL boundary breaks.
