@@ -21,11 +21,11 @@ const FULL_SUITES = [
 const FOCUSED_CHECKS = Object.freeze({
   docs: ['check:skills', 'test:skill-harness', 'test:claude-skills'],
   harness: ['ci:harness'],
-  api: ['ci:python-contract-guardrails', 'check:api-contract', 'ci:api:full'],
   web: ['ci:web'],
+  sharedUi: ['ci:web', 'ci:codex-console'],
   console: ['ci:codex-console'],
 });
-const FOCUSED_ORDER = ['docs', 'harness', 'api', 'web', 'console'];
+const FOCUSED_ORDER = ['docs', 'harness', 'web', 'sharedUi', 'console'];
 
 // Changes to the selector or its execution contract cannot select their own shortcut.
 const RELEASE_CONTROLS = new Set([
@@ -74,19 +74,10 @@ function surface(file) {
     /^(?:docs|adr|\.gitlab)\/.+\.md$/.test(file)
   )
     return 'docs';
-  if (
-    file === 'packages/ui/styles.css' ||
-    /^(?:apps\/web\/(?:src|e2e)|packages\/(?:ui|core-web)\/src)\//.test(file)
-  )
+  if (/^(?:apps\/web\/(?:src|e2e)|packages\/core-web\/src)\//.test(file))
     return 'web';
-  if (
-    /^apps\/api\/src\/open_work_hub_api\/core\/(?:settings|runtime_config(?:_source)?)\.py$/.test(
-      file,
-    ) ||
-    /^apps\/api\/src\/.+_generated\.py$/.test(file)
-  )
-    return null;
-  if (/^apps\/api\/(?:src|tests)\//.test(file)) return 'api';
+  if (file === 'packages/ui/styles.css' || /^packages\/ui\/src\//.test(file))
+    return 'sharedUi';
   if (
     /^(?:apps\/codex-console-(?:api|web)\/(?:src|tests)|apps\/codex-console-web\/e2e)\//.test(
       file,
@@ -203,9 +194,13 @@ export function selectValidation({ mode = 'full', changes = [] } = {}) {
   const checks =
     effectiveMode === 'full'
       ? ['ci:all']
-      : FOCUSED_ORDER.filter((name) =>
-          changes.some((change) => surface(change.path) === name),
-        ).flatMap((name) => FOCUSED_CHECKS[name]);
+      : [
+          ...new Set(
+            FOCUSED_ORDER.filter((name) =>
+              changes.some((change) => surface(change.path) === name),
+            ).flatMap((name) => FOCUSED_CHECKS[name]),
+          ),
+        ];
   return {
     requestedMode: mode,
     mode: effectiveMode,

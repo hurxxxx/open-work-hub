@@ -68,7 +68,9 @@ for (const file of [
 
 for (const file of [
   'apps/worker/src/task.py',
+  'apps/api/src/app.py',
   'apps/api/alembic/versions/new.py',
+  'apps/api/tests/test_api.py',
   'packages/contracts/README.ts',
   'package.json',
   'pnpm-lock.yaml',
@@ -115,21 +117,12 @@ test('bounded app-local changes select only their affected suites', () => {
   ]);
   assert.deepEqual(planFor([change('packages/ui/src/button.tsx')]).checks, [
     'ci:web',
+    'ci:codex-console',
   ]);
   assert.deepEqual(
     planFor([change('packages/core-web/src/app-registry.ts')]).checks,
     ['ci:web'],
   );
-  assert.deepEqual(planFor([change('apps/api/src/app.py')]).checks, [
-    'ci:python-contract-guardrails',
-    'check:api-contract',
-    'ci:api:full',
-  ]);
-  assert.deepEqual(planFor([change('apps/api/tests/test_api.py')]).checks, [
-    'ci:python-contract-guardrails',
-    'check:api-contract',
-    'ci:api:full',
-  ]);
   assert.deepEqual(
     planFor([
       change('apps/codex-console-api/src/codex_console/app.py'),
@@ -142,7 +135,7 @@ test('bounded app-local changes select only their affected suites', () => {
 test('mixed focused surfaces run the stable union without unrelated suites', () => {
   const plan = planFor([
     change('docs/apps/web.md'),
-    change('apps/api/src/app.py'),
+    change('packages/ui/src/button.tsx'),
     change('apps/web/src/app.tsx'),
   ]);
   assert.equal(plan.mode, 'fast');
@@ -150,12 +143,10 @@ test('mixed focused surfaces run the stable union without unrelated suites', () 
     'check:skills',
     'test:skill-harness',
     'test:claude-skills',
-    'ci:python-contract-guardrails',
-    'check:api-contract',
-    'ci:api:full',
     'ci:web',
+    'ci:codex-console',
   ]);
-  assert.ok(plan.skipped.includes('ci:codex-console'));
+  assert.ok(plan.skipped.includes('ci:api:full'));
 });
 
 test('binary, symlink, submodule, mode and unsafe path changes fail closed', () => {
