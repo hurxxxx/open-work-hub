@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -34,6 +35,7 @@ from open_work_hub_api.domains.auth.access import (
 from open_work_hub_api.domains.auth.app_bar_preferences import (
     normalize_app_bar_pinned_app_ids,
 )
+from open_work_hub_api.domains.auth.app_access import can_use_app
 from open_work_hub_api.domains.auth.date_format_preferences import (
     default_date_format_value,
     normalize_date_format_payload,
@@ -62,6 +64,9 @@ from open_work_hub_api.domains.auth.security import (
 from open_work_hub_api.domains.groups.schemas import OrganizationUnitSummaryResponse
 
 DESKTOP_SESSION_LINK_TTL_SECONDS = 5 * 60
+CODEX_CONSOLE_SESSION_LINK_TTL_SECONDS = 60
+CODEX_CONSOLE_SESSION_LINK_PREFIX = "cc1_"
+DESKTOP_SESSION_LINK_PREFIX = "ds1_"
 
 
 def _valid_email_required_error() -> PydanticCustomError:
@@ -176,6 +181,11 @@ class DesktopSessionLinkResponse(BaseModel):
 
 class DesktopSessionLinkExchangeRequest(BaseModel):
     code: str = Field(..., min_length=16, max_length=256)
+
+
+class CodexConsoleSessionLinkExchangeResponse(BaseModel):
+    authenticated: Literal[True] = True
+    subject: UUID
 
 
 class SessionListItemResponse(BaseModel):
@@ -703,7 +713,7 @@ def create_desktop_session_link(
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> DesktopSessionLinkResponse:
-    code = secrets.token_urlsafe(32)
+    code = DESKTOP_SESSION_LINK_PREFIX + secrets.token_urlsafe(32)
     now = datetime.now(UTC).replace(tzinfo=None)
     expires_at = now + timedelta(seconds=DESKTOP_SESSION_LINK_TTL_SECONDS)
     link = DesktopSessionLink(
@@ -736,6 +746,11 @@ def exchange_desktop_session_link(
     request: Request,
     db: Session = Depends(get_db_session),
 ) -> AuthSessionResponse:
+    if payload.code.startswith(CODEX_CONSOLE_SESSION_LINK_PREFIX):
+        raise localized_http_exception(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="auth.desktop_session_link_invalid",
+        )
     now = datetime.now(UTC).replace(tzinfo=None)
     link = db.scalar(
         select(DesktopSessionLink)
@@ -782,6 +797,101 @@ def exchange_desktop_session_link(
     )
     db.commit()
     return _issue_auth_response(db, user, request)
+
+
+@router.post("/codex-console-session-links", response_model=DesktopSessionLinkResponse)
+def create_codex_console_session_link(
+    request: Request,
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> DesktopSessionLinkResponse:
+    if not can_use_app(db, user_id=context.user.id, app_id="codex-console"):
+        raise localized_http_exception(status_code=403, code="platform.app_disabled")
+    code = CODEX_CONSOLE_SESSION_LINK_PREFIX + secrets.token_urlsafe(32)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    expires_at = now + timedelta(seconds=CODEX_CONSOLE_SESSION_LINK_TTL_SECONDS)
+    link = DesktopSessionLink(
+        id=new_id(),
+        user_id=context.user.id,
+        source_session_id=context.session.id,
+        code_hash=hash_token(code),
+        created_at=now,
+        expires_at=expires_at,
+        user_agent=_request_user_agent(request),
+        ip_address=_request_ip(request),
+    )
+    db.add(link)
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="auth.codex-console-session-link.create",
+        entity_kind="session",
+        entity_id=link.id,
+        summary=f"Codex Console session link created for {context.user.email}",
+        payload={"expires_at": expires_at.isoformat()},
+    )
+    db.commit()
+    return DesktopSessionLinkResponse(code=code, expires_at=expires_at)
+
+
+@router.post(
+    "/codex-console-session-links/exchange",
+    response_model=CodexConsoleSessionLinkExchangeResponse,
+)
+def exchange_codex_console_session_link(
+    payload: DesktopSessionLinkExchangeRequest,
+    db: Session = Depends(get_db_session),
+) -> CodexConsoleSessionLinkExchangeResponse:
+    now = datetime.now(UTC).replace(tzinfo=None)
+    link = None
+    if payload.code.startswith(CODEX_CONSOLE_SESSION_LINK_PREFIX):
+        link = db.scalar(
+            select(DesktopSessionLink)
+            .where(
+                DesktopSessionLink.code_hash == hash_token(payload.code),
+                DesktopSessionLink.consumed_at.is_(None),
+                DesktopSessionLink.expires_at > now,
+            )
+            .with_for_update()
+        )
+    if link is None:
+        raise localized_http_exception(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="auth.desktop_session_link_invalid",
+        )
+
+    source_session = db.scalar(
+        select(AuthSession).where(
+            AuthSession.id == link.source_session_id,
+            AuthSession.revoked_at.is_(None),
+            AuthSession.expires_at > now,
+        )
+    )
+    user = load_user_graph(db, link.user_id)
+    admitted = bool(
+        source_session
+        and user
+        and can_use_app(db, user_id=link.user_id, app_id="codex-console")
+    )
+    link.consumed_at = now
+    db.add(link)
+    if not admitted:
+        db.commit()
+        raise localized_http_exception(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="auth.desktop_session_link_invalid",
+        )
+
+    record_audit_log(
+        db,
+        actor_user_id=link.user_id,
+        action="auth.codex-console-session-link.exchange",
+        entity_kind="session",
+        entity_id=link.id,
+        summary=f"Codex Console session link exchanged for {user.email}",
+    )
+    db.commit()
+    return CodexConsoleSessionLinkExchangeResponse(subject=UUID(user.id))
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)

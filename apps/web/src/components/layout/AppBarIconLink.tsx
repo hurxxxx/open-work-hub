@@ -64,7 +64,7 @@ export function AppBarIconLink({
       className={appBarRailControlClassName(active, undefined, tone)}
       title={title}
       to={to}
-      {...(appId ? appLaunchLinkProps(appId) : {})}
+      {...(appId ? appLaunchLinkProps(appId, to) : {})}
     >
       <Icon aria-hidden size={22} strokeWidth={2.25} />
       <AppBarRailTooltip title={title} />

@@ -51,6 +51,10 @@ export const authRoutes = {
   desktopSessionLinks: () => `${AUTH_API_PREFIX}/desktop-session-links`,
   desktopSessionLinkExchange: () =>
     `${AUTH_API_PREFIX}/desktop-session-links/exchange`,
+  codexConsoleSessionLinks: () =>
+    `${AUTH_API_PREFIX}/codex-console-session-links`,
+  codexConsoleSessionLinkExchange: () =>
+    `${AUTH_API_PREFIX}/codex-console-session-links/exchange`,
   preferences: () => `${AUTH_API_PREFIX}/preferences`,
   changePassword: () => `${AUTH_API_PREFIX}/change-password`,
   sessions: () => `${AUTH_API_PREFIX}/sessions`,

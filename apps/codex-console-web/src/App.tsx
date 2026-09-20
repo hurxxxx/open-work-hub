@@ -19,6 +19,7 @@ import {
   api,
   apiBasePath,
   ApiError,
+  consumeOwhSessionHandoff,
   locked,
   record,
   uploadAttachment,
@@ -134,6 +135,7 @@ export function App() {
   const [device, setDevice] = useState<DeviceLogin | null>(null);
   const [usageOpen, setUsageOpen] = useState(false);
   const requestKeys = useRef(new Map<string, string>());
+  const sessionInitialization = useRef<Promise<void> | null>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
@@ -158,6 +160,24 @@ export function App() {
       onError(error);
     }
   }, [onError]);
+  const initializeSession = useCallback(async () => {
+    const handoff = consumeOwhSessionHandoff();
+    if (!handoff) {
+      await checkSession();
+      return;
+    }
+    setSessionFailed(false);
+    setError(null);
+    try {
+      const value = await api<{ authenticated: boolean }>(
+        '/session/owh',
+        handoff,
+      );
+      setAuthenticated(value.authenticated);
+    } catch {
+      await checkSession();
+    }
+  }, [checkSession]);
   const refreshTasks = useCallback(async () => {
     const query = searchRef.current.trim();
     const rows = await api<Task[]>(
@@ -365,8 +385,9 @@ export function App() {
     return () => media.removeEventListener('change', update);
   }, []);
   useEffect(() => {
-    void checkSession();
-  }, [checkSession]);
+    sessionInitialization.current ??= initializeSession();
+    void sessionInitialization.current;
+  }, [initializeSession]);
   useEffect(() => {
     if (!authenticated) return;
     void refreshAccount().catch(onError);

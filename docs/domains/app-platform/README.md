@@ -152,7 +152,12 @@ normal company, role and audience admission, and exposes it as `launch_url`. Unc
 remain unavailable through their feature predicate. Browser launcher, desktop personal tools and
 mobile navigation open these destinations with `target="_blank"` and `rel="noopener noreferrer"`.
 The registered `/apps/:appId` entry remains an admitted fallback with an explicit open link.
-No application token is forwarded. The destination owns its own authentication and resource access.
+No application token is forwarded. Codex Console is the narrow exception: after normal app admission,
+OWH issues a 60-second, purpose-bound code in the new window's URL fragment. The console removes the
+fragment, exchanges the code once from its server, and creates its own session. OWH rechecks the source
+session and current app admission during exchange. The exchange returns only the stable OWH user UUID;
+the console creates a session only when it matches the owner UUID configured for that exact issuer.
+Other destinations own their authentication and resource access.
 Codex Console installation and its independent subscription runtime are owned by
 [Codex Console](../../apps/codex-console/README.md).
 
