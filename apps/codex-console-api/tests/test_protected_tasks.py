@@ -242,3 +242,37 @@ def test_protected_paths_resolve_aliases_and_missing_descendants(settings, repos
     with pytest.raises(ConsoleError, match="path_denied"):
         settings.require_allowed_paths(alias / "missing")
     settings.require_allowed_paths(repository)
+
+
+def test_protected_prospective_worktree_is_checked_before_git_add(client, repository):
+    from codex_console.models import Operation
+
+    task = new_task(client)
+    settings = client.app.state.settings
+    target = settings.worktree_root / f"codex-{task['id']}"
+    # The configured storage parent remains allowed; only this child is protected.
+    current = Settings(
+        **{**settings.model_dump(), "protected_workspaces": [target]}, _env_file=None
+    )
+    client.app.state.settings = client.app.state.runtime.settings = current
+    (repository / "dirty.txt").write_text("preserve")
+    before = subprocess.check_output(
+        ["git", "-C", str(repository), "worktree", "list", "--porcelain"]
+    )
+    response = submit(client, task)
+    assert response.status_code == 403 and response.json()["code"] == "path_denied"
+    assert not target.exists()
+    assert (
+        subprocess.check_output(["git", "-C", str(repository), "worktree", "list", "--porcelain"])
+        == before
+    )
+    assert (repository / "dirty.txt").read_text() == "preserve"
+    assert not any(
+        method in ("thread/start", "turn/start") for method, _ in client.app.state.runtime.rpc.calls
+    )
+    with client.app.state.factory() as db:
+        row = db.get(Task, task["id"])
+        assert row.status == "failed" and row.root == str(repository)
+        assert db.get(Operation, row.current_operation_id).state == "failed"
+    # Blocking one target does not prevent another allowed task from taking the lease.
+    assert submit(client, new_task(client)).status_code == 200

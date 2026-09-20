@@ -209,7 +209,13 @@ def remove_missing_worktree(workspace: Path, target: Path) -> None:
 
 
 def prepare_workspace(
-    workspace: Path, task_id: str, previous: str | None, *, base_ref: str, worktree_root: Path
+    workspace: Path,
+    task_id: str,
+    previous: str | None,
+    *,
+    base_ref: str,
+    worktree_root: Path,
+    validate_target=None,
 ) -> tuple[Path, bool]:
     if previous is not None:
         if fingerprint(workspace) != previous:
@@ -218,6 +224,8 @@ def prepare_workspace(
     if not git(workspace, "status", "--porcelain=v1", "--untracked-files=all").strip():
         return workspace, False
     target = worktree_root / f"codex-{task_id}"
+    if validate_target is not None:
+        validate_target(target)
     if target.exists():
         raise ConsoleError("worktree_exists")
     base = git(workspace, "rev-parse", "--verify", "--end-of-options", f"{base_ref}^{{commit}}")

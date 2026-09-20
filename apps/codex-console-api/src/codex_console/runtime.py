@@ -380,6 +380,7 @@ class Runtime:
                             previous,
                             base_ref=self.settings.worktree_base_ref,
                             worktree_root=self.settings.worktree_root,
+                            validate_target=self.settings.require_allowed_paths,
                         )
                         with self.factory.begin() as db:
                             task = store.require_task(db, task_id, locked=True)
