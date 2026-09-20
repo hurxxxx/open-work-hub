@@ -688,3 +688,34 @@ def test_proxy_base_path_scopes_cookies_and_api_cache_headers(client):
     assert all(
         "Path=/codex-console" in cookie for cookie in response.headers.get_list("set-cookie")
     )
+
+
+def test_previous_execution_migration_preserves_existing_tasks_and_documents(client):
+    from codex_console.cli import ROOT
+
+    task = complete(client, send_message(client, new_task(client)).json())
+    spec = spec_from_file_location(
+        "previous_execution", ROOT / "migrations/versions/0006_previous_execution.py"
+    )
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = client.app.state.factory.kw["bind"]
+    with engine.connect() as connection, connection.begin() as transaction:
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.downgrade()
+            migration.upgrade()
+        row = connection.execute(
+            text(
+                "SELECT permissions, previous_permissions, previous_execution_root "
+                "FROM console_tasks WHERE id = :id"
+            ),
+            {"id": task["id"]},
+        ).one()
+        assert row == ("read-only", None, None)
+        assert (
+            connection.scalar(
+                text("SELECT body FROM console_revisions WHERE task_id = :id"), {"id": task["id"]}
+            )
+            == task["revisions"][0]["body"]
+        )
+        transaction.rollback()

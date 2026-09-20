@@ -499,3 +499,220 @@ def test_prepare_submission_discards_read_results_after_completion_or_new_reques
     if new_request:
         assert saved["turn_id"] != task["turn_id"]
     assert sum(method == "turn/start" for method, _ in rpc.calls) == (2 if new_request else 1)
+
+
+@pytest.mark.parametrize(
+    "before,permissions,after,requested",
+    [
+        ("implement", "ask", "plan", "ask"),
+        ("implement", "yolo", "plan", "yolo"),
+        ("plan", "ask", "implement", "ask"),
+        ("plan", "ask", "implement", "yolo"),
+        ("implement", "ask", "implement", "yolo"),
+        ("implement", "yolo", "implement", "ask"),
+        ("implement", "ask", "implement", "ask"),
+        ("implement", "yolo", "implement", "yolo"),
+    ],
+)
+def test_active_recovery_cannot_change_mode_or_permissions(
+    client, before, permissions, after, requested
+):
+    task = new_task(client)
+    endpoint = f"/api/tasks/{task['id']}"
+    started = client.post(
+        endpoint + ("/messages" if before == "plan" else "/implement"),
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Inspect the code",
+            "permissions": permissions,
+        },
+    )
+    assert started.status_code == 200
+    task = started.json()
+    runtime = client.app.state.runtime
+    client.portal.call(runtime.on_disconnect)
+    runtime.rpc.threads[task["thread_id"]].update(
+        status={"type": "active"},
+        turns=[
+            {
+                "id": task["turn_id"],
+                "status": "inProgress",
+                "items": [],
+            }
+        ],
+    )
+    response = client.post(
+        endpoint + ("/messages" if after == "plan" else "/implement"),
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Check one more thing",
+            "permissions": requested,
+        },
+    )
+    matches = before == after and permissions == requested
+    assert response.status_code == (200 if matches else 409)
+    if not matches:
+        assert response.json()["code"] == "turn_settings_mismatch"
+    assert sum(method == "turn/steer" for method, _ in runtime.rpc.calls) == int(matches)
+    saved = client.get(endpoint).json()
+    assert saved["status"] == ("running" if matches else "uncertain")
+    assert saved["stage"] == before
+    assert saved["permissions"] == (permissions if before == "implement" else "read-only")
+
+
+@pytest.mark.parametrize("permissions", ["ask", "yolo"])
+@pytest.mark.parametrize("target", ["plan", "implement"])
+def test_failed_permission_transition_recovers_previous_native_sandbox(client, permissions, target):
+    from codex_console import store
+    from codex_console.models import Task
+
+    task = new_task(client)
+    endpoint = f"/api/tasks/{task['id']}"
+    task = client.post(
+        endpoint + "/implement",
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Inspect the code",
+            "permissions": permissions,
+        },
+    ).json()
+    complete(client, task)
+    rpc = client.app.state.runtime.rpc
+    previous_policy = rpc.policies[task["thread_id"]].copy()
+    rpc.fail_turn = True
+    next_permissions = "yolo" if permissions == "ask" else "ask"
+    path = endpoint + ("/messages" if target == "plan" else "/implement")
+    response = client.post(
+        path,
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Review the next step",
+            "permissions": next_permissions,
+        },
+    )
+    assert response.status_code == 503
+    with client.app.state.factory() as db:
+        row = db.get(Task, task["id"])
+        assert row.previous_permissions == permissions
+        assert row.previous_execution_root == task["root"]
+    assert rpc.policies[task["thread_id"]] == previous_policy
+    store.recover_startup(client.app.state.factory)
+    rpc.fail_turn = False
+    recovered = client.post(endpoint + "/recover", json={"confirm_workspace": True})
+    assert recovered.status_code == 200
+    assert recovered.json()["permissions"] == permissions
+    retry = client.post(
+        path,
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Review the next step",
+            "permissions": next_permissions,
+        },
+    )
+    assert retry.status_code == 200
+    assert retry.json()["permissions"] == ("read-only" if target == "plan" else next_permissions)
+    with client.app.state.factory() as db:
+        row = db.get(Task, task["id"])
+        assert row.previous_permissions is None and row.previous_execution_root is None
+
+
+@pytest.mark.parametrize("target", ["plan", "implement"])
+@pytest.mark.parametrize("foreign_cwd", [False, True])
+def test_uncertain_workspace_transition_accepts_only_recorded_previous_cwd(
+    client, repository, target, foreign_cwd
+):
+    from codex_console.models import Task
+
+    task = plan(client)
+    (repository / "unrelated.txt").write_text("preserve this file")
+    endpoint = f"/api/tasks/{task['id']}"
+    rpc = client.app.state.runtime.rpc
+    rpc.fail_turn = True
+    failed = client.post(
+        endpoint + "/implement",
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Make the requested change",
+        },
+    )
+    assert failed.status_code == 503
+    with client.app.state.factory() as db:
+        row = db.get(Task, task["id"])
+        assert row.worktree_owned and row.root != str(repository)
+        assert row.last_execution_root == row.root
+        assert row.previous_execution_root == str(repository)
+    assert rpc.threads[task["thread_id"]]["cwd"] == str(repository)
+    if foreign_cwd:
+        rpc.threads[task["thread_id"]]["cwd"] = str(repository.parent / "unverified")
+    rpc.fail_turn = False
+    response = client.post(
+        endpoint + ("/messages" if target == "plan" else "/implement"),
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Continue after the failed transition",
+        },
+    )
+    assert response.status_code == (409 if foreign_cwd else 200)
+    if foreign_cwd:
+        assert response.json()["code"] == "thread_unavailable"
+    else:
+        assert response.json()["stage"] == target
+        assert response.json()["thread_id"] == task["thread_id"]
+    assert sum(method == "turn/start" for method, _ in rpc.calls) == (2 if foreign_cwd else 3)
+    assert (repository / "unrelated.txt").read_text() == "preserve this file"
+
+
+@pytest.mark.parametrize(
+    "requested_settings,matches",
+    [
+        ({}, True),
+        ({"model": "account-default", "effort": "high"}, True),
+        ({"model": "another-model"}, False),
+        ({"effort": "low"}, False),
+    ],
+)
+@pytest.mark.parametrize("mode", ["plan", "implement"])
+def test_active_recovery_preserves_omitted_settings_and_rejects_explicit_changes(
+    client, requested_settings, matches, mode
+):
+    task = new_task(client)
+    endpoint = f"/api/tasks/{task['id']}"
+    path = endpoint + ("/messages" if mode == "plan" else "/implement")
+    started = client.post(
+        path,
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Inspect the code",
+            "model": "account-default",
+            "effort": "high",
+        },
+    )
+    assert started.status_code == 200
+    task = started.json()
+    runtime = client.app.state.runtime
+    client.portal.call(runtime.on_disconnect)
+    runtime.rpc.threads[task["thread_id"]].update(
+        status={"type": "active"},
+        turns=[
+            {
+                "id": task["turn_id"],
+                "status": "inProgress",
+                "items": [],
+            }
+        ],
+    )
+    response = client.post(
+        path,
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Check the result",
+            **requested_settings,
+        },
+    )
+    assert response.status_code == (200 if matches else 409)
+    if not matches:
+        assert response.json()["code"] == "turn_settings_mismatch"
+    assert sum(method == "turn/steer" for method, _ in runtime.rpc.calls) == int(matches)
+    saved = client.get(endpoint).json()
+    assert saved["model"] == "account-default" and saved["effort"] == "high"
+    assert saved["status"] == ("running" if matches else "uncertain")

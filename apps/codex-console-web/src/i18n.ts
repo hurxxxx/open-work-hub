@@ -1,4 +1,6 @@
 export const korean = {
+  'Finish or stop the current turn before changing its mode, model, reasoning effort, or permissions.':
+    '모드·모델·추론 강도·권한을 바꾸려면 현재 실행이 끝날 때까지 기다리거나 중단한 뒤 전송하세요.',
   'Planning is read-only. Documents are updated only when requested or when agreed changes affect an existing document.':
     '계획 모드는 읽기 전용입니다. 문서는 작성을 요청하거나 기존 문서에 반영할 사항이 확정되면 갱신합니다.',
   Branch: '브랜치',
@@ -302,6 +304,8 @@ const errors: Record<string, Copy> = {
     'The document changed in another tab. Reload the latest version.',
   workspace_busy: 'Another task is running. Finish or recover it first.',
   task_busy: 'This task is already running or needs recovery.',
+  turn_settings_mismatch:
+    'Finish or stop the current turn before changing its mode, model, reasoning effort, or permissions.',
   request_expired: 'This request has already been resolved or expired.',
   workspace_changed:
     'The repository changed outside this task. Review it before continuing.',

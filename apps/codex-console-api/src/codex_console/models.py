@@ -54,6 +54,8 @@ class Task(Base):
     status: Mapped[str] = mapped_column(String(24), default="idle")
     root: Mapped[str] = mapped_column(Text)
     last_execution_root: Mapped[str | None] = mapped_column(Text)
+    previous_execution_root: Mapped[str | None] = mapped_column(Text)
+    previous_permissions: Mapped[str | None] = mapped_column(String(24))
     worktree_owned: Mapped[bool] = mapped_column(default=False)
     fingerprint: Mapped[str | None] = mapped_column(String(64))
     model: Mapped[str | None] = mapped_column(String(200))

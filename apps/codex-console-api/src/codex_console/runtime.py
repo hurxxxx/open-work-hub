@@ -145,6 +145,9 @@ class Runtime:
             task = store.require_task(db, task_id)
             thread_id, root, prior_permissions = task.thread_id, task.root, task.permissions
             prior_root = task.last_execution_root or root
+            granted = [(prior_permissions, prior_root)]
+            if task.previous_permissions and task.previous_execution_root:
+                granted.append((task.previous_permissions, task.previous_execution_root))
         config = await self.configuration(rpc, root)
         await asyncio.to_thread(attachments.prepare, self.factory, self.settings, task_id)
         params = {
@@ -161,12 +164,13 @@ class Runtime:
         if result.get("modelProvider") != "openai":
             raise ConsoleError("subscription_provider_required")
         policy = result.get("sandbox") or {}
+        if result.get("cwd") not in {root, *(path for _, path in granted)}:
+            raise ConsoleError("thread_unavailable")
         # 0.154.0 resumes loaded threads with their previous effective settings.
         # Only accept a policy this console previously granted; turn/start below
         # always supplies the new mode's complete sandbox, approval policy and cwd.
-        prior_write = (
-            thread_id
-            and prior_permissions == "ask"
+        prior_write = thread_id and any(
+            permissions == "ask"
             and policy.get("type") == "workspaceWrite"
             # Codex can omit cwd from additional writableRoots in its response.
             and policy.get("writableRoots") in ([], [prior_root])
@@ -174,9 +178,15 @@ class Runtime:
             and policy.get("networkAccess") is False
             and policy.get("excludeSlashTmp") is True
             and policy.get("excludeTmpdirEnvVar") is True
+            for permissions, prior_root in granted
         )
         prior_yolo = (
-            thread_id and prior_permissions == "yolo" and policy.get("type") == "dangerFullAccess"
+            thread_id
+            and policy.get("type") == "dangerFullAccess"
+            and any(
+                permissions == "yolo" and result.get("cwd") == prior_root
+                for permissions, prior_root in granted
+            )
         )
         if policy.get("type") != "readOnly" and not (prior_write or prior_yolo):
             raise ConsoleError("sandbox_policy_mismatch")
@@ -362,6 +372,12 @@ class Runtime:
                 with self.factory.begin() as db:
                     task = store.require_task(db, task_id, locked=True)
                     task.model, task.effort = chosen_model, effort
+                    task.previous_execution_root = result["cwd"]
+                    task.previous_permissions = {
+                        "readOnly": "read-only",
+                        "workspaceWrite": "ask",
+                        "dangerFullAccess": "yolo",
+                    }[result["sandbox"]["type"]]
                     task.last_execution_root = root
                     task.permissions = permissions if stage == "implement" else "read-only"
                     task.runtime_generation = rpc.generation
@@ -371,6 +387,7 @@ class Runtime:
                 with self.factory.begin() as db:
                     task = store.require_task(db, task_id, locked=True)
                     task.turn_id, task.status = response["turn"]["id"], "running"
+                    task.previous_permissions = task.previous_execution_root = None
                     db.get(Operation, operation_id).state = "accepted"
                     store.changed(db, task, "turn.accepted")
             except Exception as exc:
@@ -388,7 +405,7 @@ class Runtime:
                     raise
                 raise ConsoleError("execution_failed", 503) from None
 
-    async def steer(self, task_id, operation_id, text, attachment_ids=()):
+    async def steer(self, task_id, operation_id, text, attachment_ids=(), *, expected_turn_id=None):
         async with self.gate:
             rpc = await self.authenticated_rpc()
             key = str(operation_id)
@@ -396,6 +413,8 @@ class Runtime:
             request_digest = digest(json.dumps([task_id, text, "steer", attachment_ids]))
             with self.factory.begin() as db:
                 task = store.require_task(db, task_id, locked=True)
+                if expected_turn_id is not None and task.turn_id != expected_turn_id:
+                    raise ConsoleError("turn_not_active")
                 existing = db.get(Operation, key)
                 if existing:
                     if existing.task_id != task_id or existing.digest != request_digest:
@@ -499,17 +518,24 @@ class Runtime:
             task.updated_at,
             task.status,
             task.stage,
+            task.model,
+            task.effort,
+            task.permissions,
             task.thread_id,
             task.turn_id,
             task.current_operation_id,
             operation.state if operation else None,
             task.root,
             task.last_execution_root,
+            task.previous_permissions,
+            task.previous_execution_root,
             task.worktree_owned,
             task.runtime_generation,
         )
 
-    async def prepare_submission(self, task_id):
+    async def prepare_submission(
+        self, task_id, *, stage="plan", permissions="ask", model=None, effort=None
+    ):
         """Reconcile uncertain delivery before accepting a new, explicit user message."""
         with self.factory() as db:
             task = store.require_task(db, task_id)
@@ -518,12 +544,15 @@ class Runtime:
             if not uncertain and not missing:
                 return False
             expected = self.submission_state(db, task)
-            thread_id, prior_root = task.thread_id, task.last_execution_root or task.root
+            thread_id = task.thread_id
+            prior_roots = {task.last_execution_root or task.root}
+            if task.previous_execution_root:
+                prior_roots.add(task.previous_execution_root)
         rpc = await self.authenticated_rpc()
         if thread_id:
             result = await rpc.call("thread/read", {"threadId": thread_id, "includeTurns": True})
             thread = result["thread"]
-            if thread.get("id") != thread_id or thread.get("cwd") != prior_root:
+            if thread.get("id") != thread_id or thread.get("cwd") not in prior_roots:
                 raise ConsoleError("thread_unavailable")
             if (thread.get("status") or {}).get("type") == "active":
                 turns = [
@@ -536,9 +565,17 @@ class Runtime:
                         task = store.require_task(db, task_id, locked=True)
                         if self.submission_state(db, task) != expected or self.rpc is not rpc:
                             raise ConsoleError("task_busy")
+                        effective_permissions = permissions if stage == "implement" else "read-only"
+                        if (
+                            task.stage != stage
+                            or task.permissions != effective_permissions
+                            or (model is not None and model != task.model)
+                            or (effort is not None and effort != task.effort)
+                        ):
+                            raise ConsoleError("turn_settings_mismatch")
                         operation = db.get(Operation, task.current_operation_id)
                         turn = turns[0]
-                        verified = task.turn_id == turn["id"] or any(
+                        verified = bool(task.turn_id and task.turn_id == turn["id"]) or any(
                             item.get("type") == "userMessage"
                             and item.get("clientId") == task.current_operation_id
                             for item in turn.get("items", [])
@@ -546,12 +583,13 @@ class Runtime:
                         if not operation or operation.task_id != task.id or not verified:
                             raise ConsoleError("turn_not_finished")
                         operation.state = "accepted"
+                        task.previous_permissions = task.previous_execution_root = None
                         task.turn_id = turn["id"]
                         task.status = "running"
                         task.runtime_generation = rpc.generation
                         task.error_code = None
                         store.changed(db, task, "thread.reconnected")
-                return True
+                return turn["id"]
         await self.recover(
             task_id, confirm_workspace=True, expected_submission=expected, reset_missing=missing
         )
@@ -618,6 +656,13 @@ class Runtime:
                 task = store.require_task(db, task_id, locked=True)
                 store.recover_document(db, task, thread.get("turns", []))
                 task.status, task.error_code, task.turn_id = "interrupted", None, None
+                task.permissions = {
+                    "readOnly": "read-only",
+                    "workspaceWrite": "ask",
+                    "dangerFullAccess": "yolo",
+                }[result["sandbox"]["type"]]
+                task.last_execution_root = result["cwd"]
+                task.previous_permissions = task.previous_execution_root = None
                 if implementation:
                     task.fingerprint, task.stage = baseline, "review"
                 store.invalidate_pending(db, task_id)
