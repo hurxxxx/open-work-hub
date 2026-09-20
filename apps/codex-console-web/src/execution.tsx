@@ -1,6 +1,12 @@
 import { Button } from '@open-work-hub/ui';
-import { Check, Circle, ListTodo, LoaderCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  Check,
+  ChevronDown,
+  Circle,
+  ListTodo,
+  LoaderCircle,
+} from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { active, record, string, type Detail, type Model } from './api';
 import { statusCopy, type Translate } from './i18n';
 
@@ -59,84 +65,120 @@ export function ExecutionSettings({
 }) {
   const model = models.find((row) => row.model === value.model);
   const [expanded, setExpanded] = useState(false);
+  const controlsId = useId();
+  const root = useRef<HTMLFieldSetElement>(null);
   useEffect(() => {
     if (disabled) setExpanded(false);
   }, [disabled]);
+  useEffect(() => {
+    if (!expanded) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setExpanded(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [expanded]);
   return (
-    <fieldset className="execution-settings" disabled={disabled}>
-      <legend>{t('Next execution')}</legend>
-      <div className="execution-settings-summary">
-        <span>
-          {t('Model and reasoning')}
-          <strong>
-            {model?.name ?? value.model ?? t('Loading model catalog…')}
-            {value.effort ? ` · ${value.effort}` : ''}
-          </strong>
-        </span>
+    <fieldset className="execution-settings" disabled={disabled} ref={root}>
+      <legend className="sr-only">{t('Next execution')}</legend>
+      <div className="execution-model-picker">
         <Button
+          className="execution-settings-trigger"
           variant="ghost"
           aria-expanded={expanded}
+          aria-controls={controlsId}
+          aria-label={t(expanded ? 'Hide settings' : 'Change settings')}
           disabled={disabled}
           onClick={() => setExpanded((current) => !current)}
         >
-          {t(expanded ? 'Hide settings' : 'Change settings')}
+          <span>
+            {model?.name ?? value.model ?? t('Loading model catalog…')}
+            {value.effort ? ` · ${value.effort}` : ''}
+          </span>
+          <ChevronDown size={14} aria-hidden="true" />
         </Button>
+        {expanded && (
+          <div
+            className="execution-settings-popover"
+            id={controlsId}
+          >
+            <div className="execution-settings-popover-heading">
+              <strong>{t('Model and reasoning')}</strong>
+              <small>{t('Next execution')}</small>
+            </div>
+            <div className="execution-model-controls">
+              <label>
+                {t('Model')}
+                <select
+                  value={value.model ?? ''}
+                  disabled={!models.length}
+                  onChange={(event) => {
+                    const next = models.find(
+                      (row) => row.model === event.target.value,
+                    );
+                    onChange({
+                      ...value,
+                      model: next?.model ?? null,
+                      effort: next ? effortFor(next) : null,
+                    });
+                  }}
+                >
+                  {!models.length && (
+                    <option value="">{t('Loading model catalog…')}</option>
+                  )}
+                  {value.model && !model && (
+                    <option value={value.model}>{value.model}</option>
+                  )}
+                  {models.map((row) => (
+                    <option key={row.model} value={row.model}>
+                      {row.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t('Reasoning effort')}
+                <select
+                  value={value.effort ?? ''}
+                  disabled={!model}
+                  onChange={(event) =>
+                    onChange({ ...value, effort: event.target.value || null })
+                  }
+                >
+                  {value.effort && !model?.efforts.includes(value.effort) && (
+                    <option value={value.effort}>{value.effort}</option>
+                  )}
+                  {model?.efforts.map((effort) => (
+                    <option key={effort} value={effort}>
+                      {effort}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {failed && (
+              <Button
+                className="execution-model-retry"
+                variant="ghost"
+                onClick={onRetry}
+              >
+                {t('Reload models')}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
-      {expanded && (
-        <div className="execution-model-controls">
-          <label>
-            {t('Model')}
-            <select
-              value={value.model ?? ''}
-              disabled={!models.length}
-              onChange={(event) => {
-                const next = models.find(
-                  (row) => row.model === event.target.value,
-                );
-                onChange({
-                  ...value,
-                  model: next?.model ?? null,
-                  effort: next ? effortFor(next) : null,
-                });
-              }}
-            >
-              {!models.length && (
-                <option value="">{t('Loading model catalog…')}</option>
-              )}
-              {value.model && !model && (
-                <option value={value.model}>{value.model}</option>
-              )}
-              {models.map((row) => (
-                <option key={row.model} value={row.model}>
-                  {row.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t('Reasoning effort')}
-            <select
-              value={value.effort ?? ''}
-              disabled={!model}
-              onChange={(event) =>
-                onChange({ ...value, effort: event.target.value || null })
-              }
-            >
-              {value.effort && !model?.efforts.includes(value.effort) && (
-                <option value={value.effort}>{value.effort}</option>
-              )}
-              {model?.efforts.map((effort) => (
-                <option key={effort} value={effort}>
-                  {effort}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      )}
       <label className="execution-permissions">
-        {t('Permissions')}
+        <span className="sr-only">{t('Permissions')}</span>
         <select
+          aria-label={t('Permissions')}
           value={implementation ? value.permissions : 'read-only'}
           disabled={!implementation}
           onChange={(event) =>
@@ -153,15 +195,6 @@ export function ExecutionSettings({
           <option value="yolo">{t('YOLO · Full access')}</option>
         </select>
       </label>
-      {failed && (
-        <Button
-          className="execution-model-retry"
-          variant="ghost"
-          onClick={onRetry}
-        >
-          {t('Reload models')}
-        </Button>
-      )}
     </fieldset>
   );
 }

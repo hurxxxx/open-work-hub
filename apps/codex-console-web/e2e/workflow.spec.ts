@@ -181,6 +181,26 @@ test('late status, guidance, and recovery surfaces do not reflow the workspace',
   await page.getByLabel('작업 제목').fill('레이아웃 안정성 확인');
   await page.getByRole('button', { name: '작업 만들기' }).click();
 
+  const closedSettings = await layout();
+  const promptBefore = await box('.composer textarea');
+  const toolbarBefore = await box('.composer-toolbar');
+  await page.getByRole('button', { name: '설정 변경' }).click();
+  await expect(page.locator('.execution-settings-popover')).toBeVisible();
+  expectStable(closedSettings, await layout());
+  const promptAfter = await box('.composer textarea');
+  const toolbarAfter = await box('.composer-toolbar');
+  expect(Math.abs(promptAfter.y - promptBefore.y)).toBeLessThan(1);
+  expect(Math.abs(promptAfter.height - promptBefore.height)).toBeLessThan(1);
+  expect(Math.abs(toolbarAfter.y - toolbarBefore.y)).toBeLessThan(1);
+  expect(Math.abs(toolbarAfter.height - toolbarBefore.height)).toBeLessThan(1);
+  expect(
+    await page
+      .locator('.composer')
+      .evaluate((element) => getComputedStyle(element).overflowY),
+  ).toBe('visible');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.execution-settings-popover')).toBeHidden();
+
   const idle = await layout();
   await page.getByLabel('요청 내용 입력').fill('Explain the workspace.');
   await page.getByRole('button', { name: '보내기', exact: true }).click();

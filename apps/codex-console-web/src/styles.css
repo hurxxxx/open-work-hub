@@ -82,9 +82,10 @@ textarea {color: inherit; background: transparent; resize: vertical; border: 0; 
 .conversation-empty {display: grid; justify-items: start; align-content: center; min-height: 300px; gap: 16px; color: var(--ui-color-ink-subtle);}
 .conversation-empty h2 {color: var(--ui-color-ink); margin: 0;}
 .conversation-empty p {line-height: 1.9; max-width: 340px;}
-.composer {height: 280px; flex: 0 0 280px; margin: 0 18px 18px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; border: 1px solid var(--ui-color-border-strong); border-radius: 10px; background: var(--ui-color-surface);}
-.composer textarea {min-height: 88px; max-height: 250px; font-size: 13px; resize: vertical;}
-.composer-toolbar {display: flex; justify-content: space-between; align-items: center; padding: 4px 10px 10px; gap: 6px;}
+.composer {position: relative; height: 280px; flex: 0 0 280px; margin: 0 18px 18px; overflow: visible; border: 1px solid var(--ui-color-border-strong); border-radius: 10px; background: var(--ui-color-surface); display: flex; flex-direction: column;}
+.composer textarea {min-height: 88px; max-height: none; flex: 1 1 auto; font-size: 13px; resize: none; overflow-y: auto;}
+.composer-toolbar {display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; padding: 4px 10px 10px; gap: 8px;}
+.composer-controls {display: flex; align-items: center; gap: 6px; min-width: 0;}
 .composer-toolbar select {font-size: 11px; background: var(--ui-color-surface-subtle); border: 0;}
 .composer-toolbar .muted {font-size: 10px;}
 .results {grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--ui-color-surface);}
@@ -208,17 +209,21 @@ textarea {color: inherit; background: transparent; resize: vertical; border: 0; 
 .upload-status > span {overflow-wrap: anywhere; min-width: 0; flex: 1;}
 .upload-status progress {max-width: 70px;}
 
-.execution-settings {margin: 0; padding: 8px 12px; border: 0; border-top: 1px solid var(--ui-color-border); display: flex; flex-wrap: wrap; gap: 8px; min-width: 0;}
-.execution-settings legend {font-size: 10px; color: var(--ui-color-ink-subtle); padding: 0 4px;}
-.execution-settings label, .mode-selector {display: grid; gap: 3px; font-size: 10px; min-width: 0;}
-.execution-settings select {font-size: 11px; max-width: 190px;}
-.execution-settings-summary {display: flex; align-items: center; gap: 8px; flex: 1 1 280px; min-width: 0;}
-.execution-settings-summary > span {display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--ui-color-ink-subtle); font-size: 10px;}
-.execution-settings-summary strong {min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-color-ink); font-size: 11px; font-weight: 600;}
-.execution-settings-summary button {margin-left: auto; flex-shrink: 0;}
-.execution-model-controls {display: flex; align-items: end; flex-wrap: wrap; gap: 8px; width: 100%; padding-top: 2px;}
-.execution-permissions {flex-shrink: 0;}
-.execution-model-retry {flex-shrink: 0;}
+.execution-settings {margin: 0; padding: 0; border: 0; display: flex; align-items: center; gap: 6px; min-width: 0;}
+.execution-model-picker {position: relative; min-width: 0;}
+.execution-settings-trigger {max-width: 260px; min-width: 0; gap: 5px; white-space: nowrap; background: var(--ui-color-surface-subtle);}
+.execution-settings-trigger > span:first-child {overflow: hidden; text-overflow: ellipsis;}
+.execution-settings-trigger > svg {flex-shrink: 0; color: var(--ui-color-ink-subtle);}
+.execution-settings-popover {position: absolute; z-index: var(--ui-z-popover, 90); bottom: calc(100% + 10px); left: 0; width: min(320px, calc(100vw - 48px)); padding: 12px; border: 1px solid var(--ui-color-border-strong); border-radius: 10px; background: var(--ui-color-surface-raised); box-shadow: var(--ui-shadow-lg);}
+.execution-settings-popover-heading {display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px;}
+.execution-settings-popover-heading strong {font-size: 12px;}
+.execution-settings-popover-heading small {font-size: 10px; white-space: nowrap;}
+.execution-model-controls {display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(100px, .75fr); gap: 8px;}
+.execution-model-controls label {display: grid; gap: 5px; min-width: 0; color: var(--ui-color-ink-subtle); font-size: 10px;}
+.execution-model-controls select {width: 100%; min-width: 0; color: var(--ui-color-ink); font-size: 11px;}
+.execution-permissions {display: block; flex-shrink: 0; min-width: 0;}
+.execution-permissions select {max-width: 150px;}
+.execution-model-retry {margin-top: 8px;}
 .execution-status {position: relative; z-index: 2; padding: 10px 20px 8px; border-bottom: 1px solid var(--ui-color-border); background: var(--ui-color-surface-subtle); flex-shrink: 0;}
 .execution-status-heading {display: flex; flex-wrap: nowrap; gap: 6px 12px; overflow-x: auto; scrollbar-width: none; white-space: nowrap; font-size: 11px; align-items: center;}
 .execution-status-heading::-webkit-scrollbar {display: none;}
@@ -240,6 +245,16 @@ textarea {color: inherit; background: transparent; resize: vertical; border: 0; 
 .execution-progress summary .current-command {margin-left: auto; color: var(--ui-color-ink-subtle);}
 .execution-activity-placeholder {display: block; height: 1em;}
 .confirmation-request {white-space: pre-wrap; max-height: 30vh; overflow: auto;}
-@media (max-width: 640px) {.execution-status {padding: 8px 16px 6px;} .execution-settings {gap: 6px;} .execution-settings select {max-width: 160px;}}
+@media (max-width: 640px) {
+  .execution-status {padding: 8px 16px 6px;}
+  .composer-toolbar {gap: 5px; padding-inline: 8px;}
+  .composer-controls {gap: 4px; flex: 1;}
+  .execution-settings {gap: 4px; min-width: 0;}
+  .execution-settings-trigger {max-width: 128px; padding-inline: 8px;}
+  .execution-permissions select {max-width: 92px;}
+  .execution-settings-popover {position: fixed; right: 16px; bottom: 108px; left: 16px; width: auto;}
+  .composer-toolbar .actions {flex-wrap: nowrap;}
+  .composer-toolbar .actions button[type='submit'] {font-size: 0; gap: 0;}
+}
 
 .workspace-path {overflow-wrap: anywhere; font-size: 12px;}
