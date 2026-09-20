@@ -288,6 +288,7 @@ test('execution controls stay separated on a narrow desktop workspace', async ({
   await page.getByRole('button', { name: '보내기', exact: true }).click();
   await expect(page.getByRole('button', { name: '중단' })).toBeVisible();
   await expectSeparated();
+  await expect(page.getByLabel('현재 실행 상태')).toContainText('준비됨');
 });
 
 test('planning answers ordinary questions without creating documents and shows a read-only branch tab', async ({
