@@ -88,7 +88,7 @@ function surface(file) {
     return null;
   if (/^apps\/api\/(?:src|tests)\//.test(file)) return 'api';
   if (
-    /^(?:apps\/codex-console-(?:api|web)\/(?:src|tests|migrations)|apps\/codex-console-web\/e2e)\//.test(
+    /^(?:apps\/codex-console-(?:api|web)\/(?:src|tests)|apps\/codex-console-web\/e2e)\//.test(
       file,
     )
   )
