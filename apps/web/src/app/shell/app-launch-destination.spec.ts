@@ -101,7 +101,8 @@ it('opens Codex Console with a one-time handoff in the fragment', async () => {
     'codex-console',
     'https://console.example.test/',
   );
-  if (!('onClick' in props)) throw new Error('Missing console launch handler');
+  if (!('onClick' in props) || typeof props.onClick !== 'function')
+    throw new Error('Missing console launch handler');
 
   props.onClick({ preventDefault });
 
@@ -121,9 +122,10 @@ it('opens Codex Console with a one-time handoff in the fragment', async () => {
 it('keeps the launcher close callback on internal app links', () => {
   const onClose = vi.fn();
   const props = appLaunchLinkProps('docs', '/apps/docs', onClose);
-  if (!('onClick' in props)) throw new Error('Missing internal launch handler');
+  if (!('onClick' in props) || typeof props.onClick !== 'function')
+    throw new Error('Missing internal launch handler');
 
-  props.onClick();
+  props.onClick({ preventDefault: vi.fn() });
 
   expect(onClose).toHaveBeenCalledOnce();
 });
