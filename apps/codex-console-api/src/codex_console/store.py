@@ -1,5 +1,6 @@
 from sqlalchemy import delete, func, select, update
 
+from . import planning
 from .errors import ConsoleError
 from .models import (
     Attachment,
@@ -13,6 +14,7 @@ from .models import (
     WorkspaceLease,
     now,
 )
+from .rpc import MAX_MESSAGE_BYTES
 
 ACTIVE = ("starting", "running", "waiting")
 
@@ -40,7 +42,9 @@ def save_revision(db, task: Task, kind: str, body: str, *, source_turn_id=None):
     if source_turn_id:
         projected = db.scalar(
             select(Revision).where(
-                Revision.task_id == task.id, Revision.source_turn_id == source_turn_id
+                Revision.task_id == task.id,
+                Revision.kind == kind,
+                Revision.source_turn_id == source_turn_id,
             )
         )
         if projected:
@@ -65,24 +69,52 @@ def save_revision(db, task: Task, kind: str, body: str, *, source_turn_id=None):
 
 
 def project_document(db, task, turn_id, items):
-    if task.stage not in ("requirements", "plan"):
+    if task.stage != "plan":
         return
-    final = [item for item in items if item.get("type") == "plan"]
-    if not final:
-        final = [
-            item
-            for item in items
-            if item.get("type") == "agentMessage" and item.get("phase") == "final_answer"
-        ]
-    if final and final[-1].get("text", "").strip():
-        save_revision(db, task, task.stage, final[-1]["text"], source_turn_id=turn_id)
+    final = [
+        i for i in items if i.get("type") == "agentMessage" and i.get("phase") == "final_answer"
+    ]
+    final = final or [i for i in items if i.get("type") == "plan"]
+    result = planning.parse(final[-1].get("text", "")) if final else None
+    if result is None:
+        task.error_code = "planning_output_invalid"
+        changed(db, task, "document.rejected")
+        return
+    kinds = [update.kind for update in result.documents]
+    if len(kinds) != len(set(kinds)):
+        task.error_code = "planning_output_invalid"
+        changed(db, task, "document.rejected")
+        return
+    pending = []
+    for document in result.documents:
+        if db.scalar(
+            select(Revision.id).where(
+                Revision.task_id == task.id,
+                Revision.kind == document.kind,
+                Revision.source_turn_id == turn_id,
+            )
+        ):
+            continue
+        latest = latest_revision(db, task.id, document.kind)
+        if (latest.version if latest else 0) != document.base_version:
+            task.error_code = "document_conflict"
+            changed(db, task, "document.rejected")
+            return
+        pending.append(document)
+    # A plan based on this same confirmed change must be newer than its requirements.
+    for document in sorted(pending, key=lambda document: document.kind == "plan"):
+        save_revision(db, task, document.kind, document.body, source_turn_id=turn_id)
 
 
 def recover_document(db, task, turns):
-    if task.stage not in ("requirements", "plan"):
+    if task.stage != "plan":
         return
     operation = db.get(Operation, task.current_operation_id) if task.current_operation_id else None
-    if not operation or operation.task_id != task.id or operation.kind != task.stage:
+    if (
+        not operation
+        or operation.task_id != task.id
+        or operation.kind not in ("plan", "requirements", "legacy_plan")
+    ):
         return
     submitted_at = (
         db.scalar(
@@ -109,7 +141,20 @@ def recover_document(db, task, turns):
             item.get("type") == "userMessage" and item.get("clientId") == operation.id
             for item in items
         ):
-            project_document(db, task, turn["id"], items)
+            if operation.kind in ("requirements", "legacy_plan"):
+                # Only migration-marked plans and the retired requirements operation
+                # use Markdown. Never reinterpret a malformed structured response.
+                final = [item for item in items if item.get("type") == "plan"]
+                final = final or [
+                    item
+                    for item in items
+                    if item.get("type") == "agentMessage" and item.get("phase") == "final_answer"
+                ]
+                if final and final[-1].get("text", "").strip():
+                    kind = "plan" if operation.kind == "legacy_plan" else "requirements"
+                    save_revision(db, task, kind, final[-1]["text"], source_turn_id=turn["id"])
+            else:
+                project_document(db, task, turn["id"], items)
             return
 
 
@@ -134,6 +179,20 @@ def invalidate_pending(db, task_id):
         update(PendingRequest)
         .where(PendingRequest.task_id == task_id, PendingRequest.state.in_(("pending", "sending")))
         .values(state="expired")
+    )
+
+
+def implementation_authorized(db, task):
+    if task.stage != "implement":
+        return False
+    if task.approved_revision:
+        return True
+    operation = db.get(Operation, task.current_operation_id) if task.current_operation_id else None
+    return bool(
+        operation
+        and operation.task_id == task.id
+        and operation.kind == "execute"
+        and operation.state == "accepted"
     )
 
 
@@ -174,6 +233,22 @@ def detail(factory, task_id, settings):
             )
         )
         items = [{**row.payload, "turn_id": row.turn_id} for row in reversed(recent[:2000])]
+        for item in items:
+            if item.get("type") in ("agentMessage", "plan"):
+                result = planning.parse(item.get("text", ""))
+                if result:
+                    item["text"] = result.answer
+                    item["document_updates"] = [
+                        {"kind": document.kind, "summary": document.summary}
+                        for document in result.documents
+                    ]
+                elif (
+                    task.stage == "plan"
+                    and task.status in ACTIVE
+                    and item["turn_id"] == task.turn_id
+                    and item.get("phase") == "final_answer"
+                ):
+                    item["text"] = ""
         message_ids = [
             i["clientId"] for i in items if i.get("type") == "userMessage" and i.get("clientId")
         ]
@@ -201,8 +276,12 @@ def detail(factory, task_id, settings):
                 if operation.display_text is not None:
                     item["content"] = [{"type": "text", "text": operation.display_text}]
                 item["attachments"] = references.get(operation.id, [])
+        failed = db.get(Operation, task.current_operation_id) if task.current_operation_id else None
         return {
             **task_out(task),
+            "failed_request_text": failed.display_text
+            if failed and failed.state == "failed" and task.status == "failed"
+            else None,
             "revisions": [
                 {
                     "id": r.id,
@@ -241,6 +320,21 @@ def detail(factory, task_id, settings):
         }
 
 
+def bounded_item_text(task, payload, key, value):
+    # Structured planning finals contain an answer and up to two full documents.
+    # Keep the transport byte bound without applying the command-output tail limit.
+    if key == "text" and (
+        payload.get("type") == "plan"
+        or (
+            payload.get("type") == "agentMessage" and payload.get("phase") in (None, "final_answer")
+        )
+    ):
+        bounded = value.encode("utf-8")[:MAX_MESSAGE_BYTES].decode("utf-8", errors="ignore")
+        if task.stage == "plan" or planning.parse(bounded) is not None:
+            return bounded
+    return value[-100000:]
+
+
 def upsert_item(db, task, turn_id, payload):
     item_id = payload.get("id")
     if not isinstance(item_id, str) or len(item_id) > 200:
@@ -268,7 +362,7 @@ def upsert_item(db, task, turn_id, payload):
     safe = {key: payload[key] for key in keys if key in payload}
     for key in ("text", "aggregatedOutput"):
         if isinstance(safe.get(key), str):
-            safe[key] = safe[key][-100000:]
+            safe[key] = bounded_item_text(task, safe, key, safe[key])
     row = db.scalar(select(Item).where(Item.task_id == task.id, Item.item_id == item_id))
     if row:
         row.payload = safe

@@ -40,7 +40,6 @@ import {
   type Locale,
 } from './i18n';
 import {
-  Changes,
   Command,
   Confirm,
   Documents,
@@ -49,17 +48,18 @@ import {
   type DocumentDraft,
 } from './views';
 import { AttachmentBadges, FileLibrary } from './attachments';
+import { GitWorkspace, GitSummary, useGitState } from './git';
 import {
   ExecutionSettings,
   ExecutionStatus,
   type Execution,
 } from './execution';
 
-type Tab = 'requirements' | 'plan' | 'changes' | 'checks' | 'files';
+type Tab = 'requirements' | 'plan' | 'branch' | 'checks' | 'files';
 const tabs: { id: Tab; label: Copy }[] = [
   { id: 'requirements', label: 'Requirements' },
   { id: 'plan', label: 'Plan' },
-  { id: 'changes', label: 'Changes' },
+  { id: 'branch', label: 'Branch' },
   { id: 'checks', label: 'Execution results' },
   { id: 'files', label: 'Files' },
 ];
@@ -102,9 +102,8 @@ export function App() {
   const [newOpen, setNewOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
-  const [stage, setStage] = useState<'requirements' | 'plan' | 'implement'>(
-    'requirements',
-  );
+  const [stage, setStage] = useState<'plan' | 'implement'>('plan');
+  const git = useGitState(task);
   const [models, setModels] = useState<Model[]>([]);
   const [modelsFailed, setModelsFailed] = useState(false);
   const [execution, setExecution] = useState<Execution>({
@@ -114,7 +113,6 @@ export function App() {
   });
   const [approvalExecution, setApprovalExecution] =
     useState<Execution>(execution);
-  const [approvalRecover, setApprovalRecover] = useState(false);
   const [approvalText, setApprovalText] = useState('');
   const initializedTask = useRef<string | null>(null);
   const [planToApprove, setPlanToApprove] = useState<Revision | null>(null);
@@ -262,7 +260,6 @@ export function App() {
       task.attachments.filter((file) => attachmentIds.includes(file.id)),
     );
     setApprovalExecution(execution);
-    setApprovalRecover(['interrupted', 'failed'].includes(task.status));
     setApprovalText(text);
     setPlanToApprove(revision);
   };
@@ -442,9 +439,7 @@ export function App() {
     setStage(
       task.stage === 'review' || task.stage === 'implement'
         ? 'implement'
-        : task.stage === 'plan'
-          ? 'plan'
-          : 'requirements',
+        : 'plan',
     );
     setExecution({
       model: task.model ?? null,
@@ -790,33 +785,15 @@ export function App() {
                 <span>{t(statusCopy(task.status))}</span>
                 <span>·</span>
                 <span title={task.root}>
-                  {task.isolated
-                    ? t('Isolated checkout')
-                    : task.root.split('/').at(-1)}
+                  {task.root.split('/').at(-1)}
+                  {task.isolated && ` · ${t('Isolated checkout')}`}
                 </span>
                 <span className="connection">
                   <span className={`dot ${connected ? 'online' : ''}`} />
                   {t(connected ? 'Connected' : 'Reconnecting')}
                 </span>
               </div>
-            </div>
-            <div className="steps" role="group" aria-label={t('Plan')}>
-              {(['Requirements', 'Plan', 'Implement', 'Review'] as Copy[]).map(
-                (step, index) => (
-                  <span
-                    key={step}
-                    className={
-                      ['requirements', 'plan', 'implement', 'review'][index] ===
-                      task.stage
-                        ? 'current'
-                        : ''
-                    }
-                  >
-                    {index + 1}
-                    <b>{t(step)}</b>
-                  </span>
-                ),
-              )}
+              <GitSummary state={git.state} t={t} />
             </div>
           </div>
           {(task.error_code || task.status === 'uncertain') && (
@@ -870,37 +847,6 @@ export function App() {
           </div>
           <section className="conversation" aria-label={t('Conversation')}>
             <ExecutionStatus task={task} connected={connected} t={t} />
-            {['interrupted', 'failed'].includes(task.status) && (
-              <div className="resume-task">
-                <Button
-                  disabled={busy}
-                  onClick={() => {
-                    const plan = task.revisions
-                      .filter((revision) => revision.kind === 'plan')
-                      .at(-1);
-                    if (task.approved_revision && plan) {
-                      setStage('implement');
-                      approveImplementation(
-                        plan,
-                        t(
-                          'Continue from the interruption using the existing conversation and files. Check completed work and finish the remaining approved plan.',
-                        ),
-                      );
-                    } else {
-                      void send('messages', {
-                        ...execution,
-                        stage: task.stage === 'plan' ? 'plan' : 'requirements',
-                        text: t(
-                          'Continue from the interruption using the existing conversation and files. Check completed work and finish the remaining approved plan.',
-                        ),
-                      });
-                    }
-                  }}
-                >
-                  {t('Continue from interruption')}
-                </Button>
-              </div>
-            )}
             <div
               className="messages"
               ref={scroller}
@@ -963,22 +909,22 @@ export function App() {
               }}
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!active(task) && stage === 'implement') {
-                  const plan = task.revisions
-                    .filter((revision) => revision.kind === 'plan')
-                    .at(-1);
-                  if (!plan) {
-                    setError('stale_plan');
-                    setTab('plan');
-                    return;
-                  }
-                  approveImplementation(plan, message);
-                  return;
-                }
-                void send(active(task) ? 'steer' : 'messages', {
-                  text: message,
-                  ...(active(task) ? {} : { ...execution, stage }),
-                }).then((ok) => {
+                void send(
+                  active(task)
+                    ? 'steer'
+                    : stage === 'implement'
+                      ? 'implement'
+                      : 'messages',
+                  {
+                    text: message,
+                    ...(active(task)
+                      ? {}
+                      : {
+                          ...execution,
+                          ...(stage === 'plan' ? { stage } : {}),
+                        }),
+                  },
+                ).then((ok) => {
                   if (ok && selectedRef.current === task.id)
                     setMessage((current) =>
                       current === message ? '' : current,
@@ -986,6 +932,15 @@ export function App() {
                 });
               }}
             >
+              {task.failed_request_text && !message && (
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={() => setMessage(task.failed_request_text ?? '')}
+                >
+                  {t('Restore unsent request')}
+                </Button>
+              )}
               {attachmentIds.length > 0 && (
                 <AttachmentBadges
                   files={task.attachments.filter((file) =>
@@ -1009,7 +964,6 @@ export function App() {
                 onChange={(event) => setMessage(event.target.value)}
                 rows={3}
                 maxLength={32000}
-                disabled={task.status === 'uncertain'}
                 onKeyDown={(event) => {
                   if (
                     event.key === 'Enter' &&
@@ -1052,18 +1006,15 @@ export function App() {
                       active(task)
                         ? task.stage === 'implement'
                           ? 'implement'
-                          : task.stage === 'plan'
-                            ? 'plan'
-                            : 'requirements'
+                          : 'plan'
                         : stage
                     }
-                    onChange={(event) =>
-                      setStage(event.target.value as typeof stage)
-                    }
+                    onChange={(event) => {
+                      setStage(event.target.value as typeof stage);
+                    }}
                   >
-                    <option value="requirements">{t('Requirements')}</option>
                     <option value="plan">{t('Plan')}</option>
-                    <option value="implement">{t('Implement')}</option>
+                    <option value="implement">{t('Execute')}</option>
                   </select>
                 </label>
                 <div className="actions">
@@ -1092,8 +1043,8 @@ export function App() {
                     variant="primary"
                     disabled={
                       busy ||
-                      (!message.trim() && !attachmentIds.length) ||
-                      task.status === 'uncertain' ||
+                      (!message.trim() &&
+                        (stage === 'implement' || !attachmentIds.length)) ||
                       task.status === 'starting'
                     }
                     aria-label={t(active(task) ? 'Add instruction' : 'Send')}
@@ -1103,6 +1054,13 @@ export function App() {
                   </Button>
                 </div>
               </div>
+              {stage === 'plan' && !active(task) && (
+                <p className="composer-help">
+                  {t(
+                    'Planning is read-only. Documents are updated only when requested or when agreed changes affect an existing document.',
+                  )}
+                </p>
+              )}
             </form>
           </section>
           <aside className="results" aria-label={t('Results')}>
@@ -1146,7 +1104,7 @@ export function App() {
                     ...execution,
                     stage: 'plan',
                     text: t(
-                      'Create an implementation plan from the requirements, including acceptance checks.',
+                      'Create an execution plan from the requirements, including acceptance checks.',
                     ),
                   });
                 }}
@@ -1172,8 +1130,14 @@ export function App() {
                 }
               />
             )}
-            {tab === 'changes' && (
-              <Changes task={task} t={t} onError={onError} />
+            {tab === 'branch' && (
+              <GitWorkspace
+                task={task}
+                git={git}
+                locale={locale}
+                t={t}
+                onError={onError}
+              />
             )}
             {tab === 'checks' && (
               <div className="checks-pane">
@@ -1238,19 +1202,17 @@ export function App() {
       </Dialog>
       <Confirm
         open={!!planToApprove}
-        title="Implement the saved plan?"
+        title="Execute the saved plan?"
         description="Codex may edit this checkout and run checks. The approved plan does not authorize publishing or deployment."
+        action="Execute this plan"
         t={t}
         busy={busy}
-        onClose={() => setPlanToApprove(null)}
+        onClose={() => {
+          setPlanToApprove(null);
+        }}
         onConfirm={() => {
           if (planToApprove)
             void (async () => {
-              if (
-                approvalRecover &&
-                !(await mutate('recover', { confirm_workspace: true }))
-              )
-                return false;
               return send('implement', {
                 ...approvalExecution,
                 text: approvalText,
@@ -1263,11 +1225,16 @@ export function App() {
                 setMessage((current) =>
                   current === approvalText ? '' : current,
                 );
-                setTab('changes');
+                setTab('branch');
               }
             });
         }}
       >
+        {error && (
+          <p role="alert" className="danger">
+            {t(errorCopy(error))}
+          </p>
+        )}
         <p>
           {approvalExecution.model ?? t('Codex default')} ·{' '}
           {t(
@@ -1279,13 +1246,6 @@ export function App() {
         {approvalExecution.permissions === 'yolo' && (
           <p className="danger">
             {t('YOLO runs commands without approval or sandbox restrictions.')}
-          </p>
-        )}
-        {approvalRecover && (
-          <p>
-            {t(
-              'Review the current diff first. Keep these changes in this task and continue in the same workspace?',
-            )}
           </p>
         )}
         {approvalText && <p className="confirmation-request">{approvalText}</p>}

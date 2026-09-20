@@ -76,8 +76,15 @@ def test_turn_provenance_migration_preserves_existing_documents(client):
     # shared test schema, even when an assertion fails.
     with engine.connect() as connection, connection.begin() as transaction:
         with Operations.context(MigrationContext.configure(connection)):
+            current_spec = spec_from_file_location(
+                "planning_migration", ROOT / "migrations/versions/0005_planning.py"
+            )
+            current = module_from_spec(current_spec)
+            current_spec.loader.exec_module(current)
+            current.downgrade()
             migration.downgrade()
             migration.upgrade()
+            current.upgrade()
         assert (
             connection.scalar(
                 text("SELECT current_operation_id FROM console_tasks WHERE id = :id"),
@@ -193,7 +200,7 @@ def test_requirements_and_plan_turns_are_read_only(client):
     assert turn["sandboxPolicy"] == {"type": "readOnly", "networkAccess": False}
     assert turn["approvalPolicy"] == "never"
     assert turn["collaborationMode"]["mode"] == "plan"
-    result = complete(client, task, "Requirements with acceptance evidence")
+    result = complete(client, task, "Requirements with acceptance evidence", kind="requirements")
     assert result["revisions"][0]["kind"] == "requirements"
 
 
@@ -468,9 +475,9 @@ def test_disconnect_is_uncertain_and_never_replays(client):
     client.portal.call(runtime.on_disconnect)
     detail = client.get(f"/api/tasks/{task['id']}").json()
     assert detail["status"] == "uncertain"
-    assert send_message(client, detail).json()["code"] == "task_busy"
-    assert client.post(f"/api/tasks/{task['id']}/recover", json={}).status_code == 200
     assert len([x for x in runtime.rpc.calls if x[0] == "turn/start"]) == 1
+    assert send_message(client, detail, text="Continue the unfinished work").status_code == 200
+    assert len([x for x in runtime.rpc.calls if x[0] == "turn/start"]) == 2
 
 
 def test_permissions_are_denied_in_plan_and_scoped_to_approved_turn(client):
@@ -681,3 +688,34 @@ def test_proxy_base_path_scopes_cookies_and_api_cache_headers(client):
     assert all(
         "Path=/codex-console" in cookie for cookie in response.headers.get_list("set-cookie")
     )
+
+
+def test_previous_execution_migration_preserves_existing_tasks_and_documents(client):
+    from codex_console.cli import ROOT
+
+    task = complete(client, send_message(client, new_task(client)).json())
+    spec = spec_from_file_location(
+        "previous_execution", ROOT / "migrations/versions/0006_previous_execution.py"
+    )
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = client.app.state.factory.kw["bind"]
+    with engine.connect() as connection, connection.begin() as transaction:
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.downgrade()
+            migration.upgrade()
+        row = connection.execute(
+            text(
+                "SELECT permissions, previous_permissions, previous_execution_root "
+                "FROM console_tasks WHERE id = :id"
+            ),
+            {"id": task["id"]},
+        ).one()
+        assert row == ("read-only", None, None)
+        assert (
+            connection.scalar(
+                text("SELECT body FROM console_revisions WHERE task_id = :id"), {"id": task["id"]}
+            )
+            == task["revisions"][0]["body"]
+        )
+        transaction.rollback()

@@ -1,4 +1,29 @@
 export const korean = {
+  'Finish or stop the current turn before changing its mode, model, reasoning effort, or permissions.':
+    '모드·모델·추론 강도·권한을 바꾸려면 현재 실행이 끝날 때까지 기다리거나 중단한 뒤 전송하세요.',
+  'Planning is read-only. Documents are updated only when requested or when agreed changes affect an existing document.':
+    '계획 모드는 읽기 전용입니다. 문서는 작성을 요청하거나 기존 문서에 반영할 사항이 확정되면 갱신합니다.',
+  Branch: '브랜치',
+  'This workspace is based on a commit without a named branch. Your changes are preserved.':
+    '브랜치 이름 없이 커밋을 기준으로 분리된 작업 공간입니다. 변경사항은 보존되어 있습니다.',
+  'Git workspace': 'Git 작업 공간',
+  'Detached HEAD': '브랜치 없음 (detached HEAD)',
+  'No commits': '커밋 없음',
+  'Changed files': '변경 파일',
+  Staged: '스테이징',
+  Unstaged: '미스테이징',
+  Untracked: '새 파일',
+  Conflicts: '충돌',
+  'No tracking branch': '원격 추적 브랜치 없음',
+  'Could not load Git state.': 'Git 상태를 불러오지 못했습니다.',
+  'Loading Git state…': 'Git 상태 확인 중…',
+  'Refresh Git state': 'Git 상태 새로고침',
+  'Remote counts use local tracking refs; no automatic fetch.':
+    '원격 비교는 로컬 추적 정보 기준입니다. 자동 fetch는 하지 않습니다.',
+  Checked: '확인 시각',
+  'Restore unsent request': '전송하지 못한 요청 불러오기',
+  'The resumed permissions do not match this console. No new request was executed.':
+    '재개한 세션의 권한이 콘솔 기록과 일치하지 않습니다. 새 요청은 실행되지 않았습니다.',
   'Next execution': '다음 실행 설정',
   Model: '모델',
   'Codex default': 'Codex 기본 설정',
@@ -20,9 +45,6 @@ export const korean = {
     '페이지를 이동하거나 닫아도 서버에서 작업을 계속합니다.',
   'Reconnecting live updates. Leaving this page does not stop the server task.':
     '실시간 표시를 다시 연결하고 있습니다. 페이지 연결과 서버 작업 실행은 별개입니다.',
-  'Continue from interruption': '중단 지점부터 계속',
-  'Continue from the interruption using the existing conversation and files. Check completed work and finish the remaining approved plan.':
-    '기존 대화와 작업 파일을 유지하고 중단 지점부터 이어서 진행해 주세요. 완료된 작업을 확인하고 승인한 계획의 남은 작업을 끝내 주세요.',
   'The selected model or reasoning effort is unavailable. Refresh the model list.':
     '선택한 모델이나 추론 강도를 사용할 수 없습니다. 모델 목록을 새로 불러오세요.',
   'The console stopped after a processing error. Recover the task and check server diagnostics.':
@@ -105,8 +127,8 @@ export const korean = {
   'Create task': '작업 만들기',
   Cancel: '취소',
   Requirements: '요구사항',
-  Plan: '구현 계획',
-  Implement: '구현',
+  Plan: '계획',
+  Execute: '실행',
   Review: '검토',
   Conversation: '대화',
   Changes: '변경사항',
@@ -116,8 +138,7 @@ export const korean = {
   Send: '보내기',
   'Add instruction': '보충 지시 보내기',
   Stop: '중단',
-  'Read-only planning': '읽기 전용 · 요구사항과 계획 정리',
-  'Implementation authorized': '승인한 계획 구현 중',
+  'Read-only planning': '읽기 전용 · 계획',
   'Waiting for your response': '답변을 기다리고 있습니다',
   Ready: '준비됨',
   Starting: '시작 중',
@@ -148,14 +169,14 @@ export const korean = {
   Version: '버전',
   'No document yet. Continue the conversation to create one.':
     '아직 문서가 없습니다. 대화를 진행하면 여기에 정리됩니다.',
-  'Create implementation plan': '구현 계획 작성',
-  'Create an implementation plan from the requirements, including acceptance checks.':
-    '요구사항을 바탕으로 완료 조건과 검증 방법을 포함한 구현 계획을 작성해 주세요.',
-  'Implement this plan': '이 계획으로 구현',
-  'Implement the saved plan?': '저장된 계획으로 구현할까요?',
+  'Create execution plan': '실행 계획 작성',
+  'Create an execution plan from the requirements, including acceptance checks.':
+    '요구사항을 바탕으로 완료 조건과 검증 방법을 포함한 실행 계획을 작성해 주세요.',
+  'Execute this plan': '이 계획으로 실행',
+  'Execute the saved plan?': '저장된 계획으로 실행할까요?',
   'Codex may edit this checkout and run checks. The approved plan does not authorize publishing or deployment.':
     'Codex가 작업 디렉터리를 편집하고 검사를 실행합니다. 이 승인은 게시나 배포를 포함하지 않습니다.',
-  'Save your changes before implementing.': '구현 전에 문서 변경을 저장하세요.',
+  'Save your changes before execution.': '실행 전에 문서 변경을 저장하세요.',
   'View latest version': '최신 버전 보기',
   'No file changes': '변경된 파일이 없습니다',
   'Select a file to inspect its diff.':
@@ -226,6 +247,12 @@ export const korean = {
     '요청이 이미 시작되었을 수 있습니다. 실행 상태를 먼저 확인하세요.',
   'Codex is configured for a different provider. Select your ChatGPT configuration on the server.':
     'Codex에 다른 공급자가 설정되어 있습니다. 서버에서 ChatGPT용 설정을 선택하세요.',
+  'The planning response could not be saved. Ask Codex to retry.':
+    '계획 응답을 저장하지 못했습니다. Codex에 다시 요청해 주세요.',
+  'The saved document changed during this turn. Review it before retrying.':
+    '실행 중 문서가 변경되었습니다. 최신 문서를 확인하고 다시 요청해 주세요.',
+  'The previous worktree was removed. This conversation now uses the configured workspace.':
+    '이전 워크트리가 정리되어 설정된 작업 폴더에서 대화를 이어갑니다.',
 } as const;
 
 export type Copy = keyof typeof korean;
@@ -237,6 +264,14 @@ export const translate =
     locale === 'ko-KR' ? korean[key] : key;
 
 const errors: Record<string, Copy> = {
+  planning_output_invalid:
+    'The planning response could not be saved. Ask Codex to retry.',
+  document_conflict:
+    'The saved document changed during this turn. Review it before retrying.',
+  workspace_removed:
+    'The previous worktree was removed. This conversation now uses the configured workspace.',
+  sandbox_policy_mismatch:
+    'The resumed permissions do not match this console. No new request was executed.',
   model_unavailable:
     'The selected model or reasoning effort is unavailable. Refresh the model list.',
   effort_unavailable:
@@ -269,6 +304,8 @@ const errors: Record<string, Copy> = {
     'The document changed in another tab. Reload the latest version.',
   workspace_busy: 'Another task is running. Finish or recover it first.',
   task_busy: 'This task is already running or needs recovery.',
+  turn_settings_mismatch:
+    'Finish or stop the current turn before changing its mode, model, reasoning effort, or permissions.',
   request_expired: 'This request has already been resolved or expired.',
   workspace_changed:
     'The repository changed outside this task. Review it before continuing.',

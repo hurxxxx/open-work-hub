@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from conftest import complete, new_task, plan, send_message
+from conftest import complete, new_task, plan, planning_text, send_message
 from sqlalchemy import event, select
 
 from codex_console import attachments, git, store
@@ -85,10 +85,10 @@ def test_recovery_can_acknowledge_native_confirmation_without_replaying(client):
     assert len([c for c in rpc.calls if c[0] == "turn/start"]) == 1
 
 
-@pytest.mark.parametrize("stage", ["requirements", "plan"])
+@pytest.mark.parametrize("kind", ["requirements", "plan"])
 @pytest.mark.parametrize("lost_response", [False, True])
 def test_recovery_projects_completed_document_once_and_preserves_user_edits(
-    client, stage, lost_response
+    client, kind, lost_response
 ):
     client.get("/api/codex/account")
     runtime = client.app.state.runtime
@@ -96,7 +96,7 @@ def test_recovery_projects_completed_document_once_and_preserves_user_edits(
     rpc.fail_turn = lost_response
     key = str(uuid4())
     task = new_task(client)
-    response = send_message(client, task, stage, operation_id=key)
+    response = send_message(client, task, "plan", operation_id=key)
     assert response.status_code == (503 if lost_response else 200)
     task = client.get(f"/api/tasks/{task['id']}").json()
     turn_id = task["turn_id"] or "native-completed-turn"
@@ -107,7 +107,21 @@ def test_recovery_projects_completed_document_once_and_preserves_user_edits(
             "status": "completed",
             "items": [
                 {"id": "user", "type": "userMessage", "clientId": key, "content": []},
-                {"id": "document", "type": "plan", "text": "Recovered complete document"},
+                {
+                    "id": "document",
+                    "type": "plan",
+                    "text": planning_text(
+                        "Recovered",
+                        [
+                            {
+                                "kind": kind,
+                                "base_version": 0,
+                                "body": "Recovered complete document",
+                                "summary": "Created",
+                            }
+                        ],
+                    ),
+                },
             ],
         }
     ]
@@ -117,13 +131,13 @@ def test_recovery_projects_completed_document_once_and_preserves_user_edits(
     assert recovered.status_code == 200
     revisions = recovered.json()["revisions"]
     assert len(revisions) == 1
-    assert revisions[0]["kind"] == stage
+    assert revisions[0]["kind"] == kind
     assert revisions[0]["body"] == "Recovered complete document"
     assert client.post(endpoint + "/recover", json={}).json()["revisions"] == revisions
     edited = client.put(
         endpoint + "/documents",
         json={
-            "kind": stage,
+            "kind": kind,
             "base_version": 1,
             "body": "User revised the recovered document",
         },
@@ -409,3 +423,45 @@ def test_failed_steer_preparation_can_retry_but_uncertain_steer_cannot(client, m
         db.get(Operation, key).state = "uncertain"
     assert client.post(endpoint, json=body).json()["code"] == "codex_request_uncertain"
     assert len([c for c in runtime.rpc.calls if c[0] == "turn/steer"]) == 1
+
+
+@pytest.mark.parametrize("mode", ["manual", "retry"])
+@pytest.mark.parametrize("invalid", ["malformed", "duplicate_kind", "conflicting_version"])
+def test_recovery_preserves_document_rejection_errors_and_existing_revisions(client, mode, invalid):
+    task = plan(client)
+    revisions = task["revisions"]
+    runtime = client.app.state.runtime
+    rpc = runtime.rpc
+    rpc.fail_turn = True
+    operation_id = str(uuid4())
+    assert send_message(client, task, operation_id=operation_id).status_code == 503
+    rpc.fail_turn = False
+    document = {"kind": "plan", "base_version": 1, "body": "Proposed update", "summary": "Updated"}
+    output = "malformed response"
+    expected = "planning_output_invalid"
+    if invalid == "duplicate_kind":
+        output = planning_text("Updated", [document, document])
+    elif invalid == "conflicting_version":
+        output = planning_text("Updated", [{**document, "base_version": 99}])
+        expected = "document_conflict"
+    rpc.threads[task["thread_id"]]["turns"] = [
+        {
+            "id": "completed-missing-response",
+            "status": "completed",
+            "items": [
+                {"id": "user", "type": "userMessage", "clientId": operation_id, "content": []},
+                {"id": "final", "type": "agentMessage", "phase": "final_answer", "text": output},
+            ],
+        }
+    ]
+    for _ in range(2):
+        response = (
+            client.post(f"/api/tasks/{task['id']}/recover", json={})
+            if mode == "manual"
+            else send_message(client, task, operation_id=operation_id)
+        )
+        assert response.status_code == 200
+        assert response.json()["error_code"] == expected
+        assert response.json()["revisions"] == revisions
+    assert sum(method == "turn/start" for method, _ in rpc.calls) == 2
+    assert not any(method == "turn/steer" for method, _ in rpc.calls)

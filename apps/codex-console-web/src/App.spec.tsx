@@ -8,7 +8,7 @@ import {
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from './App';
-import { api, ApiError, type Detail } from './api';
+import { api, ApiError, type Detail, type GitState } from './api';
 
 vi.mock('./api', async (original) => ({
   ...(await original<typeof import('./api')>()),
@@ -27,6 +27,7 @@ class Stream extends EventTarget {
 
 const taskId = '00000000-0000-4000-8000-000000000001';
 let detail: Detail;
+let gitState: GitState;
 let submit: (body: Record<string, unknown>) => Promise<Detail>;
 let recover: () => Promise<Detail>;
 let searchTasks: (query: string) => Promise<Detail[]>;
@@ -42,7 +43,7 @@ beforeEach(() => {
   detail = {
     id: taskId,
     title: 'Test task',
-    stage: 'requirements',
+    stage: 'plan',
     status: 'idle',
     permissions: 'read-only',
     thread_id: 'thread',
@@ -65,6 +66,21 @@ beforeEach(() => {
     requests: [],
     revisions: [],
   };
+  gitState = {
+    root: '/repo/dev',
+    branch: 'dev',
+    head: 'a'.repeat(40),
+    detached: false,
+    upstream: 'origin/dev',
+    ahead: 1,
+    behind: 0,
+    staged: 0,
+    unstaged: 2,
+    untracked: 1,
+    conflicts: 0,
+    changed: 3,
+    checked_at: '2026-09-20T00:00:00Z',
+  };
   submit = async () => detail;
   recover = async () => detail;
   searchTasks = async () => [];
@@ -86,6 +102,9 @@ beforeEach(() => {
     if (path === '/codex/account')
       return { connected: true, auth_type: 'chatgpt' };
     if (path === `/tasks/${taskId}`) return detail;
+    if (path === `/tasks/${taskId}/git`) return gitState;
+    if (path === `/tasks/${taskId}/implement`)
+      return submit(body as Record<string, unknown>);
     if (path === `/tasks/${taskId}/messages`)
       return submit(body as Record<string, unknown>);
     if (path === `/tasks/${taskId}/recover`) return recover();
@@ -138,7 +157,7 @@ it('preserves separate document drafts across result tabs and tasks and warns be
     target: { value: 'Requirements draft' },
   });
   const results = within(screen.getByRole('navigation', { name: '결과물' }));
-  fireEvent.click(results.getByRole('button', { name: '구현 계획' }));
+  fireEvent.click(results.getByRole('button', { name: '계획' }));
   fireEvent.click(screen.getByRole('button', { name: '문서 편집' }));
   fireEvent.change(screen.getByRole('textbox', { name: '문서 편집' }), {
     target: { value: 'Plan draft' },
@@ -154,7 +173,7 @@ it('preserves separate document drafts across result tabs and tasks and warns be
   fireEvent.click(
     within(screen.getByRole('navigation', { name: '결과물' })).getByRole(
       'button',
-      { name: '구현 계획' },
+      { name: '계획' },
     ),
   );
   expect(screen.getByText('Plan draft')).toBeTruthy();
@@ -320,20 +339,7 @@ it('retains retry identity on failed recovery and creates a new one only after s
   expect(attempts[2]).not.toBe(attempts[0]);
 });
 
-it('submits the selected model, effort and explicit YOLO permission with the approved plan', async () => {
-  detail.revisions = [
-    {
-      id: 8,
-      kind: 'plan',
-      version: 1,
-      body: 'An approved plan',
-      created_at: detail.updated_at,
-    },
-  ];
-  const original = vi.mocked(api).getMockImplementation()!;
-  vi.mocked(api).mockImplementation(async (path, ...args) =>
-    path.endsWith('/implement') ? detail : original(path, ...args),
-  );
+it('executes an explicit prompt with selected model and YOLO without requiring a document', async () => {
   await openAndCompose();
   await screen.findByRole('option', { name: 'Alternate' });
   fireEvent.change(screen.getByLabelText('모델'), {
@@ -349,77 +355,41 @@ it('submits the selected model, effort and explicit YOLO permission with the app
     target: { value: 'yolo' },
   });
   fireEvent.click(screen.getByRole('button', { name: '보내기' }));
-  const dialog = await screen.findByRole('dialog');
-  expect(within(dialog).getByText(/alternate · YOLO/)).toBeTruthy();
-  expect(
-    vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/implement')),
-  ).toBe(false);
-  fireEvent.click(
-    within(dialog).getByRole('button', { name: '이 계획으로 구현' }),
-  );
   await waitFor(() =>
-    expect(
-      vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/implement')),
-    ).toBe(true),
+    expect(api).toHaveBeenCalledWith(
+      `/tasks/${taskId}/implement`,
+      expect.objectContaining({
+        model: 'alternate',
+        effort: 'high',
+        permissions: 'yolo',
+        text: 'Same request',
+      }),
+    ),
   );
-  const request = vi
+  const body = vi
     .mocked(api)
     .mock.calls.find(([path]) => path.endsWith('/implement'))![1];
-  expect(request).toMatchObject({
-    model: 'alternate',
-    effort: 'high',
-    permissions: 'yolo',
-    revision_id: 8,
-    text: 'Same request',
-  });
+  expect(body).not.toHaveProperty('revision_id');
 });
 
-it('reconciles an interrupted implementation before continuing in the same task', async () => {
+it('allows an explicit continuation prompt after interruption without a dedicated resume button', async () => {
   detail = {
     ...detail,
     stage: 'implement',
-    status: 'interrupted',
-    approved_revision: 8,
+    status: 'uncertain',
     permissions: 'ask',
-    revisions: [
-      {
-        id: 8,
-        kind: 'plan',
-        version: 1,
-        body: 'Finish the app',
-        created_at: detail.updated_at,
-      },
-    ],
   };
-  const original = vi.mocked(api).getMockImplementation()!;
-  vi.mocked(api).mockImplementation(async (path, ...args) =>
-    path.endsWith('/implement') ? detail : original(path, ...args),
-  );
-  render(<App />);
-  fireEvent.click(
-    await screen.findByRole('button', { name: '중단 지점부터 계속' }),
-  );
-  fireEvent.click(
-    within(await screen.findByRole('dialog')).getByRole('button', {
-      name: '이 계획으로 구현',
-    }),
-  );
+  await openAndCompose();
+  expect(
+    screen.queryByRole('button', { name: '중단 지점부터 계속' }),
+  ).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
   await waitFor(() =>
-    expect(
-      vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/implement')),
-    ).toBe(true),
+    expect(api).toHaveBeenCalledWith(
+      `/tasks/${taskId}/implement`,
+      expect.objectContaining({ text: 'Same request' }),
+    ),
   );
-  const calls = vi.mocked(api).mock.calls;
-  const recovered = calls.findIndex(([path]) => path.endsWith('/recover'));
-  const started = calls.findIndex(([path]) => path.endsWith('/implement'));
-  expect(recovered).toBeGreaterThan(-1);
-  expect(started).toBeGreaterThan(recovered);
-  expect(calls[recovered][1]).toEqual({ confirm_workspace: true });
-  expect(calls[started][0]).toBe(`/tasks/${taskId}/implement`);
-  expect(calls[started][1]).toMatchObject({
-    revision_id: 8,
-    text: expect.stringContaining('중단 지점'),
-  });
 });
 
 it('shows native progress and keeps execution settings fixed while steering', async () => {
@@ -464,4 +434,66 @@ it('shows native progress and keeps execution settings fixed while steering', as
   expect(request.text).toBe('Same request');
   expect(request).not.toHaveProperty('model');
   expect(request).not.toHaveProperty('stage');
+});
+
+it('uses planning by default without saving a document from the browser', async () => {
+  await openAndCompose();
+  expect((screen.getByLabelText('실행 모드') as HTMLSelectElement).value).toBe(
+    'plan',
+  );
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  await waitFor(() =>
+    expect(
+      vi
+        .mocked(api)
+        .mock.calls.some(
+          ([path, body]) =>
+            path.endsWith('/messages') &&
+            (body as Record<string, unknown>).stage === 'plan',
+        ),
+    ).toBe(true),
+  );
+  expect(
+    vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/documents')),
+  ).toBe(false);
+});
+
+it('shows the actual branch and changes in a read-only branch tab without merge targets', async () => {
+  gitState.branch = null;
+  gitState.detached = true;
+  gitState.upstream = null;
+  const original = vi.mocked(api).getMockImplementation()!;
+  vi.mocked(api).mockImplementation(async (path, ...args) =>
+    path.endsWith('/changes') ? [] : original(path, ...args),
+  );
+  await openAndCompose();
+  await screen.findByText('브랜치 없음 (detached HEAD)');
+  expect(screen.queryByRole('button', { name: '병합 요청' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '브랜치' }));
+  await screen.findByText('/repo/dev');
+  expect(screen.queryByLabelText('대상 브랜치')).toBeNull();
+  expect(
+    (screen.getByLabelText('요청 내용 입력') as HTMLTextAreaElement).value,
+  ).toBe('Same request');
+  expect(
+    within(screen.getByLabelText('실행 모드'))
+      .getAllByRole('option')
+      .map((option) => option.textContent),
+  ).toEqual(['계획', '실행']);
+});
+
+it('restores a request rejected before execution without automatically sending it', async () => {
+  detail.status = 'failed';
+  detail.error_code = 'sandbox_policy_mismatch';
+  detail.failed_request_text = 'An unsent ordinary question';
+  render(<App />);
+  fireEvent.click(
+    await screen.findByRole('button', { name: '전송하지 못한 요청 불러오기' }),
+  );
+  expect(
+    (screen.getByLabelText('요청 내용 입력') as HTMLTextAreaElement).value,
+  ).toBe('An unsent ordinary question');
+  expect(
+    vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/messages')),
+  ).toBe(false);
 });

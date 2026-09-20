@@ -7,6 +7,7 @@ import stat
 import subprocess
 import time
 from contextlib import ExitStack
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .errors import ConsoleError
@@ -137,17 +138,99 @@ def fingerprint(root: Path) -> str:
     return result.hexdigest()
 
 
-def prepare_workspace(workspace: Path, task_id: str, previous: str | None) -> tuple[Path, bool]:
+def status(root: Path) -> dict:
+    """Read local Git state only; remote counts describe cached refs, never a fetch."""
+    raw = git(root, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all")
+    result = dict(
+        branch=None,
+        head=None,
+        upstream=None,
+        ahead=None,
+        behind=None,
+        staged=0,
+        unstaged=0,
+        untracked=0,
+        conflicts=0,
+        changed=0,
+    )
+    records = iter(raw.split(b"\0"))
+    for record in records:
+        if not record:
+            continue
+        value = record.decode("utf-8", "replace")
+        if value.startswith("# branch.head "):
+            name = value.removeprefix("# branch.head ")
+            result["branch"] = None if name == "(detached)" else name
+        elif value.startswith("# branch.oid "):
+            oid = value.removeprefix("# branch.oid ")
+            result["head"] = None if oid == "(initial)" else oid
+        elif value.startswith("# branch.upstream "):
+            result["upstream"] = value.removeprefix("# branch.upstream ")
+        elif value.startswith("# branch.ab "):
+            ahead, behind = value.removeprefix("# branch.ab ").split()
+            result["ahead"], result["behind"] = int(ahead), -int(behind)
+        elif record[:1] in (b"1", b"2", b"u", b"?"):
+            result["changed"] += 1
+            if record[:1] == b"?":
+                result["untracked"] += 1
+            elif record[:1] == b"u":
+                result["conflicts"] += 1
+            else:
+                xy = value.split(" ", 2)[1]
+                result["staged"] += int(xy[0] != ".")
+                result["unstaged"] += int(xy[1] != ".")
+            if record[:1] == b"2":
+                next(records, None)  # rename/copy source path
+    return {
+        **result,
+        "root": str(root),
+        "detached": result["branch"] is None,
+        "checked_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def remove_missing_worktree(workspace: Path, target: Path) -> None:
+    """Remove only this absent owned worktree's registration, never prune or force."""
+    if target.exists() or target.is_symlink():
+        raise ConsoleError("worktree_exists")
+    expected = b"worktree " + os.fsencode(target.resolve())
+    records = git(workspace, "worktree", "list", "--porcelain", "-z").split(b"\0\0")
+    for record in records:
+        fields = record.split(b"\0")
+        if not fields or fields[0] != expected:
+            continue
+        if any(field == b"locked" or field.startswith(b"locked ") for field in fields):
+            raise ConsoleError("worktree_exists")
+        if target.exists() or target.is_symlink():
+            raise ConsoleError("worktree_exists")
+        # Git validates the exact registration and retains its own lock/dirty checks.
+        git(workspace, "worktree", "remove", str(target))
+        return
+
+
+def prepare_workspace(
+    workspace: Path,
+    task_id: str,
+    previous: str | None,
+    *,
+    base_ref: str,
+    worktree_root: Path,
+    validate_target=None,
+) -> tuple[Path, bool]:
     if previous is not None:
         if fingerprint(workspace) != previous:
             raise ConsoleError("workspace_changed")
         return workspace, False
     if not git(workspace, "status", "--porcelain=v1", "--untracked-files=all").strip():
         return workspace, False
-    target = workspace.parent / "worktrees" / f"codex-{task_id}"
+    target = worktree_root / f"codex-{task_id}"
+    if validate_target is not None:
+        validate_target(target)
     if target.exists():
         raise ConsoleError("worktree_exists")
-    git(workspace, "worktree", "add", "--detach", str(target), "origin/dev")
+    base = git(workspace, "rev-parse", "--verify", "--end-of-options", f"{base_ref}^{{commit}}")
+    worktree_root.mkdir(parents=True, exist_ok=True)
+    git(workspace, "worktree", "add", "--detach", str(target), base.decode().strip())
     return target, True
 
 

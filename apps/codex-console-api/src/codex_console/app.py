@@ -30,6 +30,7 @@ from .schemas import (
     DeviceLoginOut,
     DiffOut,
     DocumentInput,
+    GitStatusOut,
     Implement,
     ImportThread,
     LoginInput,
@@ -60,7 +61,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
             if not guard.scalar(text("SELECT pg_try_advisory_lock(18701, 1)")):
                 raise RuntimeError("Run exactly one console API process per database")
             revision = guard.scalar(text("SELECT version_num FROM console_alembic_version"))
-            if revision != "console_0004":
+            if revision != "console_0006":
                 raise RuntimeError("Run codex-console migrate before starting the server")
             store.recover_startup(factory)
             runtime = Runtime(app.state.settings, factory, rpc_factory)
@@ -421,7 +422,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
 
     @app.post("/api/tasks/{task_id}/messages", dependencies=secured, response_model=TaskDetail)
     async def message(task_id: str, body: Message):
-        await app.state.runtime.start(
+        await app.state.runtime.submit(
             task_id,
             body.operation_id,
             body.text,
@@ -435,7 +436,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
 
     @app.post("/api/tasks/{task_id}/implement", dependencies=secured, response_model=TaskDetail)
     async def implement(task_id: str, body: Implement):
-        await app.state.runtime.start(
+        await app.state.runtime.submit(
             task_id,
             body.operation_id,
             body.text,
@@ -475,13 +476,25 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
     @app.get("/api/tasks/{task_id}/changes", dependencies=secured, response_model=list[ChangeOut])
     def changes(task_id: str):
         with app.state.factory() as db:
-            root = Path(store.require_task(db, task_id).root)
+            task = store.require_task(db, task_id)
+            app.state.runtime.require_allowed_task(task)
+            root = Path(task.root)
         return git.changes(root)
+
+    @app.get("/api/tasks/{task_id}/git", dependencies=secured, response_model=GitStatusOut)
+    def git_status(task_id: str):
+        with app.state.factory() as db:
+            task = store.require_task(db, task_id)
+            app.state.runtime.require_allowed_task(task)
+            root = Path(task.root)
+        return git.status(root)
 
     @app.get("/api/tasks/{task_id}/diff", dependencies=secured, response_model=DiffOut)
     def diff(task_id: str, path: str = Query(max_length=2048)):
         with app.state.factory() as db:
-            root = Path(store.require_task(db, task_id).root)
+            task = store.require_task(db, task_id)
+            app.state.runtime.require_allowed_task(task)
+            root = Path(task.root)
         return git.diff(root, path)
 
     @app.get("/api/tasks/{task_id}/events", dependencies=secured)
