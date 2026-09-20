@@ -197,6 +197,74 @@ class Runtime:
             task.thread_id, task.model = result["thread"]["id"], result["model"]
         return result
 
+    @staticmethod
+    def start_digest(task_id, text, stage, revision_id, attachment_ids, model, effort, permissions):
+        identity = [task_id, text, stage, revision_id, [str(id) for id in attachment_ids]]
+        # Preserve retry identities created by the previous console release.
+        if model is not None or effort is not None or permissions != "ask":
+            identity.extend([model, effort, permissions])
+        return digest(json.dumps(identity))
+
+    def accepted_start(self, task_id, operation_id, operation_digest):
+        with self.factory() as db:
+            operation = db.get(Operation, str(operation_id))
+            if operation:
+                if operation.task_id != task_id or operation.digest != operation_digest:
+                    raise ConsoleError("duplicate_request")
+                return operation.state == "accepted"
+        return False
+
+    async def submit(
+        self,
+        task_id,
+        operation_id,
+        text,
+        stage,
+        revision_id=None,
+        attachment_ids=(),
+        *,
+        model=None,
+        effort=None,
+        permissions="ask",
+    ):
+        operation_digest = self.start_digest(
+            task_id, text, stage, revision_id, attachment_ids, model, effort, permissions
+        )
+        if self.accepted_start(task_id, operation_id, operation_digest):
+            return
+        turn_id = await self.prepare_submission(
+            task_id,
+            stage=stage,
+            permissions=permissions,
+            model=model,
+            effort=effort,
+            operation_id=str(operation_id),
+            revision_id=revision_id,
+        )
+        if self.accepted_start(task_id, operation_id, operation_digest):
+            return
+        if turn_id:
+            await self.steer(
+                task_id,
+                operation_id,
+                text,
+                attachment_ids,
+                expected_turn_id=turn_id,
+                submission_digest=operation_digest,
+            )
+        else:
+            await self.start(
+                task_id,
+                operation_id,
+                text,
+                stage,
+                revision_id,
+                attachment_ids,
+                model=model,
+                effort=effort,
+                permissions=permissions,
+            )
+
     async def start(
         self,
         task_id,
@@ -212,11 +280,9 @@ class Runtime:
     ):
         operation_id = str(operation_id)
         attachment_ids = [str(id) for id in attachment_ids]
-        identity = [task_id, text, stage, revision_id, attachment_ids]
-        # Preserve retry identities created by the previous console release.
-        if model is not None or effort is not None or permissions != "ask":
-            identity.extend([model, effort, permissions])
-        operation_digest = digest(json.dumps(identity))
+        operation_digest = self.start_digest(
+            task_id, text, stage, revision_id, attachment_ids, model, effort, permissions
+        )
         context = {"workflow": {"kind": "application", "value": f"Workflow stage: {stage}."}}
         async with self.gate:
             rpc = await self.authenticated_rpc()
@@ -405,12 +471,23 @@ class Runtime:
                     raise
                 raise ConsoleError("execution_failed", 503) from None
 
-    async def steer(self, task_id, operation_id, text, attachment_ids=(), *, expected_turn_id=None):
+    async def steer(
+        self,
+        task_id,
+        operation_id,
+        text,
+        attachment_ids=(),
+        *,
+        expected_turn_id=None,
+        submission_digest=None,
+    ):
         async with self.gate:
             rpc = await self.authenticated_rpc()
             key = str(operation_id)
             attachment_ids = [str(id) for id in attachment_ids]
-            request_digest = digest(json.dumps([task_id, text, "steer", attachment_ids]))
+            request_digest = submission_digest or digest(
+                json.dumps([task_id, text, "steer", attachment_ids])
+            )
             with self.factory.begin() as db:
                 task = store.require_task(db, task_id, locked=True)
                 if expected_turn_id is not None and task.turn_id != expected_turn_id:
@@ -534,7 +611,15 @@ class Runtime:
         )
 
     async def prepare_submission(
-        self, task_id, *, stage="plan", permissions="ask", model=None, effort=None
+        self,
+        task_id,
+        *,
+        stage="plan",
+        permissions="ask",
+        model=None,
+        effort=None,
+        operation_id=None,
+        revision_id=None,
     ):
         """Reconcile uncertain delivery before accepting a new, explicit user message."""
         with self.factory() as db:
@@ -565,6 +650,8 @@ class Runtime:
                         task = store.require_task(db, task_id, locked=True)
                         if self.submission_state(db, task) != expected or self.rpc is not rpc:
                             raise ConsoleError("task_busy")
+                        if revision_id is not None and operation_id != task.current_operation_id:
+                            raise ConsoleError("turn_not_finished")
                         effective_permissions = permissions if stage == "implement" else "read-only"
                         if (
                             task.stage != stage

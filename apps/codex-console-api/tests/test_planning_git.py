@@ -716,3 +716,112 @@ def test_active_recovery_preserves_omitted_settings_and_rejects_explicit_changes
     saved = client.get(endpoint).json()
     assert saved["model"] == "account-default" and saved["effort"] == "high"
     assert saved["status"] == ("running" if matches else "uncertain")
+
+
+@pytest.mark.parametrize("mode", ["plan", "direct", "revision"])
+def test_lost_start_response_retry_returns_verified_acceptance_without_steering(client, mode):
+    from codex_console.models import Operation
+
+    task = plan(client) if mode == "revision" else new_task(client)
+    runtime = client.app.state.runtime
+    client.portal.call(runtime.authenticated_rpc)
+    rpc = runtime.rpc
+    before = sum(method == "turn/start" for method, _ in rpc.calls)
+    path = f"/api/tasks/{task['id']}" + ("/messages" if mode == "plan" else "/implement")
+    body = {"operation_id": str(uuid4()), "text": "Inspect the tests"}
+    if mode == "revision":
+        body = {"operation_id": str(uuid4()), "revision_id": task["revisions"][-1]["id"]}
+    rpc.fail_turn = True
+    assert client.post(path, json=body).status_code == 503
+    saved = client.get(f"/api/tasks/{task['id']}").json()
+    rpc.threads[saved["thread_id"]].update(
+        status={"type": "active"},
+        turns=[
+            {
+                "id": "verified-submitted-turn",
+                "status": "inProgress",
+                "items": [
+                    {
+                        "id": "user",
+                        "type": "userMessage",
+                        "clientId": body["operation_id"],
+                        "content": [],
+                    }
+                ],
+            }
+        ],
+    )
+    for _ in range(2):
+        response = client.post(path, json=body)
+        assert response.status_code == 200
+        assert response.json()["turn_id"] == "verified-submitted-turn"
+    assert sum(method == "turn/start" for method, _ in rpc.calls) == before + 1
+    assert not any(method == "turn/steer" for method, _ in rpc.calls)
+    with client.app.state.factory() as db:
+        assert db.get(Operation, body["operation_id"]).state == "accepted"
+    assert (
+        client.post(path, json={**body, "text": "Different request"}).json()["code"]
+        == "duplicate_request"
+    )
+
+
+@pytest.mark.parametrize("revision", ["current", "old", "missing"])
+def test_new_plan_execution_is_not_silently_steered_into_a_recovered_turn(client, revision):
+    task = plan(client)
+    old_id = task["revisions"][-1]["id"]
+    task = complete(client, send_message(client, task).json(), "Updated plan")
+    latest_id = task["revisions"][-1]["id"]
+    endpoint = f"/api/tasks/{task['id']}"
+    task = client.post(
+        endpoint + "/implement",
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Inspect the code",
+        },
+    ).json()
+    runtime = client.app.state.runtime
+    client.portal.call(runtime.on_disconnect)
+    runtime.rpc.threads[task["thread_id"]].update(
+        status={"type": "active"},
+        turns=[
+            {
+                "id": task["turn_id"],
+                "status": "inProgress",
+                "items": [],
+            }
+        ],
+    )
+    revision_id = {"current": latest_id, "old": old_id, "missing": latest_id + 1000}[revision]
+    response = client.post(
+        endpoint + "/implement",
+        json={
+            "operation_id": str(uuid4()),
+            "revision_id": revision_id,
+            "text": "Execute this plan",
+        },
+    )
+    assert response.status_code == 409 and response.json()["code"] == "turn_not_finished"
+    assert not any(method == "turn/steer" for method, _ in runtime.rpc.calls)
+    saved = client.get(endpoint).json()
+    assert saved["status"] == "uncertain" and saved["approved_revision"] is None
+
+
+def test_retry_of_submission_steered_after_recovery_is_also_idempotent(client):
+    task = send_message(client, new_task(client)).json()
+    runtime = client.app.state.runtime
+    client.portal.call(runtime.on_disconnect)
+    runtime.rpc.threads[task["thread_id"]].update(
+        status={"type": "active"},
+        turns=[
+            {
+                "id": task["turn_id"],
+                "status": "inProgress",
+                "items": [],
+            }
+        ],
+    )
+    body = {"operation_id": str(uuid4()), "text": "Check the tests too"}
+    for _ in range(2):
+        assert client.post(f"/api/tasks/{task['id']}/messages", json=body).status_code == 200
+    assert sum(method == "turn/steer" for method, _ in runtime.rpc.calls) == 1
+    assert sum(method == "turn/start" for method, _ in runtime.rpc.calls) == 1

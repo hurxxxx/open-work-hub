@@ -422,18 +422,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
 
     @app.post("/api/tasks/{task_id}/messages", dependencies=secured, response_model=TaskDetail)
     async def message(task_id: str, body: Message):
-        if turn_id := await app.state.runtime.prepare_submission(
-            task_id,
-            stage=body.stage,
-            permissions=body.permissions,
-            model=body.model,
-            effort=body.effort,
-        ):
-            await app.state.runtime.steer(
-                task_id, body.operation_id, body.text, body.attachment_ids, expected_turn_id=turn_id
-            )
-            return store.detail(app.state.factory, task_id, app.state.settings)
-        await app.state.runtime.start(
+        await app.state.runtime.submit(
             task_id,
             body.operation_id,
             body.text,
@@ -447,18 +436,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
 
     @app.post("/api/tasks/{task_id}/implement", dependencies=secured, response_model=TaskDetail)
     async def implement(task_id: str, body: Implement):
-        if turn_id := await app.state.runtime.prepare_submission(
-            task_id,
-            stage="implement",
-            permissions=body.permissions,
-            model=body.model,
-            effort=body.effort,
-        ):
-            await app.state.runtime.steer(
-                task_id, body.operation_id, body.text, body.attachment_ids, expected_turn_id=turn_id
-            )
-            return store.detail(app.state.factory, task_id, app.state.settings)
-        await app.state.runtime.start(
+        await app.state.runtime.submit(
             task_id,
             body.operation_id,
             body.text,
