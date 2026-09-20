@@ -138,6 +138,8 @@ test('replaced validation images are retired by identity without touching unknow
     images: [
       ...storageImages().slice(0, 3),
       validation('obsolete-ci'),
+      validation('null-tags-ci', { RepoTags: null }),
+      validation('missing-tags-ci', { RepoTags: undefined }),
       validation('running-ci'),
       validation('stopped-ci'),
       validation('recent-ci', { Created: new Date().toISOString() }),
@@ -151,7 +153,7 @@ test('replaced validation images are retired by identity without touching unknow
   };
   assert.deepEqual(
     retirementPlan(state.images, state.containers).map((i) => i.id),
-    ['obsolete-ci'],
+    ['obsolete-ci', 'null-tags-ci', 'missing-tags-ci'],
   );
   assert.deepEqual(retirementPlan([validation('obsolete-ci')], []), []);
   const calls = [];
@@ -162,7 +164,11 @@ test('replaced validation images are retired by identity without touching unknow
   });
   assert.deepEqual(
     calls.filter((args) => args[1] === 'rm'),
-    [['image', 'rm', '--no-prune', 'obsolete-ci']],
+    [
+      ['image', 'rm', '--no-prune', 'obsolete-ci'],
+      ['image', 'rm', '--no-prune', 'null-tags-ci'],
+      ['image', 'rm', '--no-prune', 'missing-tags-ci'],
+    ],
   );
 });
 

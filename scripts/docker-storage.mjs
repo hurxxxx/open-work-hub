@@ -89,7 +89,7 @@ export function retirementPlan(images, containers, now = Date.now()) {
         Boolean(currentCi) && tags.every((tag) => VALIDATION_TAG.test(tag))
       );
     })
-    .map((image) => ({ id: image.Id, tags: image.RepoTags }));
+    .map((image) => ({ id: image.Id, tags: image.RepoTags ?? [] }));
 }
 
 function docker(args) {
