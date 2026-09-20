@@ -476,19 +476,25 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
     @app.get("/api/tasks/{task_id}/changes", dependencies=secured, response_model=list[ChangeOut])
     def changes(task_id: str):
         with app.state.factory() as db:
-            root = Path(store.require_task(db, task_id).root)
+            task = store.require_task(db, task_id)
+            app.state.runtime.require_allowed_task(task)
+            root = Path(task.root)
         return git.changes(root)
 
     @app.get("/api/tasks/{task_id}/git", dependencies=secured, response_model=GitStatusOut)
     def git_status(task_id: str):
         with app.state.factory() as db:
-            root = Path(store.require_task(db, task_id).root)
+            task = store.require_task(db, task_id)
+            app.state.runtime.require_allowed_task(task)
+            root = Path(task.root)
         return git.status(root)
 
     @app.get("/api/tasks/{task_id}/diff", dependencies=secured, response_model=DiffOut)
     def diff(task_id: str, path: str = Query(max_length=2048)):
         with app.state.factory() as db:
-            root = Path(store.require_task(db, task_id).root)
+            task = store.require_task(db, task_id)
+            app.state.runtime.require_allowed_task(task)
+            root = Path(task.root)
         return git.diff(root, path)
 
     @app.get("/api/tasks/{task_id}/events", dependencies=secured)

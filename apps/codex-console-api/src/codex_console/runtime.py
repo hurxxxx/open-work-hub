@@ -41,6 +41,15 @@ class Runtime:
         self.connect_gate = asyncio.Lock()
         self.error = None
 
+    def require_allowed_task(self, task):
+        self.settings.require_allowed_paths(
+            task.root,
+            task.last_execution_root,
+            task.previous_execution_root,
+            self.settings.workspace,
+            self.settings.worktree_root,
+        )
+
     async def connect(self):
         async with self.connect_gate:
             if self.rpc and self.rpc.connected:
@@ -143,6 +152,7 @@ class Runtime:
     async def ensure_thread(self, task_id, rpc):
         with self.factory() as db:
             task = store.require_task(db, task_id)
+            self.require_allowed_task(task)
             thread_id, root, prior_permissions = task.thread_id, task.root, task.permissions
             prior_root = task.last_execution_root or root
             granted = [(prior_permissions, prior_root)]
@@ -288,6 +298,7 @@ class Runtime:
             rpc = await self.authenticated_rpc()
             with self.factory.begin() as db:
                 task = store.require_task(db, task_id, locked=True)
+                self.require_allowed_task(task)
                 previous = db.get(Operation, operation_id)
                 if previous:
                     if previous.task_id != task_id or previous.digest != operation_digest:
@@ -355,6 +366,7 @@ class Runtime:
                 if stage == "implement":
                     with self.factory() as db:
                         task = store.require_task(db, task_id)
+                        self.require_allowed_task(task)
                         root, previous, owned = (
                             Path(task.root),
                             task.fingerprint,
@@ -437,6 +449,7 @@ class Runtime:
                 # Commit the submission boundary before any turn can reach app-server.
                 with self.factory.begin() as db:
                     task = store.require_task(db, task_id, locked=True)
+                    self.require_allowed_task(task)
                     task.model, task.effort = chosen_model, effort
                     task.previous_execution_root = result["cwd"]
                     task.previous_permissions = {
@@ -490,6 +503,7 @@ class Runtime:
             )
             with self.factory.begin() as db:
                 task = store.require_task(db, task_id, locked=True)
+                self.require_allowed_task(task)
                 if expected_turn_id is not None and task.turn_id != expected_turn_id:
                     raise ConsoleError("turn_not_active")
                 existing = db.get(Operation, key)
@@ -574,6 +588,7 @@ class Runtime:
             await rpc.call("turn/interrupt", params)
 
     def reset_removed_workspace(self, db, task):
+        self.require_allowed_task(task)
         if not task.worktree_owned or Path(task.root).exists():
             return False
         if not self.settings.workspace.is_dir():
@@ -625,6 +640,7 @@ class Runtime:
         """Reconcile uncertain delivery before accepting a new, explicit user message."""
         with self.factory() as db:
             task = store.require_task(db, task_id)
+            self.require_allowed_task(task)
             uncertain = task.status == "uncertain"
             missing = task.worktree_owned and not Path(task.root).exists()
             if not uncertain and not missing:
@@ -649,6 +665,7 @@ class Runtime:
                 async with self.gate:
                     with self.factory.begin() as db:
                         task = store.require_task(db, task_id, locked=True)
+                        self.require_allowed_task(task)
                         if self.submission_state(db, task) != expected or self.rpc is not rpc:
                             raise ConsoleError("task_busy")
                         if revision_id is not None and operation_id != task.current_operation_id:
@@ -689,6 +706,7 @@ class Runtime:
         async with self.gate:
             with self.factory.begin() as db:
                 task = store.require_task(db, task_id, locked=True)
+                self.require_allowed_task(task)
                 if expected_submission is not None:
                     if self.submission_state(db, task) != expected_submission:
                         raise ConsoleError("task_busy")
@@ -764,6 +782,7 @@ class Runtime:
             rpc = await self.connect()
             with self.factory.begin() as db:
                 task = store.require_task(db, task_id, locked=True)
+                self.require_allowed_task(task)
                 request = db.get(PendingRequest, request_id)
                 if (
                     not request
@@ -930,11 +949,14 @@ class Runtime:
                         store.project_document(db, task, turn["id"], [r.payload for r in rows])
                     if task.stage == "implement":
                         try:
+                            self.require_allowed_task(task)
                             task.fingerprint = await asyncio.to_thread(
                                 git.fingerprint, Path(task.root)
                             )
-                        except ConsoleError:
-                            if self.reset_removed_workspace(db, task):
+                        except ConsoleError as exc:
+                            if exc.code == "path_denied":
+                                task.status, task.error_code = "interrupted", "path_denied"
+                            elif self.reset_removed_workspace(db, task):
                                 task.stage = "review"
                             else:
                                 task.status, task.error_code = "uncertain", "workspace_changed"

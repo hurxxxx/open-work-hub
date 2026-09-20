@@ -6,6 +6,8 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
+from .errors import ConsoleError
+
 CODEX_VERSION = "0.154.0"
 
 
@@ -128,6 +130,18 @@ class Settings(BaseSettings):
         if make_url(self.database_url).database in self.forbidden_database_names:
             raise ValueError("The console requires its dedicated database")
         return self
+
+    def require_allowed_paths(self, *paths):
+        """Apply current protection settings to persisted and resolved execution paths."""
+        protected = [path.expanduser().resolve() for path in self.protected_workspaces]
+        for value in paths:
+            if value is None:
+                continue
+            path = Path(value).expanduser()
+            if not path.is_absolute() or any(
+                path.resolve().is_relative_to(root) for root in protected
+            ):
+                raise ConsoleError("path_denied", 403)
 
     @field_validator("base_path")
     @classmethod
