@@ -85,7 +85,8 @@ textarea {color: inherit; background: transparent; resize: vertical; border: 0; 
 .composer {position: relative; height: 280px; flex: 0 0 280px; margin: 0 18px 18px; overflow: visible; border: 1px solid var(--ui-color-border-strong); border-radius: 10px; background: var(--ui-color-surface); display: flex; flex-direction: column;}
 .composer textarea {min-height: 88px; max-height: none; flex: 1 1 auto; font-size: 13px; resize: none; overflow-y: auto;}
 .composer-toolbar {display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; padding: 4px 10px 10px; gap: 8px;}
-.composer-controls {display: flex; align-items: center; gap: 6px; min-width: 0;}
+.composer-controls {display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1 1 auto;}
+.composer-toolbar .actions {flex-shrink: 0;}
 .composer-toolbar select {font-size: 11px; background: var(--ui-color-surface-subtle); border: 0;}
 .composer-toolbar .muted {font-size: 10px;}
 .results {grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--ui-color-surface);}
@@ -209,9 +210,9 @@ textarea {color: inherit; background: transparent; resize: vertical; border: 0; 
 .upload-status > span {overflow-wrap: anywhere; min-width: 0; flex: 1;}
 .upload-status progress {max-width: 70px;}
 
-.execution-settings {margin: 0; padding: 0; border: 0; display: flex; align-items: center; gap: 6px; min-width: 0;}
-.execution-model-picker {position: relative; min-width: 0;}
-.execution-settings-trigger {max-width: 260px; min-width: 0; gap: 5px; white-space: nowrap; background: var(--ui-color-surface-subtle);}
+.execution-settings {margin: 0; padding: 0; border: 0; display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1 1 auto;}
+.execution-model-picker {position: relative; min-width: 0; flex: 1 1 auto;}
+.execution-settings-trigger {width: 100%; max-width: 260px; min-width: 0; gap: 5px; white-space: nowrap; background: var(--ui-color-surface-subtle);}
 .execution-settings-trigger > span:first-child {overflow: hidden; text-overflow: ellipsis;}
 .execution-settings-trigger > svg {flex-shrink: 0; color: var(--ui-color-ink-subtle);}
 .execution-settings-popover {position: absolute; z-index: var(--ui-z-popover, 90); bottom: calc(100% + 10px); left: 0; width: min(320px, calc(100vw - 48px)); padding: 12px; border: 1px solid var(--ui-color-border-strong); border-radius: 10px; background: var(--ui-color-surface-raised); box-shadow: var(--ui-shadow-lg);}

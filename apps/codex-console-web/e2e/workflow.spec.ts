@@ -243,6 +243,38 @@ test('late status, guidance, and recovery surfaces do not reflow the workspace',
   expectStable(beforeNotice, await layout());
 });
 
+test('execution controls stay separated on a narrow desktop workspace', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 844 });
+  await page.goto('./');
+  await page
+    .getByLabel('본인 전용 비밀번호')
+    .fill('console-tests-only-password');
+  await page.getByRole('button', { name: '로그인', exact: true }).click();
+  await page
+    .getByRole('button', { name: '새 작업', exact: true })
+    .first()
+    .click();
+  await page.getByLabel('작업 제목').fill('좁은 화면 컨트롤 확인');
+  await page.getByRole('button', { name: '작업 만들기' }).click();
+
+  const composer = await page.locator('.composer').boundingBox();
+  const controls = await page.locator('.composer-controls').boundingBox();
+  const actions = await page.locator('.composer-toolbar > .actions').boundingBox();
+  const model = await page
+    .getByRole('button', { name: '설정 변경' })
+    .boundingBox();
+  const permissions = await page.getByLabel('실행 권한').boundingBox();
+  for (const box of [composer, controls, actions, model, permissions])
+    expect(box).not.toBeNull();
+  expect(model!.x + model!.width).toBeLessThanOrEqual(permissions!.x + 1);
+  expect(controls!.x + controls!.width).toBeLessThanOrEqual(actions!.x + 1);
+  expect(actions!.x + actions!.width).toBeLessThanOrEqual(
+    composer!.x + composer!.width + 1,
+  );
+});
+
 test('planning answers ordinary questions without creating documents and shows a read-only branch tab', async ({
   page,
 }) => {
