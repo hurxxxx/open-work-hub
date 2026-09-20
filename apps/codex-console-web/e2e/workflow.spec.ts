@@ -259,20 +259,35 @@ test('execution controls stay separated on a narrow desktop workspace', async ({
   await page.getByLabel('작업 제목').fill('좁은 화면 컨트롤 확인');
   await page.getByRole('button', { name: '작업 만들기' }).click();
 
-  const composer = await page.locator('.composer').boundingBox();
-  const controls = await page.locator('.composer-controls').boundingBox();
-  const actions = await page.locator('.composer-toolbar > .actions').boundingBox();
-  const model = await page
-    .getByRole('button', { name: '설정 변경' })
-    .boundingBox();
-  const permissions = await page.getByLabel('실행 권한').boundingBox();
-  for (const box of [composer, controls, actions, model, permissions])
-    expect(box).not.toBeNull();
-  expect(model!.x + model!.width).toBeLessThanOrEqual(permissions!.x + 1);
-  expect(controls!.x + controls!.width).toBeLessThanOrEqual(actions!.x + 1);
-  expect(actions!.x + actions!.width).toBeLessThanOrEqual(
-    composer!.x + composer!.width + 1,
-  );
+  const expectSeparated = async () => {
+    const composer = await page.locator('.composer').boundingBox();
+    const controls = await page.locator('.composer-controls').boundingBox();
+    const actions = await page
+      .locator('.composer-toolbar > .actions')
+      .boundingBox();
+    const model = await page
+      .getByRole('button', { name: '설정 변경' })
+      .boundingBox();
+    const permissions = await page.getByLabel('실행 권한').boundingBox();
+    for (const box of [composer, controls, actions, model, permissions])
+      expect(box).not.toBeNull();
+    expect(model!.x + model!.width).toBeLessThanOrEqual(
+      permissions!.x + 1,
+    );
+    expect(controls!.y + controls!.height).toBeLessThanOrEqual(actions!.y + 1);
+    expect(actions!.x + actions!.width).toBeLessThanOrEqual(
+      composer!.x + composer!.width + 1,
+    );
+    expect(actions!.y + actions!.height).toBeLessThanOrEqual(
+      composer!.y + composer!.height + 1,
+    );
+  };
+
+  await expectSeparated();
+  await page.getByLabel('요청 내용 입력').fill('좁은 화면 실행 상태 확인');
+  await page.getByRole('button', { name: '보내기', exact: true }).click();
+  await expect(page.getByRole('button', { name: '중단' })).toBeVisible();
+  await expectSeparated();
 });
 
 test('planning answers ordinary questions without creating documents and shows a read-only branch tab', async ({
