@@ -80,6 +80,13 @@ def register_external_llm_provider(descriptor: ExternalLlmProviderDescriptor) ->
 def ensure_default_llm_providers_registered() -> None:
     for descriptor in (
         LlmProviderDescriptor(
+            "openai_compatible",
+            display_name="OpenAI-compatible",
+            openai_compatible=True,
+            official=False,
+            control_plane_visible=False,
+        ),
+        LlmProviderDescriptor(
             "local",
             display_name="Local",
             route_mode="local",

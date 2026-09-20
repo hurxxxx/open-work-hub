@@ -1,7 +1,10 @@
 .git
-.env
-.env.*
-!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+**/.auth_info
+**/.auth_info.*
+**/.auth_info~
 .runtime
 .nx
 .dev

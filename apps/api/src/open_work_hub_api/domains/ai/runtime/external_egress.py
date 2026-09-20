@@ -191,7 +191,8 @@ def _allow(context: _ExternalEgressContext) -> ExternalEgressDecision:
 def _default_provider(capability: ExternalCapability, settings: Settings) -> str:
     if capability == "search":
         return settings.ai_default_external_search_provider
-    return settings.ai_default_external_llm_provider
+    # Generative requests must carry the DB-resolved provider; no implicit selection.
+    return ""
 
 
 def _capability_enabled(capability: ExternalCapability, settings: Settings) -> bool:

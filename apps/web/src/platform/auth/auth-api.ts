@@ -304,6 +304,18 @@ export function createDesktopSessionLink(
   );
 }
 
+export function createCodexConsoleSessionLink(
+  token: string,
+): Promise<DesktopSessionLinkResponse> {
+  return request<DesktopSessionLinkResponse>(
+    authRoutes.codexConsoleSessionLinks(),
+    {
+      method: 'POST',
+    },
+    token,
+  );
+}
+
 export function updatePreferences(
   token: string,
   payload: UpdatePreferencesPayload,

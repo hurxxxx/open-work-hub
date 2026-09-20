@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from sqlalchemy.orm import Session
@@ -23,7 +23,7 @@ from open_work_hub_api.domains.ai.model_settings_service import (
 from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 
 RuntimeProbe = Literal["configured", "live"]
-_ConfigKey = tuple[str, str, str, str]
+_ConfigKey = tuple[str, str, str, str, str]
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,8 @@ def build_resolved_llm_pool_config(
             else resolved_settings.llm_external_long_generation_timeout_seconds
         ),
         enabled=True,
-        requires_credentials=route.route == "external",
+        requires_credentials=route.requires_credentials,
+        connection_id=route.provider_id,
     )
 
 
@@ -83,64 +84,78 @@ def inspect_registered_llm_runtime(
     configs: dict[_ConfigKey, LlmPoolConfig] = {}
 
     for workload in sorted(registry.llm_workloads.values(), key=lambda item: item.workload_id):
-        for model_role in workload.model_roles:
-            readiness_id = (
-                workload.workload_id
-                if model_role == "default"
-                else f"{workload.workload_id}:{model_role}"
-            )
-            try:
-                route = resolve_ai_model_workload_route(
-                    db,
-                    workload_id=workload.workload_id,
-                    model_role=model_role,
-                    settings=resolved_settings,
-                )
-                if (
-                    route.route == "external"
-                    and route.provider_id not in allowed_external_providers
-                ):
-                    raise AiModelSettingsError(
-                        status_code=503,
-                        code="admin.ai_model_provider_not_allowed",
-                        context={"provider_id": route.provider_id},
+        for app_id in workload.app_ids:
+            for model_role in workload.model_roles:
+                readiness_id = (
+                    (
+                        f"{app_id}:{workload.workload_id}"
+                        if len(workload.app_ids) > 1
+                        else workload.workload_id
                     )
-            except AiModelSettingsError as exc:
-                chosen_pool = workload.default_route
-                provider_id = str(exc.context.get("provider_id") or "unresolved")
-                failed_items.append(
-                    LlmTaskReadiness(
-                        task_kind=readiness_id,
-                        description=workload.description,
-                        policy=workload.default_policy,
-                        chosen_pool=chosen_pool,
-                        ready=False,
-                        detail=exc.code,
+                    if model_role == "default"
+                    else (
+                        f"{app_id}:{workload.workload_id}:{model_role}"
+                        if len(workload.app_ids) > 1
+                        else f"{workload.workload_id}:{model_role}"
                     )
                 )
-                failed_pool_health.setdefault(
-                    (chosen_pool, provider_id),
-                    LlmPoolHealth(
-                        pool=chosen_pool,
-                        provider=provider_id,
-                        base_url="",
-                        model="",
-                        canonical_model="",
-                        status="not_configured",
-                        detail=exc.code,
-                    ),
-                )
-                continue
+                try:
+                    route = resolve_ai_model_workload_route(
+                        db,
+                        workload_id=workload.workload_id,
+                        app_id=app_id,
+                        model_role=model_role,
+                        settings=resolved_settings,
+                    )
+                    if (
+                        route.route == "external"
+                        and route.adapter_provider not in allowed_external_providers
+                    ):
+                        raise AiModelSettingsError(
+                            status_code=503,
+                            code="admin.ai_model_provider_not_allowed",
+                            context={"provider_id": route.provider_id},
+                        )
+                except AiModelSettingsError as exc:
+                    chosen_pool = workload.default_route
+                    provider_id = str(exc.context.get("provider_id") or "unresolved")
+                    failed_items.append(
+                        LlmTaskReadiness(
+                            task_kind=readiness_id,
+                            description=workload.description,
+                            policy=workload.default_policy,
+                            chosen_pool=chosen_pool,
+                            ready=False,
+                            detail=exc.code,
+                        )
+                    )
+                    failed_pool_health.setdefault(
+                        (chosen_pool, provider_id),
+                        LlmPoolHealth(
+                            pool=chosen_pool,
+                            provider=provider_id,
+                            connection_id=provider_id,
+                            base_url="",
+                            model="",
+                            canonical_model="",
+                            status="not_configured",
+                            detail=exc.code,
+                        ),
+                    )
+                    continue
 
-            config = build_resolved_llm_pool_config(route, settings=resolved_settings)
-            key = _config_key(config)
-            configs.setdefault(key, config)
-            resolved_items.append(
-                (readiness_id, workload.description, workload.default_policy, key)
-            )
+                config = build_resolved_llm_pool_config(route, settings=resolved_settings)
+                key = _config_key(config)
+                configs.setdefault(key, config)
+                resolved_items.append(
+                    (readiness_id, workload.description, workload.default_policy, key)
+                )
 
     health_by_config = {
-        key: check_resolved_pool_health(config, live=probe == "live")
+        key: replace(
+            check_resolved_pool_health(config, live=probe == "live"),
+            connection_id=config.connection_id,
+        )
         for key, config in configs.items()
     }
     ready_items = [
@@ -159,19 +174,18 @@ def inspect_registered_llm_runtime(
         for readiness_id, description, policy, key in resolved_items
     ]
 
-    local_health = next(
-        (health for health in health_by_config.values() if health.pool == "local"),
-        failed_pool_health.get(("local", "local")) or _unused_local_health(),
+    local_health_items = _pool_health_items(
+        "local", health_by_config=health_by_config, failed_pool_health=failed_pool_health
     )
-    external_health_items = _external_health_items(
-        health_by_config=health_by_config,
-        failed_pool_health=failed_pool_health,
+    external_health_items = _pool_health_items(
+        "external", health_by_config=health_by_config, failed_pool_health=failed_pool_health
     )
     return RegisteredLlmRuntimeStatus(
         pools=LlmDualHealth(
-            local=local_health,
+            local=local_health_items[0] if local_health_items else _unused_local_health(),
             external=external_health_items[0] if external_health_items else None,
             external_providers=external_health_items,
+            connections=(*local_health_items, *external_health_items),
         ),
         workloads=LlmEffectiveReadiness(
             tasks=tuple(sorted((*ready_items, *failed_items), key=lambda item: item.task_kind))
@@ -180,22 +194,30 @@ def inspect_registered_llm_runtime(
 
 
 def _config_key(config: LlmPoolConfig) -> _ConfigKey:
-    return (config.pool, config.provider, config.base_url, config.default_model)
+    return (
+        config.pool,
+        config.connection_id or "",
+        config.provider,
+        config.base_url,
+        config.default_model,
+    )
 
 
-def _external_health_items(
+def _pool_health_items(
+    pool: str,
     *,
     health_by_config: dict[_ConfigKey, LlmPoolHealth],
     failed_pool_health: dict[tuple[str, str], LlmPoolHealth],
 ) -> tuple[LlmPoolHealth, ...]:
-    by_provider: dict[str, LlmPoolHealth] = {}
-    for health in health_by_config.values():
-        if health.pool == "external":
-            by_provider.setdefault(health.provider, health)
-    for (pool, provider_id), health in failed_pool_health.items():
-        if pool == "external":
-            by_provider.setdefault(provider_id, health)
-    return tuple(by_provider[key] for key in sorted(by_provider))
+    # Preserve connection/model identity; a healthy sibling must not hide a failure.
+    items = [
+        health
+        for health in (*health_by_config.values(), *failed_pool_health.values())
+        if health.pool == pool
+    ]
+    return tuple(
+        sorted(items, key=lambda health: (health.ready, health.connection_id or "", health.model))
+    )
 
 
 def _unused_local_health() -> LlmPoolHealth:

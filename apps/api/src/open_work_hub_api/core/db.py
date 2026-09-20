@@ -5,13 +5,14 @@ import os
 from collections.abc import Generator
 from functools import lru_cache
 
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from open_work_hub_api.core.model_registry import import_all_models
 from open_work_hub_api.core.settings import WORKSPACE_ROOT, get_settings
 
 logger = logging.getLogger(__name__)
+_configured_engine: Engine | None = None
 
 
 class Base(DeclarativeBase):
@@ -29,13 +30,35 @@ def _engine_options(database_url: str) -> dict[str, object]:
             max_overflow=settings.db_max_overflow,
             pool_timeout=settings.db_pool_timeout,
         )
+    if database_url.startswith("postgresql"):
+        options["connect_args"] = {
+            "application_name": f"owh:{settings.env_profile or 'local'}:api"[:63],
+        }
     return options
 
 
 @lru_cache(maxsize=1)
 def get_engine():
+    if _configured_engine is not None:
+        return _configured_engine
     settings = get_settings()
     return create_engine(settings.postgres_dsn, **_engine_options(settings.postgres_dsn))
+
+
+def configure_database_engine(engine: Engine) -> None:
+    """Bind an embedding runtime's engine before it starts accepting work.
+
+    Worker-hosted domain services must share the worker's connection budget.
+    This is a startup composition hook, not a per-request reconfiguration API.
+    """
+    global _configured_engine
+    if get_engine.cache_info().currsize:
+        previous = get_engine()
+        if previous is not engine:
+            previous.dispose()
+    _configured_engine = engine
+    get_engine.cache_clear()
+    get_session_factory.cache_clear()
 
 
 @lru_cache(maxsize=1)

@@ -80,3 +80,15 @@ describe('company launcher', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 });
+
+it('opens the admitted console in a new tab with opener isolation', () => {
+  view(
+    data([
+      { ...app('codex-console', 'personal'), launch_url: '/codex-console/' },
+    ]),
+  );
+  const link = screen.getByRole('link', { name: /openAppInNewTab/ });
+  expect(link.getAttribute('href')).toBe('/codex-console/');
+  expect(link.getAttribute('target')).toBe('_blank');
+  expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+});

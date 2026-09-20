@@ -10,12 +10,16 @@ const CACHE_LABELS = [
   'io.open-work-hub.build-cache=true',
   'org.opencontainers.image.title=Open Work Hub',
 ];
+const CURRENT_APP_TAG = 'open-work-hub-app:prod';
+const CANONICAL_VALIDATION_TAG = 'open-work-hub-validation:node22-python312';
 const KEEP_TAGS = [
-  'open-work-hub-app:prod',
+  CURRENT_APP_TAG,
   'open-work-hub-app:prod-previous',
-  'open-work-hub-validation:node22-python312',
+  'open-work-hub-app:candidate',
+  CANONICAL_VALIDATION_TAG,
 ];
-const RELEASE_TAG = /^open-work-hub-app:[0-9a-f]{12}$/;
+const RELEASE_TAG =
+  /^open-work-hub-app:(?:[0-9a-f]{12}|candidate-[0-9a-f]{12})$/;
 const VALIDATION_TAG =
   /^open-work-hub-validation:(?:deps-[0-9a-f]{12}|(?:before-)?agents-[0-9a-f]{8}|redis64-impact-release)$/;
 
@@ -51,10 +55,10 @@ export function retirementPlan(images, containers, now = Date.now()) {
       pinned.add(image.Id);
   }
   const currentApp = images.find((image) =>
-    (image.RepoTags ?? []).includes(KEEP_TAGS[0]),
+    (image.RepoTags ?? []).includes(CURRENT_APP_TAG),
   );
   const currentCi = images.find((image) =>
-    (image.RepoTags ?? []).includes(KEEP_TAGS[2]),
+    (image.RepoTags ?? []).includes(CANONICAL_VALIDATION_TAG),
   );
   return images
     .filter((image) => {
@@ -62,11 +66,22 @@ export function retirementPlan(images, containers, now = Date.now()) {
       const created = Date.parse(image.Created);
       if (
         pinned.has(image.Id) ||
-        !tags.length ||
         !Number.isFinite(created) ||
         now - created < RETENTION_MS
       )
         return false;
+      // Replacing the canonical CI tag leaves the old image untagged. Its
+      // contract label is the positive ownership marker; do not retain a full
+      // dependency image for every previous build-script revision.
+      if (!tags.length) {
+        return (
+          Boolean(currentCi) &&
+          /^[0-9a-f]{64}$/.test(
+            image.Config?.Labels?.['io.open-work-hub.validation.contract'] ??
+              '',
+          )
+        );
+      }
       if (tags.every((tag) => RELEASE_TAG.test(tag))) {
         return (
           Boolean(currentApp) &&
@@ -78,7 +93,7 @@ export function retirementPlan(images, containers, now = Date.now()) {
         Boolean(currentCi) && tags.every((tag) => VALIDATION_TAG.test(tag))
       );
     })
-    .map((image) => ({ id: image.Id, tags: image.RepoTags }));
+    .map((image) => ({ id: image.Id, tags: image.RepoTags ?? [] }));
 }
 
 function docker(args) {
@@ -98,7 +113,7 @@ function docker(args) {
 function snapshot() {
   const ids = [
     ...new Set(
-      docker(['image', 'ls', '-q', '--no-trunc'])
+      docker(['image', 'ls', '-a', '-q', '--no-trunc'])
         .trim()
         .split('\n')
         .filter(Boolean),
@@ -147,7 +162,12 @@ export function cleanup({
       );
     }
     // --no-prune avoids implicitly deleting uninspected parent images.
-    invoke(['image', 'rm', '--no-prune', ...candidate.tags]);
+    invoke([
+      'image',
+      'rm',
+      '--no-prune',
+      ...(candidate.tags.length ? candidate.tags : [candidate.id]),
+    ]);
     console.log(`[docker-storage] retired ${candidate.id}`);
   }
   // Docker owns dependency/reference tracking. This positive label and age

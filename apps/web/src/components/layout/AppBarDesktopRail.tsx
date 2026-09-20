@@ -144,6 +144,7 @@ export function AppBarDesktopRail({
         const link = resolveAppLink(item.id);
         return (
           <AppBarIconLink
+            appId={item.id}
             active={isAppBarItemPathActive(currentPathname, link)}
             icon={item.icon}
             key={item.id}

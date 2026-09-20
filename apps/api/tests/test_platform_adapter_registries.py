@@ -1796,6 +1796,7 @@ def test_default_llm_pool_config_resolvers_reregister_after_reset() -> None:
         "external:anthropic",
         "external:gemini",
         "external:openai",
+        "external:openai_compatible",
         "external:openrouter",
         "local:*",
     )
@@ -1905,7 +1906,7 @@ def test_platform_validation_rejects_unknown_external_llm_provider_setting() -> 
         _reset_platform_registries()
 
 
-def test_platform_validation_rejects_ai_external_llm_default_outside_allowlist() -> None:
+def test_platform_validation_ignores_retired_ai_external_llm_default_outside_allowlist() -> None:
     _reset_platform_registries()
     try:
         settings = _test_settings(
@@ -1915,19 +1916,13 @@ def test_platform_validation_rejects_ai_external_llm_default_outside_allowlist()
             OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER="anthropic",
         )
 
-        with pytest.raises(
-            PlatformExtensionBootstrapError,
-            match=(
-                "OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER must be listed in "
-                "OPEN_WORK_HUB_AI_ALLOWED_EXTERNAL_PROVIDERS: openai"
-            ),
-        ):
-            initialize_platform_extensions(settings=settings)
+        initialize_platform_extensions(settings=settings)
+        assert not hasattr(settings, "ai_default_external_llm_provider")
     finally:
         _reset_platform_registries()
 
 
-def test_platform_validation_rejects_unknown_ai_external_llm_default() -> None:
+def test_platform_validation_ignores_retired_unknown_ai_external_llm_default() -> None:
     _reset_platform_registries()
     try:
         settings = _test_settings(
@@ -1935,14 +1930,8 @@ def test_platform_validation_rejects_unknown_ai_external_llm_default() -> None:
             OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER="typo-provider",
         )
 
-        with pytest.raises(
-            PlatformExtensionBootstrapError,
-            match=(
-                "OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER contains unsupported "
-                "external provider: typo-provider"
-            ),
-        ):
-            initialize_platform_extensions(settings=settings)
+        initialize_platform_extensions(settings=settings)
+        assert not hasattr(settings, "ai_default_external_llm_provider")
     finally:
         _reset_platform_registries()
 
@@ -2068,6 +2057,7 @@ def test_default_llm_execution_adapters_reregister_after_reset() -> None:
         "external:anthropic",
         "external:gemini",
         "external:openai",
+        "external:openai_compatible",
         "external:openrouter",
         "local:*",
     )
@@ -2102,18 +2092,13 @@ def test_default_llm_generation_profiles_reregister_after_reset() -> None:
     assert docker_profile.extra_body("none") == {"chat_template_kwargs": {"enable_thinking": False}}
 
 
-def test_web_search_workloads_register_as_external_only() -> None:
+def test_retired_web_search_app_does_not_register_an_llm_workload() -> None:
     _reset_platform_registries()
     try:
         initialize_platform_extensions(settings=_test_settings())
         registry = get_ai_capability_registry()
-
-        for workload_id in ("web_search.answer",):
-            workload = registry.resolve_llm_workload(workload_id)
-            assert workload.default_route == "external"
-            assert workload.allowed_routes == ("external",)
-            assert workload.allowed_providers == ("anthropic",)
-
+        assert registry.get_llm_workload("web_search.answer") is None
+        assert registry.get_llm_workload("chatbot") is not None
     finally:
         _reset_platform_registries()
 

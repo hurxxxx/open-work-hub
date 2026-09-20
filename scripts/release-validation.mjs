@@ -16,13 +16,16 @@ const FULL_SUITES = [
   'ci:contract',
   'ci:api:full',
   'ci:web',
+  'ci:codex-console',
 ];
 const FOCUSED_CHECKS = Object.freeze({
   docs: ['check:skills', 'test:skill-harness', 'test:claude-skills'],
   harness: ['ci:harness'],
   web: ['ci:web'],
+  sharedUi: ['ci:web', 'ci:codex-console'],
+  console: ['ci:codex-console'],
 });
-const FOCUSED_ORDER = ['docs', 'harness', 'web'];
+const FOCUSED_ORDER = ['docs', 'harness', 'web', 'sharedUi', 'console'];
 
 // Changes to the selector or its execution contract cannot select their own shortcut.
 const RELEASE_CONTROLS = new Set([
@@ -30,6 +33,8 @@ const RELEASE_CONTROLS = new Set([
   'ops/ci/ci-first.gitlab-ci.yml',
   'scripts/release-validation.mjs',
   'scripts/release-validation.test.mjs',
+  'scripts/prod-app-release.mjs',
+  'scripts/prod-app-release.test.mjs',
   'scripts/check-gitlab-pipeline.mjs',
   'scripts/check-gitlab-pipeline.test.mjs',
   'scripts/check-mr-target-policy.mjs',
@@ -69,13 +74,22 @@ function surface(file) {
     /^(?:docs|adr|\.gitlab)\/.+\.md$/.test(file)
   )
     return 'docs';
-  if (
-    /^(?:apps\/web\/(?:src|e2e)|packages\/(?:core-web|ui)\/src)\//.test(
-      file,
-    ) ||
-    file === 'packages/ui/styles.css'
-  )
+  if (/^(?:apps\/web\/(?:src|e2e)|packages\/core-web\/src)\//.test(file))
     return 'web';
+  if (file === 'packages/ui/styles.css' || /^packages\/ui\/src\//.test(file))
+    return 'sharedUi';
+  if (
+    /^apps\/codex-console-api\/src\/codex_console\/(?:config|runtime)\.py$/.test(
+      file,
+    )
+  )
+    return null;
+  if (
+    /^(?:apps\/codex-console-(?:api|web)\/(?:src|tests)|apps\/codex-console-web\/e2e)\//.test(
+      file,
+    )
+  )
+    return 'console';
   return null;
 }
 

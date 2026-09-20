@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel
 
 from open_work_hub_api.domains.ai.schema_compile import compile_input_schemas
-from open_work_hub_api.domains.auth.app_catalog import iter_app_catalog
+from open_work_hub_api.domains.auth.app_catalog import get_app_registration, iter_app_catalog
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -802,27 +802,23 @@ def _register_domain(
 ) -> None:
     module = __import__(module_name, fromlist=["register_ai_capabilities"])
     register = getattr(module, "register_ai_capabilities", None)
-    if callable(register):
-        register(registry)
+    if not callable(register):
+        raise ValueError(f"Missing AI registration hook: {module_name}")
+    register(registry)
 
 
 @lru_cache(maxsize=1)
 def get_ai_capability_registry() -> AiCapabilityRegistry:
     registry = AiCapabilityRegistry()
     _register_builtin_predicates(registry)
-    for module_name in (
-        "open_work_hub_api.domains.ai",
-        "open_work_hub_api.domains.bento",
-        "open_work_hub_api.domains.docs",
-        "open_work_hub_api.domains.files",
-        "open_work_hub_api.domains.mail",
-        "open_work_hub_api.domains.meeting",
-        "open_work_hub_api.domains.planner",
-        "open_work_hub_api.domains.pms",
-        "open_work_hub_api.domains.retrieval",
-        "open_work_hub_api.domains.rag",
-        "open_work_hub_api.domains.web_search",
-    ):
+    modules: dict[str, None] = {}
+    for app in iter_app_catalog():
+        registration = get_app_registration(app.app_id)
+        if registration is None:
+            raise ValueError(f"Missing app registration: {app.app_id}")
+        for module_name in registration.ai_capability_modules:
+            modules[module_name] = None
+    for module_name in modules:
         _register_domain(registry, module_name)
     registry.compile_capabilities()
     return registry

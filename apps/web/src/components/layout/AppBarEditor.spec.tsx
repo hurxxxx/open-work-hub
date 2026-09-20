@@ -35,7 +35,7 @@ const translate: AppBarTranslator = (key, options) => {
 const draftItems: AppBarLaunchItem[] = [
   { id: 'chatbot' as ShellAppId, title: '챗봇', icon: MessageSquare },
   { id: 'docs' as ShellAppId, title: '문서', icon: FileText },
-  { id: 'web-search' as ShellAppId, title: '웹 검색', icon: Search },
+  { id: 'recording' as ShellAppId, title: '녹음', icon: Search },
 ];
 
 const launcherCategories: BootstrapAppBarCategory[] = [
@@ -58,9 +58,9 @@ const launcherCategories: BootstrapAppBarCategory[] = [
       {
         coming_soon: false,
         position: 1,
-        app_id: 'web-search',
-        title: '웹 검색',
-        route_base: '/apps/web-search',
+        app_id: 'recording',
+        title: '녹음',
+        route_base: '/apps/recording',
         icon_key: 'search',
         enabled: true,
       },
@@ -144,11 +144,11 @@ describe('AppBarEditor', () => {
       draftPinnedAppIds: [
         'chatbot',
         'whiteboard',
-        'web-search',
+        'recording',
         'pms',
         'files',
         'mail',
-        'recording',
+        'bento',
         'diagrams',
         'docs',
       ] as ShellAppId[],
@@ -157,9 +157,7 @@ describe('AppBarEditor', () => {
     for (const checkbox of screen.getAllByLabelText('문서 즐겨찾기에 추가')) {
       expect((checkbox as HTMLInputElement).disabled).toBe(false);
     }
-    for (const checkbox of screen.getAllByLabelText(
-      '웹 검색 즐겨찾기에 추가',
-    )) {
+    for (const checkbox of screen.getAllByLabelText('녹음 즐겨찾기에 추가')) {
       expect((checkbox as HTMLInputElement).disabled).toBe(false);
     }
   });

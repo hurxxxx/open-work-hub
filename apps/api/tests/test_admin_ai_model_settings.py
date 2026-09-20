@@ -95,7 +95,8 @@ def test_admin_ai_model_settings_projects_registry_and_default_catalog(
     assert all(
         set(item).isdisjoint({"api_key", "api_key_ciphertext"}) for item in payload["providers"]
     )
-    assert all(item["endpoint_url"] for item in payload["providers"])
+    assert all(item["endpoint_url"] for item in payload["providers"] if item["provider_id"] != "local")
+    assert next(item for item in payload["providers"] if item["provider_id"] == "local")["endpoint_url"] is None
     assert all(item["endpoint_source"] in {"default", "custom"} for item in payload["providers"])
     local_provider = next(item for item in payload["providers"] if item["provider_id"] == "local")
     assert local_provider["route_mode"] == "local"
@@ -111,7 +112,7 @@ def test_admin_ai_model_settings_projects_registry_and_default_catalog(
     assert chatbot["ready"] is False
     assert chatbot["local_max_output_tokens"] == 32_768
     assert chatbot["external_max_output_tokens"] == 65_536
-    assert chatbot["readiness_code"] == "admin.ai_model_selection_required"
+    assert chatbot["readiness_code"] == "admin.ai_model_provider_required"
     assert chatbot["resolved_routes"] == []
     bento_generate = next(
         item
@@ -127,7 +128,7 @@ def test_admin_ai_model_settings_projects_registry_and_default_catalog(
     with get_session_factory()() as db:
         with pytest.raises(AiModelSettingsError) as error:
             resolve_ai_model_workload_route(db, workload_id="chatbot")
-    assert error.value.code == "admin.ai_model_selection_required"
+    assert error.value.code == "admin.ai_model_provider_required"
 
 
 def test_ai_model_provider_default_model_key_resolves_enabled_catalog_entry(
@@ -227,6 +228,25 @@ def test_admin_ai_model_settings_provider_catalog_and_route_lifecycle(
         },
     )
     assert update_provider.status_code == 200, update_provider.text
+
+    inherited_default = next(
+        (
+            item
+            for item in update_provider.json()["defaults"]
+            if item["app_id"] == "" and item["route_mode"] == "local"
+        ),
+        None,
+    )
+    set_default = client.put(
+        "/api/v1/admin/ai-model-settings/defaults/local",
+        headers=headers,
+        json={
+            "expected_registry_digest": digest,
+            "expected_version": inherited_default["version"] if inherited_default else 0,
+            "provider_id": "local",
+        },
+    )
+    assert set_default.status_code == 200, set_default.text
 
     route_payload = {
         "expected_registry_digest": digest,
@@ -545,7 +565,7 @@ def test_admin_ai_model_discovery_requires_key_then_creates_unapproved_models(
             "expected_version": model["version"],
             "model_key": "rewritten-provider-key",
             "display_name": model["display_name"],
-            "capabilities": model["capabilities"],
+            "capabilities": ["chat", "tool_calling"],
             "enabled": False,
         },
     )
@@ -582,7 +602,7 @@ def test_admin_ai_model_discovery_requires_key_then_creates_unapproved_models(
             "expected_version": model["version"],
             "model_key": model["model_key"],
             "display_name": model["display_name"],
-            "capabilities": model["capabilities"],
+            "capabilities": ["chat", "tool_calling"],
             "enabled": True,
         },
     )

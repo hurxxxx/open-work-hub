@@ -43,7 +43,7 @@ def test_files_registers_independent_llm_workload_descriptors() -> None:
         assert workload.execution_kind == "chat"
         assert workload.allowed_routes == ("local", "external")
         assert workload.allowed_providers == ()
-        assert workload.required_capabilities == ("chat",)
+        assert workload.required_capabilities == ("chat", "tool_calling")
         assert workload.model_roles == ("default",)
         assert workload.external_data is True
         assert workload.local_max_output_tokens == max_output_tokens

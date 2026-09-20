@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 
+from anyio import CapacityLimiter, to_thread
 from fastapi import Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
@@ -98,7 +100,7 @@ def resolve_auth_context_from_token(
     )
 
 
-def require_auth_context(
+async def require_auth_context(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db_session),
@@ -108,15 +110,27 @@ def require_auth_context(
             status_code=status.HTTP_401_UNAUTHORIZED,
             code="auth.required",
         )
-    context = resolve_auth_context_from_token(
-        db,
-        credentials.credentials,
-        allow_password_change=(request.method, request.url.path)
-        in {
-            ("GET", f"{get_settings().api_prefix}/auth/me"),
-            ("POST", f"{get_settings().api_prefix}/auth/change-password"),
-            ("POST", f"{get_settings().api_prefix}/auth/logout"),
-        },
+    settings = get_settings()
+    # Pool checkout can block. Keep authentication waiters off the default
+    # thread limiter, which must remain available to finish requests already
+    # holding connections. Scope this separate budget to the ASGI application.
+    limiter = getattr(request.app.state, "auth_db_limiter", None)
+    if limiter is None:
+        limiter = CapacityLimiter(settings.db_pool_size + settings.db_max_overflow)
+        request.app.state.auth_db_limiter = limiter
+    context = await to_thread.run_sync(
+        partial(
+            resolve_auth_context_from_token,
+            db,
+            credentials.credentials,
+            allow_password_change=(request.method, request.url.path)
+            in {
+                ("GET", f"{settings.api_prefix}/auth/me"),
+                ("POST", f"{settings.api_prefix}/auth/change-password"),
+                ("POST", f"{settings.api_prefix}/auth/logout"),
+            },
+        ),
+        limiter=limiter,
     )
     request.state.auth_context = context
     return context

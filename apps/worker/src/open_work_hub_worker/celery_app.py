@@ -4,7 +4,12 @@ import sys
 from pathlib import Path
 
 from celery import Celery
-from celery.signals import after_setup_logger, after_setup_task_logger, celeryd_init
+from celery.signals import (
+    after_setup_logger,
+    after_setup_task_logger,
+    celeryd_init,
+    worker_process_init,
+)
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
@@ -21,6 +26,7 @@ from open_work_hub_worker.queue_contract import (
     worker_bootstrap_group_requires_llm_routing,
 )
 from open_work_hub_worker.settings import get_settings
+from open_work_hub_worker.runtime import configure_database, reset_database_after_fork
 
 
 def _workspace_root() -> Path:
@@ -54,6 +60,16 @@ install_beat_health()
 @after_setup_task_logger.connect
 def _restore_sensitive_http_logging_guard(**_kwargs) -> None:
     install_sensitive_http_logging_guard()
+
+
+@celeryd_init.connect
+def _configure_database_pools(**_kwargs) -> None:
+    configure_database()
+
+
+@worker_process_init.connect
+def _reset_database_pool_after_fork(**_kwargs) -> None:
+    reset_database_after_fork()
 
 
 @celeryd_init.connect
@@ -99,9 +115,18 @@ def _assert_llm_routing_control_plane_ready() -> None:
     engine = create_engine(settings.postgres_dsn, pool_pre_ping=True)
     try:
         with Session(engine) as session:
-            session.execute(text("SELECT provider_id FROM ai_model_provider_configs LIMIT 1")).all()
+            session.execute(
+                text(
+                    "SELECT provider_id, provider_kind, credential_kind FROM ai_model_provider_configs LIMIT 1"
+                )
+            ).all()
             session.execute(text("SELECT id FROM ai_model_catalog_entries LIMIT 1")).all()
-            session.execute(text("SELECT workload_id FROM ai_model_route_overrides LIMIT 1")).all()
+            session.execute(
+                text("SELECT app_id, workload_id FROM ai_model_route_overrides LIMIT 1")
+            ).all()
+            session.execute(
+                text("SELECT app_id, route_mode FROM ai_model_policy_defaults LIMIT 1")
+            ).all()
     except Exception as error:
         raise RuntimeError(
             "AI model control plane is unavailable. Run API migrations before starting the worker."
@@ -120,6 +145,7 @@ celery_app = Celery(
 )
 celery_app.autodiscover_tasks(["open_work_hub_worker.tasks"])
 celery_app.conf.timezone = "UTC"
+celery_app.conf.worker_concurrency = settings.concurrency
 
 celery_app.conf.beat_schedule = {
     "republish-pending-hermes-runs": {

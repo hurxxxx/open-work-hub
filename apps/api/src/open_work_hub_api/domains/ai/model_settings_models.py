@@ -26,6 +26,29 @@ class AiModelProviderConfig(Base):
     __tablename__ = "ai_model_provider_configs"
 
     provider_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    # provider_id is the stable connection identifier retained for API/FK compatibility.
+    provider_kind: Mapped[str] = mapped_column(
+        String(32),
+        default=lambda context: context.get_current_parameters()["provider_id"],
+        nullable=False,
+    )
+    display_name: Mapped[str] = mapped_column(String(160), default="", nullable=False)
+    route_mode: Mapped[str] = mapped_column(
+        String(16),
+        default=lambda context: (
+            "local" if context.get_current_parameters()["provider_id"] == "local" else "external"
+        ),
+        nullable=False,
+    )
+    credential_kind: Mapped[str] = mapped_column(
+        String(16),
+        default=lambda context: (
+            "none" if context.get_current_parameters()["provider_id"] == "local" else "api_key"
+        ),
+        nullable=False,
+    )
+    preset: Mapped[str] = mapped_column(String(32), default="", nullable=False)
+    verified_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     endpoint_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     api_key_ciphertext: Mapped[str | None] = mapped_column(
         Text,
@@ -108,7 +131,7 @@ class AiModelCatalogEntry(Base):
 class AiModelRouteOverride(Base):
     __tablename__ = "ai_model_route_overrides"
     __table_args__ = (
-        UniqueConstraint("workload_id", name="uq_ai_model_route_overrides_workload"),
+        UniqueConstraint("app_id", "workload_id", name="uq_ai_model_route_overrides_app_workload"),
         CheckConstraint(
             "route_mode IN ('local', 'external')",
             name="ck_ai_model_route_overrides_route_mode",
@@ -129,7 +152,8 @@ class AiModelRouteOverride(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     workload_id: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
-    route_mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    app_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    route_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
     provider_id: Mapped[str | None] = mapped_column(
         ForeignKey("ai_model_provider_configs.provider_id", ondelete="RESTRICT"),
         nullable=True,
@@ -165,8 +189,39 @@ class AiModelRouteOverride(Base):
         }
 
 
+class AiModelPolicyDefault(Base):
+    """An empty app_id denotes the company default; other rows are app exceptions."""
+
+    __tablename__ = "ai_model_policy_defaults"
+    __table_args__ = (
+        CheckConstraint(
+            "route_mode IN ('local', 'external')", name="ck_ai_model_policy_default_route"
+        ),
+        CheckConstraint(
+            "max_output_tokens IS NULL OR (max_output_tokens BETWEEN 1024 AND 65536 AND max_output_tokens % 1024 = 0)",
+            name="ck_ai_model_policy_default_cap",
+        ),
+    )
+
+    app_id: Mapped[str] = mapped_column(String(64), primary_key=True, default="")
+    route_mode: Mapped[str] = mapped_column(String(16), primary_key=True)
+    provider_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ai_model_provider_configs.provider_id", ondelete="RESTRICT"), nullable=True
+    )
+    model_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ai_model_catalog_entries.id", ondelete="RESTRICT"), nullable=True
+    )
+    max_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow_naive, onupdate=utcnow_naive, nullable=False
+    )
+
+
 __all__ = [
     "AiModelCatalogEntry",
     "AiModelProviderConfig",
     "AiModelRouteOverride",
+    "AiModelPolicyDefault",
 ]

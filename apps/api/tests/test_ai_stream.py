@@ -27,6 +27,7 @@ from open_work_hub_api.domains.ai.model_credentials import encrypt_api_key
 from open_work_hub_api.domains.ai.model_settings_models import (
     AiModelCatalogEntry,
     AiModelProviderConfig,
+    AiModelPolicyDefault,
 )
 from open_work_hub_api.domains.ai.registry import get_ai_capability_registry
 from open_work_hub_api.domains.ai import agent as ai_agent
@@ -333,8 +334,9 @@ def _configure_database_local_provider() -> None:
             )
             db.add(model)
         provider.enabled = True
-        provider.endpoint_url = get_settings().llm_local_base_url
+        provider.endpoint_url = "http://127.0.0.1:12434/engines/v1"
         provider.default_model_id = model.id
+        db.merge(AiModelPolicyDefault(app_id="", route_mode=provider.route_mode, provider_id=provider.provider_id, version=1))
         db.commit()
 
 
@@ -376,6 +378,7 @@ def _configure_database_external_provider(
         provider.endpoint_url = endpoint_url
         provider.api_key_ciphertext = encrypt_api_key(f"test-{provider_id}-key")
         provider.default_model_id = model.id
+        db.merge(AiModelPolicyDefault(app_id="", route_mode=provider.route_mode, provider_id=provider.provider_id, version=1))
         db.commit()
 
 
@@ -785,12 +788,19 @@ def test_chat_stream_caller_provider_does_not_override_external_workload_provide
         [_delta(content="external response"), _delta(finish_reason="stop")]
     )
     selected_providers: list[str | None] = []
+    planning_providers: list[str | None] = []
+    original_attach = ai_router._attach_external_egress_trace_metadata
+
+    def attach_external_metadata(routing, **kwargs):
+        planning_providers.append(kwargs.get("planning_provider"))
+        return original_attach(routing, **kwargs)
 
     def get_client(config):  # type: ignore[no-untyped-def]
         selected_providers.append(config.provider)
         return pool_client
 
     monkeypatch.setattr(llm_core, "_new_async_pool_client", get_client)
+    monkeypatch.setattr(ai_router, "_attach_external_egress_trace_metadata", attach_external_metadata)
 
     status_code, events = _stream_post(
         client,
@@ -807,6 +817,7 @@ def test_chat_stream_caller_provider_does_not_override_external_workload_provide
     done = next(event for event in _chat_events(events) if event["type"] == "done")
     assert done["data"]["meta"]["chosen_pool"] == "external"
     assert selected_providers == ["openai"]
+    assert planning_providers == ["openai"]
 
 
 def test_chat_stream_external_tool_incompatibility_blocks_without_local_fallback(

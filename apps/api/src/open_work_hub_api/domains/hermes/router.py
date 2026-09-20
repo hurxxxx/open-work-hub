@@ -197,10 +197,16 @@ async def get_agent_status(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> HermesAgentStatusResponse:
-    binding = await _profile_for_request(
-        db,
-        user=current_user,
-    )
+    try:
+        policy = resolve_model_policy(db)
+        binding = await ensure_profile_binding(db, user=current_user, model_policy=policy)
+    except (
+        HermesIntegrationDisabledError,
+        HermesClientError,
+        AiModelSettingsError,
+        LlmProviderError,
+    ) as error:
+        _raise_integration_error(error)
     client = runtime_client()
     try:
         runtime_payload, capability_payload = await asyncio.gather(
@@ -212,8 +218,8 @@ async def get_agent_status(
     return HermesAgentStatusResponse(
         enabled=True,
         release=HERMES_RELEASE,
-        provider=binding.provider,
-        model=binding.model,
+        provider=policy.provider,
+        model=policy.model,
         profile_status=binding.status,
         runtime=runtime_payload,
         capabilities=capability_payload,
@@ -627,12 +633,16 @@ def stream_run_events(
         after_sequence = max(0, int(last_event_id or 0))
     except ValueError:
         after_sequence = 0
+    events = _event_stream(
+        run_id=run.id,
+        user_id=current_user.id,
+        after_sequence=after_sequence,
+    )
+    # Admission is complete. Polling owns short sessions, so the request's
+    # read transaction must not occupy a connection for the entire SSE stream.
+    db.rollback()
     return StreamingResponse(
-        _event_stream(
-            run_id=run.id,
-            user_id=current_user.id,
-            after_sequence=after_sequence,
-        ),
+        events,
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

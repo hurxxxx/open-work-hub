@@ -937,7 +937,8 @@ def test_bento_ai_workloads_are_registered_local_only(workload_id: str) -> None:
         assert workload.allowed_runtime_adapters == ("chat_completion",)
     else:
         assert workload.allowed_routes == ("local", "external")
-        assert workload.allowed_providers == ("openai",)
+        assert workload.allowed_providers == ()
+        assert "tool_calling" in workload.required_capabilities
         assert workload.execution_kind == "agent"
         assert workload.default_runtime_adapter == "hermes"
         assert workload.allowed_runtime_adapters == ("hermes",)

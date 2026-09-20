@@ -60,10 +60,11 @@ def _seed_llm_routing_control_plane(db_path: Path) -> None:
     connection = sqlite3.connect(db_path)
     try:
         connection.execute(
-            "\n            CREATE TABLE ai_model_provider_configs (\n                provider_id TEXT PRIMARY KEY\n            )\n            "
+            "\n            CREATE TABLE ai_model_provider_configs (\n                provider_id TEXT PRIMARY KEY, provider_kind TEXT, credential_kind TEXT\n            )\n            "
         )
         connection.execute("CREATE TABLE ai_model_catalog_entries (id TEXT PRIMARY KEY)")
-        connection.execute("CREATE TABLE ai_model_route_overrides (workload_id TEXT PRIMARY KEY)")
+        connection.execute("CREATE TABLE ai_model_policy_defaults (app_id TEXT, route_mode TEXT)")
+        connection.execute("CREATE TABLE ai_model_route_overrides (workload_id TEXT PRIMARY KEY, app_id TEXT)")
         connection.executemany(
             "INSERT INTO ai_model_provider_configs (provider_id) VALUES (?)",
             [(provider_id,) for provider_id in ("anthropic", "gemini", "local", "openai")],

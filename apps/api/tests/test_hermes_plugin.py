@@ -124,11 +124,49 @@ def test_workload_blocks_native_tools_but_can_correct_and_submit(plugin, monkeyp
 
     assert "error" in invoke("terminal", {})
     assert "error" in invoke("owh_preview", {"path": "index.html"})
-    assert "error" in invoke("tool_search", {"query": "tools"})
-    assert "error" in invoke("tool_describe", {"tool": "terminal"})
     assert invoke("owh_submit_result", {"result": {"answer": "invalid"}}) == {"accepted": False}
     assert invoke("owh_submit_result", {"result": {"answer": 42}}) == {"accepted": True}
     assert len(attempts) == 2
+
+
+@pytest.mark.parametrize("tool", ["tool_search", "tool_describe"])
+def test_workload_discovery_only_receives_server_admitted_definitions(plugin, monkeypatch, tool):
+    definitions = [{"type": "function", "function": {"name": "owh_submit_result"}}]
+    calls = []
+
+    def get_definitions(names, quiet):
+        assert names == {"owh_submit_result", "web_search"} and quiet
+        return definitions
+
+    def dispatch(args, *, current_tool_defs):
+        assert current_tool_defs is definitions
+        calls.append(args)
+        return '{"tools": {}}'
+
+    for name, members in {
+        "tools.registry": {"registry": SimpleNamespace(get_definitions=get_definitions)},
+        "tools.tool_search": {"dispatch_tool_search": dispatch, "dispatch_tool_describe": dispatch},
+    }.items():
+        module = ModuleType(name)
+        module.__dict__.update(members)
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setattr(plugin.module, "_rpc", lambda *args: {
+        "allow_native_tools": False, "native_tools": ["web_search"]
+    })
+    args = {"names": ["terminal", "owh_submit_result"], "queries": ["tools"]}
+    assert json.loads(plugin.module.execute_tool(
+        tool_name=tool, args=args, next_call=lambda: pytest.fail("Unscoped discovery denied")
+    )) == {"tools": {}}
+    assert calls == [args]
+
+
+def test_workload_discovery_failure_does_not_fall_through(plugin, monkeypatch):
+    monkeypatch.setattr(plugin.module, "_rpc", lambda *args: {"allow_native_tools": False})
+    monkeypatch.setitem(sys.modules, "tools.registry", None)
+    assert "error" in json.loads(plugin.module.execute_tool(
+        tool_name="tool_describe", args={"names": ["owh_submit_result"]},
+        next_call=lambda: pytest.fail("Import failure must fail closed"),
+    ))
 
 
 @pytest.mark.parametrize("native_run_id", ["", "cron_job_fixture", "run_forged"])

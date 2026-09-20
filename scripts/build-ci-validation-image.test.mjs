@@ -9,6 +9,20 @@ import test from 'node:test';
 const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 const digest = `postgres@sha256:${'a'.repeat(64)}`;
 
+test('validation source metadata follows every installed dependency layer', () => {
+  const source = fs.readFileSync(
+    path.join(repoRoot, 'ops/ci/validation-runner/Dockerfile'),
+    'utf8',
+  );
+  const metadata = source.indexOf('ARG VALIDATION_CONTRACT_SHA256');
+  assert.ok(metadata > source.lastIndexOf('RUN '));
+  assert.ok(metadata > source.lastIndexOf('COPY '));
+  assert.match(
+    source.slice(metadata),
+    /io.open-work-hub.validation.contract="\$\{VALIDATION_CONTRACT_SHA256\}"/,
+  );
+});
+
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'owh-validation-build-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

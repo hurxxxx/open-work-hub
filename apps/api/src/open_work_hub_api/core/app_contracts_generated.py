@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
-APP_CONTRACT_REVISION: Final = "sha256:b4c3c46e9f0289854938b2634116f50b05643e569dcc7f854fb66e56ed792f78"
+APP_CONTRACT_REVISION: Final = "sha256:dc7af621dbfb839406491f331635208dfa7242e58975c1092854f4f7dafc3b10"
 APP_CONTRACTS: Final = [
   {
     "app_id": "home",
@@ -51,6 +51,31 @@ APP_CONTRACTS: Final = [
     ]
   },
   {
+    "app_id": "codex-console",
+    "title": "Codex Console",
+    "icon_key": "code-xml",
+    "execution_context_kind": "personal",
+    "resource_scope": "personal",
+    "route_base": "/apps/codex-console",
+    "entry_route_id": "codex-console.root",
+    "launcher": {
+      "placement": "personal_tools",
+      "pinned_by_default": False,
+      "url_setting": "codex_console_launch_url"
+    },
+    "required_system_roles": [
+      "platform_admin"
+    ],
+    "feature_flag": "codex_console_enabled",
+    "routes": [
+      {
+        "route_id": "codex-console.root",
+        "suffix": "",
+        "chrome": "containedSurface"
+      }
+    ]
+  },
+  {
     "app_id": "chatbot",
     "title": "AI Assistant",
     "icon_key": "message-square",
@@ -65,26 +90,6 @@ APP_CONTRACTS: Final = [
     "routes": [
       {
         "route_id": "chatbot.root",
-        "suffix": "",
-        "chrome": "containedSurface"
-      }
-    ]
-  },
-  {
-    "app_id": "web-search",
-    "title": "Web Search",
-    "icon_key": "globe-2",
-    "execution_context_kind": "personal",
-    "resource_scope": "personal",
-    "route_base": "/apps/web-search",
-    "entry_route_id": "web-search.root",
-    "launcher": {
-      "placement": "category",
-      "pinned_by_default": False
-    },
-    "routes": [
-      {
-        "route_id": "web-search.root",
         "suffix": "",
         "chrome": "containedSurface"
       }
@@ -452,6 +457,26 @@ APP_CONTRACTS: Final = [
         "route_id": "retrieval-search.root",
         "suffix": "",
         "chrome": "standard"
+      }
+    ]
+  },
+  {
+    "app_id": "tetris",
+    "title": "Tetris",
+    "icon_key": "boxes",
+    "execution_context_kind": "personal",
+    "resource_scope": "personal",
+    "route_base": "/apps/tetris",
+    "entry_route_id": "tetris.root",
+    "launcher": {
+      "placement": "personal_tools",
+      "pinned_by_default": False
+    },
+    "routes": [
+      {
+        "route_id": "tetris.root",
+        "suffix": "",
+        "chrome": "containedSurface"
       }
     ]
   }

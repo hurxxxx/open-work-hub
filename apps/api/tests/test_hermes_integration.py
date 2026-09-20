@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from open_work_hub_api.core.settings import HERMES_FALLBACK_MODEL, HERMES_MODEL, HERMES_PROVIDER
+from open_work_hub_api.core.settings import HERMES_PROVIDER
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.model_policy import HermesModelPolicy
 from open_work_hub_api.domains.hermes import mcp_router
@@ -51,6 +51,8 @@ from open_work_hub_api.domains.hermes.service import (
     scoped_mcp_server_name,
 )
 
+
+HERMES_MODEL = "test/configured-model"
 
 pytestmark = pytest.mark.anyio
 
@@ -580,63 +582,22 @@ async def test_management_client_pins_openrouter_model_and_dashboard_token() -> 
     }
 
 
-async def test_management_client_applies_managed_resilience_policy() -> None:
+async def test_management_client_applies_only_selected_policy_without_fallback() -> None:
+    from open_work_hub_api.domains.hermes.model_policy import HermesModelPolicy, synchronize_model_policy
     requests: list[httpx.Request] = []
-
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         return httpx.Response(200, json={"ok": True})
-
-    client = HermesManagementClient(
-        base_url="http://dashboard.test",
-        session_token="dashboard-secret-00000000000001",
-        transport=httpx.MockTransport(handler),
-    )
-    await client.set_profile_model("owh/profile")
-
-    assert [request.url.raw_path for request in requests] == [
-        b"/api/profiles/owh%2Fprofile/model",
-        b"/api/config",
-    ]
-    assert json.loads(requests[0].content) == {
-        "provider": HERMES_PROVIDER,
-        "model": HERMES_MODEL,
-    }
-    policy_request = json.loads(requests[1].content)
-    assert policy_request["profile"] == "owh/profile"
-    policy = policy_request["config"]
-    assert policy == {
-        "model": {
-            "default_headers": {"X-OpenRouter-Metadata": "enabled"},
-        },
-        "fallback_providers": [{"provider": HERMES_PROVIDER, "model": HERMES_FALLBACK_MODEL}],
-        "agent": {
-            "api_max_retries": 1,
-            "environment_hint": (
-                "Academic research source policy: Semantic Scholar is disabled. "
-                "Do not access or cite disabled sources, including through generic "
-                "web search. Enabled sources: arXiv, OpenAlex, Crossref."
-            ),
-        },
-        "compression": {
-            "enabled": True,
-            "threshold": 0.50,
-            "threshold_tokens": 100_000,
-            "target_ratio": 0.20,
-            "protect_last_n": 20,
-            "proactive_prune_tokens": 48_000,
-            "proactive_prune_min_result_chars": 8_000,
-            "proactive_prune_min_reclaim_tokens": 4_096,
-        },
-        "provider_routing": {
-            "sort": "throughput",
-            "require_parameters": True,
-        },
-        "auxiliary": {
-            "free_only": False,
-            "openrouter_model": HERMES_MODEL,
-        },
-    }
+    client = HermesManagementClient(base_url="http://dashboard.test", session_token="dashboard-secret-00000000000001", transport=httpx.MockTransport(handler))
+    policy = HermesModelPolicy(route="external", provider="anthropic", model="test/model-b", endpoint="https://api.anthropic.com", api_key="test-secret", max_tokens=8192)
+    await synchronize_model_policy(client, profile_name="owh/profile", policy=policy)
+    config = json.loads(requests[-1].content)["config"]
+    assert config["model"]["default"] == "test/model-b"
+    assert config["fallback_providers"] == []
+    assert config["fallback_model"] is None
+    assert config["compression"]["enabled"] is True
+    assert "qwen/qwen3.8-flash" not in json.dumps(config)
+    assert "test-secret" not in json.dumps(config)
 
 
 def test_run_scope_normalizes_app_ids_and_mcp_filters_with_it(monkeypatch) -> None:

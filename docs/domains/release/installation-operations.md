@@ -5,6 +5,31 @@
 `<...>`는 실제 설치 환경에서 확인해 대체할 값이다. 공식 설정 파일 경로·설정 키·프로토콜 주소는 그대로 표기한다.
 호스트별 값과 검사 결과는 설치 인계에 기록하고 비밀값은 [로그인 정보 관리](../../../INSTALL.md#11-로그인-정보-파일-관리)를 따른다.
 
+## Memory and swap
+
+앱·개발 도구·GitLab을 함께 실행하는 서버에서는 물리 메모리 표시 외에 실제 cgroup 제한과
+스왑 할당을 확인한다. 작업 실행 프로세스 수는 [Worker 실행 계약](README.md#persistent-development-runtime)을 따른다.
+
+```bash
+free -h
+swapon --show
+systemd-detect-virt
+cat /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.current /sys/fs/cgroup/memory.events
+cat /sys/fs/cgroup/memory.swap.max /sys/fs/cgroup/memory.swap.current
+```
+
+위 cgroup 경로는 cgroup v2의 현재 마운트 루트 기준이다. 하위 cgroup에서 실행 중이면
+`/proc/self/cgroup`과 상위 제한까지 확인한다. 스왑은 순간 메모리 부족을 완화하지만
+Worker 수·서비스별 메모리 예산을 대신하지 않는다. 작은 데모 서버에서는 우선 4GiB를
+완충 용량 후보로 검토하고, 호스트의 사용 가능한 저장 공간과 실제 스왑 사용량을 확인한다.
+
+비특권 LXC에서 `memory.swap.max=0`이고 해당 파일을 쓸 수 없으면 컨테이너 안의
+swapfile 생성으로 해결할 수 없다. LXC 호스트 관리자가 호스트의 활성 스왑을 확인하고
+해당 컨테이너의 스왑 허용량도 설정해야 한다. 호스트 관리 경로가 없으면 그 제한을
+명시하며, 실패할 swapfile이나 `/etc/fstab` 항목을 미리 남기지 않는다. 호스트 적용 후
+위 검사로 허용량과 사용량을 다시 확인한다. [Linux swapon 권한](https://man7.org/linux/man-pages/man2/swapon.2.html)과
+[cgroup v2 메모리 계약](https://docs.kernel.org/admin-guide/cgroup-v2.html#memory)을 따른다.
+
 ## PostgreSQL locale
 
 ### 클러스터 생성 전 확인

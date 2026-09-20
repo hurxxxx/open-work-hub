@@ -1,3 +1,4 @@
+import { appLaunchLinkProps } from '@/src/app/shell/app-launch-destination';
 import type { LucideProps } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { Link } from 'react-router-dom';
@@ -43,12 +44,14 @@ export function AppBarRailActiveIndicator() {
 }
 
 export function AppBarIconLink({
+  appId,
   active,
   icon: Icon,
   tone = 'default',
   title,
   to,
 }: {
+  appId?: string;
   active: boolean;
   icon: ComponentType<LucideProps>;
   tone?: AppBarRailControlTone;
@@ -61,6 +64,7 @@ export function AppBarIconLink({
       className={appBarRailControlClassName(active, undefined, tone)}
       title={title}
       to={to}
+      {...(appId ? appLaunchLinkProps(appId, to) : {})}
     >
       <Icon aria-hidden size={22} strokeWidth={2.25} />
       <AppBarRailTooltip title={title} />

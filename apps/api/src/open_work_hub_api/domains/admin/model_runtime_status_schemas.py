@@ -21,7 +21,7 @@ class ModelRuntimeModelResponse(BaseModel):
 
 class ModelRuntimeTargetResponse(BaseModel):
     id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9][a-z0-9._-]*$")
-    display_name: str = Field(min_length=1, max_length=120)
+    display_name: str = Field(min_length=1, max_length=160)
     kind: Literal["inference_gateway", "llm"]
     role: Literal["serving", "redundancy", "diagnostic"]
     provider_id: str | None = None

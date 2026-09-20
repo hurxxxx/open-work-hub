@@ -30,7 +30,30 @@ def ensure_api_src_on_path() -> None:
 @lru_cache(maxsize=1)
 def postgres_engine() -> Engine:
     settings = get_settings()
-    return create_engine(settings.postgres_dsn, pool_pre_ping=True)
+    options: dict[str, object] = {"pool_pre_ping": True}
+    if not settings.postgres_dsn.startswith("sqlite"):
+        options.update(
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+            pool_timeout=settings.db_pool_timeout,
+            connect_args={
+                "application_name": f"owh:{settings.env_profile}:worker"[:63],
+            },
+        )
+    return create_engine(settings.postgres_dsn, **options)
+
+
+def configure_database() -> None:
+    ensure_api_src_on_path()
+    from open_work_hub_api.core.db import configure_database_engine
+
+    configure_database_engine(postgres_engine())
+
+
+def reset_database_after_fork() -> None:
+    # Replace the inherited pool without closing the parent's connections.
+    # Session factories keep their binding to this Engine, including domain code.
+    postgres_engine().dispose(close=False)
 
 
 @lru_cache(maxsize=1)

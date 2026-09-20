@@ -47,6 +47,8 @@ def discover_provider_models(
     endpoint_url: str,
     api_key: str | None,
     timeout_seconds: float,
+    *,
+    requires_credentials: bool | None = None,
 ) -> tuple[DiscoveredProviderModel, ...]:
     """List models visible to one configured provider credential."""
 
@@ -59,7 +61,11 @@ def discover_provider_models(
         raise ProviderModelDiscoveryError("endpoint_required")
 
     key = (api_key or "").strip()
-    if descriptor.credential_kind == "api_key" and not key:
+    if (
+        requires_credentials
+        if requires_credentials is not None
+        else descriptor.credential_kind == "api_key"
+    ) and not key:
         raise ProviderModelDiscoveryError("api_key_required")
     if timeout_seconds <= 0:
         raise ProviderModelDiscoveryError("timeout_invalid")
@@ -201,22 +207,27 @@ def _normalize_candidates(
 
 
 def _new_openai_client(*, endpoint_url: str, api_key: str, timeout_seconds: float) -> Any:
+    import httpx
     from openai import OpenAI
 
     return OpenAI(
         api_key=api_key or "local-no-key",
         base_url=endpoint_url,
         timeout=timeout_seconds,
+        max_retries=0,
+        http_client=httpx.Client(follow_redirects=False, timeout=timeout_seconds),
     )
 
 
 def _new_anthropic_client(*, endpoint_url: str, api_key: str, timeout_seconds: float) -> Any:
-    from anthropic import Anthropic
+    from anthropic import Anthropic, DefaultHttpxClient
 
     return Anthropic(
         api_key=api_key,
         base_url=endpoint_url,
         timeout=timeout_seconds,
+        max_retries=0,
+        http_client=DefaultHttpxClient(follow_redirects=False, timeout=timeout_seconds),
     )
 
 
@@ -229,6 +240,8 @@ def _new_gemini_client(*, endpoint_url: str, api_key: str, timeout_seconds: floa
         http_options=types.HttpOptions(
             base_url=endpoint_url,
             timeout=max(1, int(timeout_seconds * 1000)),
+            client_args={"follow_redirects": False},
+            retry_options=types.HttpRetryOptions(attempts=1),
         ),
     )
 
