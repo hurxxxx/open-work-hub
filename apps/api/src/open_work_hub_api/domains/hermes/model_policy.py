@@ -41,6 +41,7 @@ class HermesModelPolicy:
     api_mode: str = "chat_completions"
     extra_headers: dict[str, str] = field(default_factory=dict, repr=False)
     temperature: float | None = None
+    connection_id: str | None = None
 
     def __post_init__(self) -> None:
         # v2026.8.31 only consumes provider extra_body on its OpenAI wire.
@@ -86,6 +87,7 @@ class HermesModelPolicy:
             api_mode="anthropic_messages" if config.provider == "anthropic" else "chat_completions",
             extra_headers=dict(config.default_headers or {}),
             temperature=temperature,
+            connection_id=config.connection_id,
         )
 
     @property
@@ -94,6 +96,7 @@ class HermesModelPolicy:
         # projections. Each saved native provider entry is immutable.
         payload = [
             self.route,
+            self.connection_id,
             self.provider,
             self.model,
             self.endpoint,
@@ -114,6 +117,7 @@ class HermesModelPolicy:
             "model_options": {"reasoning_effort": reasoning_effort} if reasoning_effort else {},
             "owh_policy": {
                 "route": self.route,
+                "connection_id": self.connection_id,
                 "provider": self.provider,
                 "model": self.model,
                 "max_output_tokens": self.max_tokens,

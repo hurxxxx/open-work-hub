@@ -1,0 +1,48 @@
+# Optional bridge when HTTPS terminates on another host.
+# Replace 192.0.2.10 with this server's private IP, 192.0.2.1 with the
+# trusted TLS proxy's observed source IP, and codex.example.com with its host.
+# Keep the console itself bound to 127.0.0.1:19365.
+worker_processes 1;
+pid /tmp/nginx.pid;
+error_log /dev/stderr warn;
+
+events {
+    worker_connections 256;
+}
+
+http {
+    access_log off;
+    server_tokens off;
+    client_body_temp_path /tmp/client_temp;
+    proxy_temp_path /tmp/proxy_temp;
+    fastcgi_temp_path /tmp/fastcgi_temp;
+    uwsgi_temp_path /tmp/uwsgi_temp;
+    scgi_temp_path /tmp/scgi_temp;
+
+    server {
+        listen 192.0.2.10:19365 default_server;
+        server_name _;
+        return 404;
+    }
+
+    server {
+        listen 192.0.2.10:19365;
+        server_name codex.example.com;
+        allow 192.0.2.1;
+        deny all;
+
+        client_max_body_size 50m;
+        client_body_timeout 120s;
+        location / {
+            proxy_pass http://127.0.0.1:19365;
+            proxy_http_version 1.1;
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_request_buffering off;
+            proxy_send_timeout 120s;
+            proxy_read_timeout 3600s;
+        }
+    }
+}

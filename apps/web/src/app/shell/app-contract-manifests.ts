@@ -1,3 +1,5 @@
+import { codexConsoleManifest } from '@/src/app-modules/codex-console/manifest';
+import { tetrisManifest } from '@/src/app-modules/tetris/manifest';
 import { agentTerminalManifest } from '@/src/app-modules/agent-terminal/manifest';
 import { announcementsManifest } from '@/src/app-modules/announcements/manifest';
 import { bentoManifest } from '@/src/app-modules/bento/manifest';
@@ -15,11 +17,12 @@ import { recordingManifest } from '@/src/app-modules/recording/manifest';
 import { retrievalSearchManifest } from '@/src/app-modules/retrieval-search/manifest';
 import { settingsManifest } from '@/src/app-modules/settings/manifest';
 import { videoChatManifest } from '@/src/app-modules/video-chat/manifest';
-import { webSearchManifest } from '@/src/app-modules/web-search/manifest';
 import { whiteboardManifest } from '@/src/app-modules/whiteboard/manifest';
 
 export {
+  tetrisManifest,
   agentTerminalManifest,
+  codexConsoleManifest,
   announcementsManifest,
   bentoManifest,
   chatbotManifest,
@@ -36,15 +39,14 @@ export {
   retrievalSearchManifest,
   settingsManifest,
   videoChatManifest,
-  webSearchManifest,
   whiteboardManifest,
 };
 
 export const DEFAULT_APP_CONTRACT_MANIFESTS = [
   homeManifest,
   agentTerminalManifest,
+  codexConsoleManifest,
   chatbotManifest,
-  webSearchManifest,
   pmsManifest,
   docsManifest,
   filesManifest,
@@ -58,6 +60,7 @@ export const DEFAULT_APP_CONTRACT_MANIFESTS = [
   videoChatManifest,
   recordingManifest,
   retrievalSearchManifest,
+  tetrisManifest,
 ] as const;
 
 export const DEFAULT_FEATURE_CONTRACT_MANIFESTS = [

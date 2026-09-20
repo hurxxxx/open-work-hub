@@ -99,14 +99,14 @@ def _register_default_resolver(
 
 def _local_pool_config(settings: Settings) -> LlmPoolConfigValues:
     return LlmPoolConfigValues(
-        provider=settings.llm_local_provider,
-        base_url=settings.llm_local_base_url,
-        api_key=settings.llm_local_api_key,
+        provider="local",
+        base_url="",
+        api_key="",
         # Model selection belongs to the DB-backed workload control plane.
         default_model="",
         canonical_model="",
         long_generation_timeout_seconds=settings.llm_local_long_generation_timeout_seconds,
-        enabled=True,
+        enabled=False,
         requires_credentials=False,
     )
 
@@ -126,7 +126,7 @@ def _external_pool_config(
         default_model="",
         canonical_model="",
         long_generation_timeout_seconds=settings.llm_external_long_generation_timeout_seconds,
-        enabled=True,
+        enabled=False,
     )
 
 

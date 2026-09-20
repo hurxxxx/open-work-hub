@@ -74,7 +74,6 @@ from open_work_hub_api.domains.retrieval.router import router as retrieval_route
 from open_work_hub_api.domains.search.router import router as search_router
 from open_work_hub_api.domains.usage.router import router as usage_router
 from open_work_hub_api.domains.video_chat.router import router as video_chat_router
-from open_work_hub_api.domains.web_search.router import router as web_search_router
 from open_work_hub_api.domains.whiteboard.group_sharing import (
     router as whiteboard_group_sharing_router,
 )
@@ -171,7 +170,6 @@ def _router_specs() -> list[_RouterSpec]:
         _RouterSpec(announcements_router, "protected"),
         _RouterSpec(retrieval_router, "protected"),
         _RouterSpec(rag_router, "protected"),
-        _RouterSpec(web_search_router, "protected"),
         _RouterSpec(mail_router, "protected"),
         _RouterSpec(search_router, "protected"),
         _RouterSpec(media_router, "protected"),

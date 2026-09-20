@@ -40,7 +40,7 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
             default_route="local",
             execution_kind="chat",
             allowed_routes=("local", "external"),
-            required_capabilities=("chat",),
+            required_capabilities=("chat", "tool_calling"),
             model_roles=("default",),
             external_data=True,
             local_max_output_tokens=max_output_tokens,

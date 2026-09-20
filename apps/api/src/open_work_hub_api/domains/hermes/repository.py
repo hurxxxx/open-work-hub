@@ -9,7 +9,7 @@ from uuid import uuid4
 from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.orm import Session
 
-from open_work_hub_api.core.settings import HERMES_MODEL, HERMES_PROVIDER, get_settings
+from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.hermes.models import (
     HermesDispatchOutbox,
@@ -126,6 +126,8 @@ def get_or_create_profile_binding(
     *,
     user: User,
     route: str = "external",
+    provider: str,
+    model: str,
 ) -> HermesProfileBinding:
     # Serialize the first binding creation for a user. Without this lock,
     # simultaneous status/session requests can both miss the unique row and
@@ -145,8 +147,8 @@ def get_or_create_profile_binding(
         profile_name=deterministic_profile_name(user.id, route),
         route=route,
         status="provisioning",
-        provider=HERMES_PROVIDER,
-        model=HERMES_MODEL,
+        provider=provider,
+        model=model,
     )
     db.add(binding)
     db.flush()

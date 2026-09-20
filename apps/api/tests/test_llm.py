@@ -222,7 +222,7 @@ def test_legacy_external_pool_health_fails_closed_without_db_credential(
 
     health = llm.check_pool_health("external", external_provider="anthropic")
 
-    assert health.status == "not_configured"
+    assert health.status == "disabled"
     assert calls == []
 
 
@@ -271,10 +271,10 @@ def test_legacy_pool_health_does_not_accept_environment_model(
 
     dual = llm.check_all_pools_health()
 
-    assert dual.local.status == "not_configured"
+    assert dual.local.status == "disabled"
     assert dual.external is not None
     assert dual.external.ready is False
-    assert dual.external.status == "not_configured"
+    assert dual.external.status == "disabled"
     assert dual.external.canonical_model == ""
 
 
@@ -294,7 +294,7 @@ def test_configured_health_does_not_probe_provider(
     dual = llm.check_configured_pools_health()
 
     assert dual.ready is False
-    assert dual.local.status == "not_configured"
+    assert dual.local.status == "disabled"
     assert "base_url" not in dual.public_dict(include_base_url=False)["local"]
 
 

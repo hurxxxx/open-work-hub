@@ -511,7 +511,30 @@ class LlmWorkloadContext:
 class LlmWorkloadResult:
     completion: LlmCompletionResult
     decision: AiGatewayDecision
-    config: LlmPoolConfig
+    metadata: "LlmWorkloadMetadata"
+
+
+@dataclass(frozen=True)
+class LlmWorkloadMetadata:
+    """Public execution identity; never contains transport or credentials."""
+
+    workload_id: str
+    connection_id: str
+    provider: str
+    model: str
+    route: str
+
+    @classmethod
+    def from_execution(
+        cls, request: AiGatewayRequest, decision: AiGatewayDecision, config: LlmPoolConfig
+    ) -> "LlmWorkloadMetadata":
+        return cls(
+            request.workload_id or "",
+            config.connection_id or "",
+            decision.provider,
+            decision.model,
+            decision.chosen_pool,
+        )
 
 
 def resolve_llm_workload_route(
@@ -519,6 +542,8 @@ def resolve_llm_workload_route(
     db: Session,
     *,
     model_role: str = "default",
+    app_id: str | None = None,
+    require_tool_calling: bool = False,
 ) -> ResolvedLlmWorkloadRoute:
     """Resolve the admin-selected route without executing it."""
 
@@ -526,6 +551,8 @@ def resolve_llm_workload_route(
         db,
         workload_id=workload_id,
         model_role=model_role,
+        app_id=app_id,
+        require_tool_calling=require_tool_calling,
     )
 
 
@@ -577,7 +604,7 @@ def execute_llm(
     return LlmWorkloadResult(
         completion=completion,
         decision=decision,
-        config=config,
+        metadata=LlmWorkloadMetadata.from_execution(request, decision, config),
     )
 
 
@@ -601,7 +628,7 @@ async def stream_llm(
     context_pack: AiGatewayContextPack | None = None,
     agent_run_id: str | None = None,
     conversation_id: str | None = None,
-) -> AsyncIterator[tuple[StreamChunk, AiGatewayDecision, LlmPoolConfig]]:
+) -> AsyncIterator[tuple[StreamChunk, AiGatewayDecision, LlmWorkloadMetadata]]:
     """Stream one registered workload through the same routing seam."""
 
     request = build_llm_workload_request(
@@ -625,8 +652,8 @@ async def stream_llm(
         agent_run_id=agent_run_id,
         conversation_id=conversation_id,
     )
-    async for item in complete_gateway_chat_stream(request, db):
-        yield item
+    async for chunk, decision, config in complete_gateway_chat_stream(request, db):
+        yield chunk, decision, LlmWorkloadMetadata.from_execution(request, decision, config)
 
 
 def build_llm_workload_request(
@@ -636,7 +663,14 @@ def build_llm_workload_request(
     **request_values: Any,
 ) -> AiGatewayRequest:
     try:
-        route = resolve_llm_workload_route(workload_id, db)
+        route = resolve_llm_workload_route(
+            workload_id,
+            db,
+            app_id=context.app_id,
+            require_tool_calling=bool(
+                request_values.get("tools") or request_values.get("output_schema")
+            ),
+        )
     except AiModelSettingsError as error:
         raise LlmProviderError(error.code) from error
     workload = route.workload
@@ -671,7 +705,7 @@ def build_llm_workload_request(
         principal_kind=context.principal_kind,
         principal_id=context.principal_id,
         pool_hint="local" if route.route == "local" else None,
-        requested_provider=route.provider_id if route.route == "external" else None,
+        requested_provider=route.adapter_provider if route.route == "external" else None,
         requested_model=route.model_key,
         **request_values,
     )

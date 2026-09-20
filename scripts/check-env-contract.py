@@ -5,10 +5,9 @@ import ast
 import re
 import sys
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from re import Pattern
-
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS_FILE_PARTS = [
@@ -27,6 +26,10 @@ DEPLOY_ENV_KEYS: frozenset[str] = frozenset(
 
 FORBIDDEN_ENV_KEYS = frozenset(
     {
+        "OPEN_WORK_HUB_LLM_LOCAL_API_KEY",
+        "OPEN_WORK_HUB_LLM_LOCAL_BASE_URL",
+        "OPEN_WORK_HUB_LLM_LOCAL_PROVIDER",
+        "OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER",
         "OPEN_WORK_HUB_AI_MANAGER_ENABLED",
         "OPEN_WORK_HUB_AI_MANAGER_HOSTED_TOOLS_ENABLED",
         "OPEN_WORK_HUB_AI_MANAGER_MAX_LOOPS",
@@ -224,10 +227,6 @@ def env_file_paths(root: Path, env_name: str) -> dict[str, Path]:
     local_env = root / ".env.local"
     if local_env.exists():
         env_files["local"] = local_env
-    for sibling_name in ("dev", "prod"):
-        sibling_env = root.parent / sibling_name / ".env"
-        if sibling_name != env_name and sibling_env.exists():
-            env_files[sibling_name] = sibling_env
     return env_files
 
 
@@ -433,7 +432,9 @@ def evaluate_env_contract(
     current_env_name: str,
     forbidden_patterns: Iterable[Pattern[str]],
     forbidden_env_keys: Iterable[str] = (),
+    runtime_config_keys: Iterable[str] = (),
 ) -> EnvContractReport:
+    public_keys = frozenset(runtime_config_keys)
     parsed_env_files = tuple(parse_env(env_file) for env_file in env_files)
     settings_scans = tuple(
         scan_settings_file(settings_file) for settings_file in settings_files
@@ -476,8 +477,8 @@ def evaluate_env_contract(
         for env_file in parsed_env_files:
             if env_file.name == current_env_name or env_file.missing:
                 continue
-            missing = sorted(base.key_set - env_file.key_set)
-            extra = sorted(env_file.key_set - base.key_set)
+            missing = sorted(base.key_set - env_file.key_set - public_keys)
+            extra = sorted(env_file.key_set - base.key_set - public_keys)
             if missing or extra:
                 failures.append(
                     EnvContractFailure(
@@ -488,7 +489,9 @@ def evaluate_env_contract(
                         ),
                     )
                 )
-            elif env_file.keys != base.keys:
+            elif tuple(key for key in env_file.keys if key not in public_keys) != tuple(
+                key for key in base.keys if key not in public_keys
+            ):
                 failures.append(
                     EnvContractFailure(
                         code="env_key_order_mismatch",
@@ -530,8 +533,15 @@ def evaluate_env_contract(
     settings_keys: set[str] = set(DEPLOY_ENV_KEYS)
     for settings_scan in settings_scans:
         settings_keys.update(settings_scan.keys)
+    unknown_public_keys = public_keys - settings_keys
+    if unknown_public_keys:
+        failures.append(EnvContractFailure(
+            code="unknown_runtime_config_key",
+            message="runtime config contains keys without typed settings: "
+            + ", ".join(sorted(unknown_public_keys)),
+        ))
     if base is not None and not base.missing:
-        missing_settings_keys = sorted(settings_keys - base.key_set)
+        missing_settings_keys = sorted(settings_keys - base.key_set - public_keys)
         if missing_settings_keys:
             failures.append(
                 EnvContractFailure(
@@ -585,7 +595,22 @@ def load_text_file(path: Path, *, root: Path = ROOT) -> TextFileContent:
     )
 
 
-def build_report(root: Path = ROOT) -> EnvContractReport:
+def _checkout_report(
+    root: Path, *, forbidden_env_keys: Iterable[str], scan_sources: bool
+) -> EnvContractReport:
+    sys.path.insert(0, str(ROOT / "apps/api/src"))
+    from open_work_hub_api.core.runtime_config import (
+        RuntimeConfigError,
+        load_runtime_document,
+    )
+
+    config_failure = None
+    try:
+        runtime_document = load_runtime_document(root)
+        public_keys = frozenset(runtime_document["defaults"])
+    except RuntimeConfigError as error:
+        public_keys = frozenset()
+        config_failure = EnvContractFailure(code="invalid_runtime_config", message=str(error))
     env_name = current_env_name(root)
     env_files = tuple(
         load_env_file(name, path) for name, path in env_file_paths(root, env_name).items()
@@ -596,15 +621,73 @@ def build_report(root: Path = ROOT) -> EnvContractReport:
     source_file_contents = tuple(
         load_text_file(path, root=root)
         for path in source_files(root, excluded_paths={Path(__file__).resolve()})
-    )
-    return evaluate_env_contract(
+    ) if scan_sources else ()
+    report = evaluate_env_contract(
         env_files=env_files,
         settings_files=settings_files,
         source_file_contents=source_file_contents,
         current_env_name=env_name,
         forbidden_patterns=FORBIDDEN_ENV_PATTERNS,
-        forbidden_env_keys=FORBIDDEN_ENV_KEYS,
+        forbidden_env_keys=forbidden_env_keys,
+        runtime_config_keys=public_keys,
     )
+    if config_failure is not None:
+        report = replace(report, failures=(*report.failures, config_failure))
+    return report
+
+
+def _checkout_retired_keys(root: Path) -> frozenset[str]:
+    """Read the peer release's declared contract without executing its code."""
+    tree = ast.parse((root / "scripts/check-env-contract.py").read_text())
+    for node in tree.body:
+        if not isinstance(node, ast.Assign) or not any(
+            isinstance(target, ast.Name) and target.id == "FORBIDDEN_ENV_KEYS"
+            for target in node.targets
+        ):
+            continue
+        call = node.value
+        if (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id == "frozenset"
+            and len(call.args) == 1
+            and not call.keywords
+        ):
+            values = ast.literal_eval(call.args[0])
+            if isinstance(values, (set, tuple, list)) and all(isinstance(v, str) for v in values):
+                return frozenset(values)
+        break
+    raise ValueError("Missing or invalid retired-key contract")
+
+
+def build_report(root: Path = ROOT) -> EnvContractReport:
+    report = _checkout_report(root, forbidden_env_keys=FORBIDDEN_ENV_KEYS, scan_sources=True)
+    # Dev can be ahead of production. Validate both, each against the template,
+    # typed settings, public defaults and retired keys shipped in that checkout.
+    for name in ("dev", "prod"):
+        peer = root.parent / name
+        if peer.resolve() == root.resolve() or not (peer / ".env").exists():
+            continue
+        try:
+            peer_report = _checkout_report(
+                peer, forbidden_env_keys=_checkout_retired_keys(peer), scan_sources=False
+            )
+        except (OSError, ValueError, SyntaxError):
+            failure = EnvContractFailure(
+                code="invalid_peer_env_contract",
+                message=f"{name}: missing or invalid checkout environment contract",
+            )
+            report = replace(report, failures=(*report.failures, failure))
+            continue
+        report = replace(
+            report,
+            env_files=(*report.env_files, *(replace(item, name=name if item.name == name else f"{name}.{item.name}")
+                        for item in peer_report.env_files)),
+            settings_files=(*report.settings_files, *peer_report.settings_files),
+            failures=(*report.failures, *(replace(item, message=f"{name}: {item.message}")
+                       for item in peer_report.failures)),
+        )
+    return report
 
 
 def format_report_lines(report: EnvContractReport) -> tuple[str, ...]:

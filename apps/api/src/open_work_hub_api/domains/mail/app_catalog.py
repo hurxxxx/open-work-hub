@@ -5,6 +5,7 @@ from open_work_hub_api.core.app_registry import (
 
 MAIL_APP = app_registration(
     "mail",
+    ai_capability_modules=('open_work_hub_api.domains.mail',),
     nav_items=(
         AppNavRegistration(
             id="mail-inbox",

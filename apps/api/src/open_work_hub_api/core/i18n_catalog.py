@@ -692,6 +692,18 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "배포 후 LLM 워크로드 목록이 변경되었습니다. 설정을 새로고침하세요.",
         "en-US": "The LLM workload registry changed after deployment. Refresh the settings.",
     },
+    "admin.ai_model_workload_app_required": {
+        "ko-KR": "워크로드 {workload_id}의 앱을 지정해야 합니다.",
+        "en-US": "Specify the app for workload {workload_id}.",
+    },
+    "admin.ai_model_default_breaks_workload": {
+        "ko-KR": "기본값 변경으로 {app_id}의 {workload_id} 실행이 불가능합니다.",
+        "en-US": "The default would make {app_id}/{workload_id} unavailable.",
+    },
+    "admin.ai_model_app_not_found": {
+        "ko-KR": "등록된 앱을 찾을 수 없습니다.",
+        "en-US": "Registered app not found.",
+    },
     "admin.ai_model_version_conflict": {
         "ko-KR": "다른 관리자가 LLM 설정을 변경했습니다. 새로고침 후 다시 시도하세요.",
         "en-US": "Another administrator changed the LLM settings. Refresh and try again.",
@@ -711,6 +723,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     "admin.ai_model_credential_encryption_unavailable": {
         "ko-KR": "LLM API 키 암호화 설정을 사용할 수 없습니다.",
         "en-US": "LLM API key encryption is not configured.",
+    },
+    "admin.ai_model_local_host_not_allowed": {
+        "ko-KR": "운영 설정의 로컬 LLM 허용 호스트에 등록된 주소만 사용할 수 있습니다.",
+        "en-US": "Use a host registered in the deployment's local LLM host allowlist.",
     },
     "admin.ai_model_endpoint_invalid": {
         "ko-KR": "LLM 제공자 엔드포인트가 올바른 HTTP(S) URL이 아닙니다.",

@@ -6,18 +6,15 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
 from open_work_hub_worker.celery_app import celery_app
+from open_work_hub_worker.runtime import db_session
 from open_work_hub_worker.settings import get_settings
 
 
 def _get_db_session():
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import Session
-
     settings = get_settings()
     if not settings.postgres_dsn:
         return None
-    engine = create_engine(settings.postgres_dsn, pool_pre_ping=True)
-    return Session(engine)
+    return db_session()
 
 
 def _get_minio_client():

@@ -7,17 +7,6 @@ from urllib.parse import quote
 
 import httpx
 
-from open_work_hub_api.core.settings import (
-    HERMES_FALLBACK_MODEL,
-    HERMES_MODEL,
-    HERMES_PROVIDER,
-)
-from open_work_hub_api.domains.hermes.research_sources import (
-    academic_research_environment_hint,
-)
-
-_OPENROUTER_METADATA_HEADERS = {"X-OpenRouter-Metadata": "enabled"}
-
 
 def managed_compression_policy() -> dict[str, Any]:
     """Native compression settings shared by managed profile update paths.
@@ -34,32 +23,6 @@ def managed_compression_policy() -> dict[str, Any]:
         "proactive_prune_tokens": 48_000,
         "proactive_prune_min_result_chars": 8_000,
         "proactive_prune_min_reclaim_tokens": 4_096,
-    }
-
-
-def fixed_model_runtime_policy(
-    research_sources: Mapping[str, object] | None = None,
-) -> dict[str, Any]:
-    """Return the managed Hermes model and resilience settings."""
-
-    return {
-        "model": {
-            "default_headers": dict(_OPENROUTER_METADATA_HEADERS),
-        },
-        "fallback_providers": [{"provider": HERMES_PROVIDER, "model": HERMES_FALLBACK_MODEL}],
-        "agent": {
-            "api_max_retries": 1,
-            "environment_hint": academic_research_environment_hint(research_sources),
-        },
-        "compression": managed_compression_policy(),
-        "provider_routing": {
-            "sort": "throughput",
-            "require_parameters": True,
-        },
-        "auxiliary": {
-            "free_only": False,
-            "openrouter_model": HERMES_MODEL,
-        },
     }
 
 
@@ -678,29 +641,6 @@ class HermesManagementClient:
             },
             expected=frozenset({200, 201}),
         )
-
-    async def set_profile_model(
-        self,
-        profile_name: str,
-        *,
-        research_sources: Mapping[str, object] | None = None,
-    ) -> dict[str, Any]:
-        result = await self._request(
-            "PUT",
-            f"/api/profiles/{quote(profile_name, safe='')}/model",
-            operation="set_profile_model",
-            body={"provider": HERMES_PROVIDER, "model": HERMES_MODEL},
-        )
-        await self._request(
-            "PUT",
-            "/api/config",
-            operation="set_profile_model_policy",
-            body={
-                "profile": profile_name,
-                "config": fixed_model_runtime_policy(research_sources),
-            },
-        )
-        return result
 
     async def update_profile_config(
         self, profile_name: str, config: Mapping[str, Any]

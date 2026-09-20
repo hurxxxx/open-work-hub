@@ -111,6 +111,19 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
         execution = _rpc(server, run_id, "owh/context", {})
         if tool_name == "owh_submit_result":
             return json.dumps(_rpc(server, run_id, "owh/submit", args), ensure_ascii=False)
+        if tool_name in {"tool_search", "tool_describe"} and not execution.get("allow_native_tools"):
+            # The pinned native Tool Search defers plugin tools, including
+            # result submission. Use its public catalog operations with only
+            # server-admitted tools; discovery must not expose the interactive
+            # profile's other capabilities to an application workload.
+            from tools.registry import registry
+            from tools.tool_search import dispatch_tool_describe, dispatch_tool_search
+
+            definitions = registry.get_definitions(
+                {"owh_submit_result", *execution.get("native_tools", [])}, quiet=True
+            )
+            dispatch = dispatch_tool_search if tool_name == "tool_search" else dispatch_tool_describe
+            return dispatch(args, current_tool_defs=definitions)
         # Profile history includes app workloads. Native search has no trusted
         # OWH app/resource ACL filter, including its direct session-read mode.
         if tool_name == "session_search":

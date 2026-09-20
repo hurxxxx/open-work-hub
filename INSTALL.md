@@ -9,6 +9,10 @@ Web·API·Worker는 저장소 소스에서 실행하고, 최초 셋업의 Postgr
 조직 최초 도입의 완료 기준은 GitLab 관리자·인증·프로젝트·Runner·CI 변수 구성, 실제 개발 MR 파이프라인 성공, 외부 접속과 개발 시드 계정 로그인이다.
 운영 배포는 [Release Domain](docs/domains/release/README.md)의 별도 절차를 따른다.
 
+README의 전체 셋업 요청에는 [Codex Console 설치](docs/apps/codex-console/README.md#설치)도 포함된다.
+현재 ChatGPT 구독 로그인을 사용하며 OWH 개발 서버와 별도 프로세스·로그인·DB로 실행한다.
+개인 앱의 **Codex 콘솔**을 클릭하면 새 탭으로 열린다. [함께 설치하는 절차](#61-codex-콘솔-함께-설치)를 완료한다.
+
 ## 설치 계정 권한
 
 네이티브 최초 설치 계정은 비밀번호 없이 `sudo`를 실행할 수 있는 `sudo` 그룹 소속 일반 사용자여야 한다. 관리자가 [README의 설치 계정 권한 설정](README.md#0-설치-계정-권한-설정)을 먼저 완료한다. 에이전트는 `sudo -n true`로 권한을 확인하고, 실패하면 권한을 자동 변경하거나 비밀번호를 요청하지 말고 관리자에게 사전 설정을 요청한다.
@@ -43,6 +47,7 @@ Codex 실행 후 `/permissions`에서 **Full access**를 선택한다.
 > API·개발 DB·Redis는 loopback 수신을 유지하고, 내 PC에서 서버 IP로 직접 접속해 시드 계정으로 로그인할 수 있게 해줘.
 > pnpm dev:login-smoke 명령과 agent-browser로 서버 IP 주소의 로그인과 화면을 확인해줘.
 > 조직 최초 도입이면 README 4절의 셋업 요청 범위로 GitLab·Runner·CI 변수와 개발 MR 파이프라인 성공까지 진행해줘. GitLab 도메인·DNS 설정은 제외하고 서버 IP를 사용해줘.
+> 6.1절의 Codex 콘솔도 전용 DB·비밀번호·지속 실행 서비스·HTTPS 접속까지 구성하고, 개인 앱에서 새 탭 열기와 구독 연결을 확인해줘.
 > 비밀값은 대화에 요청하지 말고 서버에서 입력할 방법을 안내해줘.
 > 로그인 정보는 1.1절에 따라 프로젝트 루트의 .auth_info에 기록·갱신하고, 비밀값 대신 파일 경로를 알려줘.
 > 끝나면 접속 방법, 실행한 검사, 사용 가능한 기능과 추가 설정이 필요한 기능을 알려줘.
@@ -361,6 +366,7 @@ docker build -f ops/opensearch/Dockerfile -t open-work-hub-opensearch:3.3.2-nori
 ```
 
 검증 이미지 이름은 현재 `open-work-hub-validation:node22-python312`다.
+이미지·BuildKit 캐시의 보관 범위와 용량 설정은 [빌드·테스트 저장 공간](docs/domains/release/README.md#build-and-test-storage)을 따른다. 검증 이미지를 커밋별로 복사·백업하지 않고, 의존성이 같은 이미지를 재사용한다.
 개발 서버의 Node.js 24 설치와는 별도이며, 이름만 같은 다른 이미지로 대체하지 않는다.
 빌드 스크립트는 선택한 PostgreSQL 메이저의 공식 Bookworm 이미지 태그를 불변 digest로 확인한다. PostgreSQL 버전·digest·Docker 플랫폼·Dockerfile·의존성이 일치하면 기존 이미지를 다시 검사해 재사용하고, 다르면 빌드한다. 빌드·클라이언트 검사 실패는 설치 실패로 처리한다.
 출력된 PostgreSQL 버전·이미지 digest·플랫폼·의존성 해시를 셋업 결과에 기록한다. 같은 입력으로 재현하려면 `--postgres-client-image 'postgres@sha256:<기록한-digest>'`를 전달한다. ARM64를 포함한 [플랫폼·재빌드 계약](docs/domains/release/README.md#validation-image-platform-and-database)을 따른다.
@@ -512,7 +518,7 @@ free -h
 
 | 도구 | 버전 기준 및 설치 방법 |
 | --- | --- |
-| Bash, Git, curl, CA 인증서, 시스템 `python3`, `lsof`, `pgrep` | 해당 Linux 배포판의 패키지 관리자로 준비. 개발 스크립트와 환경설정 도구가 사용한다. |
+| Bash, Git, curl, CA 인증서, 시스템 `python3`, `lsof`, `pgrep`, `flock`(`util-linux`) | 해당 Linux 배포판의 패키지 관리자로 준비. 개발 스크립트와 환경설정 도구가 사용하며, `flock`은 운영 후보 준비·배포·롤백의 동시 실행을 막는다. |
 | Node.js와 npm | Codex 실행 전에 [README](README.md)의 nvm 설치·Bash 재로드·`nvm install 24` 명령을 따른다. 버전 범위는 [package.json](package.json)의 `engines.node`가 기준이다. |
 | bubblewrap (Linux Codex) | Codex 실행 전에 설치한다. [README](README.md) · [공식 샌드박스 요건](https://developers.openai.com/codex/concepts/sandboxing#prerequisites) |
 | pnpm | 루트 `package.json`의 `packageManager`에 지정된 버전을 사용한다. [공식 설치 안내](https://pnpm.io/installation) |
@@ -624,6 +630,21 @@ bash .agents/skills/owh-env-contracts/scripts/local-env-files.sh install --sourc
 템플릿으로 덮어쓸 이유가 아니다. 필요한 키만 기존 값을 보존하여 맞춘다.
 환경 파일 취급은 [환경설정 절차](.agents/skills/owh-env-contracts/references/env-files.md)를 따른다.
 
+DB 풀·시간제한·재시도·임베딩/리랭커 모델의 공통 권장값은 Git 추적 대상인
+[`config/runtime.json`](config/runtime.json)에서 관리한다. `defaults` 위에
+`OPEN_WORK_HUB_ENV_PROFILE`에 해당하는 `profiles` 설정이 적용되며, `.env`와 프로세스 환경변수는
+이를 덮어쓸 수 있다. 비밀키·접속정보·설치별 설정은 계속 `.env`에 둔다.
+설정 범위·우선순위·운영 반영은 [공개 런타임 설정](docs/domains/release/README.md#public-runtime-configuration)을 따른다.
+
+기존 설치는 다음 dry run으로 중복 기본값을 확인한다. 제거 대상 키 이름만 출력하며,
+기본값과 다른 기존 지정값은 보존한다. 확인 후 `--apply`를 붙이면 `0600` 백업을 만들고
+중복 항목만 제거한다. 현재 체크아웃에 설정 파일과 새 로더가 모두 있어야 하며,
+운영의 이전 코드에서 먼저 제거하지 않는다.
+
+```bash
+uv run --frozen --python 3.12 --directory apps/api python ../../scripts/runtime-config-migrate.py
+```
+
 ```bash
 pnpm check:env-contract
 pnpm check:path-hardcoding
@@ -680,6 +701,13 @@ OpenSearch를 포함한 추가 서비스는 이 단계에서 필요하지 않으
 systemd unit에는 실제 바이너리·설정·데이터 경로를 사용하고 서비스 계정으로 인증 연결을 검증한다.
 
 첫 실행 전에 개발 `.env`에서 다음 항목을 설정한다. 서버 IP는 PC에서 실제로 접속할 주소로 바꾸고 기존의 다른 설정은 보존한다.
+
+DB 연결 설정은 [API·Worker 연결 예산](docs/domains/release/README.md#database-connection-budgets)을 따른다.
+개발·운영이 PostgreSQL 서버를 공유하면 모든 프로세스의 한도를 합산한다.
+기존 설치의 API 풀 32/64 설정은 새 기본값으로 자동 변경되지 않으므로 해당 절의 설정 검토·적용·검증 절차를 함께 수행한다.
+접속이 몰릴 때 풀 대기가 발생하면 같은 절의 인증 동시 요청 검사를 실행하고,
+열린 챗봇 이벤트 스트림이 초기 조회 연결을 계속 점유하지 않는지 확인한다.
+풀 크기를 늘리기 전에 요청 처리 스레드의 대기와 연결 반환 시점을 구분한다.
 
 ```dotenv
 OPEN_WORK_HUB_WEB_DEV_HOST=0.0.0.0
@@ -844,7 +872,7 @@ Bento 등 별도 주소를 쓰는 기능은 사용 시 해당 기능 문서의 �
 | --- | --- |
 | PostgreSQL·Redis·파일 저장소·검색 | 네이티브 DB·Redis 연결은 유지하고 필요한 저장소·검색만 추가한다. 개발 DB, 큐, 버킷, 색인 연결이 실제 실행 대상과 일치하는지 확인한다. Docker 서비스 정의는 [개발 Compose](ops/compose/open-work-hub-dev.infra.yml), 앱 연결 설정은 [개발 환경 설정](scripts/dev-env.sh)을 따른다. |
 | 개인정보 필터 | `OPEN_WORK_HUB_OPF_SERVICE_BASE_URL`에 별도 서비스 주소가 있으면 해당 서비스를 먼저 준비한다. 아래 실행 예와 [서비스 구현](apps/api/src/open_work_hub_api/domains/ai/privacy_filter_service.py)을 따른다. |
-| 모든 생성형 AI·챗봇 작업 파일 | 관리자 LLM 정책, 공급자 키 암호화 설정, Hermes 활성화, Docker 소켓 그룹·동시 실행 한도·마이그레이션은 [Hermes 설치 문서](docs/domains/ai/hermes.md#fresh-environment-setup)를 따른다. 기존 설치에서 플러그인·샌드박스 설정을 갱신할 때는 [게이트웨이 재생성 → API·Worker 갱신 절차](docs/domains/ai/hermes.md#updating-an-existing-development-installation)를 따른다. API·Worker의 프로필 정책만 바뀌는 경우는 [대화 컨텍스트 정책 적용 절차](docs/domains/ai/hermes.md#conversation-context-policy)를 따른다. 네이티브 파일 쓰기는 Docker 호스트/VM의 Landlock ABI 3+가 필요하다. 신규·기존 설치 모두 [실제 샌드박스·네이티브 코드·파일·챗봇 실행 검사](docs/domains/ai/hermes.md#sandbox-execution-check)로 완료를 확인하고, 실패 시 [오류별 복구 절차](docs/domains/ai/hermes.md#sandbox-startup-recovery)를 적용한다. 정적 결과물은 기본 제공 Chromium과 `owh_preview`로 검사하며 Playwright를 추가 설치하지 않는다. [오프라인 렌더링·파일 수정·실행 종료 확인](docs/domains/ai/hermes.md#static-preview-execution)도 셋업 검증에 포함한다. 공급자별 temperature 지원과 확장 제약은 해당 문서의 [런타임 계약](docs/domains/ai/hermes.md#pinned-runtime-contract)·[확장 제약](docs/domains/ai/hermes.md#pinned-upstream-gaps)을 확인한다. 로컬 모델은 OpenRouter 키 없이 시작할 수 있다. 호스트에 Hermes를 별도 설치하지 않는다. |
+| 모든 생성형 AI·챗봇 작업 파일 | 관리자 LLM 정책(전역·앱·워크로드 상속), 공급자 키 암호화 설정, Hermes 활성화, Docker 소켓 그룹·동시 실행 한도·마이그레이션은 [Hermes 설치 문서](docs/domains/ai/hermes.md#fresh-environment-setup)를 따른다. 기존 설치에서 플러그인·샌드박스 설정을 갱신할 때는 [게이트웨이 재생성 → API·Worker 갱신 절차](docs/domains/ai/hermes.md#updating-an-existing-development-installation)를 따른다. API·Worker의 프로필 정책만 바뀌는 경우는 [대화 컨텍스트 정책 적용 절차](docs/domains/ai/hermes.md#conversation-context-policy)를 따른다. 네이티브 파일 쓰기는 Docker 호스트/VM의 Landlock ABI 3+가 필요하다. 신규·기존 설치 모두 [실제 샌드박스·네이티브 코드·파일·구조화 결과 제출·챗봇 실행 검사](docs/domains/ai/hermes.md#sandbox-execution-check)로 완료를 확인하고, 실패 시 [오류별 복구 절차](docs/domains/ai/hermes.md#sandbox-startup-recovery)를 적용한다. 정적 결과물은 기본 제공 Chromium과 `owh_preview`로 검사하며 Playwright를 추가 설치하지 않는다. [오프라인 렌더링·파일 수정·실행 종료 확인](docs/domains/ai/hermes.md#static-preview-execution)도 셋업 검증에 포함한다. 공급자별 temperature 지원과 확장 제약은 해당 문서의 [런타임 계약](docs/domains/ai/hermes.md#pinned-runtime-contract)·[확장 제약](docs/domains/ai/hermes.md#pinned-upstream-gaps)을 확인한다. 로컬 모델은 OpenRouter 키 없이 시작할 수 있다. 기본 모델·앱별 모델·공급자 API 키는 관리자 LLM 설정에서 관리하며, 기존 설치의 LLM 환경변수는 [DB 설정 이관 절차](docs/domains/ai/hermes.md#db-connection-and-default-policy-cutover)로 정리한다. 기존 로컬 연결이 암묵적 기본 주소를 사용했다면 해당 절차의 명시적 주소 사전 조건을 먼저 충족한다. vLLM/Ollama 서버는 별도로 실행한 뒤 관리자 연결에 등록한다. 호스트에 Hermes를 별도 설치하지 않는다. |
 | 문서 AI·OCR·음성 인식 | 설정한 [Inference Gateway](docs/domains/inference-gateway/README.md)와 [RAG](docs/domains/rag/README.md) 연결을 준비한다. 개발 Compose가 외부 추론 서버까지 설치하지는 않는다. |
 | 슬라이드·다이어그램 | [Bento](docs/apps/bento/README.md)와 [Diagrams](docs/apps/diagrams/README.md)의 서버 주소·브라우저 연결을 확인한다. Bento의 별도 런타임 이미지와 Web bridge 프로토콜도 함께 맞춘다. |
 | 화상회의·녹음 | [Recording](docs/apps/recording/README.md)의 LiveKit·네트워크·추론 서비스 요구사항을 확인한다. |
@@ -887,6 +915,13 @@ pnpm dev:infra:up
 ./dev.sh --with-worker --no-infra
 ```
 
+데모 환경의 Worker는 `config/runtime.json`의 `OPEN_WORK_HUB_WORKER_CONCURRENCY=1`로
+작업 실행 자식 프로세스 하나를 유지한다. 개발·운영 모두 같은 설정을 사용하며,
+운영 적용에는 해당 설정을 포함한 릴리스 이미지가 필요하다. `.env`에 비밀이 아닌
+동시 실행 수를 복제하지 않는다. 작업은 순차 처리되고 Worker 감독 프로세스와 Beat는
+별도로 유지된다. 조정과 재시작은 [Worker 실행 계약](docs/domains/release/README.md#persistent-development-runtime)을 따른다.
+공유 서버의 메모리 한도·스왑 확인과 LXC 호스트 설정은 [메모리·스왑 운영 확인](docs/domains/release/installation-operations.md#memory-and-swap)을 따른다.
+
 네이티브 DB·Redis는 4절의 연결 검사로, Docker 서비스는 `pnpm infra:dev:status`로 확인한다.
 별도 터미널에서 Worker를 포함한 앱 상태를 확인한다.
 
@@ -899,6 +934,64 @@ curl --fail --silent --output /dev/null http://127.0.0.1:8001/readyz
 기능별 준비 실패는 해당 설정을 해결하고 재검사한다. 설치를 통과시키려고 필수 검사나
 AI 보호 정책을 끄지 않는다. 추가 키·서버가 필요한 기능은 미설정 상태로 명시한다.
 별도의 사용자 요청 없이 준비 확인만을 위해 유료 추론을 실행하지 않는다.
+
+## 6.1. Codex 콘솔 함께 설치
+
+[Codex Console 소유 문서](docs/apps/codex-console/README.md)의 설치·서비스 실행·개인 앱 연결
+절차를 수행한다. OWH 업무 DB와 별개의 전용 PostgreSQL 역할·DB를 만들고, Codex를 구독으로
+로그인한 OS 사용자로 서비스를 실행한다. 콘솔은 고정 버전의 공식 app-server를 사용하며
+Platform API 키나 OWH AI 공급자 설정을 요구하지 않는다.
+
+- 콘솔의 `.env`와 웹 비밀번호를 준비하고 migration·정적 UI 빌드·systemd 자동 시작을 완료한다.
+- [추론 강도 허용 목록](docs/apps/codex-console/README.md#개인-cli-클라이언트와-제품-ai의-연결-경계)을
+  확인한다. 기본값은 `xhigh`까지이며 새 강도는 명시적으로 허용할 때까지 표시하지 않는다.
+- [파일 첨부 설정](docs/apps/codex-console/README.md#파일-보관과-메시지별-첨부)에 따라 원본 DB
+  백업·Git 저장소 밖의 읽기 사본 경로·업로드 용량과 HTTPS 프록시 제한을 준비한다.
+- 전용 HTTPS 주소에서 콘솔로 직접 연결해 OWH 개발 Web 재시작과 접속 경로를 분리한다.
+  앞단 프록시가 다른 호스트이면 [사설망 연결 설정](docs/apps/codex-console/README.md#tls-프록시가-다른-호스트에-있을-때)을 따른다.
+  기존 개발 사이트의 `/codex-console/`를 Vite로 연결하는 대안은 개발 Web 재시작 시 접속이 중단된다.
+  IP 기반 최초 설치에는 [HTTPS 신뢰 등록](docs/domains/release/installation-operations.md#https-trust)을 적용한다.
+  외부 HTTP origin 허용이나 Codex 인증 파일 복사로 우회하지 않는다.
+- OWH의 typed launch URL 설정과 관리자 앱 사용 설정에서 `codex-console`을 활성화한다.
+  URL 미설정·비활성화 상태에서는 개인 앱에 노출되지 않는다. 자동 로그인을 사용할 때는
+  [개인 앱과 HTTPS 접속 연결](docs/apps/codex-console/README.md#개인-앱과-https-접속-연결)에 따라
+  콘솔 `.env`에서 개발·운영 OWH의 정확한 origin을 각 환경의 단일 콘솔 소유자 사용자 UUID에
+  연결한다. 자동 로그인을 사용하지 않거나 교환이 실패한 경우에는 별도 작업실 비밀번호로
+  직접 로그인한다.
+- `개인 앱 → Codex 콘솔` 클릭 시 기존 탭은 유지되고 새 탭이 열리는지 확인한다. 자동 로그인을
+  설정했다면 소유자 OWH 세션에서 비밀번호 화면 없이 열리고 URL fragment가 즉시 제거되어야
+  하며, 다른 사용자는 자동 로그인되지 않아야 한다. 자동 로그인을 설정하지 않았다면 작업실
+  비밀번호 화면이 표시되어야 한다. 이어서 ChatGPT 구독 연결 상태, 로그아웃 후 접근 차단,
+  프록시 아래의 정적 파일·API·SSE를 확인한다.
+- [실행 설정과 재개](docs/apps/codex-console/README.md#실행-설정과-중단-후-계속하기)에 따라
+  구독 모델 목록·계획/실행 모드·승인/YOLO 선택과 탭 종료 후 백그라운드 작업 복원·중단 재개를 확인한다.
+- 파일 두 개를 보관하고 하나만 메시지에 선택해 전달한다. 전송 후 선택 해제, 첨부 기록과
+  파일 목록의 새로고침 복원, 128 KiB 초과 업로드도 확인한다.
+- 접속 주소·전용 웹 비밀번호·DB 정보는 [`.auth_info`](#11-로그인-정보-파일-관리)에 기록한다.
+  콘솔의 실제 서비스 이름·실행 계정·중지/재시작 명령을 인계한다.
+- 업데이트 후에는 [콘솔 배포 완료 확인](docs/apps/codex-console/README.md#배포-완료-확인)에 따라
+  실제 릴리스 경로·health·로그인 후 API와 브라우저 동작까지 검증한다.
+
+`dev.sh`는 콘솔을 시작하거나 종료하지 않는다. 콘솔은 자신을 수정하는 개발 체크아웃과
+분리된 릴리스에서 실행한다. 업데이트에는 새 릴리스 빌드·설정 연결·검증·전용 DB 백업과
+서비스 중지 중 [최신 콘솔 DB migration](docs/apps/codex-console/README.md#설치)·서비스 재시작을
+사용하며, 원본 Codex 인증과 전용 DB는 유지한다. 새 서버를 실행하기 전에 migration을 완료하고,
+이전 서버로 되돌릴 때는 해당 릴리스의 DB 백업도 함께 복원한다. 이미 사용 중인 전용 DB·비밀번호·서비스
+설정은 재설치 시 초기화하지 않는다.
+
+콘솔의 [작업 공간 설정](docs/apps/codex-console/README.md#브랜치와-작업-공간)에 따라 기준 ref,
+외부 워크트리 경로, 운영 체크아웃과 제품 DB 금지 목록을 설정한다. OWH 설치는 `origin/dev`와
+체크아웃 루트의 `worktrees`를 사용하고 실제 prod 경로·dev/prod DB 이름을 등록한다.
+새 작업의 계획 기본값, 질문만으로 문서 미생성, 요청한 문서의 생성·확정 변경 자동 갱신,
+직접 실행과 작업별 브랜치 탭을 확인한다.
+
+## 6.2. 테트리스 개인 앱 사용
+
+테트리스는 OWH API·Web과 함께 설치되며 별도 서비스나 환경 설정이 필요 없다.
+새 서버에서는 [테트리스 설치·활성화](docs/apps/tetris/README.md#설치와-앱-활성화)에 따라
+플랫폼 관리자가 앱을 켜고 대상 사용자를 선택한다. 개인 앱에서 테트리스를 열고 키보드와
+화면 버튼 조작·점수 증가·일시정지·재개 및 비허용 사용자 차단을 확인한다. 게임 진행은
+일시적인 화면 상태이며 페이지 이동·새로고침 시 초기화된다.
 
 ## 7. 실행 종료·재시작과 완료 확인
 
@@ -937,7 +1030,8 @@ Runner는 `sudo systemctl stop gitlab-runner`, `sudo systemctl start gitlab-runn
 - 세션 종료와 무관한 개발 앱 실행, PostgreSQL·Redis 인증 연결과 API readiness.
 - IP 기반 GitLab 로그인, 관리자 설정·`glab` 인증, 비공개 프로젝트와 `origin` 연결, `dev`·`main` 등록·보호와 개발·운영 체크아웃 분리.
 - Runner 등록·온라인 상태와 필요한 이미지·CI 변수·테스트 DB 준비, 검증용 `dev` 대상 MR의 최신 커밋에 대한 실제 파이프라인 성공.
-- `.auth_info`의 최신 개발·GitLab·DB 로그인 정보, 소유자 전용 권한과 Git 제외·미추적 상태.
+- Codex 콘솔의 지속 실행·HTTPS 접속과 개인 앱 새 탭 열기, 전용 로그인·구독 연결 및 메시지별 파일 선택 첨부 확인.
+- `.auth_info`의 최신 개발·GitLab·DB·Codex 콘솔 로그인 정보, 소유자 전용 권한과 Git 제외·미추적 상태.
 
 GitLab 패키지 다운로드·lint·최소 환경 실행은 중간 단계다. 실패한 필수 항목은 원인을 해결하고 재검사한다.
 필수 인증이나 외부 네트워크 권한처럼 사용자만 처리할 수 있는 항목이 남으면 정확한 미완료 항목과 필요한 조치만 요청하며, 독립적으로 가능한 설치 작업은 계속한다.

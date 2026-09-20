@@ -145,6 +145,22 @@ the event contains `notification: null` and the current count, without the old t
 - Category assignment, pinning, ordering, and hiding never create an app identity or authorize a
   route, API, worker, search result, notification, or AI capability.
 
+## Standalone Launcher Destinations
+
+A registered leaf may declare `launcher.url_setting`. Bootstrap reads that typed setting only after
+normal company, role and audience admission, and exposes it as `launch_url`. Unconfigured consoles
+remain unavailable through their feature predicate. Browser launcher, desktop personal tools and
+mobile navigation open these destinations with `target="_blank"` and `rel="noopener noreferrer"`.
+The registered `/apps/:appId` entry remains an admitted fallback with an explicit open link.
+No application token is forwarded. Codex Console is the narrow exception: after normal app admission,
+OWH issues a 60-second, purpose-bound code in the new window's URL fragment. The console removes the
+fragment, exchanges the code once from its server, and creates its own session. OWH rechecks the source
+session and current app admission during exchange. The exchange returns only the stable OWH user UUID;
+the console creates a session only when it matches the owner UUID configured for that exact issuer.
+Other destinations own their authentication and resource access.
+Codex Console installation and its independent subscription runtime are owned by
+[Codex Console](../../apps/codex-console/README.md).
+
 ## Backend Registration
 
 - A domain exports one immutable leaf registration from

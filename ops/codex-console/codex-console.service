@@ -1,0 +1,18 @@
+[Unit]
+Description=Private Codex development console
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/owh-codex-console/current/apps/codex-console-api
+EnvironmentFile=%h/.config/owh-codex-console/console.env
+ExecStart=%h/.local/share/owh-codex-console/current/apps/codex-console-api/.venv/bin/codex-console serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

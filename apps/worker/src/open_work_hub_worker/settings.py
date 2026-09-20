@@ -20,9 +20,33 @@ ENV_FILE = WORKSPACE_ROOT / ".env"
 class Settings(BaseSettings):
     broker_url: str = "redis://127.0.0.1:6379/0"
     result_backend: str = "redis://127.0.0.1:6379/1"
+    concurrency: int = Field(
+        default=1,
+        ge=1,
+        le=64,
+        validation_alias="OPEN_WORK_HUB_WORKER_CONCURRENCY",
+    )
     postgres_dsn: str = Field(
         default="",
         validation_alias="OPEN_WORK_HUB_POSTGRES_DSN",
+    )
+    db_pool_size: int = Field(
+        default=1,
+        ge=1,
+        le=100,
+        validation_alias="OPEN_WORK_HUB_WORKER_DB_POOL_SIZE",
+    )
+    db_max_overflow: int = Field(
+        default=2,
+        ge=0,
+        le=100,
+        validation_alias="OPEN_WORK_HUB_WORKER_DB_MAX_OVERFLOW",
+    )
+    db_pool_timeout: int = Field(
+        default=45,
+        ge=1,
+        le=300,
+        validation_alias="OPEN_WORK_HUB_WORKER_DB_POOL_TIMEOUT",
     )
     queue_group: str = Field(
         default="all",
@@ -59,10 +83,6 @@ class Settings(BaseSettings):
     ai_allowed_external_providers: str = Field(
         default="openai,anthropic,gemini,kipris",
         validation_alias="OPEN_WORK_HUB_AI_ALLOWED_EXTERNAL_PROVIDERS",
-    )
-    ai_default_external_llm_provider: str = Field(
-        default="openai",
-        validation_alias="OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER",
     )
     ai_default_external_search_provider: str = Field(
         default="openai",
@@ -396,6 +416,23 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+    ):
+        from open_work_hub_worker.runtime import ensure_api_src_on_path
+
+        ensure_api_src_on_path()
+        from open_work_hub_api.core.runtime_config_source import RuntimeConfigSettingsSource
+
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            RuntimeConfigSettingsSource(settings_cls, WORKSPACE_ROOT),
+        )
 
     @model_validator(mode="after")
     def validate_hermes_runtime(self) -> "Settings":

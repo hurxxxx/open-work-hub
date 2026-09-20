@@ -5,6 +5,7 @@ from open_work_hub_api.core.app_registry import (
 
 RECORDING_APP = app_registration(
     "recording",
+    ai_capability_modules=('open_work_hub_api.domains.meeting',),
     nav_items=(
         AppNavRegistration(
             id="recording-quick",

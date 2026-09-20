@@ -175,7 +175,7 @@ def test_enabled_audience_union_and_schema(
         with engine.connect() as connection:
             differences = compare_metadata(MigrationContext.configure(connection), Base.metadata)
             assert differences == []
-        with pytest.raises(RuntimeError, match="Archive policy-partitioned"):
+        with pytest.raises(RuntimeError, match="paired database/configuration restore"):
             command.downgrade(config, "group_sources_20260912")
     finally:
         engine.dispose()

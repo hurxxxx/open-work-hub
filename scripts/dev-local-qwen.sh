@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 MODEL_REF="${OPEN_WORK_HUB_DEV_QWEN_MODEL_REF:-ai/qwen3.6:35B-A3B-UD-Q4_K_M}"
-OPENAI_BASE_URL="${OPEN_WORK_HUB_LLM_LOCAL_BASE_URL:-http://127.0.0.1:12434/engines/v1}"
+OPENAI_BASE_URL="http://127.0.0.1:12434/engines/v1"
 COMMAND="${1:-status}"
 
 require_model_runner() {

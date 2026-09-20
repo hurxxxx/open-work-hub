@@ -104,7 +104,7 @@ def test_external_audit_records_detected_values_for_observability(
         task_kind="web_search",
         capability="web_search",
         provider="anthropic",
-        app_id="web-search",
+        app_id="chatbot",
         status="blocked",
         latency_ms=0,
         policy_reason="hard_external_transfer_blocker",
@@ -123,10 +123,10 @@ def test_external_audit_records_detected_values_for_observability(
         audit_log = db.scalars(select(AuditLog)).one()
         detected_value = db.scalars(select(AiSecurityDetectedValue)).one()
 
-    assert audit_log.payload["app_id"] == "web-search"
+    assert audit_log.payload["app_id"] == "chatbot"
     assert detected_value.audit_log_id == audit_log.id
     assert not hasattr(detected_value, "workspace_id")
-    assert detected_value.app_id == "web-search"
+    assert detected_value.app_id == "chatbot"
     assert detected_value.detector == "regex"
     assert detected_value.entity_type == "credential"
     assert detected_value.detected_value == "api_key"

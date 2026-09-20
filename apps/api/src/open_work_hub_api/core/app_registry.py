@@ -43,6 +43,7 @@ class AppCatalogItem:
     execution_context_kind: AppExecutionContextKind = "company"
     resource_scope: AppResourceScope = "company"
     entry_route_id: str = ""
+    launch_url_setting: str | None = None
     launcher_category: bool = False
     launcher_fixed: bool = False
     launcher_personal_tools: bool = False
@@ -72,6 +73,7 @@ class AppRegistration:
     title: str
     route_base: str
     icon_key: str
+    launch_url_setting: str | None = None
     launcher_category: bool = False
     launcher_fixed: bool = False
     launcher_personal_tools: bool = False
@@ -81,6 +83,7 @@ class AppRegistration:
     feature_flag: str | None = None
     required_system_roles: tuple[str, ...] = ()
     backend_domain: str | None = None
+    ai_capability_modules: tuple[str, ...] = ()
 
 
 def app_registration(
@@ -89,6 +92,7 @@ def app_registration(
     nav_items: tuple[AppNavRegistration, ...] = (),
     coming_soon: bool = False,
     backend_domain: str | None = None,
+    ai_capability_modules: tuple[str, ...] = (),
 ) -> AppRegistration:
     """Create an app registration from the generated leaf-app contract.
 
@@ -107,6 +111,7 @@ def app_registration(
         title=str(contract["title"]),
         route_base=str(contract["route_base"]),
         icon_key=str(contract["icon_key"]),
+        launch_url_setting=cast(str | None, launcher.get("url_setting")),
         launcher_category=placement == "category",
         launcher_fixed=placement == "fixed",
         launcher_personal_tools=placement == "personal_tools",
@@ -116,6 +121,7 @@ def app_registration(
         feature_flag=cast(str | None, contract.get("feature_flag")),
         required_system_roles=tuple(cast(list[str], contract.get("required_system_roles", []))),
         backend_domain=backend_domain,
+        ai_capability_modules=ai_capability_modules,
     )
 
 
@@ -252,6 +258,7 @@ def compile_app_registry(
                 if contract is not None
                 else f"{registration.app_id}.root"
             ),
+            launch_url_setting=registration.launch_url_setting,
             launcher_category=registration.launcher_category,
             launcher_fixed=registration.launcher_fixed,
             launcher_personal_tools=registration.launcher_personal_tools,

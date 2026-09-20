@@ -41,7 +41,6 @@ function resolveChrome(
       'pms',
       'retrieval-search',
       'docs',
-      'web-search',
       'whiteboard',
     ],
     appGlobalRoutes: APP_GLOBAL_ROUTES,
@@ -102,21 +101,13 @@ describe('shell chrome model', () => {
       showSubSidebar: true,
     });
 
-    for (const pathname of ['/apps/chatbot', '/apps/web-search']) {
+    for (const pathname of ['/apps/chatbot']) {
       expect(resolveChrome(pathname)).toMatchObject({
         canOpenMobileAppMenu: true,
         mainClassName: 'flex-1 overflow-hidden relative',
         showSubSidebar: true,
       });
     }
-
-    expect(resolveChrome('/apps/web-search')).toMatchObject({
-      activeAppId: 'web-search',
-      activeNavItemId: 'web-search',
-      canOpenMobileAppMenu: true,
-      mainClassName: 'flex-1 overflow-hidden relative',
-      showSubSidebar: true,
-    });
   });
 
   it('keeps context chrome on app renders but not shared renders', () => {

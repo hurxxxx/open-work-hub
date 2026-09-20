@@ -2,10 +2,13 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from open_work_hub_api.core.runtime_config_source import RuntimeConfigSettingsSource
 
 from open_work_hub_api.open_work_hub_desktop_update_manifest import (
     open_work_hub_desktop_update_dir_values,
@@ -28,8 +31,6 @@ DEFAULT_OPF_CHECKPOINT = "openai/privacy-filter"
 HERMES_RELEASE = "v2026.8.31"
 HERMES_IMAGE = "nousresearch/hermes-agent:v2026.8.31@sha256:64923faeae267792bf9bf87fe3b4c4869e35004e360c7df01730ad801b74d524"
 HERMES_PROVIDER = "openrouter"
-HERMES_MODEL = "qwen/qwen3.8-flash"
-HERMES_FALLBACK_MODEL = "z-ai/glm-5.3-flash"
 PRODUCTION_ENVIRONMENT = "production"
 PREVIEW_ENVIRONMENT = "preview"
 PRODUCTION_LIKE_ENVIRONMENTS = frozenset({PREVIEW_ENVIRONMENT, PRODUCTION_ENVIRONMENT})
@@ -228,13 +229,13 @@ class Settings(BaseSettings):
         validation_alias="OPEN_WORK_HUB_API_COLLAB_CLEANUP_TIMEOUT_SECONDS",
     )
     db_pool_size: int = Field(
-        default=32,
+        default=5,
         ge=1,
         le=100,
         validation_alias="OPEN_WORK_HUB_API_DB_POOL_SIZE",
     )
     db_max_overflow: int = Field(
-        default=64,
+        default=5,
         ge=0,
         le=100,
         validation_alias="OPEN_WORK_HUB_API_DB_MAX_OVERFLOW",
@@ -249,6 +250,30 @@ class Settings(BaseSettings):
         default=str(WORKSPACE_ROOT / ".local-recording-spool"),
         validation_alias="OPEN_WORK_HUB_API_RECORDING_SPOOL_DIR",
     )
+    codex_console_launch_url: str = Field(
+        default="", validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_LAUNCH_URL"
+    )
+
+    @field_validator("codex_console_launch_url")
+    @classmethod
+    def _console_launch_url(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            return value
+        parsed = urlsplit(value)
+        if any(c.isspace() or ord(c) < 32 for c in value) or "\\" in value:
+            raise ValueError("Invalid console launch URL")
+        relative = value.startswith("/") and not value.startswith("//")
+        secure = parsed.scheme == "https" and bool(parsed.hostname)
+        local = parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1", "::1")
+        if not (relative or secure or local) or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError("Use HTTPS, a loopback URL or an absolute same-origin path")
+        return value
+
+    @property
+    def codex_console_enabled(self) -> bool:
+        return bool(self.codex_console_launch_url)
+
     agent_terminal_enabled: bool = Field(
         default=False,
         validation_alias="OPEN_WORK_HUB_API_AGENT_TERMINAL_ENABLED",
@@ -393,18 +418,10 @@ class Settings(BaseSettings):
         default="[]",
         validation_alias="OPEN_WORK_HUB_MODEL_STATUS_DIAGNOSTIC_TARGETS_JSON",
     )
-    # LLM — Local pool (Apple Silicon mlx-lm by default)
-    llm_local_provider: str = Field(
-        default="mlx-lm",
-        validation_alias="OPEN_WORK_HUB_LLM_LOCAL_PROVIDER",
-    )
-    llm_local_base_url: str = Field(
-        default="http://127.0.0.1:8080/v1",
-        validation_alias="OPEN_WORK_HUB_LLM_LOCAL_BASE_URL",
-    )
-    llm_local_api_key: str = Field(
-        default="mlx",
-        validation_alias="OPEN_WORK_HUB_LLM_LOCAL_API_KEY",
+    # LLM transport limits; connections, credentials and models live in PostgreSQL.
+    llm_local_allowed_hosts: str = Field(
+        default="127.0.0.1,localhost,::1,host.docker.internal",
+        validation_alias="OPEN_WORK_HUB_LLM_LOCAL_ALLOWED_HOSTS",
     )
     llm_local_long_generation_timeout_seconds: float = Field(
         default=1200.0,
@@ -687,10 +704,6 @@ class Settings(BaseSettings):
         default="mock",
         validation_alias="OPEN_WORK_HUB_AI_EXTERNAL_SEARCH_EXECUTION_ADAPTER",
     )
-    ai_default_external_llm_provider: str = Field(
-        default="openai",
-        validation_alias="OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_LLM_PROVIDER",
-    )
     ai_default_external_search_provider: str = Field(
         default="openai",
         validation_alias="OPEN_WORK_HUB_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER",
@@ -944,6 +957,18 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
+    @classmethod
+    def settings_customise_sources(
+        cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+    ):
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+            RuntimeConfigSettingsSource(settings_cls, WORKSPACE_ROOT),
+        )
+
     @model_validator(mode="after")
     def _validate_runtime_config(self) -> "Settings":
         self.environment = normalize_runtime_environment(self.environment)
@@ -1049,9 +1074,6 @@ class Settings(BaseSettings):
             )
         self.ai_allowed_external_providers = _normalize_external_provider_list_text(
             self.ai_allowed_external_providers,
-        )
-        self.ai_default_external_llm_provider = _normalize_external_provider_text(
-            self.ai_default_external_llm_provider,
         )
         self.ai_default_external_search_provider = _normalize_external_provider_text(
             self.ai_default_external_search_provider,

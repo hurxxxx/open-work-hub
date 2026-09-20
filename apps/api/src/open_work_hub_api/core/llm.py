@@ -100,7 +100,7 @@ class LlmPoolConfig:
     pool: LlmPoolName
     provider: str
     base_url: str
-    api_key: str
+    api_key: str = field(repr=False)
     default_model: str
     canonical_model: str
     healthcheck_timeout_seconds: float
@@ -108,6 +108,7 @@ class LlmPoolConfig:
     enabled: bool = True
     default_headers: Mapping[str, str] | None = None
     requires_credentials: bool = True
+    connection_id: str | None = None
 
     @property
     def configured(self) -> bool:
@@ -210,6 +211,7 @@ class LlmPoolHealth:
     canonical_model: str
     status: LlmHealthStatus
     detail: LlmHealthDetail = None
+    connection_id: str | None = None
 
     @property
     def ready(self) -> bool:
@@ -224,6 +226,7 @@ class LlmPoolHealth:
         payload: dict[str, Any] = {
             "pool": self.pool,
             "provider": self.provider,
+            "connection_id": self.connection_id,
             "model": self.model,
             "canonical_model": self.canonical_model,
             "status": self.status,
@@ -240,6 +243,7 @@ class LlmDualHealth:
     local: LlmPoolHealth
     external: LlmPoolHealth | None
     external_providers: tuple[LlmPoolHealth, ...] = ()
+    connections: tuple[LlmPoolHealth, ...] = ()
 
     @property
     def ready(self) -> bool:
@@ -252,6 +256,7 @@ class LlmDualHealth:
             self.local.ready
             or bool(self.external and self.external.ready)
             or any(provider.ready for provider in self.external_providers)
+            or any(connection.ready for connection in self.connections)
         )
 
     def public_dict(
@@ -280,6 +285,10 @@ class LlmDualHealth:
                     include_base_url=include_base_url,
                 )
                 for provider in self.external_providers
+            ],
+            "connections": [
+                connection.public_dict(locale=locale, include_base_url=include_base_url)
+                for connection in self.connections
             ],
         }
 

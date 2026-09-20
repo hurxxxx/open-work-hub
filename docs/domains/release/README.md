@@ -26,12 +26,14 @@
 | --- | --- |
 | Known Markdown docs/instructions only | Whitespace, skills checker, skill-harness and Claude bridge tests; omit application suites |
 | Skills, native agent setup/hooks, tested Codex review tooling | Whitespace and `pnpm ci:harness`; omit API, generated contract, web build/test and browser E2E suites |
-| Web source/E2E, core-web source, or shared UI source/styles | `pnpm ci:web`; omit API suites |
+| Web source/E2E or core-web source | `pnpm ci:web`; omit API and Codex Console suites |
+| Shared UI source/styles | `pnpm ci:web` and `pnpm ci:codex-console`; omit API suites |
+| Codex Console source/tests | `pnpm ci:codex-console`; omit OWH API and Web suites |
 | Mixed known focused surfaces | Stable union of their checks; omit unrelated suites |
-| API/worker code, dependencies/lockfiles, shared/generated contracts, DB migrations, env, dev/runtime startup, Compose, images, release selector/CI routing/gates, or unknown paths | Full `pnpm ci:all` |
+| Dependencies/lockfiles, worker, shared/generated contracts, OWH DB migrations, env, dev/runtime startup, Compose, images, release selector/CI routing/gates, or unknown paths | Full `pnpm ci:all` |
 | More than 40 files or 1,000 added/deleted lines; binary, symlink/submodule or mode changes | Full `pnpm ci:all` |
 
-The size limits are conservative routing policy, not measured correctness thresholds. Focused application routing is an allowlist of Web, core-web and shared UI source/test trees, not a generic extension rule: API/worker code, dependency manifests, generated/shared contracts, database migrations, runtime configuration/topology and unknown paths remain full. A `.sh`, `.yml`, or “setup/CI” name alone does not prove low impact. Release-control changes, including introducing or changing this selector, cannot choose their own abbreviated validation.
+The size limits are conservative routing policy, not measured correctness thresholds. Focused application routing is an allowlist of Web and Codex Console source and test trees, not a generic extension rule: API/worker code, dependency manifests, generated/shared contracts, database migrations, runtime configuration/topology and unknown paths remain full. Shared UI runs both of its consumers' suites. A `.sh`, `.yml`, or “setup/CI” name alone does not prove low impact. Release-control changes, including introducing or changing this selector, cannot choose their own abbreviated validation.
 
 For an authorized release with an explicit fast request:
 
@@ -69,7 +71,9 @@ Selector maintenance checks: `node --test scripts/release-validation.test.mjs`, 
 - Ruff's explicit `E4`, `E7`, `E9`, and `F` selection preserves all pre-0.16 checks, including rules removed from the new defaults. Dependency upgrades must not silently replace the existing lint policy with a different upstream default set.
 - Beat health requires a successful broker publication within 180 seconds. The official Celery `beat_init` and `after_task_publish` signals maintain a disposable `celerybeat-heartbeat` marker in Beat's working directory. Startup discards the previous marker; API and worker publications cannot refresh it. The marker stores no task or business data. Container health detects a stalled publisher after the freshness window and two failed 30-second checks; Docker restart policies alone do not restart an unhealthy process that is still running.
 - The image build embeds the validated `OPEN_WORK_HUB_BENTO_SERVER_URL` in the static web bundle; changing that public origin requires a new app image.
-- `pnpm app:prod:deploy` first rejects a terminal broker listener that is not the expected existing production container, then builds and verifies the revision image, applies migrations, replaces the app runtime, and requires direct and public health identity plus readiness, revision, bootstrap, and login-shell checks.
+- `pnpm app:prod:prepare --release-mr <iid>` verifies that the current `origin/main` is the named merged same-project `dev -> main` MR, that its current `release_validation` job passed, and that the validated source tree equals the production tree. It reuses a matching verified local candidate or builds it once from the committed Git snapshot, then prints its immutable image ID.
+- `pnpm app:prod:deploy --release-mr <iid> --image sha256:<candidate-image-id>` rechecks the same GitLab, source-tree, platform, build-setting, image-label and runtime-content contract. It never builds an image. It rejects a terminal broker listener that is not the expected existing production container, promotes the exact candidate ID, applies migrations, replaces the app runtime, and requires direct and public health identity plus readiness, revision, bootstrap, and login-shell checks.
+- Prepare, deploy and rollback are mutually exclusive host operations through a private runtime lock. Repeating prepare with the same commit, tree, platform and Bento URL verifies and returns the same candidate ID without building, including after a successful pipeline retry for the same source. A matching candidate that fails verification stops instead of rebuilding over the evidence.
 - A failed migration, runtime start, or public smoke attempts to restore the previous app image and reports restoration failure explicitly. Default rollback retains the current database/configuration, so ordinary releases must keep them compatible with the previous image. Incompatible cutovers require the paired recovery procedure below.
 
 Read-only checks:
@@ -82,10 +86,13 @@ pnpm app:prod:smoke
 Mutating commands require explicit production scope:
 
 ```bash
-pnpm app:prod:deploy
+pnpm app:prod:prepare --release-mr <merged-dev-to-main-mr-iid>
+pnpm app:prod:deploy --release-mr <same-mr-iid> --image 'sha256:<prepare-output>'
 pnpm app:prod:rollback
 pnpm app:prod:up
 ```
+
+Run both release commands from the clean `prod` checkout after updating it to `origin/main`. The host needs an authenticated `glab` session for the internal GitLab project. Copy only the `sha256:...` line printed by prepare into deploy; tags are not accepted as deployment input.
 
 ## Incompatible database and configuration cutovers
 
@@ -100,7 +107,7 @@ Before exposing an empty deployment, initialize its administrator through the ne
 An incompatible deployment must supply both options to the guarded entrypoint:
 
 ```bash
-pnpm app:prod:deploy --rollback-env-file /protected/path/previous.env --rollback-image 'sha256:<previous-image-id>'
+pnpm app:prod:deploy --release-mr <iid> --image 'sha256:<candidate-image-id>' --rollback-env-file /protected/path/previous.env --rollback-image 'sha256:<previous-image-id>'
 pnpm app:prod:rollback --rollback-env-file /protected/path/previous.env --rollback-image 'sha256:<previous-image-id>'
 ```
 
@@ -108,21 +115,126 @@ The env backup must be a regular non-symlink file with mode 0600. The image must
 
 Recovery stops only the production app Compose project without deleting volumes, atomically restores the root `.env` with mode 0600, and starts the immutable previous image using the previous revision's Compose and host-mounted helpers. The snapshot also contains its matching `.env`, because Compose's service `env_file` is resolved relative to its file. Recovery uses the previous revision's smoke validator and does not run migrations. Restoring a tag alone, or validating an old env with the new code's renamed keys, is insufficient. Keep the paired old database/namespaces and backup until the rollback retention decision is made; do not automatically delete them after a successful deployment. Snapshot restoration does not rewind shared persistent volumes or external side effects, which require separate compatibility review.
 
+## Public runtime configuration
+
+[`config/runtime.json`](../../../config/runtime.json) owns reviewed, non-secret API/Worker
+startup defaults: database pools, LLM call timeouts, agent limits, retry/retention limits,
+collaboration limits, and embedding/reranker model IDs and revisions. The versioned JSON
+schema allowlists the supported typed `OPEN_WORK_HUB_*` keys and validates their ranges.
+Missing files, unknown keys/profiles, duplicate JSON keys and invalid values fail startup;
+validation errors do not print supplied values. `pnpm check:env-contract` validates this
+document as well as the remaining env contract. Public config keys may be absent from
+env files or appear as overrides; non-config key coverage/order and duplicate checks remain.
+Sibling dev/prod checkouts are each checked against their own versioned template, typed
+settings, public defaults and retired-key declaration. Different release versions may
+therefore use different keys during a staged cutover; missing peer contracts and invalid
+peer settings still fail validation. Source-token scanning covers the active checkout.
+API and Worker Nx inputs include these files, so config-only edits invalidate their cached
+checks. Runtime config and pool regressions run in the API/Worker contract test targets.
+
+Settings precedence, highest first: explicit constructor values (tests), process environment,
+checkout `.env`, Pydantic secret files when configured, selected `profiles` overrides,
+`defaults`, typed code defaults. `OPEN_WORK_HUB_ENV_PROFILE` selects `local`, `dev`, `prod`,
+`preview` or `test`; `development`/`production` map to `dev`/`prod`. With no profile, `local`
+applies. Settings are cached per process; changes require its normal restart.
+
+Credentials, signing/encryption keys, DSNs, site endpoints/namespaces, feature admission
+and Hermes settings remain in protected env configuration. Active generative provider/model
+and workload routing remain authoritative in the Admin database; see [AI Gateway](../ai/gateway.md).
+Embedding-model changes still require the retrieval owner's index/version migration contract.
+Do not copy real env values into Git or add an unused model-preset file.
+
+Existing installations can run `uv run --frozen --python 3.12 --directory apps/api python
+../../scripts/runtime-config-migrate.py` from their checkout root. The default is a dry run;
+`--apply` atomically removes only public values equal to that profile's defaults, retains
+custom overrides and interpolation dependencies, and creates a mode-0600 `.env.backup-config-*`
+recovery copy. The tool rejects tracked/symlink/non-0600 files, duplicate keys and changes to
+unrelated multiline values. Review `.env.local` overlays separately. Protect backups like the
+original env file; they are ignored by Git and Docker.
+
+The application image contains both `config/runtime.json` and its schema. Deployment and
+rollback therefore use the config from the corresponding immutable image. Production env
+overrides remain compatible with the previous image; prune them only after the matching
+code/config has been promoted and deployed. Config/env edits do not authorize promotion,
+deployment or restart. Do not bind-mount a newer config over a rollback image.
+
+## Database connection budgets
+
+PostgreSQL's connection limit belongs to the physical server, including when development
+and production use different databases on it. Budget every API process and Celery child,
+plus migration/operator capacity, below the server's non-reserved connection limit.
+
+| Runtime | Retained connections per process | Extra concurrent connections | Settings |
+| --- | --- | --- | --- |
+| API | 5 | 5 | `OPEN_WORK_HUB_API_DB_POOL_SIZE`, `OPEN_WORK_HUB_API_DB_MAX_OVERFLOW` |
+| Worker child | 1 | 2 | `OPEN_WORK_HUB_WORKER_DB_POOL_SIZE`, `OPEN_WORK_HUB_WORKER_DB_MAX_OVERFLOW` |
+
+Both `OPEN_WORK_HUB_API_DB_POOL_TIMEOUT` and `OPEN_WORK_HUB_WORKER_DB_POOL_TIMEOUT`
+default to 45 seconds. These are lazy pool limits, not connections opened at startup.
+For example, two API processes and eighteen worker children have a combined maximum
+of `2 × (5 + 5) + 18 × (1 + 2) = 74` connections, retaining at most 28 after work finishes.
+Additional processes/replicas and configuration overrides change that budget.
+
+Worker startup binds API-domain database access to the same worker engine; mail, search,
+media cleanup and shared worker tasks reuse it. Prefork children replace the inherited
+pool with SQLAlchemy's `Engine.dispose(close=False)` through Celery's
+`worker_process_init` signal. Existing session factories retain their engine binding.
+The [SQLAlchemy pooling contract](https://docs.sqlalchemy.org/en/20/core/pooling.html)
+owns connection retention, overflow closure, rollback-on-return and fork isolation.
+Do not create a task-local engine, or use `pool_size=0` to disable pooling: zero removes
+the pool size limit. SQLAlchemy's `NullPool` is the explicit no-pooling option.
+
+`Session.close()` returns a connection to its pool; PostgreSQL `idle` alone is not proof
+of a leaked session. Beat still runs maintenance every 30–60 seconds without users.
+Inspect `pg_stat_activity` grouped by `application_name`, `state` and database/role,
+excluding query text and business data. Clients identify themselves as
+`owh:<environment>:api` or `owh:<environment>:worker`. Repeated empty maintenance cycles
+must not grow the retained connection count. Investigate persistent `idle in transaction`
+separately, and never terminate arbitrary connections to conceal a leak.
+
+Authentication runs its synchronous database work through an application-scoped
+[AnyIO `CapacityLimiter`](https://anyio.readthedocs.io/en/stable/threads.html), separate from the default request-thread limiter. Its
+capacity is the existing API pool size plus overflow; it does not increase the
+database connection budget. This keeps blocked authentication checkouts from
+occupying every thread needed by authenticated requests to finish and return
+their connections. Use AnyIO's public `to_thread.run_sync(..., limiter=...)`
+interface; keep cancellation shielding enabled so a request cannot close a
+session while its authentication thread still uses it. A larger database pool
+or thread count does not fix this dependency scheduling cycle.
+
+Verify concurrent authenticated reads with
+`uv run --directory apps/api --group dev pytest tests/test_database_request_concurrency.py`.
+The regression uses a smaller connection pool than the request-thread budget,
+exercises real authentication and app admission, and checks connection return.
+Long-lived streams must also release admission-only read transactions before
+opening the stream; each later database poll owns a short session.
+
+For existing installations, explicitly review the pool keys in each protected `.env`:
+old API values of 32/64 override the new defaults. Apply reviewed values through the
+development supervisor or the guarded production deployment procedure with the required
+authorization; editing defaults does not update running workers or production images.
+After rollout, verify connection counts over several Beat cycles and authenticated API
+requests. No database recreation or PostgreSQL capacity increase is required by this change.
+
 ## Persistent development runtime
 
-`dev.sh` is a foreground development command: its children stop when its session exits. A continuously available development address requires an independent host supervisor with restart-on-exit and persistent logs, using the same entrypoint, selected flags and checkout. For native minimal installation this is `./dev.sh --minimal-infra --no-infra`; use `./dev.sh --with-worker` when the selected configuration includes a worker. Manage that runtime through its supervisor instead of starting a second copy or stopping its children directly. Development workers use two concurrent processes to bound their memory use on a host shared with other environments. Keep host-specific service definitions outside the repository.
+`dev.sh` is a foreground development command: its children stop when its session exits. A continuously available development address requires an independent host supervisor with restart-on-exit and persistent logs, using the same entrypoint, selected flags and checkout. For native minimal installation this is `./dev.sh --minimal-infra --no-infra`; use `./dev.sh --with-worker` when the selected configuration includes a worker. Manage that runtime through its supervisor instead of starting a second copy or stopping its children directly. Keep host-specific service definitions outside the repository.
+
+Worker concurrency is the typed `OPEN_WORK_HUB_WORKER_CONCURRENCY` setting in `config/runtime.json` (default `1`, range `1..64`). Both development and the released production worker use Celery's public `worker_concurrency` configuration; the standard commands must not override it with a separate CLI count. One prefork child is the minimum for the demo deployment; the worker supervisor and single Beat scheduler remain required, and queued tasks run sequentially. CPU-count auto-detection is unsuitable for shared LXC hosts, where Python may see more CPUs than the process affinity allows. Include every child in the database and memory budgets. Raising concurrency requires a memory/throughput budget and worker restart. A source configuration change reaches production through the normal release image; Celery's targeted `pool_shrink` can reduce idle processes immediately, but is temporary and does not survive worker restart.
 
 After startup, reboot or recovery, follow the shared [development access checks](installation-operations.md#development-access-checks): verify local listeners and API readiness, then use `pnpm dev:login-smoke` plus browser login, screens and logout for HTTP development access. `pnpm dev:public-smoke` remains required for an HTTPS public-domain development origin; it rejects HTTP and IP-address origins, including HTTPS IP addresses. Remote-PC installations also require a separate client-path browser check. INSTALL uses the same conditions; a server checking its own address does not establish client reachability.
 
 ## Build and test storage
 
-`scripts/docker-storage.mjs` owns project image retention and capacity preflight. Before building a validation image or starting an app build, run `node scripts/docker-storage.mjs check` against the local Docker daemon. Require at least 15 GiB **and** 15% available on its filesystem; these are conservative minimums, not a guarantee that an arbitrary build fits. Release CI checks its workspace filesystem before launching suites and records a failed preflight without running them. If CI services use another filesystem/host, inspect that storage at its owner too. Do not disable OpenSearch disk watermarks or index-creation protection to make tests pass.
+`scripts/docker-storage.mjs` owns project image retention and capacity preflight. Before building a validation image or when production candidate preparation needs a new image, run `node scripts/docker-storage.mjs check` against the local Docker daemon. Require at least 15 GiB **and** 15% available on its filesystem; these are conservative minimums, not a guarantee that an arbitrary build fits. Reusing an already matching candidate does not require build headroom. Release CI checks its workspace filesystem before launching suites and records a failed preflight without running them. If CI services use another filesystem/host, inspect that storage at its owner too. Do not disable OpenSearch disk watermarks or index-creation protection to make tests pass.
 
-Harness fixtures also run capacity checks on their temporary workspaces. If the default temporary directory is a small tmpfs, set `TMPDIR` to an ignored, owner-only directory on a filesystem that satisfies the same capacity threshold before running `pnpm ci:harness`. Check that filesystem's free space; do not lower the threshold or bypass preflight.
+Harness fixtures also run capacity checks on their temporary workspaces. If the default temporary directory is a small tmpfs, set `TMPDIR` to an ignored, owner-only directory on a filesystem that satisfies the same capacity threshold before running `pnpm ci:harness`. Check that filesystem's free space; do not lower the threshold or bypass preflight. For console tests, temporary attachment directories must also be outside every Git checkout; do not reuse a repository-local harness `TMPDIR` for `ci:codex-console`.
 
-An explicitly authorized production deploy applies retention before building and again after successful public smoke. `node scripts/docker-storage.mjs cleanup` is a read-only plan; `cleanup --apply` requires deploy or project artifact-cleanup scope. It removes only recognized generated app/validation image tags older than 48 hours, preserving current production, its previous rollback image, the canonical CI image, every container-referenced image (including stopped containers), recent builds and unknown/manual tags. Each image is rechecked before non-force removal. Docker's own dangling-image pruning is restricted to positive project build-cache/app labels and the same age threshold. It never prunes volumes, containers, other projects, or the Docker daemon globally. Cleanup failure is reported; it does not roll back a healthy deployment.
+An explicitly authorized production deploy applies retention after successful public smoke. It does not clean before promotion, so the explicitly selected candidate ID cannot be retired between verification and tagging. `node scripts/docker-storage.mjs cleanup` is a read-only plan; `cleanup --apply` requires deploy or project artifact-cleanup scope. It removes recognized generated app/validation image tags and untagged validation images with a valid `io.open-work-hub.validation.contract` label older than 48 hours, preserving the prepared candidate, current production, its previous rollback image, the canonical CI image, every container-referenced image (including stopped containers), recent builds and unknown/manual tags. Each image is rechecked before non-force removal. Docker's own dangling-image pruning is restricted to positive project build-cache/app labels and the same age threshold. It never prunes volumes, containers, other projects, or the Docker daemon globally. Cleanup failure is reported; it does not roll back a healthy deployment.
 
-Production Dockerfile revision metadata follows the dependency layers so a new commit does not invalidate heavy dependency copies. Build stages have a project cache label; the final runtime does not inherit the cache label. Python installs use `uv --no-cache`; do not retain package downloads alongside installed environments. The Docker context excludes local runtime, Beat state and browser test reports. Failed test evidence remains governed by CI artifact expiry; do not add local copies of every run.
+Production and validation Dockerfile revision/contract metadata follows the dependency layers so a new commit or builder-script change does not reinstall heavy dependencies. Production copies third-party Python environments before installing the small API/worker wheels; application source changes reuse the dependency layers. The collaboration codec deployment also precedes the web source copy, avoiding a new dependency layer for each UI or documentation change. Build stages have a project cache label; the final runtime does not inherit the cache label. Python installs use `uv --no-cache`; do not retain package downloads alongside installed environments. The Docker context excludes local runtime, Beat state and browser test reports. Failed test evidence remains governed by CI artifact expiry; do not add local copies of every run.
+
+Production candidate preparation sends `git archive HEAD`, rather than the working directory, as Docker's build context. The reusable candidate contract covers the full production commit, its Git tree, the validated release source, Docker platform, and a hash of the normalized Bento public URL. Image labels also record the release MR and the successful pipeline used at build time. A later successful pipeline retry for the same source is checked live without changing the image contract. Deployment accepts only the full local image ID and repeats the contract and content checks; it does not call `docker build`. Promoting an image already serving as current production leaves `prod-previous` unchanged.
 
 CI preparation links both ordinary `apps/{api,worker}/.venv` and focused `.runtime/ci-*-venv` paths to the same hash-verified image environments. Normal `uv run` still installs the current source package; do not skip dependency identity checks or redirect API and worker into one shared environment. Missing/mismatched identity or an existing foreign environment fails closed without overwriting it. This avoids downloading/installing the full dependency tree again during each full suite. Test with `node --test scripts/prepare-validation-runtime.test.mjs` and confirm an actual CI run does not recreate a multi-gigabyte uv cache.
 
@@ -133,6 +245,10 @@ Release CI and the production web image build set Node's [V8 old-space limit](ht
 Release CI preserves Playwright's existing failure traces, videos, and error context under `test-results/` together with the validation context artifact, restricted to maintainers and expiring after 14 days. These shell tests use synthetic API fixtures. Do not archive runtime `.env` files or production browser sessions. A browser process crash is a failed check; retain its evidence and reproduce with the same image and resource settings before changing UI assertions, timeouts, or retry policy.
 
 Do not export Docker tar backups for reproducible builds/test images. Preserve the current and previous runtime tags for image rollback; back up persistent business data only through its separately authorized data-retention policy. Image sizes share layers: compare filesystem free space before/after cleanup rather than summing `docker image ls` sizes. Verify current/previous image IDs and runtime health remain unchanged after maintenance. Run `pnpm test:prod-app`, `node --test scripts/release-validation.test.mjs`, and the release pipeline when changing these controls.
+
+Image cleanup and BuildKit cache cleanup are separate: `docker image prune` does not bound BuildKit storage. Inspect `docker buildx du` and `docker buildx inspect` when filesystem usage keeps growing after image retirement. Prefer Docker's native [BuildKit garbage collection](https://docs.docker.com/build/cache/garbage-collection/) with an explicitly budgeted `builder.gc.defaultKeepStorage` on a project-owned daemon; inspect other owners before changing a shared daemon. A build cache is reproducible and is not a rollback backup. Never create tar copies before removing it. On a shared builder, identify exact unused project cache IDs and recheck ownership/reference state before targeted removal; descriptions alone do not establish ownership. For a small project-owned host, merge `"builder": {"gc": {"enabled": true, "defaultKeepStorage": "8GB"}}` into the existing daemon configuration, preserving runtime/network settings; larger caches need an explicit disk budget. This is a GC target, not a hard cap during a build, and it does not remove tagged runtime images or data volumes. Validate with `dockerd --validate --config-file /etc/docker/daemon.json`. Builder GC changes require a daemon restart on Docker 29; where supported, first enable/reload `live-restore`, verify `docker info` reports it active, then restart during authorized maintenance and verify existing container PIDs, images and health. Confirm the effective budget with `docker buildx inspect`; a saved configuration alone is not evidence that GC changed.
+
+Do not create a full product Docker image merely to release the independent Codex Console: use its [release builder](../../apps/codex-console/README.md#배포-완료-확인). Verify the prepared product candidate directly; do not create a second `verify-*` copy. Product release validation remains required when its own image/runtime changes.
 
 Official behavior: [Docker cache invalidation](https://docs.docker.com/reference/dockerfile/#impact-on-build-caching), [uv Docker caching](https://docs.astral.sh/uv/guides/integration/docker/#caching), [positive-label image pruning](https://docs.docker.com/reference/cli/docker/image/prune/).
 
