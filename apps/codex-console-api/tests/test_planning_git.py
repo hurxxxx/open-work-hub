@@ -163,26 +163,41 @@ def test_execution_needs_text_or_approved_plan_and_git_status_requires_auth(clie
     assert client.get(f"/api/tasks/{task['id']}/git").status_code == 401
 
 
-def test_planning_updates_two_documents_atomically_and_preserves_answers(client):
+@pytest.mark.parametrize("reverse", [False, True])
+def test_planning_updates_two_documents_atomically_and_preserves_answers(client, reverse):
     task = send_message(client, new_task(client)).json()
     documents = [
         {"kind": kind, "base_version": 0, "body": f"Initial {kind}", "summary": "Created"}
         for kind in ("requirements", "plan")
     ]
+    if reverse:
+        documents.reverse()
     task = complete(client, task, "Both documents saved", documents=documents)
     assert len(task["revisions"]) == 2
     assert task["items"][-1]["text"] == "Both documents saved"
     before = task["revisions"]
     task = send_message(client, task, text="Change the confirmed scope").json()
-    documents[0].update(base_version=1, body="Changed scope")
-    documents[1].update(base_version=0, body="Conflicting plan")
+    by_kind = {document["kind"]: document for document in documents}
+    by_kind["requirements"].update(base_version=1, body="Changed scope")
+    by_kind["plan"].update(base_version=0, body="Conflicting plan")
     task = complete(client, task, documents=documents)
     assert task["error_code"] == "document_conflict"
     assert task["revisions"] == before
     task = send_message(client, task, text="Apply the agreed revision").json()
-    documents[1]["base_version"] = 1
+    by_kind["plan"]["base_version"] = 1
     task = complete(client, task, documents=documents)
     assert [r["version"] for r in task["revisions"]] == [1, 1, 2, 2]
+    latest = task["revisions"][-2:]
+    assert [r["kind"] for r in latest] == ["requirements", "plan"]
+    response = client.post(
+        f"/api/tasks/{task['id']}/implement",
+        json={
+            "operation_id": str(uuid4()),
+            "revision_id": latest[-1]["id"],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["approved_revision"] == latest[-1]["id"]
 
 
 def test_malformed_planning_response_never_overwrites_documents(client):
@@ -267,3 +282,220 @@ def test_isolation_works_without_an_origin_or_dev_branch(repository, tmp_path):
     )
     assert owned and run(root, "rev-parse", "HEAD") == run(repository, "rev-parse", "HEAD")
     assert (repository / "unrelated.txt").read_text() == "preserve"
+
+
+@pytest.mark.parametrize("streamed", [False, True])
+def test_large_planning_final_preserves_both_documents_and_command_limit(client, streamed):
+    from conftest import notify, planning_text
+
+    task = send_message(client, new_task(client)).json()
+    documents = [
+        {"kind": kind, "base_version": 0, "body": "문" * 100000, "summary": "Created"}
+        for kind in ("requirements", "plan")
+    ]
+    text = planning_text("Saved both documents", documents)
+    assert len(text) > 100000
+    item = {"id": "large-final", "type": "agentMessage", "phase": "final_answer", "text": text}
+    if streamed:
+        notify(client, task, "item/started", {"item": {**item, "text": ""}})
+        for offset in range(0, len(text), 40000):
+            notify(
+                client,
+                task,
+                "item/agentMessage/delta",
+                {
+                    "itemId": item["id"],
+                    "delta": text[offset : offset + 40000],
+                },
+            )
+    else:
+        notify(client, task, "item/completed", {"item": item})
+    notify(
+        client,
+        task,
+        "item/completed",
+        {
+            "item": {
+                "id": "command",
+                "type": "commandExecution",
+                "aggregatedOutput": "x" * 110000 + "end",
+            }
+        },
+    )
+    notify(client, task, "turn/completed", {"turn": {"id": task["turn_id"], "status": "completed"}})
+    saved = client.get(f"/api/tasks/{task['id']}").json()
+    assert saved["error_code"] is None
+    assert [r["body"] for r in saved["revisions"]] == [d["body"] for d in documents]
+    assert (
+        next(i for i in saved["items"] if i["id"] == "large-final")["text"]
+        == "Saved both documents"
+    )
+    output = next(i for i in saved["items"] if i["id"] == "command")["aggregatedOutput"]
+    assert len(output) == 100000 and output.endswith("end")
+
+    # Recovery projects old planning finals while the task is now implementing/reviewing.
+    response = client.post(
+        f"/api/tasks/{task['id']}/implement",
+        json={
+            "operation_id": str(uuid4()),
+            "revision_id": saved["revisions"][-1]["id"],
+        },
+    )
+    assert response.status_code == 200
+    executing = response.json()
+    runtime = client.app.state.runtime
+    client.portal.call(runtime.on_disconnect)
+    runtime.rpc.threads[task["thread_id"]].update(
+        status={"type": "idle"},
+        turns=[
+            {
+                "id": task["turn_id"],
+                "status": "completed",
+                "items": [
+                    item,
+                    {
+                        "id": "command",
+                        "type": "commandExecution",
+                        "aggregatedOutput": "x" * 110000 + "end",
+                    },
+                ],
+            },
+            {"id": executing["turn_id"], "status": "completed", "items": []},
+        ],
+    )
+    for _ in range(2):
+        recovered = client.post(
+            f"/api/tasks/{task['id']}/recover", json={"confirm_workspace": True}
+        )
+        assert recovered.status_code == 200
+        history = recovered.json()
+        assert history["stage"] == "review"
+        assert history["revisions"] == saved["revisions"]
+        final = next(i for i in history["items"] if i["id"] == "large-final")
+        assert final["text"] == "Saved both documents"
+        assert len(final["document_updates"]) == 2
+        output = next(i for i in history["items"] if i["id"] == "command")["aggregatedOutput"]
+        assert len(output) == 100000 and output.endswith("end")
+
+
+@pytest.mark.parametrize("proof", ["client_id", "turn_id", "unrelated", "missing"])
+def test_uncertain_direct_execution_requires_acceptance_proof_and_restores_approvals(client, proof):
+    from codex_console.models import Task
+
+    runtime = client.app.state.runtime
+    task = new_task(client)
+    operation_id = str(uuid4())
+    client.portal.call(runtime.authenticated_rpc)
+    runtime.rpc.fail_turn = True
+    assert (
+        client.post(
+            f"/api/tasks/{task['id']}/implement",
+            json={
+                "operation_id": operation_id,
+                "text": "Fix the test",
+            },
+        ).status_code
+        == 503
+    )
+    task = client.get(f"/api/tasks/{task['id']}").json()
+    turn_id = "accepted-native-turn"
+    if proof == "turn_id":
+        with client.app.state.factory.begin() as db:
+            db.get(Task, task["id"]).turn_id = turn_id
+    items = (
+        []
+        if proof in ("missing", "turn_id")
+        else [
+            {
+                "id": "user",
+                "type": "userMessage",
+                "clientId": operation_id if proof == "client_id" else str(uuid4()),
+                "content": [],
+            }
+        ]
+    )
+    runtime.rpc.threads[task["thread_id"]].update(
+        status={"type": "active"}, turns=[{"id": turn_id, "status": "inProgress", "items": items}]
+    )
+    response = client.post(
+        f"/api/tasks/{task['id']}/implement",
+        json={
+            "operation_id": str(uuid4()),
+            "text": "Also check formatting",
+        },
+    )
+    verified = proof in ("client_id", "turn_id")
+    assert response.status_code == (200 if verified else 409)
+    with client.app.state.factory() as db:
+        assert db.get(Operation, operation_id).state == ("accepted" if verified else "uncertain")
+        assert db.get(Task, task["id"]).status == ("running" if verified else "uncertain")
+    assert sum(method == "turn/start" for method, _ in runtime.rpc.calls) == 1
+    assert sum(method == "turn/steer" for method, _ in runtime.rpc.calls) == int(verified)
+    client.portal.call(
+        runtime.on_message,
+        {
+            "id": 789,
+            "method": "item/commandExecution/requestApproval",
+            "params": {
+                "threadId": task["thread_id"],
+                "turnId": turn_id,
+                "itemId": "command",
+                "command": "git status",
+            },
+        },
+    )
+    requests = client.get(f"/api/tasks/{task['id']}").json()["requests"]
+    assert len(requests) == int(verified)
+    if verified:
+        assert (
+            client.post(
+                f"/api/tasks/{task['id']}/requests/{requests[0]['id']}", json={"decision": "accept"}
+            ).status_code
+            == 200
+        )
+
+
+@pytest.mark.parametrize("new_request", [False, True])
+@pytest.mark.parametrize("native_active", [False, True])
+def test_prepare_submission_discards_read_results_after_completion_or_new_request(
+    client, monkeypatch, new_request, native_active
+):
+    from copy import deepcopy
+
+    from codex_console.errors import ConsoleError
+
+    task = send_message(client, new_task(client)).json()
+    runtime = client.app.state.runtime
+    client.portal.call(runtime.on_disconnect)
+    rpc = runtime.rpc
+    rpc.threads[task["thread_id"]].update(
+        status={"type": "active" if native_active else "idle"},
+        turns=[{"id": task["turn_id"], "status": "inProgress" if native_active else "completed"}],
+    )
+    original = rpc.call
+    new_operation = str(uuid4())
+
+    async def racing_read(method, params):
+        result = deepcopy(await original(method, params))
+        if method == "thread/read":
+            await runtime.on_message(
+                {
+                    "method": "turn/completed",
+                    "params": {
+                        "threadId": task["thread_id"],
+                        "turn": {"id": task["turn_id"], "status": "completed"},
+                    },
+                }
+            )
+            if new_request:
+                await runtime.start(task["id"], new_operation, "A new explicit request", "plan")
+        return result
+
+    monkeypatch.setattr(rpc, "call", racing_read)
+    with pytest.raises(ConsoleError, match="task_busy"):
+        client.portal.call(runtime.prepare_submission, task["id"])
+    saved = client.get(f"/api/tasks/{task['id']}").json()
+    assert saved["status"] == ("running" if new_request else "idle")
+    if new_request:
+        assert saved["turn_id"] != task["turn_id"]
+    assert sum(method == "turn/start" for method, _ in rpc.calls) == (2 if new_request else 1)

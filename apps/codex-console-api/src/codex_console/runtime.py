@@ -490,6 +490,25 @@ class Runtime:
         store.changed(db, task, "workspace.relocated")
         return True
 
+    @staticmethod
+    def submission_state(db, task):
+        operation = (
+            db.get(Operation, task.current_operation_id) if task.current_operation_id else None
+        )
+        return (
+            task.updated_at,
+            task.status,
+            task.stage,
+            task.thread_id,
+            task.turn_id,
+            task.current_operation_id,
+            operation.state if operation else None,
+            task.root,
+            task.last_execution_root,
+            task.worktree_owned,
+            task.runtime_generation,
+        )
+
     async def prepare_submission(self, task_id):
         """Reconcile uncertain delivery before accepting a new, explicit user message."""
         with self.factory() as db:
@@ -498,6 +517,7 @@ class Runtime:
             missing = task.worktree_owned and not Path(task.root).exists()
             if not uncertain and not missing:
                 return False
+            expected = self.submission_state(db, task)
             thread_id, prior_root = task.thread_id, task.last_execution_root or task.root
         rpc = await self.authenticated_rpc()
         if thread_id:
@@ -514,25 +534,40 @@ class Runtime:
                 async with self.gate:
                     with self.factory.begin() as db:
                         task = store.require_task(db, task_id, locked=True)
-                        task.turn_id = turns[0]["id"]
+                        if self.submission_state(db, task) != expected or self.rpc is not rpc:
+                            raise ConsoleError("task_busy")
+                        operation = db.get(Operation, task.current_operation_id)
+                        turn = turns[0]
+                        verified = task.turn_id == turn["id"] or any(
+                            item.get("type") == "userMessage"
+                            and item.get("clientId") == task.current_operation_id
+                            for item in turn.get("items", [])
+                        )
+                        if not operation or operation.task_id != task.id or not verified:
+                            raise ConsoleError("turn_not_finished")
+                        operation.state = "accepted"
+                        task.turn_id = turn["id"]
                         task.status = "running"
                         task.runtime_generation = rpc.generation
                         task.error_code = None
                         store.changed(db, task, "thread.reconnected")
                 return True
-        if missing:
-            async with self.gate:
-                with self.factory.begin() as db:
-                    task = store.require_task(db, task_id, locked=True)
-                    self.reset_removed_workspace(db, task)
-        if uncertain:
-            await self.recover(task_id, confirm_workspace=True)
+        await self.recover(
+            task_id, confirm_workspace=True, expected_submission=expected, reset_missing=missing
+        )
         return False
 
-    async def recover(self, task_id, *, confirm_workspace=False):
+    async def recover(
+        self, task_id, *, confirm_workspace=False, expected_submission=None, reset_missing=False
+    ):
         async with self.gate:
             with self.factory.begin() as db:
                 task = store.require_task(db, task_id, locked=True)
+                if expected_submission is not None:
+                    if self.submission_state(db, task) != expected_submission:
+                        raise ConsoleError("task_busy")
+                    if reset_missing:
+                        self.reset_removed_workspace(db, task)
                 if task.status in store.ACTIVE:
                     raise ConsoleError("task_busy")
                 if not task.thread_id:
@@ -705,7 +740,12 @@ class Runtime:
                         key = "aggregatedOutput" if method.endswith("outputDelta") else "text"
                         row.payload = {
                             **row.payload,
-                            key: ((row.payload.get(key) or "") + params.get("delta", ""))[-100000:],
+                            key: store.bounded_item_text(
+                                task,
+                                row.payload,
+                                key,
+                                (row.payload.get(key) or "") + params.get("delta", ""),
+                            ),
                         }
                 elif method == "turn/plan/updated":
                     task.progress = {

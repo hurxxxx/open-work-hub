@@ -62,7 +62,10 @@ textarea {color: inherit; background: transparent; resize: vertical; border: 0; 
 .task-meta {display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--ui-color-ink-subtle);}
 .task-header > div:first-child {min-width: 0; flex: 1;}
 .task-meta {flex-wrap: wrap;}
-.git-workspace {margin-top: 10px; min-width: 0; overflow-wrap: anywhere;}
+.git-workspace.stack {display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 16px 20px; overflow-wrap: anywhere;}
+.git-workspace > * {flex-shrink: 0;}
+/* One outer scrollbar keeps metadata and long diffs reachable on short screens. */
+.git-workspace > .changes-pane {flex: 1 0 auto; overflow: visible;}
 .git-summary {display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px;}
 .git-workspace small {display: block; margin-top: 4px;}
 .composer-help {margin: 0; padding: 0 12px 8px; color: var(--ui-color-ink-subtle); font-size: 12px;}
@@ -118,13 +121,13 @@ textarea {color: inherit; background: transparent; resize: vertical; border: 0; 
 .answer-option input {margin-top: 4px;}
 .answer-option span {display: grid; gap: 3px;}
 .answer-option strong {font-weight: 550;}
-.changes-pane {min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: auto;}
+.changes-pane {min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: auto;}
 .file-list {max-height: 180px; overflow: auto; border-bottom: 1px solid var(--ui-color-border); flex-shrink: 0;}
 .file-list button {display: flex; align-items: center; gap: 9px; width: 100%; border: 0; background: transparent; color: inherit; padding: 10px 18px; text-align: left; font-size: 11px;}
 .file-list button[aria-pressed='true'] {background: var(--ui-color-surface-subtle);}
 .file-list span {overflow-wrap: anywhere;}
 .file-list code {font-size: 10px; color: var(--ui-color-success-text);}
-.diff-content {min-width: 0; font-size: 11px;}
+.diff-content {flex-shrink: 0; min-width: 0; font-size: 11px;}
 .context-note {padding: 12px 18px; font-size: 11px; line-height: 1.7; color: var(--ui-color-ink-subtle); margin: 0;}
 .feedback {position: fixed; top: 68px; left: 50%; transform: translateX(-50%); z-index: var(--ui-z-toast, 100); padding: 10px 12px 10px 18px; border: 1px solid var(--ui-color-danger-border); border-radius: 8px; background: var(--ui-color-surface); box-shadow: var(--ui-shadow-lg); display: flex; gap: 16px; align-items: center; max-width: calc(100vw - 32px); width: max-content; font-size: 12px;}
 .login-page {min-height: 100dvh; display: grid; place-items: center; padding: 32px; background: var(--ui-color-surface-subtle);}

@@ -14,6 +14,7 @@ from .models import (
     WorkspaceLease,
     now,
 )
+from .rpc import MAX_MESSAGE_BYTES
 
 ACTIVE = ("starting", "running", "waiting")
 
@@ -100,7 +101,8 @@ def project_document(db, task, turn_id, items):
             changed(db, task, "document.rejected")
             return
         pending.append(document)
-    for document in pending:
+    # A plan based on this same confirmed change must be newer than its requirements.
+    for document in sorted(pending, key=lambda document: document.kind == "plan"):
         save_revision(db, task, document.kind, document.body, source_turn_id=turn_id)
 
 
@@ -301,6 +303,25 @@ def detail(factory, task_id, settings):
         }
 
 
+def bounded_item_text(task, payload, key, value):
+    # Structured planning finals contain an answer and up to two full documents.
+    # Keep the transport byte bound without applying the command-output tail limit.
+    if (
+        key == "text"
+        and (
+            payload.get("type") == "plan"
+            or (
+                payload.get("type") == "agentMessage"
+                and payload.get("phase") in (None, "final_answer")
+            )
+        )
+    ):
+        bounded = value.encode("utf-8")[:MAX_MESSAGE_BYTES].decode("utf-8", errors="ignore")
+        if task.stage == "plan" or planning.parse(bounded) is not None:
+            return bounded
+    return value[-100000:]
+
+
 def upsert_item(db, task, turn_id, payload):
     item_id = payload.get("id")
     if not isinstance(item_id, str) or len(item_id) > 200:
@@ -328,7 +349,7 @@ def upsert_item(db, task, turn_id, payload):
     safe = {key: payload[key] for key in keys if key in payload}
     for key in ("text", "aggregatedOutput"):
         if isinstance(safe.get(key), str):
-            safe[key] = safe[key][-100000:]
+            safe[key] = bounded_item_text(task, safe, key, safe[key])
     row = db.scalar(select(Item).where(Item.task_id == task.id, Item.item_id == item_id))
     if row:
         row.payload = safe

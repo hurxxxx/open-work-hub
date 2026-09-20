@@ -183,3 +183,82 @@ test('planning answers ordinary questions without creating documents and shows a
     ),
   ).toBe(true);
 });
+
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 390, height: 667 },
+]) {
+  test(`branch workspace scrolls through 18 files and the full diff at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const files = Array.from({ length: 18 }, (_, index) => ({
+      path: `src/changed-file-${String(index + 1).padStart(2, '0')}.txt`,
+      status: 'M',
+      old_path: null,
+    }));
+    await page.route('**/api/tasks/*/changes', (route) =>
+      route.fulfill({ json: files }),
+    );
+    await page.route('**/api/tasks/*/diff?*', (route) =>
+      route.fulfill({
+        json: {
+          path: new URL(route.request().url()).searchParams.get('path'),
+          binary: false,
+          old: 'original\n',
+          new:
+            Array.from(
+              { length: 150 },
+              (_, index) => `changed line ${index + 1}`,
+            ).join('\n') + '\nEND-OF-SELECTED-DIFF\n',
+        },
+      }),
+    );
+    await page.goto('./');
+    await page
+      .getByLabel('본인 전용 비밀번호')
+      .fill('console-tests-only-password');
+    await page.getByRole('button', { name: '로그인', exact: true }).click();
+    await page
+      .getByRole('button', { name: '새 작업', exact: true })
+      .first()
+      .click();
+    await page
+      .getByLabel('작업 제목')
+      .fill(`Branch scrolling ${viewport.width}`);
+    await page.getByRole('button', { name: '작업 만들기' }).click();
+    if (viewport.width < 960)
+      await page.getByRole('button', { name: '결과물', exact: true }).click();
+    await page.getByRole('button', { name: '브랜치', exact: true }).click();
+    const panel = page.locator('.git-workspace');
+    await expect(panel.locator('.file-list button')).toHaveCount(18);
+    const panelBox = await panel.boundingBox();
+    expect(panelBox!.height).toBeGreaterThan(100);
+    expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(
+      viewport.height + 1,
+    );
+    const lastFile = panel.getByRole('button', { name: /changed-file-18.txt/ });
+    await lastFile.scrollIntoViewIfNeeded();
+    await expect(lastFile).toBeInViewport();
+    await lastFile.click();
+    const diff = panel.locator('.diff-content');
+    await expect(diff).toHaveAttribute('aria-label', files[17].path);
+    const end = diff.getByText('END-OF-SELECTED-DIFF', { exact: true });
+    await expect(end).toBeAttached();
+    await panel.hover({ position: { x: 12, y: 12 } });
+    await page.mouse.wheel(0, 10000);
+    await expect(end).toBeInViewport();
+    await expect
+      .poll(() => panel.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+    await page.mouse.wheel(0, -10000);
+    await expect(
+      panel.getByRole('button', { name: 'Git 상태 새로고침' }),
+    ).toBeInViewport();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  });
+}
