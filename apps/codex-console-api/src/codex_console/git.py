@@ -141,13 +141,6 @@ def fingerprint(root: Path) -> str:
 def status(root: Path) -> dict:
     """Read local Git state only; remote counts describe cached refs, never a fetch."""
     raw = git(root, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all")
-    refs = git(
-        root,
-        "for-each-ref",
-        "--format=%(refname)%00%(objectname)%00%(symref)",
-        "refs/heads/",
-        "refs/remotes/",
-    )
     result = dict(
         branch=None,
         head=None,
@@ -188,59 +181,29 @@ def status(root: Path) -> dict:
                 result["unstaged"] += int(xy[1] != ".")
             if record[:1] == b"2":
                 next(records, None)  # rename/copy source path
-    targets = []
-    for line in refs.splitlines():
-        ref, oid, symbolic = line.decode("utf-8", "replace").split("\0")
-        if not symbolic:
-            targets.append(
-                {
-                    "ref": ref,
-                    "name": ref.removeprefix("refs/heads/").removeprefix("refs/remotes/"),
-                    "head": oid,
-                }
-            )
-    if len(targets) > 1000:
-        raise ConsoleError("output_too_large")
     return {
         **result,
         "root": str(root),
         "detached": result["branch"] is None,
-        "targets": targets,
         "checked_at": datetime.now(UTC).isoformat(),
-        "snapshot": hashlib.sha256(str(root).encode() + b"\0" + raw + refs).hexdigest(),
     }
 
 
-def request_context(root: Path, request: dict) -> dict:
-    current = status(root)
-    if current["snapshot"] != request["snapshot"]:
-        raise ConsoleError("git_state_changed")
-    target = next((r for r in current["targets"] if r["ref"] == request["target_ref"]), None)
-    if target is None or not current["head"]:
-        raise ConsoleError("git_target_unavailable", 422)
-    if current["conflicts"]:
-        raise ConsoleError("git_conflicts")
-    return {
-        "workspace": str(root),
-        "source_branch": current["branch"],
-        "source_head": current["head"],
-        "target": target,
-        "scope": request["scope"],
-        "changed_files": current["changed"],
-    }
-
-
-def prepare_workspace(workspace: Path, task_id: str, previous: str | None) -> tuple[Path, bool]:
+def prepare_workspace(
+    workspace: Path, task_id: str, previous: str | None, *, base_ref: str, worktree_root: Path
+) -> tuple[Path, bool]:
     if previous is not None:
         if fingerprint(workspace) != previous:
             raise ConsoleError("workspace_changed")
         return workspace, False
     if not git(workspace, "status", "--porcelain=v1", "--untracked-files=all").strip():
         return workspace, False
-    target = workspace.parent / "worktrees" / f"codex-{task_id}"
+    target = worktree_root / f"codex-{task_id}"
     if target.exists():
         raise ConsoleError("worktree_exists")
-    git(workspace, "worktree", "add", "--detach", str(target), "origin/dev")
+    base = git(workspace, "rev-parse", "--verify", "--end-of-options", f"{base_ref}^{{commit}}")
+    worktree_root.mkdir(parents=True, exist_ok=True)
+    git(workspace, "worktree", "add", "--detach", str(target), base.decode().strip())
     return target, True
 
 

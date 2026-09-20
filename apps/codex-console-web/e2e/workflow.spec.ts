@@ -16,21 +16,20 @@ test('requirements, saved plan, implementation, diff and refresh recovery', asyn
     .click();
   await page.getByLabel('작업 제목').fill('인사말 기능 개발');
   await page.getByRole('button', { name: '작업 만들기' }).click();
-  await expect(page.getByLabel('실행 모드')).toHaveValue('chat');
-  await page.getByLabel('실행 모드').selectOption('requirements');
+  await expect(page.getByLabel('실행 모드')).toHaveValue('plan');
   await page
     .getByLabel('요청 내용 입력')
-    .fill('프로젝트에 인사말 기능을 추가하고 검증하고 싶습니다.');
+    .fill('Inspect the project and make a plan.');
   await page.getByRole('button', { name: '보내기', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: '결과물' })
+    .getByRole('button', { name: '계획', exact: true })
+    .click();
   await expect(
-    page.getByRole('button', { name: '구현 계획 작성' }),
-  ).toBeEnabled();
-  await page.getByRole('button', { name: '구현 계획 작성' }).click();
-  await expect(
-    page.getByRole('button', { name: '이 계획으로 구현', exact: true }),
+    page.getByRole('button', { name: '이 계획으로 실행', exact: true }),
   ).toBeEnabled();
   await page
-    .getByRole('button', { name: '이 계획으로 구현', exact: true })
+    .getByRole('button', { name: '이 계획으로 실행', exact: true })
     .click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: '취소' }).click();
@@ -38,15 +37,16 @@ test('requirements, saved plan, implementation, diff and refresh recovery', asyn
     page.getByText('Implemented the greeting.', { exact: false }),
   ).toHaveCount(0);
   await page
-    .getByRole('button', { name: '이 계획으로 구현', exact: true })
+    .getByRole('button', { name: '이 계획으로 실행', exact: true })
     .click();
   await page
     .getByRole('dialog')
-    .getByRole('button', { name: '이 계획으로 구현' })
+    .getByRole('button', { name: '이 계획으로 실행' })
     .click();
   await expect(
     page.getByText('Implemented the greeting.', { exact: false }),
   ).toBeVisible();
+  await page.getByRole('button', { name: '브랜치', exact: true }).click();
   await expect(
     page.getByRole('button', { name: /greeting.txt/ }),
   ).toBeVisible();
@@ -122,19 +122,15 @@ test('server work survives closing the browser tab and restores progress and exe
   await expect(returned.getByLabel('현재 실행 상태')).toContainText('준비됨');
   await returned
     .getByRole('navigation', { name: '결과물' })
-    .getByRole('button', { name: '구현 계획', exact: true })
+    .getByRole('button', { name: '계획', exact: true })
     .click();
   await expect(
-    returned.getByRole('button', { name: '이 계획으로 구현', exact: true }),
+    returned.getByRole('button', { name: '이 계획으로 실행', exact: true }),
   ).toBeEnabled();
   await returned.getByLabel('실행 모드').selectOption('implement');
   await returned.getByLabel('실행 권한').selectOption('yolo');
   await returned.getByLabel('요청 내용 입력').fill('Implement the plan.');
   await returned.getByRole('button', { name: '보내기', exact: true }).click();
-  await returned
-    .getByRole('dialog')
-    .getByRole('button', { name: '이 계획으로 구현' })
-    .click();
   await expect(returned.getByLabel('현재 실행 상태')).toContainText('YOLO');
   await expect(
     returned.getByText('Implemented the greeting.', { exact: false }),
@@ -147,7 +143,7 @@ test('server work survives closing the browser tab and restores progress and exe
   ).toBe(true);
 });
 
-test('general chat keeps documents unchanged and merge drafting requires an explicit target and scope', async ({
+test('planning answers ordinary questions without creating documents and shows a read-only branch tab', async ({
   page,
 }) => {
   await page.goto('./');
@@ -161,8 +157,8 @@ test('general chat keeps documents unchanged and merge drafting requires an expl
     .click();
   await page.getByLabel('작업 제목').fill('일반 대화와 브랜치 표시 확인');
   await page.getByRole('button', { name: '작업 만들기' }).click();
-  await expect(page.getByLabel('실행 모드')).toHaveValue('chat');
-  await expect(page.getByLabel('Git 작업 공간')).toContainText('dev');
+  await expect(page.getByLabel('실행 모드')).toHaveValue('plan');
+  await expect(page.locator('.git-summary')).toContainText('dev');
   await page
     .getByLabel('요청 내용 입력')
     .fill('Explain the current workspace.');
@@ -174,22 +170,12 @@ test('general chat keeps documents unchanged and merge drafting requires an expl
   const taskId = new URL(page.url()).searchParams.get('task');
   const detail = await (await page.request.get(`api/tasks/${taskId}`)).json();
   expect(detail.revisions).toEqual([]);
-  await page.getByRole('button', { name: '병합 요청', exact: true }).click();
-  await expect(
-    page.getByRole('button', { name: '채팅창에 요청문 넣기' }),
-  ).toBeDisabled();
-  await page.getByLabel('대상 브랜치').selectOption('refs/remotes/origin/dev');
-  await page.getByRole('button', { name: '채팅창에 요청문 넣기' }).click();
-  await expect(page.getByLabel('요청 내용 입력')).toHaveValue(
-    /MR\/PR 생성까지만/,
-  );
-  await expect(page.getByLabel('실행 모드')).toHaveValue('implement');
   expect(
-    (await (await page.request.get(`api/tasks/${taskId}`)).json()).turn_id,
-  ).toBe(detail.turn_id);
-  await page.getByRole('button', { name: '보내기', exact: true }).click();
-  await expect(page.getByRole('dialog')).toContainText('MR/PR 생성까지');
-  await page.getByRole('dialog').getByRole('button', { name: '취소' }).click();
+    await page.getByRole('button', { name: '병합 요청', exact: true }).count(),
+  ).toBe(0);
+  await page.getByRole('button', { name: '브랜치', exact: true }).click();
+  await expect(page.locator('.workspace-path')).toBeVisible();
+  expect(await page.getByLabel('대상 브랜치').count()).toBe(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(

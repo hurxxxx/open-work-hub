@@ -43,7 +43,7 @@ beforeEach(() => {
   detail = {
     id: taskId,
     title: 'Test task',
-    stage: 'chat',
+    stage: 'plan',
     status: 'idle',
     permissions: 'read-only',
     thread_id: 'thread',
@@ -80,14 +80,6 @@ beforeEach(() => {
     conflicts: 0,
     changed: 3,
     checked_at: '2026-09-20T00:00:00Z',
-    snapshot: 'b'.repeat(64),
-    targets: [
-      {
-        ref: 'refs/remotes/origin/dev',
-        name: 'origin/dev',
-        head: 'c'.repeat(40),
-      },
-    ],
   };
   submit = async () => detail;
   recover = async () => detail;
@@ -165,7 +157,7 @@ it('preserves separate document drafts across result tabs and tasks and warns be
     target: { value: 'Requirements draft' },
   });
   const results = within(screen.getByRole('navigation', { name: '결과물' }));
-  fireEvent.click(results.getByRole('button', { name: '구현 계획' }));
+  fireEvent.click(results.getByRole('button', { name: '계획' }));
   fireEvent.click(screen.getByRole('button', { name: '문서 편집' }));
   fireEvent.change(screen.getByRole('textbox', { name: '문서 편집' }), {
     target: { value: 'Plan draft' },
@@ -181,7 +173,7 @@ it('preserves separate document drafts across result tabs and tasks and warns be
   fireEvent.click(
     within(screen.getByRole('navigation', { name: '결과물' })).getByRole(
       'button',
-      { name: '구현 계획' },
+      { name: '계획' },
     ),
   );
   expect(screen.getByText('Plan draft')).toBeTruthy();
@@ -347,20 +339,7 @@ it('retains retry identity on failed recovery and creates a new one only after s
   expect(attempts[2]).not.toBe(attempts[0]);
 });
 
-it('submits the selected model, effort and explicit YOLO permission with the approved plan', async () => {
-  detail.revisions = [
-    {
-      id: 8,
-      kind: 'plan',
-      version: 1,
-      body: 'An approved plan',
-      created_at: detail.updated_at,
-    },
-  ];
-  const original = vi.mocked(api).getMockImplementation()!;
-  vi.mocked(api).mockImplementation(async (path, ...args) =>
-    path.endsWith('/implement') ? detail : original(path, ...args),
-  );
+it('executes an explicit prompt with selected model and YOLO without requiring a document', async () => {
   await openAndCompose();
   await screen.findByRole('option', { name: 'Alternate' });
   fireEvent.change(screen.getByLabelText('모델'), {
@@ -376,77 +355,41 @@ it('submits the selected model, effort and explicit YOLO permission with the app
     target: { value: 'yolo' },
   });
   fireEvent.click(screen.getByRole('button', { name: '보내기' }));
-  const dialog = await screen.findByRole('dialog');
-  expect(within(dialog).getByText(/alternate · YOLO/)).toBeTruthy();
-  expect(
-    vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/implement')),
-  ).toBe(false);
-  fireEvent.click(
-    within(dialog).getByRole('button', { name: '이 계획으로 구현' }),
-  );
   await waitFor(() =>
-    expect(
-      vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/implement')),
-    ).toBe(true),
+    expect(api).toHaveBeenCalledWith(
+      `/tasks/${taskId}/implement`,
+      expect.objectContaining({
+        model: 'alternate',
+        effort: 'high',
+        permissions: 'yolo',
+        text: 'Same request',
+      }),
+    ),
   );
-  const request = vi
+  const body = vi
     .mocked(api)
     .mock.calls.find(([path]) => path.endsWith('/implement'))![1];
-  expect(request).toMatchObject({
-    model: 'alternate',
-    effort: 'high',
-    permissions: 'yolo',
-    revision_id: 8,
-    text: 'Same request',
-  });
+  expect(body).not.toHaveProperty('revision_id');
 });
 
-it('reconciles an interrupted implementation before continuing in the same task', async () => {
+it('allows an explicit continuation prompt after interruption without a dedicated resume button', async () => {
   detail = {
     ...detail,
     stage: 'implement',
-    status: 'interrupted',
-    approved_revision: 8,
+    status: 'uncertain',
     permissions: 'ask',
-    revisions: [
-      {
-        id: 8,
-        kind: 'plan',
-        version: 1,
-        body: 'Finish the app',
-        created_at: detail.updated_at,
-      },
-    ],
   };
-  const original = vi.mocked(api).getMockImplementation()!;
-  vi.mocked(api).mockImplementation(async (path, ...args) =>
-    path.endsWith('/implement') ? detail : original(path, ...args),
-  );
-  render(<App />);
-  fireEvent.click(
-    await screen.findByRole('button', { name: '중단 지점부터 계속' }),
-  );
-  fireEvent.click(
-    within(await screen.findByRole('dialog')).getByRole('button', {
-      name: '이 계획으로 구현',
-    }),
-  );
+  await openAndCompose();
+  expect(
+    screen.queryByRole('button', { name: '중단 지점부터 계속' }),
+  ).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
   await waitFor(() =>
-    expect(
-      vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/implement')),
-    ).toBe(true),
+    expect(api).toHaveBeenCalledWith(
+      `/tasks/${taskId}/implement`,
+      expect.objectContaining({ text: 'Same request' }),
+    ),
   );
-  const calls = vi.mocked(api).mock.calls;
-  const recovered = calls.findIndex(([path]) => path.endsWith('/recover'));
-  const started = calls.findIndex(([path]) => path.endsWith('/implement'));
-  expect(recovered).toBeGreaterThan(-1);
-  expect(started).toBeGreaterThan(recovered);
-  expect(calls[recovered][1]).toEqual({ confirm_workspace: true });
-  expect(calls[started][0]).toBe(`/tasks/${taskId}/implement`);
-  expect(calls[started][1]).toMatchObject({
-    revision_id: 8,
-    text: expect.stringContaining('중단 지점'),
-  });
 });
 
 it('shows native progress and keeps execution settings fixed while steering', async () => {
@@ -493,10 +436,10 @@ it('shows native progress and keeps execution settings fixed while steering', as
   expect(request).not.toHaveProperty('stage');
 });
 
-it('uses general chat by default without changing the saved requirements or plan', async () => {
+it('uses planning by default without saving a document from the browser', async () => {
   await openAndCompose();
   expect((screen.getByLabelText('실행 모드') as HTMLSelectElement).value).toBe(
-    'chat',
+    'plan',
   );
   fireEvent.click(screen.getByRole('button', { name: '보내기' }));
   await waitFor(() =>
@@ -506,7 +449,7 @@ it('uses general chat by default without changing the saved requirements or plan
         .mock.calls.some(
           ([path, body]) =>
             path.endsWith('/messages') &&
-            (body as Record<string, unknown>).stage === 'chat',
+            (body as Record<string, unknown>).stage === 'plan',
         ),
     ).toBe(true),
   );
@@ -515,56 +458,28 @@ it('uses general chat by default without changing the saved requirements or plan
   ).toBe(false);
 });
 
-it('inserts a scoped merge draft without overwriting text or submitting before confirmation', async () => {
+it('shows the actual branch and changes in a read-only branch tab without merge targets', async () => {
   gitState.branch = null;
   gitState.detached = true;
   gitState.upstream = null;
+  const original = vi.mocked(api).getMockImplementation()!;
+  vi.mocked(api).mockImplementation(async (path, ...args) =>
+    path.endsWith('/changes') ? [] : original(path, ...args),
+  );
   await openAndCompose();
   await screen.findByText('브랜치 없음 (detached HEAD)');
-  fireEvent.click(screen.getByRole('button', { name: '병합 요청' }));
-  fireEvent.change(screen.getByLabelText('대상 브랜치'), {
-    target: { value: 'refs/remotes/origin/dev' },
-  });
-  fireEvent.change(screen.getByLabelText('요청 범위'), {
-    target: { value: 'merge' },
-  });
-  fireEvent.click(screen.getByRole('button', { name: '채팅창에 요청문 넣기' }));
-  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-  const textarea = screen.getByLabelText(
-    '요청 내용 입력',
-  ) as HTMLTextAreaElement;
-  expect(textarea.value).toContain('Same request');
-  expect(textarea.value).toContain('origin/dev');
-  expect(textarea.value).toContain('병합까지 완료');
+  expect(screen.queryByRole('button', { name: '병합 요청' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '브랜치' }));
+  await screen.findByText('/repo/dev');
+  expect(screen.queryByLabelText('대상 브랜치')).toBeNull();
   expect(
-    vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/implement')),
-  ).toBe(false);
-  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
-  expect((await screen.findByRole('dialog')).textContent).toContain(
-    '검사·리뷰 후 병합까지',
-  );
-  fireEvent.click(
-    within(screen.getByRole('dialog')).getByRole('button', {
-      name: 'Git 작업 요청',
-    }),
-  );
-  await waitFor(() =>
-    expect(
-      vi.mocked(api).mock.calls.some(([path]) => path.endsWith('/implement')),
-    ).toBe(true),
-  );
-  const body = vi
-    .mocked(api)
-    .mock.calls.find(([path]) => path.endsWith('/implement'))![1] as Record<
-    string,
-    unknown
-  >;
-  expect(body.git_request).toEqual({
-    snapshot: gitState.snapshot,
-    target_ref: 'refs/remotes/origin/dev',
-    scope: 'merge',
-  });
-  expect(body).not.toHaveProperty('revision_id');
+    (screen.getByLabelText('요청 내용 입력') as HTMLTextAreaElement).value,
+  ).toBe('Same request');
+  expect(
+    within(screen.getByLabelText('실행 모드'))
+      .getAllByRole('option')
+      .map((option) => option.textContent),
+  ).toEqual(['계획', '실행']);
 });
 
 it('restores a request rejected before execution without automatically sending it', async () => {

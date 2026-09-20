@@ -1,5 +1,6 @@
 from sqlalchemy import delete, func, select, update
 
+from . import planning
 from .errors import ConsoleError
 from .models import (
     Attachment,
@@ -40,7 +41,9 @@ def save_revision(db, task: Task, kind: str, body: str, *, source_turn_id=None):
     if source_turn_id:
         projected = db.scalar(
             select(Revision).where(
-                Revision.task_id == task.id, Revision.source_turn_id == source_turn_id
+                Revision.task_id == task.id,
+                Revision.kind == kind,
+                Revision.source_turn_id == source_turn_id,
             )
         )
         if projected:
@@ -65,21 +68,44 @@ def save_revision(db, task: Task, kind: str, body: str, *, source_turn_id=None):
 
 
 def project_document(db, task, turn_id, items):
-    if task.stage not in ("requirements", "plan"):
+    if task.stage != "plan":
         return
-    final = [item for item in items if item.get("type") == "plan"]
-    if not final:
-        final = [
-            item
-            for item in items
-            if item.get("type") == "agentMessage" and item.get("phase") == "final_answer"
-        ]
-    if final and final[-1].get("text", "").strip():
-        save_revision(db, task, task.stage, final[-1]["text"], source_turn_id=turn_id)
+    final = [
+        i for i in items if i.get("type") == "agentMessage" and i.get("phase") == "final_answer"
+    ]
+    final = final or [i for i in items if i.get("type") == "plan"]
+    result = planning.parse(final[-1].get("text", "")) if final else None
+    if result is None:
+        task.error_code = "planning_output_invalid"
+        changed(db, task, "document.rejected")
+        return
+    kinds = [update.kind for update in result.documents]
+    if len(kinds) != len(set(kinds)):
+        task.error_code = "planning_output_invalid"
+        changed(db, task, "document.rejected")
+        return
+    pending = []
+    for document in result.documents:
+        if db.scalar(
+            select(Revision.id).where(
+                Revision.task_id == task.id,
+                Revision.kind == document.kind,
+                Revision.source_turn_id == turn_id,
+            )
+        ):
+            continue
+        latest = latest_revision(db, task.id, document.kind)
+        if (latest.version if latest else 0) != document.base_version:
+            task.error_code = "document_conflict"
+            changed(db, task, "document.rejected")
+            return
+        pending.append(document)
+    for document in pending:
+        save_revision(db, task, document.kind, document.body, source_turn_id=turn_id)
 
 
 def recover_document(db, task, turns):
-    if task.stage not in ("requirements", "plan"):
+    if task.stage != "plan":
         return
     operation = db.get(Operation, task.current_operation_id) if task.current_operation_id else None
     if not operation or operation.task_id != task.id or operation.kind != task.stage:
@@ -146,7 +172,7 @@ def implementation_authorized(db, task):
     return bool(
         operation
         and operation.task_id == task.id
-        and operation.kind in ("git_create", "git_merge")
+        and operation.kind == "execute"
         and operation.state == "accepted"
     )
 
@@ -188,6 +214,22 @@ def detail(factory, task_id, settings):
             )
         )
         items = [{**row.payload, "turn_id": row.turn_id} for row in reversed(recent[:2000])]
+        for item in items:
+            if item.get("type") in ("agentMessage", "plan"):
+                result = planning.parse(item.get("text", ""))
+                if result:
+                    item["text"] = result.answer
+                    item["document_updates"] = [
+                        {"kind": document.kind, "summary": document.summary}
+                        for document in result.documents
+                    ]
+                elif (
+                    task.stage == "plan"
+                    and task.status in ACTIVE
+                    and item["turn_id"] == task.turn_id
+                    and item.get("phase") == "final_answer"
+                ):
+                    item["text"] = ""
         message_ids = [
             i["clientId"] for i in items if i.get("type") == "userMessage" and i.get("clientId")
         ]

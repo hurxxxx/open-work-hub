@@ -415,7 +415,7 @@ export function Documents({
             onClick={onPlan}
           >
             <FileText size={14} />
-            {t('Create implementation plan')}
+            {t('Create execution plan')}
           </Button>
         ) : (
           <Button
@@ -424,12 +424,10 @@ export function Documents({
             onClick={() => latest && onImplement(latest)}
           >
             <Play size={14} />
-            {t('Implement this plan')}
+            {t('Execute this plan')}
           </Button>
         )}
-        {modified && (
-          <small>{t('Save your changes before implementing.')}</small>
-        )}
+        {modified && <small>{t('Save your changes before execution.')}</small>}
         {stale && (
           <small>
             {t('The saved plan changed. Review the latest version.')}
@@ -588,7 +586,7 @@ export function Confirm({
   onClose,
   onConfirm,
   children,
-  action = 'Implement this plan',
+  action = 'Execute this plan',
 }: {
   open: boolean;
   title: Copy;
@@ -618,9 +616,9 @@ export function Confirm({
         </>
       }
     >
-      {action === 'Implement this plan' && (
+      {action === 'Execute this plan' && (
         <p>
-          {t('Read-only planning')} → {t('Implement')}
+          {t('Read-only planning')} → {t('Execute')}
         </p>
       )}
       {children}

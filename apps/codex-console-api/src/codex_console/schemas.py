@@ -34,7 +34,7 @@ class ExecutionOptions(Input):
 class MessageBody(Input):
     operation_id: UUID
     text: str = Field(default="", max_length=MESSAGE_CHAR_LIMIT)
-    stage: Literal["chat", "requirements", "plan"] = "chat"
+    stage: Literal["plan"] = "plan"
     attachment_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
@@ -48,33 +48,17 @@ class Message(MessageBody, ExecutionOptions):
     pass
 
 
-class GitRequest(Input):
-    snapshot: str = Field(pattern=r"^[a-f0-9]{64}$")
-    target_ref: str = Field(min_length=1, max_length=1024)
-    scope: Literal["create", "merge"]
-
-
 class Implement(ExecutionOptions):
     operation_id: UUID
     revision_id: int | None = Field(default=None, gt=0)
-    git_request: GitRequest | None = None
     text: str = Field(default="", max_length=MESSAGE_CHAR_LIMIT)
     attachment_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def authorization(self):
-        if self.git_request is not None:
-            if not self.text or self.revision_id is not None:
-                raise ValueError("A Git request needs text and its own authorization")
-        elif self.revision_id is None:
-            raise ValueError("An approved plan is required")
+        if self.revision_id is None and not self.text:
+            raise ValueError("A direct execution request needs text")
         return self
-
-
-class GitTarget(BaseModel):
-    ref: str
-    name: str
-    head: str
 
 
 class GitStatusOut(BaseModel):
@@ -90,9 +74,7 @@ class GitStatusOut(BaseModel):
     untracked: int
     conflicts: int
     changed: int
-    targets: list[GitTarget]
     checked_at: str
-    snapshot: str
 
 
 class DocumentInput(Input):

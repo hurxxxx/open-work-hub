@@ -61,7 +61,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
             if not guard.scalar(text("SELECT pg_try_advisory_lock(18701, 1)")):
                 raise RuntimeError("Run exactly one console API process per database")
             revision = guard.scalar(text("SELECT version_num FROM console_alembic_version"))
-            if revision != "console_0004":
+            if revision != "console_0005":
                 raise RuntimeError("Run codex-console migrate before starting the server")
             store.recover_startup(factory)
             runtime = Runtime(app.state.settings, factory, rpc_factory)
@@ -422,6 +422,11 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
 
     @app.post("/api/tasks/{task_id}/messages", dependencies=secured, response_model=TaskDetail)
     async def message(task_id: str, body: Message):
+        if await app.state.runtime.prepare_submission(task_id):
+            await app.state.runtime.steer(
+                task_id, body.operation_id, body.text, body.attachment_ids
+            )
+            return store.detail(app.state.factory, task_id, app.state.settings)
         await app.state.runtime.start(
             task_id,
             body.operation_id,
@@ -436,6 +441,11 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
 
     @app.post("/api/tasks/{task_id}/implement", dependencies=secured, response_model=TaskDetail)
     async def implement(task_id: str, body: Implement):
+        if await app.state.runtime.prepare_submission(task_id):
+            await app.state.runtime.steer(
+                task_id, body.operation_id, body.text, body.attachment_ids
+            )
+            return store.detail(app.state.factory, task_id, app.state.settings)
         await app.state.runtime.start(
             task_id,
             body.operation_id,
@@ -446,7 +456,6 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
             model=body.model,
             effort=body.effort,
             permissions=body.permissions,
-            git_request=body.git_request.model_dump() if body.git_request else None,
         )
         return store.detail(app.state.factory, task_id, app.state.settings)
 

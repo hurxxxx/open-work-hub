@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import psycopg
 import uvicorn
-from conftest import PASSWORD, FakeRPC
+from conftest import PASSWORD, FakeRPC, planning_text
 from psycopg import sql
 from sqlalchemy.engine import make_url
 
@@ -59,22 +59,30 @@ class BrowserRPC(FakeRPC):
         )
         await asyncio.sleep(3)
         if params["collaborationMode"]["mode"] == "plan":
-            item = {
-                "id": str(uuid4()),
-                "type": "plan",
-                "text": (
-                    "# A small, verifiable change\n\nAdd a greeting to the project.\n\n"
-                    "1. Inspect the existing files.\n2. Implement the greeting.\n"
-                    "3. Run a focused check.\n\n"
-                    "**Acceptance:** the greeting is visible and the check passes."
-                ),
-            }
-        elif params["sandboxPolicy"]["type"] == "readOnly":
+            # Deterministic protocol fixture: the tests use an explicit document request.
+            wants_document = "make a plan" in params["input"][0].get("text", "")
+            documents = (
+                [
+                    {
+                        "kind": "plan",
+                        "base_version": 0,
+                        "body": "# Greeting\nAdd a greeting and run a focused check.",
+                        "summary": "Created plan",
+                    }
+                ]
+                if wants_document
+                else []
+            )
             item = {
                 "id": str(uuid4()),
                 "type": "agentMessage",
                 "phase": "final_answer",
-                "text": "This is a general answer; saved documents are unchanged.",
+                "text": planning_text(
+                    "Plan saved."
+                    if documents
+                    else "This is a general answer; saved documents are unchanged.",
+                    documents,
+                ),
             }
         else:
             (Path(params["cwd"]) / "greeting.txt").write_text("Hello from the Codex console.\n")

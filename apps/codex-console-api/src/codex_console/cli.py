@@ -6,7 +6,7 @@ from pathlib import Path
 import uvicorn
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import delete
+from sqlalchemy import create_engine, delete, inspect
 
 from .app import create_app
 from .auth import password_hash
@@ -17,6 +17,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def migrate(url):
+    engine = create_engine(url)
+    try:
+        if any(not name.startswith("console_") for name in inspect(engine).get_table_names()):
+            raise ValueError("Migrations require a dedicated console database")
+    finally:
+        engine.dispose()
     config = Config(str(ROOT / "alembic.ini"))
     config.attributes["database_url"] = url
     command.upgrade(config, "head")

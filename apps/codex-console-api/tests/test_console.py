@@ -76,8 +76,15 @@ def test_turn_provenance_migration_preserves_existing_documents(client):
     # shared test schema, even when an assertion fails.
     with engine.connect() as connection, connection.begin() as transaction:
         with Operations.context(MigrationContext.configure(connection)):
+            current_spec = spec_from_file_location(
+                "planning_migration", ROOT / "migrations/versions/0005_planning.py"
+            )
+            current = module_from_spec(current_spec)
+            current_spec.loader.exec_module(current)
+            current.downgrade()
             migration.downgrade()
             migration.upgrade()
+            current.upgrade()
         assert (
             connection.scalar(
                 text("SELECT current_operation_id FROM console_tasks WHERE id = :id"),
@@ -193,7 +200,7 @@ def test_requirements_and_plan_turns_are_read_only(client):
     assert turn["sandboxPolicy"] == {"type": "readOnly", "networkAccess": False}
     assert turn["approvalPolicy"] == "never"
     assert turn["collaborationMode"]["mode"] == "plan"
-    result = complete(client, task, "Requirements with acceptance evidence")
+    result = complete(client, task, "Requirements with acceptance evidence", kind="requirements")
     assert result["revisions"][0]["kind"] == "requirements"
 
 
@@ -468,9 +475,9 @@ def test_disconnect_is_uncertain_and_never_replays(client):
     client.portal.call(runtime.on_disconnect)
     detail = client.get(f"/api/tasks/{task['id']}").json()
     assert detail["status"] == "uncertain"
-    assert send_message(client, detail).json()["code"] == "task_busy"
-    assert client.post(f"/api/tasks/{task['id']}/recover", json={}).status_code == 200
     assert len([x for x in runtime.rpc.calls if x[0] == "turn/start"]) == 1
+    assert send_message(client, detail, text="Continue the unfinished work").status_code == 200
+    assert len([x for x in runtime.rpc.calls if x[0] == "turn/start"]) == 2
 
 
 def test_permissions_are_denied_in_plan_and_scoped_to_approved_turn(client):

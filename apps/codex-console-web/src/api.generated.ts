@@ -485,18 +485,6 @@ export interface components {
             /** Body */
             body: string;
         };
-        /** GitRequest */
-        GitRequest: {
-            /** Snapshot */
-            snapshot: string;
-            /** Target Ref */
-            target_ref: string;
-            /**
-             * Scope
-             * @enum {string}
-             */
-            scope: "create" | "merge";
-        };
         /** GitStatusOut */
         GitStatusOut: {
             /** Root */
@@ -523,21 +511,8 @@ export interface components {
             conflicts: number;
             /** Changed */
             changed: number;
-            /** Targets */
-            targets: components["schemas"]["GitTarget"][];
             /** Checked At */
             checked_at: string;
-            /** Snapshot */
-            snapshot: string;
-        };
-        /** GitTarget */
-        GitTarget: {
-            /** Ref */
-            ref: string;
-            /** Name */
-            name: string;
-            /** Head */
-            head: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -563,7 +538,6 @@ export interface components {
             operation_id: string;
             /** Revision Id */
             revision_id?: number | null;
-            git_request?: components["schemas"]["GitRequest"] | null;
             /**
              * Text
              * @default
@@ -611,10 +585,10 @@ export interface components {
             text: string;
             /**
              * Stage
-             * @default chat
-             * @enum {string}
+             * @default plan
+             * @constant
              */
-            stage: "chat" | "requirements" | "plan";
+            stage: "plan";
             /** Attachment Ids */
             attachment_ids?: string[];
         };
@@ -632,10 +606,10 @@ export interface components {
             text: string;
             /**
              * Stage
-             * @default chat
-             * @enum {string}
+             * @default plan
+             * @constant
              */
-            stage: "chat" | "requirements" | "plan";
+            stage: "plan";
             /** Attachment Ids */
             attachment_ids?: string[];
         };

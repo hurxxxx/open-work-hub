@@ -97,7 +97,7 @@ describe('plan authorization UI', () => {
     expect(
       (
         screen.getByRole('button', {
-          name: 'Implement this plan',
+          name: 'Execute this plan',
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -139,7 +139,7 @@ describe('plan authorization UI', () => {
     expect(
       (
         screen.getByRole('button', {
-          name: 'Implement this plan',
+          name: 'Execute this plan',
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
@@ -261,7 +261,7 @@ describe('plan authorization UI', () => {
     expect(
       (
         screen.getByRole('button', {
-          name: 'Implement this plan',
+          name: 'Execute this plan',
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);

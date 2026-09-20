@@ -50,9 +50,10 @@ class Task(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     title: Mapped[str] = mapped_column(String(200))
     thread_id: Mapped[str | None] = mapped_column(String(160), unique=True)
-    stage: Mapped[str] = mapped_column(String(24), default="chat")
+    stage: Mapped[str] = mapped_column(String(24), default="plan")
     status: Mapped[str] = mapped_column(String(24), default="idle")
     root: Mapped[str] = mapped_column(Text)
+    last_execution_root: Mapped[str | None] = mapped_column(Text)
     worktree_owned: Mapped[bool] = mapped_column(default=False)
     fingerprint: Mapped[str | None] = mapped_column(String(64))
     model: Mapped[str | None] = mapped_column(String(200))
@@ -72,7 +73,7 @@ class Revision(Base):
     __tablename__ = "console_revisions"
     __table_args__ = (
         UniqueConstraint("task_id", "kind", "version"),
-        UniqueConstraint("task_id", "source_turn_id", name="uq_console_revision_source_turn"),
+        UniqueConstraint("task_id", "kind", "source_turn_id", name="uq_console_revision_kind_turn"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     task_id: Mapped[str] = mapped_column(ForeignKey("console_tasks.id", ondelete="CASCADE"))
