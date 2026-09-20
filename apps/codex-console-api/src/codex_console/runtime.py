@@ -741,8 +741,9 @@ class Runtime:
             )
             with self.factory.begin() as db:
                 task = store.require_task(db, task_id, locked=True)
+                task.error_code = None
                 store.recover_document(db, task, thread.get("turns", []))
-                task.status, task.error_code, task.turn_id = "interrupted", None, None
+                task.status, task.turn_id = "interrupted", None
                 task.permissions = {
                     "readOnly": "read-only",
                     "workspaceWrite": "ask",

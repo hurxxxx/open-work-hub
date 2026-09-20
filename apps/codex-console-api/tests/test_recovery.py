@@ -423,3 +423,45 @@ def test_failed_steer_preparation_can_retry_but_uncertain_steer_cannot(client, m
         db.get(Operation, key).state = "uncertain"
     assert client.post(endpoint, json=body).json()["code"] == "codex_request_uncertain"
     assert len([c for c in runtime.rpc.calls if c[0] == "turn/steer"]) == 1
+
+
+@pytest.mark.parametrize("mode", ["manual", "retry"])
+@pytest.mark.parametrize("invalid", ["malformed", "duplicate_kind", "conflicting_version"])
+def test_recovery_preserves_document_rejection_errors_and_existing_revisions(client, mode, invalid):
+    task = plan(client)
+    revisions = task["revisions"]
+    runtime = client.app.state.runtime
+    rpc = runtime.rpc
+    rpc.fail_turn = True
+    operation_id = str(uuid4())
+    assert send_message(client, task, operation_id=operation_id).status_code == 503
+    rpc.fail_turn = False
+    document = {"kind": "plan", "base_version": 1, "body": "Proposed update", "summary": "Updated"}
+    output = "malformed response"
+    expected = "planning_output_invalid"
+    if invalid == "duplicate_kind":
+        output = planning_text("Updated", [document, document])
+    elif invalid == "conflicting_version":
+        output = planning_text("Updated", [{**document, "base_version": 99}])
+        expected = "document_conflict"
+    rpc.threads[task["thread_id"]]["turns"] = [
+        {
+            "id": "completed-missing-response",
+            "status": "completed",
+            "items": [
+                {"id": "user", "type": "userMessage", "clientId": operation_id, "content": []},
+                {"id": "final", "type": "agentMessage", "phase": "final_answer", "text": output},
+            ],
+        }
+    ]
+    for _ in range(2):
+        response = (
+            client.post(f"/api/tasks/{task['id']}/recover", json={})
+            if mode == "manual"
+            else send_message(client, task, operation_id=operation_id)
+        )
+        assert response.status_code == 200
+        assert response.json()["error_code"] == expected
+        assert response.json()["revisions"] == revisions
+    assert sum(method == "turn/start" for method, _ in rpc.calls) == 2
+    assert not any(method == "turn/steer" for method, _ in rpc.calls)
