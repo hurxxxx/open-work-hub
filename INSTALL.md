@@ -366,6 +366,7 @@ docker build -f ops/opensearch/Dockerfile -t open-work-hub-opensearch:3.3.2-nori
 ```
 
 검증 이미지 이름은 현재 `open-work-hub-validation:node22-python312`다.
+이미지·BuildKit 캐시의 보관 범위와 용량 설정은 [빌드·테스트 저장 공간](docs/domains/release/README.md#build-and-test-storage)을 따른다. 검증 이미지를 커밋별로 복사·백업하지 않고, 의존성이 같은 이미지를 재사용한다.
 개발 서버의 Node.js 24 설치와는 별도이며, 이름만 같은 다른 이미지로 대체하지 않는다.
 빌드 스크립트는 선택한 PostgreSQL 메이저의 공식 Bookworm 이미지 태그를 불변 digest로 확인한다. PostgreSQL 버전·digest·Docker 플랫폼·Dockerfile·의존성이 일치하면 기존 이미지를 다시 검사해 재사용하고, 다르면 빌드한다. 빌드·클라이언트 검사 실패는 설치 실패로 처리한다.
 출력된 PostgreSQL 버전·이미지 digest·플랫폼·의존성 해시를 셋업 결과에 기록한다. 같은 입력으로 재현하려면 `--postgres-client-image 'postgres@sha256:<기록한-digest>'`를 전달한다. ARM64를 포함한 [플랫폼·재빌드 계약](docs/domains/release/README.md#validation-image-platform-and-database)을 따른다.
@@ -942,6 +943,8 @@ AI 보호 정책을 끄지 않는다. 추가 키·서버가 필요한 기능은 
 Platform API 키나 OWH AI 공급자 설정을 요구하지 않는다.
 
 - 콘솔의 `.env`와 웹 비밀번호를 준비하고 migration·정적 UI 빌드·systemd 자동 시작을 완료한다.
+- [추론 강도 허용 목록](docs/apps/codex-console/README.md#개인-cli-클라이언트와-제품-ai의-연결-경계)을
+  확인한다. 기본값은 `xhigh`까지이며 새 강도는 명시적으로 허용할 때까지 표시하지 않는다.
 - [파일 첨부 설정](docs/apps/codex-console/README.md#파일-보관과-메시지별-첨부)에 따라 원본 DB
   백업·Git 저장소 밖의 읽기 사본 경로·업로드 용량과 HTTPS 프록시 제한을 준비한다.
 - 전용 HTTPS 주소에서 콘솔로 직접 연결해 OWH 개발 Web 재시작과 접속 경로를 분리한다.
@@ -960,6 +963,8 @@ Platform API 키나 OWH AI 공급자 설정을 요구하지 않는다.
   파일 목록의 새로고침 복원, 128 KiB 초과 업로드도 확인한다.
 - 접속 주소·전용 웹 비밀번호·DB 정보는 [`.auth_info`](#11-로그인-정보-파일-관리)에 기록한다.
   콘솔의 실제 서비스 이름·실행 계정·중지/재시작 명령을 인계한다.
+- 업데이트 후에는 [콘솔 배포 완료 확인](docs/apps/codex-console/README.md#배포-완료-확인)에 따라
+  실제 릴리스 경로·health·로그인 후 API와 브라우저 동작까지 검증한다.
 
 `dev.sh`는 콘솔을 시작하거나 종료하지 않는다. 콘솔은 자신을 수정하는 개발 체크아웃과
 분리된 릴리스에서 실행한다. 업데이트에는 새 릴리스 빌드·설정 연결·검증·전용 DB 백업과

@@ -57,10 +57,6 @@ FROM ${UV_IMAGE}
 
 ARG POSTGRES_MAJOR
 ARG POSTGRES_CLIENT_IMAGE
-ARG VALIDATION_CONTRACT_SHA256
-LABEL io.open-work-hub.validation.contract="${VALIDATION_CONTRACT_SHA256}" \
-      io.open-work-hub.validation.postgres-major="${POSTGRES_MAJOR}" \
-      io.open-work-hub.validation.postgres-client-image="${POSTGRES_CLIENT_IMAGE}"
 
 COPY --from=node_toolchain /usr/local/ /usr/local/
 COPY --from=postgres_client /opt/postgres-client/bin/ /usr/local/bin/
@@ -170,3 +166,9 @@ ENV OPEN_WORK_HUB_NODE_IMAGE_MODULES=/opt/open-work-hub/node-runtime/node_module
 ENV OPEN_WORK_HUB_WORKER_IMAGE_DEPENDENCY_FILE=/opt/open-work-hub/locks/worker/dependency.sha256
 ENV OPEN_WORK_HUB_WORKER_IMAGE_VENV=/opt/open-work-hub/venvs/worker
 WORKDIR /builds
+
+# Build-script/source identity must not invalidate the installed dependencies.
+ARG VALIDATION_CONTRACT_SHA256
+LABEL io.open-work-hub.validation.contract="${VALIDATION_CONTRACT_SHA256}" \
+      io.open-work-hub.validation.postgres-major="${POSTGRES_MAJOR}" \
+      io.open-work-hub.validation.postgres-client-image="${POSTGRES_CLIENT_IMAGE}"

@@ -372,6 +372,23 @@ it('executes an explicit prompt with selected model and YOLO without requiring a
   expect(body).not.toHaveProperty('revision_id');
 });
 
+it('resets a saved effort absent from the catalog before the next message', async () => {
+  detail = { ...detail, model: 'alternate', effort: 'max' };
+  await openAndCompose();
+  await screen.findByRole('option', { name: 'Alternate' });
+  expect((screen.getByLabelText('추론 강도') as HTMLSelectElement).value).toBe(
+    '',
+  );
+  expect(screen.queryByRole('option', { name: 'max' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      `/tasks/${taskId}/messages`,
+      expect.objectContaining({ model: 'alternate', effort: null }),
+    ),
+  );
+});
+
 it('allows an explicit continuation prompt after interruption without a dedicated resume button', async () => {
   detail = {
     ...detail,

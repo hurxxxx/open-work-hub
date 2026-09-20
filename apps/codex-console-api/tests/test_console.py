@@ -378,6 +378,8 @@ def test_console_inherits_native_thread_model_without_choosing_a_route(client, m
         result = await original(method, params)
         if method in ("thread/start", "thread/resume"):
             result["model"] = "native-session-model"
+        if method == "model/list":
+            result["data"][0]["model"] = "native-session-model"
         return result
 
     monkeypatch.setattr(rpc, "call", native_model)

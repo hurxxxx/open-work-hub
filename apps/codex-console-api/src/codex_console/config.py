@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+from typing import Annotated
 from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
@@ -37,6 +38,13 @@ class Settings(BaseSettings):
         validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_FORBIDDEN_DATABASE_NAMES",
     )
     binary: str = Field(default="codex", validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_BINARY")
+    allowed_reasoning_efforts: list[
+        Annotated[str, Field(min_length=1, max_length=40, pattern=r"^\S+$")]
+    ] = Field(
+        default_factory=lambda: ["none", "minimal", "low", "medium", "high", "xhigh"],
+        min_length=1,
+        validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_ALLOWED_REASONING_EFFORTS",
+    )
     bind_host: str = Field(
         default="127.0.0.1", validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_BIND_HOST"
     )

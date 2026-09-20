@@ -112,15 +112,23 @@ class Runtime:
                 "model/list", {"limit": 100, "cursor": cursor, "includeHidden": False}
             )
             for row in page.get("data", []):
+                supported = {item["reasoningEffort"] for item in row["supportedReasoningEfforts"]}
+                efforts = [
+                    effort
+                    for effort in self.settings.allowed_reasoning_efforts
+                    if effort in supported
+                ]
+                if not efforts:
+                    continue
                 rows.append(
                     {
                         "model": row["model"],
                         "name": row["displayName"],
                         "is_default": row["isDefault"],
-                        "default_effort": row["defaultReasoningEffort"],
-                        "efforts": [
-                            item["reasoningEffort"] for item in row["supportedReasoningEfforts"]
-                        ],
+                        "default_effort": row["defaultReasoningEffort"]
+                        if row["defaultReasoningEffort"] in efforts
+                        else efforts[-1],
+                        "efforts": efforts,
                     }
                 )
             cursor = page.get("nextCursor")
@@ -400,15 +408,23 @@ class Runtime:
                     # Loaded thread/resume can also report the previous cwd.
                     root = store.require_task(db, task_id).root
                 chosen_model = model or session_model
-                if model is not None or effort is not None:
-                    available = next(
-                        (row for row in await self.models(rpc) if row["model"] == chosen_model),
-                        None,
+                available = next(
+                    (row for row in await self.models(rpc) if row["model"] == chosen_model),
+                    None,
+                )
+                if not available:
+                    raise ConsoleError("model_unavailable", 422)
+                if effort is not None and effort not in available["efforts"]:
+                    raise ConsoleError("effort_unavailable", 422)
+                if effort is None:
+                    inherited = (
+                        result.get("reasoningEffort") if chosen_model == session_model else None
                     )
-                    if not available:
-                        raise ConsoleError("model_unavailable", 422)
-                    if effort is not None and effort not in available["efforts"]:
-                        raise ConsoleError("effort_unavailable", 422)
+                    effort = (
+                        inherited
+                        if inherited in available["efforts"]
+                        else available["default_effort"]
+                    )
                 yolo = stage == "implement" and permissions == "yolo"
                 sandbox = (
                     {"type": "dangerFullAccess"}

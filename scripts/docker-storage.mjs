@@ -62,11 +62,22 @@ export function retirementPlan(images, containers, now = Date.now()) {
       const created = Date.parse(image.Created);
       if (
         pinned.has(image.Id) ||
-        !tags.length ||
         !Number.isFinite(created) ||
         now - created < RETENTION_MS
       )
         return false;
+      // Replacing the canonical CI tag leaves the old image untagged. Its
+      // contract label is the positive ownership marker; do not retain a full
+      // dependency image for every previous build-script revision.
+      if (!tags.length) {
+        return (
+          Boolean(currentCi) &&
+          /^[0-9a-f]{64}$/.test(
+            image.Config?.Labels?.['io.open-work-hub.validation.contract'] ??
+              '',
+          )
+        );
+      }
       if (tags.every((tag) => RELEASE_TAG.test(tag))) {
         return (
           Boolean(currentApp) &&
@@ -78,7 +89,7 @@ export function retirementPlan(images, containers, now = Date.now()) {
         Boolean(currentCi) && tags.every((tag) => VALIDATION_TAG.test(tag))
       );
     })
-    .map((image) => ({ id: image.Id, tags: image.RepoTags }));
+    .map((image) => ({ id: image.Id, tags: image.RepoTags ?? [] }));
 }
 
 function docker(args) {
@@ -98,7 +109,7 @@ function docker(args) {
 function snapshot() {
   const ids = [
     ...new Set(
-      docker(['image', 'ls', '-q', '--no-trunc'])
+      docker(['image', 'ls', '-a', '-q', '--no-trunc'])
         .trim()
         .split('\n')
         .filter(Boolean),
@@ -147,7 +158,12 @@ export function cleanup({
       );
     }
     // --no-prune avoids implicitly deleting uninspected parent images.
-    invoke(['image', 'rm', '--no-prune', ...candidate.tags]);
+    invoke([
+      'image',
+      'rm',
+      '--no-prune',
+      ...(candidate.tags.length ? candidate.tags : [candidate.id]),
+    ]);
     console.log(`[docker-storage] retired ${candidate.id}`);
   }
   // Docker owns dependency/reference tracking. This positive label and age
