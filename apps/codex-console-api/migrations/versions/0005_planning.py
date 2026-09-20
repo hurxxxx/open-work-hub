@@ -10,6 +10,8 @@ depends_on = None
 
 
 def upgrade():
+    # Preserve the pre-structured protocol identity before normalizing task stages.
+    op.execute("UPDATE console_operations SET kind = 'legacy_plan' WHERE kind = 'plan'")
     op.add_column("console_tasks", sa.Column("last_execution_root", sa.Text(), nullable=True))
     op.execute("UPDATE console_tasks SET last_execution_root = root")
     op.execute("UPDATE console_tasks SET stage = 'plan' WHERE stage IN ('chat', 'requirements')")
@@ -20,6 +22,7 @@ def upgrade():
 
 
 def downgrade():
+    op.execute("UPDATE console_operations SET kind = 'plan' WHERE kind = 'legacy_plan'")
     # Retain both document histories when returning to the older single-document provenance.
     op.execute(
         "UPDATE console_revisions SET source_turn_id = NULL WHERE id IN ("

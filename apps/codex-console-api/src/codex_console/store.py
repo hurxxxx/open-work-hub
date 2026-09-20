@@ -110,7 +110,11 @@ def recover_document(db, task, turns):
     if task.stage != "plan":
         return
     operation = db.get(Operation, task.current_operation_id) if task.current_operation_id else None
-    if not operation or operation.task_id != task.id or operation.kind != task.stage:
+    if (
+        not operation
+        or operation.task_id != task.id
+        or operation.kind not in ("plan", "requirements", "legacy_plan")
+    ):
         return
     submitted_at = (
         db.scalar(
@@ -137,7 +141,20 @@ def recover_document(db, task, turns):
             item.get("type") == "userMessage" and item.get("clientId") == operation.id
             for item in items
         ):
-            project_document(db, task, turn["id"], items)
+            if operation.kind in ("requirements", "legacy_plan"):
+                # Only migration-marked plans and the retired requirements operation
+                # use Markdown. Never reinterpret a malformed structured response.
+                final = [item for item in items if item.get("type") == "plan"]
+                final = final or [
+                    item
+                    for item in items
+                    if item.get("type") == "agentMessage" and item.get("phase") == "final_answer"
+                ]
+                if final and final[-1].get("text", "").strip():
+                    kind = "plan" if operation.kind == "legacy_plan" else "requirements"
+                    save_revision(db, task, kind, final[-1]["text"], source_turn_id=turn["id"])
+            else:
+                project_document(db, task, turn["id"], items)
             return
 
 
@@ -306,14 +323,10 @@ def detail(factory, task_id, settings):
 def bounded_item_text(task, payload, key, value):
     # Structured planning finals contain an answer and up to two full documents.
     # Keep the transport byte bound without applying the command-output tail limit.
-    if (
-        key == "text"
-        and (
-            payload.get("type") == "plan"
-            or (
-                payload.get("type") == "agentMessage"
-                and payload.get("phase") in (None, "final_answer")
-            )
+    if key == "text" and (
+        payload.get("type") == "plan"
+        or (
+            payload.get("type") == "agentMessage" and payload.get("phase") in (None, "final_answer")
         )
     ):
         bounded = value.encode("utf-8")[:MAX_MESSAGE_BYTES].decode("utf-8", errors="ignore")

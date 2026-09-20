@@ -342,6 +342,9 @@ class Runtime:
                 task.current_operation_id = operation_id
                 if previous:
                     previous.state = "preparing"
+                    previous.kind = (
+                        "execute" if stage == "implement" and revision_id is None else stage
+                    )
                     # A failed operation was never submitted; retain its immutable file refs.
                     for attachment_id in attachment_ids:
                         attachments.require(db, task_id, attachment_id)
