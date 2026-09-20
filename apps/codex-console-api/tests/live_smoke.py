@@ -23,7 +23,8 @@ from codex_console.config import Settings
 from codex_console.models import Owner, database
 
 REQUIREMENTS = (
-    "Inspect this tiny Python project and summarize requirements for adding clamp(value, "
+    "Inspect this tiny Python project and create and save a requirements document "
+    "for adding clamp(value, "
     "lower, upper) to calculator.py. Accept int/float, return the nearest bound when "
     "outside the range, preserve an in-range value, and raise ValueError when lower > "
     "upper. Add unittest coverage for below, within, above and invalid bounds. Preserve "
@@ -31,7 +32,8 @@ REQUIREMENTS = (
     "necessary. Do not implement yet. "
 )
 PLAN = (
-    "Write the concrete implementation and validation plan for the saved requirements. All "
+    "Create and save the concrete implementation and validation plan "
+    "for the saved requirements. All "
     "decisions are specified. Do not implement yet. "
 )
 
@@ -115,7 +117,7 @@ def main():
                             "messages",
                             {
                                 "operation_id": str(uuid4()),
-                                "stage": "requirements",
+                                "stage": "plan",
                                 "text": REQUIREMENTS,
                             },
                         )

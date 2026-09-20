@@ -16,19 +16,20 @@ test('requirements, saved plan, implementation, diff and refresh recovery', asyn
     .click();
   await page.getByLabel('작업 제목').fill('인사말 기능 개발');
   await page.getByRole('button', { name: '작업 만들기' }).click();
+  await expect(page.getByLabel('실행 모드')).toHaveValue('plan');
   await page
     .getByLabel('요청 내용 입력')
-    .fill('프로젝트에 인사말 기능을 추가하고 검증하고 싶습니다.');
+    .fill('Inspect the project and make a plan.');
   await page.getByRole('button', { name: '보내기', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: '결과물' })
+    .getByRole('button', { name: '계획', exact: true })
+    .click();
   await expect(
-    page.getByRole('button', { name: '구현 계획 작성' }),
-  ).toBeEnabled();
-  await page.getByRole('button', { name: '구현 계획 작성' }).click();
-  await expect(
-    page.getByRole('button', { name: '이 계획으로 구현', exact: true }),
+    page.getByRole('button', { name: '이 계획으로 실행', exact: true }),
   ).toBeEnabled();
   await page
-    .getByRole('button', { name: '이 계획으로 구현', exact: true })
+    .getByRole('button', { name: '이 계획으로 실행', exact: true })
     .click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: '취소' }).click();
@@ -36,15 +37,16 @@ test('requirements, saved plan, implementation, diff and refresh recovery', asyn
     page.getByText('Implemented the greeting.', { exact: false }),
   ).toHaveCount(0);
   await page
-    .getByRole('button', { name: '이 계획으로 구현', exact: true })
+    .getByRole('button', { name: '이 계획으로 실행', exact: true })
     .click();
   await page
     .getByRole('dialog')
-    .getByRole('button', { name: '이 계획으로 구현' })
+    .getByRole('button', { name: '이 계획으로 실행' })
     .click();
   await expect(
     page.getByText('Implemented the greeting.', { exact: false }),
   ).toBeVisible();
+  await page.getByRole('button', { name: '브랜치', exact: true }).click();
   await expect(
     page.getByRole('button', { name: /greeting.txt/ }),
   ).toBeVisible();
@@ -120,19 +122,15 @@ test('server work survives closing the browser tab and restores progress and exe
   await expect(returned.getByLabel('현재 실행 상태')).toContainText('준비됨');
   await returned
     .getByRole('navigation', { name: '결과물' })
-    .getByRole('button', { name: '구현 계획', exact: true })
+    .getByRole('button', { name: '계획', exact: true })
     .click();
   await expect(
-    returned.getByRole('button', { name: '이 계획으로 구현', exact: true }),
+    returned.getByRole('button', { name: '이 계획으로 실행', exact: true }),
   ).toBeEnabled();
   await returned.getByLabel('실행 모드').selectOption('implement');
   await returned.getByLabel('실행 권한').selectOption('yolo');
   await returned.getByLabel('요청 내용 입력').fill('Implement the plan.');
   await returned.getByRole('button', { name: '보내기', exact: true }).click();
-  await returned
-    .getByRole('dialog')
-    .getByRole('button', { name: '이 계획으로 구현' })
-    .click();
   await expect(returned.getByLabel('현재 실행 상태')).toContainText('YOLO');
   await expect(
     returned.getByText('Implemented the greeting.', { exact: false }),
@@ -143,4 +141,202 @@ test('server work survives closing the browser tab and restores progress and exe
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+});
+
+test('planning answers ordinary questions without creating documents and shows a read-only branch tab', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await page
+    .getByLabel('본인 전용 비밀번호')
+    .fill('console-tests-only-password');
+  await page.getByRole('button', { name: '로그인', exact: true }).click();
+  await page
+    .getByRole('button', { name: '새 작업', exact: true })
+    .first()
+    .click();
+  await page.getByLabel('작업 제목').fill('일반 대화와 브랜치 표시 확인');
+  await page.getByRole('button', { name: '작업 만들기' }).click();
+  await expect(page.getByLabel('실행 모드')).toHaveValue('plan');
+  await expect(page.locator('.git-summary')).toContainText('dev');
+  await page
+    .getByLabel('요청 내용 입력')
+    .fill('Explain the current workspace.');
+  await page.getByRole('button', { name: '보내기', exact: true }).click();
+  await expect(
+    page.getByText('This is a general answer; saved documents are unchanged.'),
+  ).toBeVisible();
+  await expect(page.getByLabel('현재 실행 상태')).toContainText('준비됨');
+  const taskId = new URL(page.url()).searchParams.get('task');
+  const detail = await (await page.request.get(`api/tasks/${taskId}`)).json();
+  expect(detail.revisions).toEqual([]);
+  expect(
+    await page.getByRole('button', { name: '병합 요청', exact: true }).count(),
+  ).toBe(0);
+  await page.getByRole('button', { name: '브랜치', exact: true }).click();
+  await expect(page.locator('.workspace-path')).toBeVisible();
+  expect(await page.getByLabel('대상 브랜치').count()).toBe(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+});
+
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 390, height: 667 },
+]) {
+  test(`branch workspace scrolls through 18 files and the full diff at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.clock.install();
+    await page.setViewportSize(viewport);
+    let diffReads = 0;
+    const files = Array.from({ length: 18 }, (_, index) => ({
+      path: `src/changed-file-${String(index + 1).padStart(2, '0')}.txt`,
+      status: 'M',
+      old_path: null,
+    }));
+    await page.route('**/api/tasks/*/changes', (route) =>
+      route.fulfill({ json: files }),
+    );
+    await page.route('**/api/tasks/*/diff?*', (route) => {
+      diffReads++;
+      return route.fulfill({
+        json: {
+          path: new URL(route.request().url()).searchParams.get('path'),
+          binary: false,
+          old: 'original\n',
+          new:
+            Array.from(
+              { length: 150 },
+              (_, index) => `changed line ${index + 1}`,
+            ).join('\n') + '\nEND-OF-SELECTED-DIFF\n',
+        },
+      });
+    });
+    await page.goto('./');
+    await page
+      .getByLabel('본인 전용 비밀번호')
+      .fill('console-tests-only-password');
+    await page.getByRole('button', { name: '로그인', exact: true }).click();
+    await page
+      .getByRole('button', { name: '새 작업', exact: true })
+      .first()
+      .click();
+    await page
+      .getByLabel('작업 제목')
+      .fill(`Branch scrolling ${viewport.width}`);
+    await page.getByRole('button', { name: '작업 만들기' }).click();
+    if (viewport.width < 960)
+      await page.getByRole('button', { name: '결과물', exact: true }).click();
+    await page.getByRole('button', { name: '브랜치', exact: true }).click();
+    const panel = page.locator('.git-workspace');
+    await expect(panel.locator('.file-list button')).toHaveCount(18);
+    const panelBox = await panel.boundingBox();
+    expect(panelBox!.height).toBeGreaterThan(100);
+    expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(
+      viewport.height + 1,
+    );
+    const lastFile = panel.getByRole('button', { name: /changed-file-18.txt/ });
+    await lastFile.scrollIntoViewIfNeeded();
+    await expect(lastFile).toBeInViewport();
+    await lastFile.click();
+    const diff = panel.locator('.diff-content');
+    await expect(diff).toHaveAttribute('aria-label', files[17].path);
+    const end = diff.getByText('END-OF-SELECTED-DIFF', { exact: true });
+    await expect(end).toBeAttached();
+    await panel.hover({ position: { x: 12, y: 12 } });
+    await page.mouse.wheel(0, 10000);
+    await expect(end).toBeInViewport();
+    const beforePolling = diffReads;
+    await page.clock.fastForward(10001);
+    await expect.poll(() => diffReads).toBeGreaterThan(beforePolling);
+    await expect(end).toBeInViewport();
+    await expect
+      .poll(() => panel.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0);
+    await page.mouse.wheel(0, -10000);
+    await expect(
+      panel.getByRole('button', { name: 'Git 상태 새로고침' }),
+    ).toBeInViewport();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  });
+}
+
+test('Git refresh updates files and the selected diff without a task state change', async ({
+  page,
+}) => {
+  await page.clock.install();
+  let version = 1;
+  await page.route('**/api/tasks/*/changes', (route) =>
+    route.fulfill({
+      json: [
+        { path: 'selected.txt', status: 'M', old_path: null },
+        { path: `version-${version}.txt`, status: 'M', old_path: null },
+      ],
+    }),
+  );
+  await page.route('**/api/tasks/*/diff?*', (route) =>
+    route.fulfill({
+      json: {
+        path: new URL(route.request().url()).searchParams.get('path'),
+        binary: false,
+        old: 'original\n',
+        new: `refreshed content ${version}\n`,
+      },
+    }),
+  );
+  await page.goto('./');
+  await page
+    .getByLabel('본인 전용 비밀번호')
+    .fill('console-tests-only-password');
+  await page.getByRole('button', { name: '로그인', exact: true }).click();
+  await page
+    .getByRole('button', { name: '새 작업', exact: true })
+    .first()
+    .click();
+  await page.getByLabel('작업 제목').fill('Refresh files and diff');
+  await page.getByRole('button', { name: '작업 만들기' }).click();
+  await page.getByRole('button', { name: '브랜치', exact: true }).click();
+  const panel = page.locator('.git-workspace');
+  const selected = panel.getByRole('button', { name: /selected.txt/ });
+  await selected.click();
+  await expect(
+    panel.getByText('refreshed content 1', { exact: true }),
+  ).toBeVisible();
+  const taskId = new URL(page.url()).searchParams.get('task');
+  const before = await (await page.request.get(`api/tasks/${taskId}`)).json();
+  version = 2;
+  await panel.getByRole('button', { name: 'Git 상태 새로고침' }).click();
+  await expect(
+    panel.getByRole('button', { name: /version-2.txt/ }),
+  ).toBeVisible();
+  await expect(
+    panel.getByRole('button', { name: /version-1.txt/ }),
+  ).toHaveCount(0);
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    panel.getByText('refreshed content 2', { exact: true }),
+  ).toBeVisible();
+  version = 3;
+  await page.clock.fastForward(10001);
+  await expect(
+    panel.getByRole('button', { name: /version-3.txt/ }),
+  ).toBeVisible();
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    panel.getByText('refreshed content 3', { exact: true }),
+  ).toBeVisible();
+  const after = await (await page.request.get(`api/tasks/${taskId}`)).json();
+  expect({ id: after.id, status: after.status }).toEqual({
+    id: before.id,
+    status: before.status,
+  });
 });

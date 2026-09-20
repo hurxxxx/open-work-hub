@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 from uuid import uuid4
@@ -31,6 +32,7 @@ class FakeRPC:
         self.on_disconnect = on_disconnect
         self.auth_type = "chatgpt"
         self.fail_turn = False
+        self.policies = {}
 
     async def start(self):
         self.connected = True
@@ -78,12 +80,21 @@ class FakeRPC:
                 "thread": self.threads[thread_id],
                 "model": "account-default",
                 "modelProvider": "openai",
-                "cwd": params["cwd"],
-                "sandbox": {"type": "readOnly"},
+                "cwd": self.threads[thread_id]["cwd"],
+                "sandbox": self.policies.get(thread_id, {"type": "readOnly"}),
             }
         if method == "turn/start":
             if self.fail_turn:
                 raise ConsoleError("codex_request_uncertain", 503)
+            self.policies[params["threadId"]] = {
+                **params["sandboxPolicy"],
+                **(
+                    {"writableRoots": []}
+                    if params["sandboxPolicy"].get("writableRoots") == [params["cwd"]]
+                    else {}
+                ),
+            }
+            self.threads[params["threadId"]]["cwd"] = params["cwd"]
             return {"turn": {"id": str(uuid4()), "status": "inProgress", "items": []}}
         if method == "thread/read":
             return {"thread": self.threads[params["threadId"]]}
@@ -147,6 +158,7 @@ def settings(database_url, repository):
         database_url=database_url,
         origin="http://localhost",
         workspace=repository,
+        worktree_root=repository.parent / "worktrees",
         web_dist=repository / "absent",
         attachment_cache=repository.parent / "attachments",
         _env_file=None,
@@ -182,9 +194,7 @@ def new_task(client, title="A useful change"):
     return result.json()
 
 
-def send_message(
-    client, task, stage="requirements", text="Inspect the repository", operation_id=None
-):
+def send_message(client, task, stage="plan", text="Inspect the repository", operation_id=None):
     return client.post(
         f"/api/tasks/{task['id']}/messages",
         json={"text": text, "stage": stage, "operation_id": operation_id or str(uuid4())},
@@ -201,8 +211,22 @@ def notify(client, task, method, extra):
     )
 
 
-def complete(client, task, body="An actionable plan", status="completed"):
-    item = {"id": str(uuid4()), "type": "plan", "text": body}
+def planning_text(answer, documents=()):
+    return json.dumps({"answer": answer, "documents": list(documents)})
+
+
+def complete(
+    client, task, body="An actionable plan", status="completed", *, kind="plan", documents=None
+):
+    if task["stage"] == "plan":
+        current = client.get(f"/api/tasks/{task['id']}").json()
+        latest = max((r["version"] for r in current["revisions"] if r["kind"] == kind), default=0)
+        if documents is None:
+            documents = [
+                {"kind": kind, "base_version": latest, "body": body, "summary": "Updated document"}
+            ]
+        body = planning_text(body, documents)
+    item = {"id": str(uuid4()), "type": "agentMessage", "phase": "final_answer", "text": body}
     notify(client, task, "item/completed", {"item": item})
     notify(client, task, "turn/completed", {"turn": {"id": task["turn_id"], "status": status}})
     return client.get(f"/api/tasks/{task['id']}").json()

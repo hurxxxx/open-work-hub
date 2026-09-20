@@ -135,7 +135,7 @@ export function ExecutionStatus({
         <span>
           {t(
             task.stage === 'implement' || task.stage === 'review'
-              ? 'Implement'
+              ? 'Execute'
               : 'Plan',
           )}
         </span>

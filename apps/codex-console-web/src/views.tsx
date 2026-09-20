@@ -415,7 +415,7 @@ export function Documents({
             onClick={onPlan}
           >
             <FileText size={14} />
-            {t('Create implementation plan')}
+            {t('Create execution plan')}
           </Button>
         ) : (
           <Button
@@ -424,12 +424,10 @@ export function Documents({
             onClick={() => latest && onImplement(latest)}
           >
             <Play size={14} />
-            {t('Implement this plan')}
+            {t('Execute this plan')}
           </Button>
         )}
-        {modified && (
-          <small>{t('Save your changes before implementing.')}</small>
-        )}
+        {modified && <small>{t('Save your changes before execution.')}</small>}
         {stale && (
           <small>
             {t('The saved plan changed. Review the latest version.')}
@@ -442,10 +440,12 @@ export function Documents({
 
 export function Changes({
   task,
+  refreshToken,
   t,
   onError,
 }: {
   task: Detail;
+  refreshToken?: string;
   t: Translate;
   onError: (error: unknown) => void;
 }) {
@@ -458,9 +458,7 @@ export function Changes({
   const [diffAttempt, setDiffAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    setListState('loading');
-    setChanges([]);
-    setSelected(null);
+    setListState((current) => (current === 'ready' ? 'refreshing' : 'loading'));
     void api<Change[]>(
       `/tasks/${task.id}/changes`,
       undefined,
@@ -471,6 +469,7 @@ export function Changes({
         if (controller.signal.aborted) return;
         setListState('ready');
         setChanges(rows);
+        setDiffAttempt((attempt) => attempt + 1);
         setSelected((current) =>
           rows.some((row) => row.path === current)
             ? current
@@ -484,11 +483,17 @@ export function Changes({
         }
       });
     return () => controller.abort();
-  }, [task.id, task.status, onError, listAttempt]);
+  }, [task.id, task.root, task.status, refreshToken, onError, listAttempt]);
   useEffect(() => {
-    setDiff(null);
+    if (listState !== 'ready') return;
+    if (!selected) {
+      setDiff(null);
+      setDiffState('ready');
+      return;
+    }
+    // Keep a selected diff mounted during polling so reading does not jump to the top.
+    setDiff((current) => (current?.path === selected ? current : null));
     setDiffState('loading');
-    if (!selected) return;
     const controller = new AbortController();
     void api<Diff>(
       `/tasks/${task.id}/diff?path=${encodeURIComponent(selected)}`,
@@ -508,7 +513,15 @@ export function Changes({
         }
       });
     return () => controller.abort();
-  }, [task.id, task.status, selected, onError, diffAttempt]);
+  }, [
+    task.id,
+    task.root,
+    task.status,
+    selected,
+    listState,
+    onError,
+    diffAttempt,
+  ]);
   return (
     <div className="changes-pane">
       {task.isolated && (
@@ -588,7 +601,7 @@ export function Confirm({
   onClose,
   onConfirm,
   children,
-  action = 'Implement this plan',
+  action = 'Execute this plan',
 }: {
   open: boolean;
   title: Copy;
@@ -618,9 +631,9 @@ export function Confirm({
         </>
       }
     >
-      {action === 'Implement this plan' && (
+      {action === 'Execute this plan' && (
         <p>
-          {t('Read-only planning')} → {t('Implement')}
+          {t('Read-only planning')} → {t('Execute')}
         </p>
       )}
       {children}

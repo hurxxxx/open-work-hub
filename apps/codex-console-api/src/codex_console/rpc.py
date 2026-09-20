@@ -17,6 +17,8 @@ from .config import CODEX_VERSION
 from .errors import ConsoleError
 from .models import uid
 
+MAX_MESSAGE_BYTES = 4 * 1024 * 1024
+
 CONTRACT = json.loads(Path(__file__).with_name("protocol.json").read_text())
 METHOD_SCHEMAS = {
     "thread/start": "ThreadStartParams",
@@ -85,7 +87,7 @@ class CodexRPC:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
-            limit=4 * 1024 * 1024,
+            limit=MAX_MESSAGE_BYTES,
         )
         self.reader = asyncio.create_task(self._read())
         self.dispatcher = asyncio.create_task(self._dispatch())
