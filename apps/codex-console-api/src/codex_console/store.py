@@ -112,6 +112,7 @@ def project_plan(db, task, turn_id, items):
             return
         body, expected_version = document.body, document.base_version
 
+    body = planning.unwrap_proposed_plan(body)
     latest = latest_revision(db, task.id, "plan")
     if expected_version is not None and (latest.version if latest else 0) != expected_version:
         task.error_code = "document_conflict"
@@ -250,8 +251,9 @@ def detail(factory, task_id, settings):
         for item in items:
             if item.get("type") in ("agentMessage", "plan"):
                 result = planning.parse(item.get("text", ""))
-                if result:
-                    item["text"] = result.answer
+                item["text"] = planning.unwrap_proposed_plan(
+                    result.answer if result else item.get("text", "")
+                )
         message_ids = [
             i["clientId"] for i in items if i.get("type") == "userMessage" and i.get("clientId")
         ]
@@ -290,7 +292,7 @@ def detail(factory, task_id, settings):
                     "id": r.id,
                     "kind": r.kind,
                     "version": r.version,
-                    "body": r.body,
+                    "body": planning.unwrap_proposed_plan(r.body),
                     "created_at": r.created_at.isoformat(),
                 }
                 for r in db.scalars(

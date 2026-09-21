@@ -7,7 +7,7 @@ from pathlib import Path
 from jsonschema import Draft7Validator
 from sqlalchemy import select, update
 
-from . import attachments, git, store
+from . import attachments, git, planning, store
 from .auth import digest
 from .errors import ConsoleError
 from .models import Item, Operation, PendingRequest, Task
@@ -321,7 +321,10 @@ class Runtime:
                     plan = store.latest_revision(db, task_id, "plan")
                     if not plan or plan.id != revision_id:
                         raise ConsoleError("stale_plan")
-                    context["approved_plan"] = {"kind": "application", "value": plan.body}
+                    context["approved_plan"] = {
+                        "kind": "application",
+                        "value": planning.unwrap_proposed_plan(plan.body),
+                    }
                     text = text or "Implement the approved plan."
                     task.approved_revision = plan.id
                 elif stage == "implement":
@@ -334,7 +337,11 @@ class Runtime:
                         context["saved_plan"] = {
                             "kind": "application",
                             "value": json.dumps(
-                                {"version": plan.version, "body": plan.body}, ensure_ascii=False
+                                {
+                                    "version": plan.version,
+                                    "body": planning.unwrap_proposed_plan(plan.body),
+                                },
+                                ensure_ascii=False,
                             ),
                         }
                 store.lease(db, task_id)

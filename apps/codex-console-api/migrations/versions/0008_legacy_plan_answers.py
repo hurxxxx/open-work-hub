@@ -11,6 +11,16 @@ branch_labels = None
 depends_on = None
 
 
+def _unwrap_proposed_plan(value: str) -> str:
+    opening = "<proposed_plan>"
+    closing = "</proposed_plan>"
+    candidate = value.strip()
+    if not candidate.startswith(opening) or not candidate.endswith(closing):
+        return value
+    body = candidate[len(opening) : -len(closing)].strip()
+    return body or value
+
+
 def _plan_body(value: str) -> str | None:
     try:
         structured = json.loads(value)
@@ -30,11 +40,11 @@ def _plan_body(value: str) -> str | None:
             and isinstance(document.get("body"), str)
             and document["body"].strip()
         ):
-            return document["body"].strip()
+            return _unwrap_proposed_plan(document["body"])
     if structured["documents"]:
         return None
     answer = structured["answer"].strip()
-    return answer or None
+    return _unwrap_proposed_plan(answer) if answer else None
 
 
 def upgrade():

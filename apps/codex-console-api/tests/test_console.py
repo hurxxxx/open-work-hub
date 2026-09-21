@@ -10,7 +10,7 @@ from conftest import complete, new_task, notify, plan, planning_text, send_messa
 from sqlalchemy import select, text
 
 from codex_console import auth, store
-from codex_console.models import Base, PendingRequest, Task, database
+from codex_console.models import Base, PendingRequest, Revision, Task, database
 from codex_console.runtime import QUESTION
 
 
@@ -268,8 +268,14 @@ def test_native_plan_turns_are_read_only_and_project_the_final_plan(client):
     assert turn["sandboxPolicy"] == {"type": "readOnly", "networkAccess": False}
     assert turn["approvalPolicy"] == "never"
     assert turn["collaborationMode"]["mode"] == "plan"
-    result = complete(client, task, "Plan with acceptance evidence")
+    result = complete(
+        client,
+        task,
+        "<proposed_plan>\nPlan with acceptance evidence\n</proposed_plan>",
+    )
     assert result["revisions"][0]["kind"] == "plan"
+    assert result["revisions"][0]["body"] == "Plan with acceptance evidence"
+    assert result["items"][-1]["text"] == "Plan with acceptance evidence"
     assert "outputSchema" not in turn
     assert "planning" not in turn["additionalContext"]
     updated = send_message(client, result, text="Refine the saved plan").json()
@@ -279,6 +285,24 @@ def test_native_plan_turns_are_read_only_and_project_the_final_plan(client):
         "version": 1,
         "body": "Plan with acceptance evidence",
     }
+
+
+def test_existing_wrapped_plan_is_unwrapped_for_display_and_execution(client):
+    task = plan(client)
+    with client.app.state.factory.begin() as db:
+        revision = db.get(Revision, task["revisions"][-1]["id"])
+        revision.body = "<proposed_plan>\nRecovered plan\n</proposed_plan>"
+    detail = client.get(f"/api/tasks/{task['id']}").json()
+    assert detail["revisions"][-1]["body"] == "Recovered plan"
+    response = client.post(
+        f"/api/tasks/{task['id']}/implement",
+        json={"operation_id": str(uuid4()), "revision_id": revision.id},
+    )
+    assert response.status_code == 200
+    params = [
+        params for method, params in client.app.state.runtime.rpc.calls if method == "turn/start"
+    ][-1]
+    assert params["additionalContext"]["approved_plan"]["value"] == "Recovered plan"
 
 
 def test_implementation_requires_current_plan_and_is_idempotent(client):
@@ -852,7 +876,12 @@ def test_legacy_plan_answer_migration_requires_an_accepted_plan_operation(client
         client, new_task(client), "plan", operation_id=operation_id
     ).json()
     turn_id = task["turn_id"]
-    task = complete(client, task, "Recovered legacy answer", documents=[])
+    task = complete(
+        client,
+        task,
+        "<proposed_plan>\nRecovered legacy answer\n</proposed_plan>",
+        documents=[],
+    )
     assert task["revisions"] == []
     spec = spec_from_file_location(
         "legacy_plan_answers", ROOT / "migrations/versions/0008_legacy_plan_answers.py"

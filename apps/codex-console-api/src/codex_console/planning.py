@@ -24,3 +24,14 @@ def parse(text):
         return PlanningOutput.model_validate_json(text)
     except (ValidationError, ValueError, TypeError):
         return None
+
+
+def unwrap_proposed_plan(text: str) -> str:
+    """Remove the presentation wrapper used by older Codex plan answers."""
+    opening = "<proposed_plan>"
+    closing = "</proposed_plan>"
+    candidate = text.strip()
+    if not candidate.startswith(opening) or not candidate.endswith(closing):
+        return text
+    body = candidate[len(opening) : -len(closing)].strip()
+    return body or text
