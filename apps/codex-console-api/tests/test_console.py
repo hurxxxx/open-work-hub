@@ -842,3 +842,48 @@ def test_native_plan_migration_backfills_a_missing_structured_plan(client):
         ).all()
         assert revisions == [("plan", 1, "Recovered native plan")]
         transaction.rollback()
+
+
+def test_legacy_plan_answer_migration_requires_an_accepted_plan_operation(client):
+    from codex_console.cli import ROOT
+
+    operation_id = str(uuid4())
+    task = send_message(
+        client, new_task(client), "plan", operation_id=operation_id
+    ).json()
+    turn_id = task["turn_id"]
+    task = complete(client, task, "Recovered legacy answer", documents=[])
+    assert task["revisions"] == []
+    spec = spec_from_file_location(
+        "legacy_plan_answers", ROOT / "migrations/versions/0008_legacy_plan_answers.py"
+    )
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = client.app.state.factory.kw["bind"]
+    with engine.connect() as connection, connection.begin() as transaction:
+        connection.execute(
+            text(
+                "INSERT INTO console_items (task_id, item_id, turn_id, payload) "
+                "VALUES (:task_id, :item_id, :turn_id, CAST(:payload AS json))"
+            ),
+            {
+                "task_id": task["id"],
+                "item_id": str(uuid4()),
+                "turn_id": turn_id,
+                "payload": json.dumps(
+                    {"id": str(uuid4()), "type": "userMessage", "clientId": operation_id}
+                ),
+            },
+        )
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+            migration.upgrade()
+        revisions = connection.execute(
+            text(
+                "SELECT kind, version, body FROM console_revisions "
+                "WHERE task_id = :id ORDER BY id"
+            ),
+            {"id": task["id"]},
+        ).all()
+        assert revisions == [("plan", 1, "Recovered legacy answer")]
+        transaction.rollback()

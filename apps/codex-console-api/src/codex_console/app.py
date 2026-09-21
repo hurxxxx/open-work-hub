@@ -82,7 +82,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
             if not guard.scalar(text("SELECT pg_try_advisory_lock(18701, 1)")):
                 raise RuntimeError("Run exactly one console API process per database")
             revision = guard.scalar(text("SELECT version_num FROM console_alembic_version"))
-            if revision != "console_0007":
+            if revision != "console_0008":
                 raise RuntimeError("Run codex-console migrate before starting the server")
             store.recover_startup(factory)
             runtime = Runtime(app.state.settings, factory, rpc_factory)
