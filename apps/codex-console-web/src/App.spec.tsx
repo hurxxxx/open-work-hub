@@ -217,7 +217,7 @@ it('runs handoff initialization once when StrictMode replays effects', async () 
   expect(api).not.toHaveBeenCalledWith('/session');
 });
 
-it('preserves separate document drafts across result tabs and tasks and warns before leaving the page', async () => {
+it('preserves the plan draft across result tabs and tasks and warns before leaving the page', async () => {
   const other = {
     ...detail,
     id: '00000000-0000-4000-8000-000000000002',
@@ -232,22 +232,17 @@ it('preserves separate document drafts across result tabs and tasks and warns be
   await openAndCompose();
   fireEvent.click(screen.getByRole('button', { name: '문서 편집' }));
   fireEvent.change(screen.getByRole('textbox', { name: '문서 편집' }), {
-    target: { value: 'Requirements draft' },
-  });
-  const results = within(screen.getByRole('navigation', { name: '결과물' }));
-  fireEvent.click(results.getByRole('button', { name: '계획' }));
-  fireEvent.click(screen.getByRole('button', { name: '문서 편집' }));
-  fireEvent.change(screen.getByRole('textbox', { name: '문서 편집' }), {
     target: { value: 'Plan draft' },
   });
+  const results = within(screen.getByRole('navigation', { name: '결과물' }));
   fireEvent.click(results.getByRole('button', { name: '파일' }));
-  fireEvent.click(results.getByRole('button', { name: '요구사항' }));
-  expect(screen.getByText('Requirements draft')).toBeTruthy();
+  fireEvent.click(results.getByRole('button', { name: '계획' }));
+  expect(screen.getByText('Plan draft')).toBeTruthy();
   fireEvent.click(await screen.findByRole('button', { name: /Another task/ }));
   await screen.findByRole('heading', { name: 'Another task' });
-  expect(screen.queryByText('Requirements draft')).toBeNull();
+  expect(screen.queryByText('Plan draft')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: /Test task/ }));
-  await screen.findByText('Requirements draft');
+  await screen.findByText('Plan draft');
   fireEvent.click(
     within(screen.getByRole('navigation', { name: '결과물' })).getByRole(
       'button',

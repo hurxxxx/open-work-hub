@@ -57,9 +57,8 @@ import {
   type Execution,
 } from './execution';
 
-type Tab = 'requirements' | 'plan' | 'branch' | 'checks' | 'files';
+type Tab = 'plan' | 'branch' | 'checks' | 'files';
 const tabs: { id: Tab; label: Copy }[] = [
-  { id: 'requirements', label: 'Requirements' },
   { id: 'plan', label: 'Plan' },
   { id: 'branch', label: 'Branch' },
   { id: 'checks', label: 'Execution results' },
@@ -87,7 +86,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [tab, setTab] = useState<Tab>('requirements');
+  const [tab, setTab] = useState<Tab>('plan');
   const [mobileView, setMobileView] = useState<'conversation' | 'results'>(
     'conversation',
   );
@@ -803,7 +802,7 @@ export function App() {
           <h1>{t('Start with what you want to change.')}</h1>
           <p>
             {t(
-              'Describe a feature or a problem. Codex will inspect the repository and help define the requirements.',
+              'Describe a feature or a problem. Codex will inspect the repository and create a plan.',
             )}
           </p>
           <Button
@@ -906,7 +905,7 @@ export function App() {
                   <h2>{t('Start with what you want to change.')}</h2>
                   <p>
                     {t(
-                      'Describe a feature or a problem. Codex will inspect the repository and help define the requirements.',
+                      'Describe a feature or a problem. Codex will inspect the repository and create a plan.',
                     )}
                   </p>
                 </div>
@@ -1126,14 +1125,13 @@ export function App() {
                 </button>
               ))}
             </nav>
-            {(tab === 'requirements' || tab === 'plan') && (
+            {tab === 'plan' && (
               <Documents
                 key={`${task.id}-${tab}`}
                 task={task}
-                kind={tab}
-                draft={documentDrafts[`${task.id}:${tab}`] ?? null}
+                draft={documentDrafts[`${task.id}:plan`] ?? null}
                 onDraftChange={(next) => {
-                  const key = `${task.id}:${tab}`;
+                  const key = `${task.id}:plan`;
                   setDocumentDrafts((current) => {
                     const draft =
                       typeof next === 'function'
@@ -1148,17 +1146,6 @@ export function App() {
                 t={t}
                 busy={busy}
                 onSave={(body) => mutate('documents', body, 'PUT')}
-                onPlan={() => {
-                  setStage('plan');
-                  setTab('plan');
-                  void send('messages', {
-                    ...selectedExecution,
-                    stage: 'plan',
-                    text: t(
-                      'Create an execution plan from the requirements, including acceptance checks.',
-                    ),
-                  });
-                }}
                 onImplement={(revision) => {
                   setStage('implement');
                   approveImplementation(revision);

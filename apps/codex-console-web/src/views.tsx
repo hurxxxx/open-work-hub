@@ -273,26 +273,22 @@ export type DocumentDraft = { body: string; base: Revision | undefined };
 
 export function Documents({
   task,
-  kind,
   t,
   busy,
   onSave,
-  onPlan,
   onImplement,
   draft: savedDraft,
   onDraftChange,
 }: {
   task: Detail;
-  kind: 'requirements' | 'plan';
   t: Translate;
   busy: boolean;
   onSave: (body: unknown) => Promise<boolean>;
-  onPlan: () => void;
   onImplement: (revision: Revision) => void;
   draft?: DocumentDraft | null;
   onDraftChange?: Dispatch<SetStateAction<DocumentDraft | null>>;
 }) {
-  const versions = task.revisions.filter((row) => row.kind === kind);
+  const versions = task.revisions.filter((row) => row.kind === 'plan');
   const latest = versions.at(-1);
   const [selected, setSelected] = useState<number | null>(null);
   const revision = versions.find((row) => row.id === selected) ?? latest;
@@ -306,22 +302,14 @@ export function Documents({
     setSelected(null);
     setEditing(false);
     setLocalDraft(null);
-  }, [kind, task.id]);
+  }, [task.id]);
   const modified = body !== (base?.body ?? '');
   const conflict = !!draft && base?.id !== latest?.id;
   const disabled = busy || locked(task) || base?.id !== latest?.id;
-  const requirements = task.revisions
-    .filter((r) => r.kind === 'requirements')
-    .at(-1);
-  const stale =
-    kind === 'plan' &&
-    requirements &&
-    latest &&
-    requirements.created_at > latest.created_at;
   return (
     <section className="document-pane">
       <div className="document-toolbar">
-        <strong>{t(kind === 'requirements' ? 'Requirements' : 'Plan')}</strong>
+        <strong>{t('Plan')}</strong>
         <div className="actions">
           {versions.length > 0 && (
             <select
@@ -381,10 +369,6 @@ export function Documents({
             </small>
           ) : modified ? (
             <small>{t('Save your changes before execution.')}</small>
-          ) : stale ? (
-            <small>
-              {t('The saved plan changed. Review the latest version.')}
-            </small>
           ) : null}
         </div>
         <div className="document-footer-actions">
@@ -406,7 +390,6 @@ export function Documents({
               onClick={async () => {
                 if (
                   await onSave({
-                    kind,
                     base_version: base?.version ?? 0,
                     body,
                   })
@@ -421,25 +404,14 @@ export function Documents({
               {t('Save document')}
             </Button>
           )}
-          {kind === 'requirements' ? (
-            <Button
-              variant="primary"
-              disabled={!!disabled || modified || !latest}
-              onClick={onPlan}
-            >
-              <FileText size={14} />
-              {t('Create execution plan')}
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              disabled={!!disabled || modified || !latest || !!stale}
-              onClick={() => latest && onImplement(latest)}
-            >
-              <Play size={14} />
-              {t('Execute this plan')}
-            </Button>
-          )}
+          <Button
+            variant="primary"
+            disabled={!!disabled || modified || !latest}
+            onClick={() => latest && onImplement(latest)}
+          >
+            <Play size={14} />
+            {t('Execute this plan')}
+          </Button>
         </div>
       </div>
     </section>

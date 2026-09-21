@@ -163,44 +163,33 @@ def test_execution_needs_text_or_approved_plan_and_git_status_requires_auth(clie
     assert client.get(f"/api/tasks/{task['id']}/git").status_code == 401
 
 
-@pytest.mark.parametrize("reverse", [False, True])
-def test_planning_updates_two_documents_atomically_and_preserves_answers(client, reverse):
+def test_completed_structured_turn_from_previous_release_recovers_only_its_plan(client):
     task = send_message(client, new_task(client)).json()
     documents = [
         {"kind": kind, "base_version": 0, "body": f"Initial {kind}", "summary": "Created"}
         for kind in ("requirements", "plan")
     ]
-    if reverse:
-        documents.reverse()
     task = complete(client, task, "Both documents saved", documents=documents)
-    assert len(task["revisions"]) == 2
+    assert [(row["kind"], row["body"]) for row in task["revisions"]] == [
+        ("plan", "Initial plan")
+    ]
     assert task["items"][-1]["text"] == "Both documents saved"
-    before = task["revisions"]
-    task = send_message(client, task, text="Change the confirmed scope").json()
-    by_kind = {document["kind"]: document for document in documents}
-    by_kind["requirements"].update(base_version=1, body="Changed scope")
-    by_kind["plan"].update(base_version=0, body="Conflicting plan")
-    task = complete(client, task, documents=documents)
-    assert task["error_code"] == "document_conflict"
-    assert task["revisions"] == before
-    task = send_message(client, task, text="Apply the agreed revision").json()
-    by_kind["plan"]["base_version"] = 1
-    task = complete(client, task, documents=documents)
-    assert [r["version"] for r in task["revisions"]] == [1, 1, 2, 2]
-    latest = task["revisions"][-2:]
-    assert [r["kind"] for r in latest] == ["requirements", "plan"]
+
+    task = send_message(client, task, text="Revise the plan").json()
+    task = complete(client, task, "Revised native plan")
+    assert [row["version"] for row in task["revisions"]] == [1, 2]
     response = client.post(
         f"/api/tasks/{task['id']}/implement",
         json={
             "operation_id": str(uuid4()),
-            "revision_id": latest[-1]["id"],
+            "revision_id": task["revisions"][-1]["id"],
         },
     )
     assert response.status_code == 200
-    assert response.json()["approved_revision"] == latest[-1]["id"]
+    assert response.json()["approved_revision"] == task["revisions"][-1]["id"]
 
 
-def test_malformed_planning_response_never_overwrites_documents(client):
+def test_plain_agent_answer_does_not_overwrite_the_native_plan(client):
     from conftest import notify
 
     task = plan(client)
@@ -221,7 +210,7 @@ def test_malformed_planning_response_never_overwrites_documents(client):
     )
     notify(client, task, "turn/completed", {"turn": {"id": task["turn_id"], "status": "completed"}})
     result = client.get(f"/api/tasks/{task['id']}").json()
-    assert result["error_code"] == "planning_output_invalid"
+    assert result["error_code"] is None
     assert result["revisions"] == before
 
 
@@ -310,31 +299,25 @@ def test_isolation_works_without_an_origin_or_dev_branch(repository, tmp_path):
 
 
 @pytest.mark.parametrize("streamed", [False, True])
-def test_large_planning_final_preserves_both_documents_and_command_limit(client, streamed):
-    from conftest import notify, planning_text
+def test_large_native_plan_and_command_output_keep_their_respective_bounds(client, streamed):
+    from conftest import notify
 
     task = send_message(client, new_task(client)).json()
-    documents = [
-        {"kind": kind, "base_version": 0, "body": "문" * 100000, "summary": "Created"}
-        for kind in ("requirements", "plan")
-    ]
-    text = planning_text("Saved both documents", documents)
-    assert len(text) > 100000
-    item = {"id": "large-final", "type": "agentMessage", "phase": "final_answer", "text": text}
+    plan_body = "문" * 100000
+    item = {"id": "large-final", "type": "plan", "text": plan_body}
     if streamed:
         notify(client, task, "item/started", {"item": {**item, "text": ""}})
-        for offset in range(0, len(text), 40000):
+        for offset in range(0, len(plan_body), 40000):
             notify(
                 client,
                 task,
-                "item/agentMessage/delta",
+                "item/plan/delta",
                 {
                     "itemId": item["id"],
-                    "delta": text[offset : offset + 40000],
+                    "delta": plan_body[offset : offset + 40000],
                 },
             )
-    else:
-        notify(client, task, "item/completed", {"item": item})
+    notify(client, task, "item/completed", {"item": item})
     notify(
         client,
         task,
@@ -350,15 +333,12 @@ def test_large_planning_final_preserves_both_documents_and_command_limit(client,
     notify(client, task, "turn/completed", {"turn": {"id": task["turn_id"], "status": "completed"}})
     saved = client.get(f"/api/tasks/{task['id']}").json()
     assert saved["error_code"] is None
-    assert [r["body"] for r in saved["revisions"]] == [d["body"] for d in documents]
-    assert (
-        next(i for i in saved["items"] if i["id"] == "large-final")["text"]
-        == "Saved both documents"
-    )
+    assert [r["body"] for r in saved["revisions"]] == [plan_body]
+    assert next(i for i in saved["items"] if i["id"] == "large-final")["text"] == plan_body
     output = next(i for i in saved["items"] if i["id"] == "command")["aggregatedOutput"]
     assert len(output) == 100000 and output.endswith("end")
 
-    # Recovery projects old planning finals while the task is now implementing/reviewing.
+    # Recovery keeps the native plan while the task is now implementing/reviewing.
     response = client.post(
         f"/api/tasks/{task['id']}/implement",
         json={
@@ -397,8 +377,7 @@ def test_large_planning_final_preserves_both_documents_and_command_limit(client,
         assert history["stage"] == "review"
         assert history["revisions"] == saved["revisions"]
         final = next(i for i in history["items"] if i["id"] == "large-final")
-        assert final["text"] == "Saved both documents"
-        assert len(final["document_updates"]) == 2
+        assert final["text"] == plan_body
         output = next(i for i in history["items"] if i["id"] == "command")["aggregatedOutput"]
         assert len(output) == 100000 and output.endswith("end")
 

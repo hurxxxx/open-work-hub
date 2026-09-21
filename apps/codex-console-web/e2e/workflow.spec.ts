@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('requirements, saved plan, implementation, diff and refresh recovery', async ({
+test('native plan, implementation, diff and refresh recovery', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -17,6 +17,11 @@ test('requirements, saved plan, implementation, diff and refresh recovery', asyn
   await page.getByLabel('작업 제목').fill('인사말 기능 개발');
   await page.getByRole('button', { name: '작업 만들기' }).click();
   await expect(page.getByLabel('실행 모드')).toHaveValue('plan');
+  await expect(
+    page
+      .getByRole('navigation', { name: '결과물' })
+      .getByRole('button', { name: '요구사항', exact: true }),
+  ).toHaveCount(0);
   await page
     .getByLabel('요청 내용 입력')
     .fill('Inspect the project and make a plan.');
@@ -312,7 +317,7 @@ test('planning answers ordinary questions without creating documents and shows a
     .fill('Explain the current workspace.');
   await page.getByRole('button', { name: '보내기', exact: true }).click();
   await expect(
-    page.getByText('This is a general answer; saved documents are unchanged.'),
+    page.getByText('This is a general answer; saved plan is unchanged.'),
   ).toBeVisible();
   await expect(page.getByLabel('현재 실행 상태')).toContainText('준비됨');
   const taskId = new URL(page.url()).searchParams.get('task');

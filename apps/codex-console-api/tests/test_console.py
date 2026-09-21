@@ -6,11 +6,11 @@ import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from conftest import complete, new_task, notify, plan, send_message
+from conftest import complete, new_task, notify, plan, planning_text, send_message
 from sqlalchemy import select, text
 
-from codex_console import auth
-from codex_console.models import Base, PendingRequest, Task, database
+from codex_console import auth, store
+from codex_console.models import Base, PendingRequest, Revision, Task, database
 from codex_console.runtime import QUESTION
 
 
@@ -206,7 +206,7 @@ def test_body_size_boundary(client):
 def test_document_json_supports_full_unicode_character_limit(client, character, escaped):
     task = new_task(client)
     endpoint = f"/api/tasks/{task['id']}/documents"
-    body = {"kind": "requirements", "base_version": 0, "body": character * 100000}
+    body = {"base_version": 0, "body": character * 100000}
     response = client.put(
         endpoint,
         content=json.dumps(body, ensure_ascii=escaped).encode(),
@@ -258,7 +258,7 @@ def test_detail_cursor_and_projection_share_a_database_snapshot(client, monkeypa
     assert after["event_id"] > during["event_id"]
 
 
-def test_requirements_and_plan_turns_are_read_only(client):
+def test_native_plan_turns_are_read_only_and_project_the_final_plan(client):
     task = send_message(client, new_task(client)).json()
     rpc = client.app.state.runtime.rpc
     thread = next(params for method, params in rpc.calls if method == "thread/start")
@@ -268,8 +268,41 @@ def test_requirements_and_plan_turns_are_read_only(client):
     assert turn["sandboxPolicy"] == {"type": "readOnly", "networkAccess": False}
     assert turn["approvalPolicy"] == "never"
     assert turn["collaborationMode"]["mode"] == "plan"
-    result = complete(client, task, "Requirements with acceptance evidence", kind="requirements")
-    assert result["revisions"][0]["kind"] == "requirements"
+    result = complete(
+        client,
+        task,
+        "<proposed_plan>\nPlan with acceptance evidence\n</proposed_plan>",
+    )
+    assert result["revisions"][0]["kind"] == "plan"
+    assert result["revisions"][0]["body"] == "Plan with acceptance evidence"
+    assert result["items"][-1]["text"] == "Plan with acceptance evidence"
+    assert "outputSchema" not in turn
+    assert "planning" not in turn["additionalContext"]
+    updated = send_message(client, result, text="Refine the saved plan").json()
+    assert updated["status"] == "running"
+    resumed = [params for method, params in rpc.calls if method == "turn/start"][-1]
+    assert json.loads(resumed["additionalContext"]["saved_plan"]["value"]) == {
+        "version": 1,
+        "body": "Plan with acceptance evidence",
+    }
+
+
+def test_existing_wrapped_plan_is_unwrapped_for_display_and_execution(client):
+    task = plan(client)
+    with client.app.state.factory.begin() as db:
+        revision = db.get(Revision, task["revisions"][-1]["id"])
+        revision.body = "<proposed_plan>\nRecovered plan\n</proposed_plan>"
+    detail = client.get(f"/api/tasks/{task['id']}").json()
+    assert detail["revisions"][-1]["body"] == "Recovered plan"
+    response = client.post(
+        f"/api/tasks/{task['id']}/implement",
+        json={"operation_id": str(uuid4()), "revision_id": revision.id},
+    )
+    assert response.status_code == 200
+    params = [
+        params for method, params in client.app.state.runtime.rpc.calls if method == "turn/start"
+    ][-1]
+    assert params["additionalContext"]["approved_plan"]["value"] == "Recovered plan"
 
 
 def test_implementation_requires_current_plan_and_is_idempotent(client):
@@ -289,28 +322,35 @@ def test_implementation_requires_current_plan_and_is_idempotent(client):
     assert first.json()["approved_revision"] == body["revision_id"]
 
 
-def test_modified_requirements_invalidate_plan(client):
+def test_retired_requirements_do_not_invalidate_the_native_plan(client):
     task = plan(client)
-    assert (
-        client.put(
-            f"/api/tasks/{task['id']}/documents",
-            json={"kind": "requirements", "base_version": 0, "body": "Changed scope"},
-        ).status_code
-        == 200
-    )
+    with client.app.state.factory.begin() as db:
+        row = db.get(Task, task["id"])
+        store.save_revision(db, row, "requirements", "Legacy scope")
+    assert [row["kind"] for row in client.get(f"/api/tasks/{task['id']}").json()["revisions"]] == [
+        "plan"
+    ]
     result = client.post(
         f"/api/tasks/{task['id']}/implement",
         json={"operation_id": str(uuid4()), "revision_id": task["revisions"][-1]["id"]},
     )
-    assert result.json()["code"] == "stale_plan"
+    assert result.status_code == 200
 
 
 def test_documents_use_optimistic_version_check(client):
     task = plan(client)
     endpoint = f"/api/tasks/{task['id']}/documents"
-    body = {"kind": "plan", "base_version": 1, "body": "Revised plan"}
+    body = {"base_version": 1, "body": "Revised plan"}
     assert client.put(endpoint, json=body).status_code == 200
     assert client.put(endpoint, json=body).json()["code"] == "stale_document"
+
+
+def test_document_endpoint_accepts_the_previous_plan_payload_but_rejects_requirements(client):
+    endpoint = f"/api/tasks/{new_task(client)['id']}/documents"
+    body = {"kind": "plan", "base_version": 0, "body": "Compatible plan"}
+    assert client.put(endpoint, json=body).status_code == 200
+    body.update(kind="requirements", base_version=1)
+    assert client.put(endpoint, json=body).status_code == 422
 
 
 def test_task_search_reaches_older_isolated_tasks_beyond_recent_limit(client, repository):
@@ -335,24 +375,10 @@ def test_task_search_reaches_older_isolated_tasks_beyond_recent_limit(client, re
     assert client.get("/api/tasks", params={"search": "x" * 201}).status_code == 422
 
 
-def test_identical_regenerated_plan_can_approve_new_requirements(client):
+def test_identical_native_plan_is_saved_as_a_new_authoritative_version(client):
     task = plan(client)
     previous = task["revisions"][-1]
     endpoint = f"/api/tasks/{task['id']}"
-    assert (
-        client.put(
-            endpoint + "/documents",
-            json={"kind": "requirements", "base_version": 0, "body": "Clarified scope"},
-        ).status_code
-        == 200
-    )
-    assert (
-        client.post(
-            endpoint + "/implement",
-            json={"operation_id": str(uuid4()), "revision_id": previous["id"]},
-        ).json()["code"]
-        == "stale_plan"
-    )
     task = send_message(client, task, "plan").json()
     task = complete(client, task, previous["body"])
     revised = [row for row in task["revisions"] if row["kind"] == "plan"][-1]
@@ -605,7 +631,14 @@ def test_delta_and_final_plan_are_projected_from_official_items(client):
     notify(client, task, "item/started", {"item": {"id": "plan-item", "type": "plan", "text": ""}})
     notify(client, task, "item/plan/delta", {"itemId": "plan-item", "delta": "partial"})
     assert client.get(f"/api/tasks/{task['id']}").json()["items"][-1]["text"] == "partial"
-    result = complete(client, task, "authoritative final plan")
+    notify(
+        client,
+        task,
+        "item/completed",
+        {"item": {"id": "plan-item", "type": "plan", "text": "authoritative final plan"}},
+    )
+    notify(client, task, "turn/completed", {"turn": {"id": task["turn_id"], "status": "completed"}})
+    result = client.get(f"/api/tasks/{task['id']}").json()
     assert result["revisions"][-1]["body"] == "authoritative final plan"
 
 
@@ -788,4 +821,98 @@ def test_previous_execution_migration_preserves_existing_tasks_and_documents(cli
             )
             == task["revisions"][0]["body"]
         )
+        transaction.rollback()
+
+
+def test_native_plan_migration_backfills_a_missing_structured_plan(client):
+    from codex_console.cli import ROOT
+
+    task = plan(client)
+    spec = spec_from_file_location(
+        "native_plans", ROOT / "migrations/versions/0007_native_plans.py"
+    )
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = client.app.state.factory.kw["bind"]
+    with engine.connect() as connection, connection.begin() as transaction:
+        connection.execute(
+            text("DELETE FROM console_revisions WHERE task_id = :id"), {"id": task["id"]}
+        )
+        connection.execute(
+            text(
+                "UPDATE console_items SET payload = CAST(:payload AS json) "
+                "WHERE task_id = :id AND payload->>'type' = 'plan'"
+            ),
+            {
+                "id": task["id"],
+                "payload": json.dumps(
+                    {
+                        "id": "native-plan",
+                        "type": "plan",
+                        "text": planning_text("Recovered native plan", []),
+                    }
+                ),
+            },
+        )
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+            migration.upgrade()
+        revisions = connection.execute(
+            text(
+                "SELECT kind, version, body FROM console_revisions "
+                "WHERE task_id = :id ORDER BY id"
+            ),
+            {"id": task["id"]},
+        ).all()
+        assert revisions == [("plan", 1, "Recovered native plan")]
+        transaction.rollback()
+
+
+def test_legacy_plan_answer_migration_requires_an_accepted_plan_operation(client):
+    from codex_console.cli import ROOT
+
+    operation_id = str(uuid4())
+    task = send_message(
+        client, new_task(client), "plan", operation_id=operation_id
+    ).json()
+    turn_id = task["turn_id"]
+    task = complete(
+        client,
+        task,
+        "<proposed_plan>\nRecovered legacy answer\n</proposed_plan>",
+        documents=[],
+    )
+    assert task["revisions"] == []
+    spec = spec_from_file_location(
+        "legacy_plan_answers", ROOT / "migrations/versions/0008_legacy_plan_answers.py"
+    )
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = client.app.state.factory.kw["bind"]
+    with engine.connect() as connection, connection.begin() as transaction:
+        connection.execute(
+            text(
+                "INSERT INTO console_items (task_id, item_id, turn_id, payload) "
+                "VALUES (:task_id, :item_id, :turn_id, CAST(:payload AS json))"
+            ),
+            {
+                "task_id": task["id"],
+                "item_id": str(uuid4()),
+                "turn_id": turn_id,
+                "payload": json.dumps(
+                    {"id": str(uuid4()), "type": "userMessage", "clientId": operation_id}
+                ),
+            },
+        )
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+            migration.upgrade()
+        revisions = connection.execute(
+            text(
+                "SELECT kind, version, body FROM console_revisions "
+                "WHERE task_id = :id ORDER BY id"
+            ),
+            {"id": task["id"]},
+        ).all()
+        assert revisions == [("plan", 1, "Recovered legacy answer")]
         transaction.rollback()

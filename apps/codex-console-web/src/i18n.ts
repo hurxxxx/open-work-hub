@@ -123,12 +123,11 @@ export const korean = {
   Close: '닫기',
   'No tasks yet': '아직 작업이 없습니다',
   'Start with what you want to change.': '바꾸고 싶은 내용을 이야기해 주세요.',
-  'Describe a feature or a problem. Codex will inspect the repository and help define the requirements.':
-    '필요한 기능이나 문제를 설명하세요. Codex가 저장소를 살펴보고 요구사항을 함께 정리합니다.',
+  'Describe a feature or a problem. Codex will inspect the repository and create a plan.':
+    '필요한 기능이나 문제를 설명하세요. Codex가 저장소를 살펴보고 계획을 작성합니다.',
   'Task title': '작업 제목',
   'Create task': '작업 만들기',
   Cancel: '취소',
-  Requirements: '요구사항',
   Plan: '계획',
   Execute: '실행',
   Review: '검토',
@@ -171,9 +170,6 @@ export const korean = {
   Version: '버전',
   'No document yet. Continue the conversation to create one.':
     '아직 문서가 없습니다. 대화를 진행하면 여기에 정리됩니다.',
-  'Create execution plan': '실행 계획 작성',
-  'Create an execution plan from the requirements, including acceptance checks.':
-    '요구사항을 바탕으로 완료 조건과 검증 방법을 포함한 실행 계획을 작성해 주세요.',
   'Execute this plan': '이 계획으로 실행',
   'Execute the saved plan?': '저장된 계획으로 실행할까요?',
   'Codex may edit this checkout and run checks. The approved plan does not authorize publishing or deployment.':
@@ -223,7 +219,7 @@ export const korean = {
   'Connect your ChatGPT account in Codex.':
     'Codex에 ChatGPT 계정을 연결해 주세요.',
   'The saved plan changed. Review the latest version.':
-    '계획 또는 요구사항이 바뀌었습니다. 최신 계획을 확인해 주세요.',
+    '저장된 계획이 바뀌었습니다. 최신 계획을 확인해 주세요.',
   'The document changed in another tab. Reload the latest version.':
     '다른 탭에서 문서가 바뀌었습니다. 최신 버전을 다시 불러오세요.',
   'Another task is running. Finish or recover it first.':

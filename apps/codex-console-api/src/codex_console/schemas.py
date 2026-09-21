@@ -83,7 +83,7 @@ class GitStatusOut(BaseModel):
 
 
 class DocumentInput(Input):
-    kind: Literal["requirements", "plan"]
+    kind: Literal["plan"] | None = None
     base_version: int = Field(ge=0)
     body: str = Field(min_length=1, max_length=DOCUMENT_CHAR_LIMIT)
 

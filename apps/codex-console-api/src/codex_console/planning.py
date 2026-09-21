@@ -1,4 +1,4 @@
-"""The native final-output schema separates conversation from optional documents."""
+"""Compatibility parser for structured planning turns created before native plan projection."""
 
 from typing import Literal
 
@@ -26,15 +26,12 @@ def parse(text):
         return None
 
 
-INSTRUCTIONS = """
-Planning includes ordinary questions, investigation and optional document authoring.
-Return an answer and documents using the supplied output schema. For an ordinary question,
-documents is empty: do not create a document merely because planning mode is selected.
-Create requirements or a plan when the user requests that document. Once a document exists,
-update it for the user's confirmed changes and decisions without requiring repeated save requests.
-Do not treat exploratory questions or suggestions as confirmed scope. Separate open questions
-from decisions. Keep unrelated content and follow the user's requested document format.
-Use the supplied document base_version (0 for a new document), return the full updated body,
-and explain the changes in summary and answer. Omit unchanged documents. Output at most one
-update of each kind. These are console documents, not permission to edit repository files.
-"""
+def unwrap_proposed_plan(text: str) -> str:
+    """Remove the presentation wrapper used by older Codex plan answers."""
+    opening = "<proposed_plan>"
+    closing = "</proposed_plan>"
+    candidate = text.strip()
+    if not candidate.startswith(opening) or not candidate.endswith(closing):
+        return text
+    body = candidate[len(opening) : -len(closing)].strip()
+    return body or text

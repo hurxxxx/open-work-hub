@@ -51,9 +51,7 @@ def save_revision(db, task: Task, kind: str, body: str, *, source_turn_id=None):
             return projected
     previous = latest_revision(db, task.id, kind)
     if previous and previous.body == body and not source_turn_id:
-        requirements = latest_revision(db, task.id, "requirements") if kind == "plan" else None
-        if requirements is None or requirements.created_at <= previous.created_at:
-            return previous
+        return previous
     row = Revision(
         task_id=task.id,
         kind=kind,
@@ -68,42 +66,59 @@ def save_revision(db, task: Task, kind: str, body: str, *, source_turn_id=None):
     return row
 
 
-def project_document(db, task, turn_id, items):
+def project_plan(db, task, turn_id, items):
     if task.stage != "plan":
         return
-    final = [
-        i for i in items if i.get("type") == "agentMessage" and i.get("phase") == "final_answer"
+    if db.scalar(
+        select(Revision.id).where(
+            Revision.task_id == task.id,
+            Revision.kind == "plan",
+            Revision.source_turn_id == turn_id,
+        )
+    ):
+        return
+
+    expected_version = None
+    plans = [
+        item
+        for item in items
+        if item.get("type") == "plan"
+        and isinstance(item.get("text"), str)
+        and item["text"].strip()
     ]
-    final = final or [i for i in items if i.get("type") == "plan"]
-    result = planning.parse(final[-1].get("text", "")) if final else None
-    if result is None:
-        task.error_code = "planning_output_invalid"
-        changed(db, task, "document.rejected")
-        return
-    kinds = [update.kind for update in result.documents]
-    if len(kinds) != len(set(kinds)):
-        task.error_code = "planning_output_invalid"
-        changed(db, task, "document.rejected")
-        return
-    pending = []
-    for document in result.documents:
-        if db.scalar(
-            select(Revision.id).where(
-                Revision.task_id == task.id,
-                Revision.kind == document.kind,
-                Revision.source_turn_id == turn_id,
-            )
-        ):
-            continue
-        latest = latest_revision(db, task.id, document.kind)
-        if (latest.version if latest else 0) != document.base_version:
-            task.error_code = "document_conflict"
-            changed(db, task, "document.rejected")
+    if plans:
+        body = plans[-1]["text"]
+        # A short-lived older console contract encoded the answer and optional
+        # documents inside the native plan item. Keep those completed turns
+        # recoverable while treating new native Markdown plan items verbatim.
+        structured = planning.parse(body)
+        if structured:
+            document = next((row for row in structured.documents if row.kind == "plan"), None)
+            body = document.body if document else structured.answer
+            expected_version = document.base_version if document else None
+    else:
+        finals = [
+            item
+            for item in items
+            if item.get("type") == "agentMessage" and item.get("phase") == "final_answer"
+        ]
+        structured = planning.parse(finals[-1].get("text", "")) if finals else None
+        document = (
+            next((row for row in structured.documents if row.kind == "plan"), None)
+            if structured
+            else None
+        )
+        if document is None:
             return
-        pending.append(document)
-    # A plan based on this same confirmed change must be newer than its requirements.
-    for document in sorted(pending, key=lambda document: document.kind == "plan"):
-        save_revision(db, task, document.kind, document.body, source_turn_id=turn_id)
+        body, expected_version = document.body, document.base_version
+
+    body = planning.unwrap_proposed_plan(body)
+    latest = latest_revision(db, task.id, "plan")
+    if expected_version is not None and (latest.version if latest else 0) != expected_version:
+        task.error_code = "document_conflict"
+        changed(db, task, "document.rejected")
+        return
+    save_revision(db, task, "plan", body, source_turn_id=turn_id)
 
 
 def recover_document(db, task, turns):
@@ -154,7 +169,7 @@ def recover_document(db, task, turns):
                     kind = "plan" if operation.kind == "legacy_plan" else "requirements"
                     save_revision(db, task, kind, final[-1]["text"], source_turn_id=turn["id"])
             else:
-                project_document(db, task, turn["id"], items)
+                project_plan(db, task, turn["id"], items)
             return
 
 
@@ -236,19 +251,9 @@ def detail(factory, task_id, settings):
         for item in items:
             if item.get("type") in ("agentMessage", "plan"):
                 result = planning.parse(item.get("text", ""))
-                if result:
-                    item["text"] = result.answer
-                    item["document_updates"] = [
-                        {"kind": document.kind, "summary": document.summary}
-                        for document in result.documents
-                    ]
-                elif (
-                    task.stage == "plan"
-                    and task.status in ACTIVE
-                    and item["turn_id"] == task.turn_id
-                    and item.get("phase") == "final_answer"
-                ):
-                    item["text"] = ""
+                item["text"] = planning.unwrap_proposed_plan(
+                    result.answer if result else item.get("text", "")
+                )
         message_ids = [
             i["clientId"] for i in items if i.get("type") == "userMessage" and i.get("clientId")
         ]
@@ -287,11 +292,13 @@ def detail(factory, task_id, settings):
                     "id": r.id,
                     "kind": r.kind,
                     "version": r.version,
-                    "body": r.body,
+                    "body": planning.unwrap_proposed_plan(r.body),
                     "created_at": r.created_at.isoformat(),
                 }
                 for r in db.scalars(
-                    select(Revision).where(Revision.task_id == task_id).order_by(Revision.id)
+                    select(Revision)
+                    .where(Revision.task_id == task_id, Revision.kind == "plan")
+                    .order_by(Revision.id)
                 )
             ],
             "items": items,
@@ -321,17 +328,10 @@ def detail(factory, task_id, settings):
 
 
 def bounded_item_text(task, payload, key, value):
-    # Structured planning finals contain an answer and up to two full documents.
-    # Keep the transport byte bound without applying the command-output tail limit.
-    if key == "text" and (
-        payload.get("type") == "plan"
-        or (
-            payload.get("type") == "agentMessage" and payload.get("phase") in (None, "final_answer")
-        )
-    ):
+    # Native plan items are authoritative documents and must keep their beginning.
+    if key == "text" and payload.get("type") == "plan":
         bounded = value.encode("utf-8")[:MAX_MESSAGE_BYTES].decode("utf-8", errors="ignore")
-        if task.stage == "plan" or planning.parse(bounded) is not None:
-            return bounded
+        return bounded
     return value[-100000:]
 
 
