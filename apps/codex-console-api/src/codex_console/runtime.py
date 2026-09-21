@@ -7,7 +7,7 @@ from pathlib import Path
 from jsonschema import Draft7Validator
 from sqlalchemy import select, update
 
-from . import attachments, git, planning, store
+from . import attachments, git, store
 from .auth import digest
 from .errors import ConsoleError
 from .models import Item, Operation, PendingRequest, Task
@@ -319,12 +319,7 @@ class Runtime:
                     raise ConsoleError("task_busy")
                 if stage == "implement" and revision_id is not None:
                     plan = store.latest_revision(db, task_id, "plan")
-                    requirements = store.latest_revision(db, task_id, "requirements")
-                    if (
-                        not plan
-                        or plan.id != revision_id
-                        or (requirements and requirements.created_at > plan.created_at)
-                    ):
+                    if not plan or plan.id != revision_id:
                         raise ConsoleError("stale_plan")
                     context["approved_plan"] = {"kind": "application", "value": plan.body}
                     text = text or "Implement the approved plan."
@@ -334,15 +329,14 @@ class Runtime:
                         raise ConsoleError("invalid_input", 422)
                     task.approved_revision = None
                 else:
-                    context["planning"] = {"kind": "application", "value": planning.INSTRUCTIONS}
-                    documents = []
-                    for kind in ("requirements", "plan"):
-                        revision = store.latest_revision(db, task_id, kind)
-                        if revision:
-                            documents.append(
-                                {"kind": kind, "version": revision.version, "body": revision.body}
-                            )
-                    context["documents"] = {"kind": "application", "value": json.dumps(documents)}
+                    plan = store.latest_revision(db, task_id, "plan")
+                    if plan:
+                        context["saved_plan"] = {
+                            "kind": "application",
+                            "value": json.dumps(
+                                {"version": plan.version, "body": plan.body}, ensure_ascii=False
+                            ),
+                        }
                 store.lease(db, task_id)
                 task.status, task.stage, task.error_code = "starting", stage, None
                 task.turn_id = None
@@ -464,8 +458,6 @@ class Runtime:
                     "model": chosen_model,
                     "effort": effort,
                 }
-                if stage == "plan":
-                    params["outputSchema"] = planning.PlanningOutput.model_json_schema()
                 # Commit the submission boundary before any turn can reach app-server.
                 with self.factory.begin() as db:
                     task = store.require_task(db, task_id, locked=True)
@@ -966,7 +958,7 @@ class Runtime:
                                 .order_by(Item.id)
                             )
                         )
-                        store.project_document(db, task, turn["id"], [r.payload for r in rows])
+                        store.project_plan(db, task, turn["id"], [r.payload for r in rows])
                     if task.stage == "implement":
                         try:
                             self.require_allowed_task(task)

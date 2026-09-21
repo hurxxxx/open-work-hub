@@ -492,11 +492,8 @@ export interface components {
         };
         /** DocumentInput */
         DocumentInput: {
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "requirements" | "plan";
+            /** Kind */
+            kind?: "plan" | null;
             /** Base Version */
             base_version: number;
             /** Body */

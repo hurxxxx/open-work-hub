@@ -72,7 +72,7 @@ def test_pre_structured_migration_recovers_only_original_completed_document(clie
         transaction.rollback()
 
 
-def test_unmarked_plan_markdown_stays_invalid_and_legacy_recovery_preserves_user_edit(client):
+def test_plain_agent_answer_is_ignored_and_legacy_recovery_preserves_user_edit(client):
     task = send_message(client, new_task(client)).json()
     with client.app.state.factory.begin() as db:
         row = db.get(Task, task["id"])
@@ -90,7 +90,7 @@ def test_unmarked_plan_markdown_stays_invalid_and_legacy_recovery_preserves_user
             }
         ]
         store.recover_document(db, row, turns)
-        assert row.error_code == "planning_output_invalid"
+        assert row.error_code is None
         assert not list(db.scalars(select(Revision).where(Revision.task_id == row.id)))
         db.get(Operation, row.current_operation_id).kind = "legacy_plan"
         store.save_revision(db, row, "plan", "A later owner edit")

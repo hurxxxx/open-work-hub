@@ -215,18 +215,25 @@ def planning_text(answer, documents=()):
     return json.dumps({"answer": answer, "documents": list(documents)})
 
 
-def complete(
-    client, task, body="An actionable plan", status="completed", *, kind="plan", documents=None
-):
+def complete(client, task, body="An actionable plan", status="completed", *, documents=None):
     if task["stage"] == "plan":
-        current = client.get(f"/api/tasks/{task['id']}").json()
-        latest = max((r["version"] for r in current["revisions"] if r["kind"] == kind), default=0)
-        if documents is None:
-            documents = [
-                {"kind": kind, "base_version": latest, "body": body, "summary": "Updated document"}
-            ]
-        body = planning_text(body, documents)
-    item = {"id": str(uuid4()), "type": "agentMessage", "phase": "final_answer", "text": body}
+        item = (
+            {"id": str(uuid4()), "type": "plan", "text": body}
+            if documents is None
+            else {
+                "id": str(uuid4()),
+                "type": "agentMessage",
+                "phase": "final_answer",
+                "text": planning_text(body, documents),
+            }
+        )
+    else:
+        item = {
+            "id": str(uuid4()),
+            "type": "agentMessage",
+            "phase": "final_answer",
+            "text": body,
+        }
     notify(client, task, "item/completed", {"item": item})
     notify(client, task, "turn/completed", {"turn": {"id": task["turn_id"], "status": status}})
     return client.get(f"/api/tasks/{task['id']}").json()

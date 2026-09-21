@@ -82,7 +82,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
             if not guard.scalar(text("SELECT pg_try_advisory_lock(18701, 1)")):
                 raise RuntimeError("Run exactly one console API process per database")
             revision = guard.scalar(text("SELECT version_num FROM console_alembic_version"))
-            if revision != "console_0006":
+            if revision != "console_0007":
                 raise RuntimeError("Run codex-console migrate before starting the server")
             store.recover_startup(factory)
             runtime = Runtime(app.state.settings, factory, rpc_factory)
@@ -432,10 +432,10 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
             task = store.require_task(db, task_id, locked=True)
             if task.status in (*store.ACTIVE, "uncertain"):
                 raise ConsoleError("task_busy")
-            latest = store.latest_revision(db, task_id, body.kind)
+            latest = store.latest_revision(db, task_id, "plan")
             if (latest.version if latest else 0) != body.base_version:
                 raise ConsoleError("stale_document")
-            store.save_revision(db, task, body.kind, body.body)
+            store.save_revision(db, task, "plan", body.body)
         return store.detail(app.state.factory, task_id, app.state.settings)
 
     @app.post("/api/tasks/{task_id}/messages", dependencies=secured, response_model=TaskDetail)

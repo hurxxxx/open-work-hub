@@ -85,10 +85,9 @@ def test_recovery_can_acknowledge_native_confirmation_without_replaying(client):
     assert len([c for c in rpc.calls if c[0] == "turn/start"]) == 1
 
 
-@pytest.mark.parametrize("kind", ["requirements", "plan"])
 @pytest.mark.parametrize("lost_response", [False, True])
-def test_recovery_projects_completed_document_once_and_preserves_user_edits(
-    client, kind, lost_response
+def test_recovery_projects_completed_native_plan_once_and_preserves_user_edits(
+    client, lost_response
 ):
     client.get("/api/codex/account")
     runtime = client.app.state.runtime
@@ -110,17 +109,7 @@ def test_recovery_projects_completed_document_once_and_preserves_user_edits(
                 {
                     "id": "document",
                     "type": "plan",
-                    "text": planning_text(
-                        "Recovered",
-                        [
-                            {
-                                "kind": kind,
-                                "base_version": 0,
-                                "body": "Recovered complete document",
-                                "summary": "Created",
-                            }
-                        ],
-                    ),
+                    "text": "Recovered complete plan",
                 },
             ],
         }
@@ -131,15 +120,14 @@ def test_recovery_projects_completed_document_once_and_preserves_user_edits(
     assert recovered.status_code == 200
     revisions = recovered.json()["revisions"]
     assert len(revisions) == 1
-    assert revisions[0]["kind"] == kind
-    assert revisions[0]["body"] == "Recovered complete document"
+    assert revisions[0]["kind"] == "plan"
+    assert revisions[0]["body"] == "Recovered complete plan"
     assert client.post(endpoint + "/recover", json={}).json()["revisions"] == revisions
     edited = client.put(
         endpoint + "/documents",
         json={
-            "kind": kind,
             "base_version": 1,
-            "body": "User revised the recovered document",
+            "body": "User revised the recovered plan",
         },
     ).json()["revisions"]
     assert client.post(endpoint + "/recover", json={}).json()["revisions"] == edited
@@ -426,8 +414,7 @@ def test_failed_steer_preparation_can_retry_but_uncertain_steer_cannot(client, m
 
 
 @pytest.mark.parametrize("mode", ["manual", "retry"])
-@pytest.mark.parametrize("invalid", ["malformed", "duplicate_kind", "conflicting_version"])
-def test_recovery_preserves_document_rejection_errors_and_existing_revisions(client, mode, invalid):
+def test_recovery_preserves_plan_conflicts_and_existing_revisions(client, mode):
     task = plan(client)
     revisions = task["revisions"]
     runtime = client.app.state.runtime
@@ -436,14 +423,8 @@ def test_recovery_preserves_document_rejection_errors_and_existing_revisions(cli
     operation_id = str(uuid4())
     assert send_message(client, task, operation_id=operation_id).status_code == 503
     rpc.fail_turn = False
-    document = {"kind": "plan", "base_version": 1, "body": "Proposed update", "summary": "Updated"}
-    output = "malformed response"
-    expected = "planning_output_invalid"
-    if invalid == "duplicate_kind":
-        output = planning_text("Updated", [document, document])
-    elif invalid == "conflicting_version":
-        output = planning_text("Updated", [{**document, "base_version": 99}])
-        expected = "document_conflict"
+    document = {"kind": "plan", "base_version": 99, "body": "Proposed update", "summary": "Updated"}
+    output = planning_text("Updated", [document])
     rpc.threads[task["thread_id"]]["turns"] = [
         {
             "id": "completed-missing-response",
@@ -461,7 +442,7 @@ def test_recovery_preserves_document_rejection_errors_and_existing_revisions(cli
             else send_message(client, task, operation_id=operation_id)
         )
         assert response.status_code == 200
-        assert response.json()["error_code"] == expected
+        assert response.json()["error_code"] == "document_conflict"
         assert response.json()["revisions"] == revisions
     assert sum(method == "turn/start" for method, _ in rpc.calls) == 2
     assert not any(method == "turn/steer" for method, _ in rpc.calls)

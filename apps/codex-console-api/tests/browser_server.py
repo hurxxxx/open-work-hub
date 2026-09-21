@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import psycopg
 import uvicorn
-from conftest import PASSWORD, FakeRPC, planning_text
+from conftest import PASSWORD, FakeRPC
 from psycopg import sql
 from sqlalchemy.engine import make_url
 
@@ -59,31 +59,21 @@ class BrowserRPC(FakeRPC):
         )
         await asyncio.sleep(3)
         if params["collaborationMode"]["mode"] == "plan":
-            # Deterministic protocol fixture: the tests use an explicit document request.
-            wants_document = "make a plan" in params["input"][0].get("text", "")
-            documents = (
-                [
-                    {
-                        "kind": "plan",
-                        "base_version": 0,
-                        "body": "# Greeting\nAdd a greeting and run a focused check.",
-                        "summary": "Created plan",
-                    }
-                ]
-                if wants_document
-                else []
+            wants_plan = "make a plan" in params["input"][0].get("text", "")
+            item = (
+                {
+                    "id": str(uuid4()),
+                    "type": "plan",
+                    "text": "# Greeting\nAdd a greeting and run a focused check.",
+                }
+                if wants_plan
+                else {
+                    "id": str(uuid4()),
+                    "type": "agentMessage",
+                    "phase": "final_answer",
+                    "text": "This is a general answer; saved plan is unchanged.",
+                }
             )
-            item = {
-                "id": str(uuid4()),
-                "type": "agentMessage",
-                "phase": "final_answer",
-                "text": planning_text(
-                    "Plan saved."
-                    if documents
-                    else "This is a general answer; saved documents are unchanged.",
-                    documents,
-                ),
-            }
         else:
             (Path(params["cwd"]) / "greeting.txt").write_text("Hello from the Codex console.\n")
             command = {

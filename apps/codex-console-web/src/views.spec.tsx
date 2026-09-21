@@ -82,11 +82,9 @@ describe('plan authorization UI', () => {
     render(
       <Documents
         task={task}
-        kind="plan"
         t={t}
         busy={false}
         onSave={onSave}
-        onPlan={vi.fn()}
         onImplement={onImplement}
       />,
     );
@@ -104,14 +102,13 @@ describe('plan authorization UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save document' }));
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith({
-        kind: 'plan',
         base_version: 1,
         body: 'Changed scope',
       }),
     );
     expect(onImplement).not.toHaveBeenCalled();
   });
-  it('does not enable implementation when a newer requirements version exists', () => {
+  it('ignores retired requirements revisions when authorizing the plan', () => {
     const changed = {
       ...task,
       revisions: [
@@ -128,11 +125,9 @@ describe('plan authorization UI', () => {
     render(
       <Documents
         task={changed}
-        kind="plan"
         t={t}
         busy={false}
         onSave={vi.fn()}
-        onPlan={vi.fn()}
         onImplement={vi.fn()}
       />,
     );
@@ -142,17 +137,15 @@ describe('plan authorization UI', () => {
           name: 'Execute this plan',
         }) as HTMLButtonElement
       ).disabled,
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('preserves the draft and its base across server updates and preview', () => {
     const onSave = vi.fn();
     const props = {
-      kind: 'plan' as const,
       t,
       busy: false,
       onSave,
-      onPlan: vi.fn(),
       onImplement: vi.fn(),
     };
     const { rerender } = render(<Documents {...props} task={task} />);
@@ -208,11 +201,9 @@ describe('plan authorization UI', () => {
   it('keeps failed saves and clears the draft only after a successful save', async () => {
     const onSave = vi.fn().mockResolvedValue(false);
     const props = {
-      kind: 'plan' as const,
       t,
       busy: false,
       onSave,
-      onPlan: vi.fn(),
       onImplement: vi.fn(),
     };
     const { rerender } = render(<Documents {...props} task={task} />);
@@ -252,7 +243,6 @@ describe('plan authorization UI', () => {
       ).toBeNull(),
     );
     expect(onSave).toHaveBeenLastCalledWith({
-      kind: 'plan',
       base_version: 1,
       body: 'My saved plan',
     });
