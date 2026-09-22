@@ -25,7 +25,12 @@ def test_openai_tool_specs_export_registered_read_tools() -> None:
 
     tool_names = [spec["function"]["name"] for spec in specs]
     assert tool_names == sorted(registry.tools.keys())
-    assert {"pms.search_tasks", "pms.get_task", "pms.list_task_lists"} <= set(tool_names)
+    assert {
+        "pms.search_tasks",
+        "pms.get_task",
+        "pms.list_task_lists",
+        "pms.get_task_list_options",
+    } <= set(tool_names)
     for spec in specs:
         function = spec["function"]
         assert spec["type"] == "function"

@@ -4,13 +4,16 @@ from collections.abc import Mapping
 from datetime import date
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 from pydantic_core import PydanticCustomError
 from sqlalchemy.orm import Session
 
 from open_work_hub_api.core.principal import CallerPrincipal
 from open_work_hub_api.core.settings import get_settings
 from open_work_hub_api.domains.ai.registry import AiCapabilityRegistry
+from open_work_hub_api.domains.ai.tool_argument_validation import (
+    STRICT_TOOL_ARGUMENTS_CONTEXT_KEY,
+)
 from open_work_hub_api.domains.auth.models import User
 from open_work_hub_api.domains.pms.app_catalog import PMS_APP
 from open_work_hub_api.domains.pms.approval_preview import (
@@ -52,28 +55,133 @@ class ListTaskListsArgs(_ToolArgsModel):
     team_id: str | None = None
 
 
+class GetTaskListOptionsArgs(_ToolArgsModel):
+    list_id: str = Field(..., min_length=1)
+
+
 class PmsCreateTaskAiInput(_ToolArgsModel):
     list_id: str = Field(..., min_length=1)
-    title: str = Field(..., min_length=1)
-    body: str | None = None
+    title: str = Field(..., min_length=2, max_length=180)
+    body: str | None = Field(default=None, max_length=4000)
+    status: str = Field(..., min_length=1, max_length=40)
+    priority: Literal["low", "medium", "high", "critical"] = "medium"
     assignee_ids: list[str] | None = Field(default=None, max_length=20)
-    labels: list[str] | None = Field(default=None, max_length=20)
-    due_date: date | None = None
+    labels: list[str] | None = Field(
+        default=None,
+        max_length=20,
+        description="PMS label IDs from pms.get_task_list_options.",
+    )
+    parent_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Parent task ID from the same PMS task list.",
+    )
+    start_date: date | None = Field(
+        default=None,
+        description="Task start date.",
+    )
+    due_date: date | None = Field(
+        default=None,
+        description="Task due date.",
+    )
+
+
+PmsTaskClearField = Literal["parent_id", "start_date", "due_date"]
 
 
 class PmsUpdateTaskAiInput(_ToolArgsModel):
     task_id: str = Field(..., min_length=1)
-    title: str | None = None
-    body: str | None = None
-    status: str | None = None
+    title: str | None = Field(default=None, min_length=2, max_length=180)
+    body: str | None = Field(default=None, max_length=4000)
+    status: str | None = Field(default=None, min_length=1, max_length=40)
+    priority: Literal["low", "medium", "high", "critical"] | None = None
     assignee_ids: list[str] | None = Field(default=None, max_length=20)
-    due_date: date | None = None
+    labels: list[str] | None = Field(
+        default=None,
+        max_length=20,
+        description="PMS label IDs from pms.get_task_list_options.",
+    )
+    parent_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Set a parent task ID. MCP null clears it; strict callers use clear_fields.",
+    )
+    start_date: date | None = Field(
+        default=None,
+        description="Set the start date. MCP null clears it; strict callers use clear_fields.",
+    )
+    due_date: date | None = Field(
+        default=None,
+        description="Set the due date. MCP null clears it; strict callers use clear_fields.",
+    )
+    archived: bool | None = None
+    clear_fields: list[PmsTaskClearField] | None = Field(
+        default=None,
+        max_length=3,
+        description=(
+            "Fields to clear when using a strict function schema. MCP callers may instead send "
+            "null for parent_id, start_date, or due_date."
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _translate_explicit_null_clears(
+        cls,
+        value: Any,
+        info: ValidationInfo,
+    ) -> Any:
+        if not isinstance(value, Mapping) or bool(
+            (info.context or {}).get(STRICT_TOOL_ARGUMENTS_CONTEXT_KEY)
+        ):
+            return value
+
+        translated = dict(value)
+        explicit_null_fields = [
+            field_name
+            for field_name in ("parent_id", "start_date", "due_date")
+            if field_name in translated and translated[field_name] is None
+        ]
+        if not explicit_null_fields:
+            return value
+
+        existing_clear_fields = translated.get("clear_fields")
+        if existing_clear_fields is not None and not isinstance(existing_clear_fields, list):
+            return value
+        translated["clear_fields"] = list(
+            dict.fromkeys([*(existing_clear_fields or []), *explicit_null_fields])
+        )
+        for field_name in explicit_null_fields:
+            translated.pop(field_name, None)
+        return translated
 
     @model_validator(mode="after")
     def _validate_has_mutation(self) -> "PmsUpdateTaskAiInput":
-        if self.model_fields_set.intersection(
-            {"title", "body", "status", "assignee_ids", "due_date"}
-        ):
+        cleared_fields = set(self.clear_fields or [])
+        conflicting_fields = sorted(
+            field_name for field_name in cleared_fields if getattr(self, field_name) is not None
+        )
+        if conflicting_fields:
+            raise ValueError(
+                "PMS task fields cannot be set and cleared together: "
+                + ", ".join(conflicting_fields)
+            )
+        mutable_fields = {
+            "title",
+            "body",
+            "status",
+            "priority",
+            "assignee_ids",
+            "labels",
+            "parent_id",
+            "start_date",
+            "due_date",
+            "archived",
+        }
+        if any(
+            field_name in self.model_fields_set and getattr(self, field_name) is not None
+            for field_name in mutable_fields
+        ) or bool(self.clear_fields):
             return self
         raise PydanticCustomError(
             "pms.update_mutable_field_required",
@@ -84,7 +192,7 @@ class PmsUpdateTaskAiInput(_ToolArgsModel):
 
 class PmsAddCommentAiInput(_ToolArgsModel):
     task_id: str = Field(..., min_length=1)
-    body: str = Field(..., min_length=1)
+    body: str = Field(..., min_length=1, max_length=4000)
 
 
 class PmsDeleteTaskAiInput(_ToolArgsModel):
@@ -172,6 +280,20 @@ def _list_task_lists(
     )
 
 
+def _get_task_list_options(
+    db: Session,
+    principal: CallerPrincipal,
+    user: User,
+    arguments: Mapping[str, Any],
+) -> dict[str, Any]:
+    return _pms_service().get_task_list_options_for_ai(
+        db,
+        principal=principal,
+        user=user,
+        list_id=str(arguments["list_id"]),
+    )
+
+
 def _create_task(
     db: Session,
     principal: CallerPrincipal,
@@ -180,18 +302,23 @@ def _create_task(
     *,
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
-    return _pms_service().create_task(
+    result = _pms_service().create_task(
         db,
         principal=principal,
         user=user,
         list_id=str(arguments["list_id"]),
         title=str(arguments["title"]),
         description=str(arguments.get("body") or ""),
+        status=str(arguments["status"]),
+        priority=str(arguments.get("priority") or "medium"),
         assignee_ids=_string_list_or_none(arguments.get("assignee_ids")),
+        parent_id=arguments.get("parent_id"),
+        start_date=arguments.get("start_date"),
         due_date=arguments.get("due_date"),
         label_ids=_string_list_or_none(arguments.get("labels")),
         approved_call_id=approved_call_id,
     )
+    return _with_resource_ids(result, result.get("id"))
 
 
 def _update_task(
@@ -203,16 +330,22 @@ def _update_task(
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
     provided_fields: set[str] = set()
+    clear_fields = set(_string_list_or_none(arguments.get("clear_fields")) or [])
     for field_name, service_field_name in (
         ("title", "title"),
         ("body", "description"),
         ("status", "status"),
+        ("priority", "priority"),
         ("assignee_ids", "assignee_ids"),
+        ("labels", "label_ids"),
+        ("parent_id", "parent_id"),
+        ("start_date", "start_date"),
         ("due_date", "due_date"),
+        ("archived", "archived"),
     ):
-        if field_name in arguments:
+        if field_name in arguments or field_name in clear_fields:
             provided_fields.add(service_field_name)
-    return _pms_service().update_task(
+    result = _pms_service().update_task(
         db,
         principal=principal,
         user=user,
@@ -221,10 +354,16 @@ def _update_task(
         title=arguments.get("title"),
         description=arguments.get("body"),
         status=arguments.get("status"),
+        priority=arguments.get("priority"),
         assignee_ids=_string_list_or_none(arguments.get("assignee_ids")),
-        due_date=arguments.get("due_date"),
+        label_ids=_string_list_or_none(arguments.get("labels")),
+        parent_id=None if "parent_id" in clear_fields else arguments.get("parent_id"),
+        start_date=None if "start_date" in clear_fields else arguments.get("start_date"),
+        due_date=None if "due_date" in clear_fields else arguments.get("due_date"),
+        archived=arguments.get("archived"),
         approved_call_id=approved_call_id,
     )
+    return _with_resource_ids(result, result.get("id"))
 
 
 def _add_comment(
@@ -235,7 +374,7 @@ def _add_comment(
     *,
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
-    return _pms_service().add_task_comment(
+    result = _pms_service().add_task_comment(
         db,
         principal=principal,
         user=user,
@@ -243,6 +382,7 @@ def _add_comment(
         body=str(arguments["body"]),
         approved_call_id=approved_call_id,
     )
+    return _with_resource_ids(result, arguments.get("task_id"), result.get("id"))
 
 
 def _delete_task(
@@ -253,19 +393,27 @@ def _delete_task(
     *,
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
-    return _pms_service().delete_task(
+    result = _pms_service().delete_task(
         db,
         principal=principal,
         user=user,
         task_id=str(arguments["task_id"]),
         approved_call_id=approved_call_id,
     )
+    return _with_resource_ids(result, result.get("id"))
 
 
 def _string_list_or_none(value: Any) -> list[str] | None:
     if value is None:
         return None
     return [str(item) for item in value]
+
+
+def _with_resource_ids(result: dict[str, Any], *values: Any) -> dict[str, Any]:
+    resource_ids = list(
+        dict.fromkeys(str(value) for value in values if isinstance(value, str) and value)
+    )
+    return {**result, "resource_ids": resource_ids}
 
 
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
@@ -309,10 +457,20 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     )
     registry.register_tool(
         name="pms.list_task_lists",
-        description="List PMS task lists in the current user.",
+        description="List PMS task lists accessible to the current user.",
         owner_domain="pms",
         handler=_list_task_lists,
         args_model=ListTaskListsArgs,
+    )
+    registry.register_tool(
+        name="pms.get_task_list_options",
+        description=(
+            "Load valid statuses, label IDs, assignee IDs, and editability for one accessible "
+            "PMS task list. Use this before creating or updating a task instead of guessing IDs."
+        ),
+        owner_domain="pms",
+        handler=_get_task_list_options,
+        args_model=GetTaskListOptionsArgs,
     )
 
     if not get_settings().ai_write_tools_enabled:
@@ -320,7 +478,10 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
 
     registry.register_tool(
         name="pms.create_task",
-        description="Create a PMS task in the current user.",
+        description=(
+            "Create one PMS task after resolving its list options. Do not guess status, label, "
+            "assignee, or parent IDs."
+        ),
         owner_domain="pms",
         handler=_create_task,
         args_model=PmsCreateTaskAiInput,
@@ -332,7 +493,10 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     )
     registry.register_tool(
         name="pms.update_task",
-        description="Update one PMS task in the current user.",
+        description=(
+            "Update, archive, or restore one PMS task. Prefer archived=true for an ambiguous "
+            "remove or delete request; use pms.delete_task only for explicit permanent deletion."
+        ),
         owner_domain="pms",
         handler=_update_task,
         args_model=PmsUpdateTaskAiInput,
@@ -356,7 +520,10 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     )
     registry.register_tool(
         name="pms.delete_task",
-        description="Delete one PMS task in the current user.",
+        description=(
+            "Permanently and irreversibly delete one PMS task. Use only when the user explicitly "
+            "requests permanent deletion; otherwise archive it with pms.update_task."
+        ),
         owner_domain="pms",
         handler=_delete_task,
         args_model=PmsDeleteTaskAiInput,

@@ -48,6 +48,8 @@ def build_create_task_preview(
     fields: list[PreviewField] = [
         PreviewField(label="List", value=str(values.get("list_id", "-"))),
         PreviewField(label="Title", value=str(values.get("title", "-"))),
+        PreviewField(label="Status", value=str(values.get("status", "-"))),
+        PreviewField(label="Priority", value=str(values.get("priority", "medium"))),
     ]
     assignee_ids = _string_list_or_none(values.get("assignee_ids"))
     if assignee_ids is not None:
@@ -55,6 +57,10 @@ def build_create_task_preview(
     labels = _string_list_or_none(values.get("labels"))
     if labels is not None:
         fields.append(PreviewField(label="Labels", value=_preview_field_list(labels)))
+    if values.get("parent_id") is not None:
+        fields.append(PreviewField(label="Parent", value=str(values["parent_id"])))
+    if values.get("start_date") is not None:
+        fields.append(PreviewField(label="Start", value=str(values["start_date"])))
     if values.get("due_date") is not None:
         fields.append(PreviewField(label="Due", value=str(values["due_date"])))
     return ApprovalPreview(
@@ -76,11 +82,40 @@ def build_update_task_preview(
         fields.append(PreviewField(label="Title", value=str(values["title"])))
     if values.get("status") is not None:
         fields.append(PreviewField(label="Status", value=str(values["status"])))
+    if values.get("priority") is not None:
+        fields.append(PreviewField(label="Priority", value=str(values["priority"])))
+    if "body" in values and not str(values["body"]).strip():
+        fields.append(PreviewField(label="Body", value="Clear"))
     assignee_ids = _string_list_or_none(values.get("assignee_ids"))
     if assignee_ids is not None:
         fields.append(PreviewField(label="Assignees", value=_preview_field_list(assignee_ids)))
+    labels = _string_list_or_none(values.get("labels"))
+    if labels is not None:
+        fields.append(PreviewField(label="Labels", value=_preview_field_list(labels)))
+    if values.get("parent_id") is not None:
+        fields.append(PreviewField(label="Parent", value=str(values["parent_id"])))
+    if values.get("start_date") is not None:
+        fields.append(PreviewField(label="Start", value=str(values["start_date"])))
     if values.get("due_date") is not None:
         fields.append(PreviewField(label="Due", value=str(values["due_date"])))
+    if values.get("archived") is not None:
+        fields.append(
+            PreviewField(
+                label="Archive state",
+                value="Archive" if values["archived"] else "Restore",
+            )
+        )
+    cleared_fields = _string_list_or_none(values.get("clear_fields")) or []
+    clear_labels = {
+        "parent_id": "Parent",
+        "start_date": "Start",
+        "due_date": "Due",
+    }
+    fields.extend(
+        PreviewField(label=clear_labels[field_name], value="Clear")
+        for field_name in cleared_fields
+        if field_name in clear_labels
+    )
     return ApprovalPreview(
         title="Update PMS task",
         summary=_preview_summary(values.get("body"), fallback="Update a PMS task from AI."),
@@ -106,8 +141,8 @@ def build_delete_task_preview(
 ) -> ApprovalPreview:
     values = _preview_values(parsed_args)
     return ApprovalPreview(
-        title="Delete PMS task",
-        summary="Delete one PMS task from AI.",
+        title="Permanently delete PMS task",
+        summary="This permanently deletes the task and cannot be undone.",
         fields=(PreviewField(label="Task", value=str(values.get("task_id", "-"))),),
     )
 

@@ -68,3 +68,74 @@ def test_validate_tool_arguments_maps_localized_domain_validation_failure() -> N
     failure = failure_info.value
     assert failure.localized_error == ("pms.update_mutable_field_required", {})
     assert "PMS task updates must provide at least one mutable field." in failure.message
+
+
+def test_pms_update_accepts_empty_collections_false_and_explicit_clears() -> None:
+    result = validate_tool_arguments(
+        args_model=PmsUpdateTaskAiInput,
+        arguments={
+            "task_id": "task-1",
+            "assignee_ids": [],
+            "labels": [],
+            "archived": False,
+            "clear_fields": ["parent_id", "start_date", "due_date"],
+        },
+    )
+
+    assert result.validated_arguments == {
+        "task_id": "task-1",
+        "assignee_ids": [],
+        "labels": [],
+        "archived": False,
+        "clear_fields": ["parent_id", "start_date", "due_date"],
+    }
+
+
+def test_pms_update_translates_explicit_nulls_to_clears_for_mcp_arguments() -> None:
+    result = validate_tool_arguments(
+        args_model=PmsUpdateTaskAiInput,
+        arguments={
+            "task_id": "task-1",
+            "parent_id": None,
+            "start_date": None,
+            "due_date": None,
+        },
+    )
+
+    assert result.validated_arguments == {
+        "task_id": "task-1",
+        "clear_fields": ["parent_id", "start_date", "due_date"],
+    }
+
+
+def test_pms_update_ignores_strict_schema_null_placeholders() -> None:
+    result = validate_tool_arguments(
+        args_model=PmsUpdateTaskAiInput,
+        arguments={
+            "task_id": "task-1",
+            "title": "Updated title",
+            "parent_id": None,
+            "start_date": None,
+            "due_date": None,
+        },
+        strict_tool_arguments=True,
+    )
+
+    assert result.validated_arguments == {
+        "task_id": "task-1",
+        "title": "Updated title",
+    }
+
+
+def test_pms_update_rejects_setting_and_clearing_the_same_field() -> None:
+    with pytest.raises(ToolArgumentValidationFailure) as failure_info:
+        validate_tool_arguments(
+            args_model=PmsUpdateTaskAiInput,
+            arguments={
+                "task_id": "task-1",
+                "due_date": "2026-06-02",
+                "clear_fields": ["due_date"],
+            },
+        )
+
+    assert "cannot be set and cleared together" in failure_info.value.message

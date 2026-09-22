@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+STRICT_TOOL_ARGUMENTS_CONTEXT_KEY = "strict_tool_arguments"
+
 _LOCALIZED_TOOL_VALIDATION_ERROR_TYPES = frozenset(
     {
         "planner.update_mutable_field_required",
@@ -43,6 +45,7 @@ def validate_tool_arguments(
     *,
     args_model: type[BaseModel] | None,
     arguments: Mapping[str, Any],
+    strict_tool_arguments: bool = False,
 ) -> ToolArgumentValidationResult:
     if args_model is None:
         validated_arguments = dict(arguments)
@@ -52,7 +55,10 @@ def validate_tool_arguments(
         )
 
     try:
-        parsed_args = args_model.model_validate(dict(arguments))
+        parsed_args = args_model.model_validate(
+            dict(arguments),
+            context={STRICT_TOOL_ARGUMENTS_CONTEXT_KEY: strict_tool_arguments},
+        )
     except ValidationError as error:
         raise ToolArgumentValidationFailure(
             message=validation_error_message(error),

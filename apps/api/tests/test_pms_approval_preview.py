@@ -16,6 +16,7 @@ def test_create_task_preview_accepts_pydantic_args_and_compacts_lists() -> None:
     parsed_args = PmsCreateTaskAiInput(
         list_id="list-1",
         title="Prepare release checklist",
+        status="todo",
         body="  Confirm rollout tasks before launch.  ",
         assignee_ids=["user-1", "user-2", "user-3", "user-4"],
         labels=["release", "risk"],
@@ -29,6 +30,8 @@ def test_create_task_preview_accepts_pydantic_args_and_compacts_lists() -> None:
     assert preview.fields == (
         PreviewField(label="List", value="list-1"),
         PreviewField(label="Title", value="Prepare release checklist"),
+        PreviewField(label="Status", value="todo"),
+        PreviewField(label="Priority", value="medium"),
         PreviewField(label="Assignees", value="user-1, user-2, user-3 (+1)"),
         PreviewField(label="Labels", value="release, risk"),
         PreviewField(label="Due", value="2026-06-01"),
@@ -50,7 +53,28 @@ def test_update_task_preview_falls_back_summary_and_only_shows_provided_fields()
     assert preview.fields == (
         PreviewField(label="Task", value="task-1"),
         PreviewField(label="Status", value="done"),
+        PreviewField(label="Body", value="Clear"),
         PreviewField(label="Due", value="2026-06-02"),
+    )
+
+
+def test_update_task_preview_shows_archive_and_explicit_clears() -> None:
+    parsed_args = PmsUpdateTaskAiInput(
+        task_id="task-1",
+        archived=True,
+        labels=[],
+        clear_fields=["parent_id", "start_date", "due_date"],
+    )
+
+    preview = build_update_task_preview(object(), parsed_args)
+
+    assert preview.fields == (
+        PreviewField(label="Task", value="task-1"),
+        PreviewField(label="Labels", value="-"),
+        PreviewField(label="Archive state", value="Archive"),
+        PreviewField(label="Parent", value="Clear"),
+        PreviewField(label="Start", value="Clear"),
+        PreviewField(label="Due", value="Clear"),
     )
 
 
@@ -71,6 +95,6 @@ def test_delete_task_preview_accepts_mapping_args() -> None:
         {"task_id": "task-3"},
     )
 
-    assert preview.title == "Delete PMS task"
-    assert preview.summary == "Delete one PMS task from AI."
+    assert preview.title == "Permanently delete PMS task"
+    assert preview.summary == "This permanently deletes the task and cannot be undone."
     assert preview.fields == (PreviewField(label="Task", value="task-3"),)

@@ -75,6 +75,7 @@ from open_work_hub_api.domains.pms.rag_sync import (
     enqueue_task_list_task_recompute,
     enqueue_task_rag_sync,
 )
+from open_work_hub_api.domains.pms.roles import team_role_allows
 from open_work_hub_api.domains.pms.space_models import Team, TeamMember
 from open_work_hub_api.domains.pms.status_lifecycle import (
     create_default_space_statuses as _create_default_space_statuses,
@@ -120,6 +121,17 @@ def _status_label(status_value: str, task_list: TaskList | None = None) -> str:
 
 def _status_category(status_value: str, task_list: TaskList | None = None) -> str | None:
     return status_category(status_value, task_list)
+
+
+def _validate_task_status(task_list: TaskList, status_value: str) -> str:
+    normalized_status = _normalize_task_status(status_value)
+    valid_statuses = {item.slug for item in _status_definitions(task_list)}
+    if normalized_status not in valid_statuses:
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="pms.status_not_found",
+        )
+    return normalized_status
 
 
 def _require_actor(db: Session, *, principal: CallerPrincipal, user: User) -> None:
@@ -1109,6 +1121,63 @@ def list_task_lists(
     }
 
 
+def get_task_list_options_for_ai(
+    db: Session,
+    *,
+    principal: CallerPrincipal,
+    user: User,
+    list_id: str,
+) -> dict[str, Any]:
+    """Return ACL-scoped values that are valid for AI task mutations."""
+
+    _require_actor(db, principal=principal, user=user)
+    task_list, role = _ensure_list_member(db, user, list_id)
+    labels = list(
+        db.scalars(
+            select(Label)
+            .where(Label.list_id == task_list.id)
+            .order_by(func.lower(Label.name), Label.id)
+        )
+    )
+    member_ids = _space_member_ids(db, task_list.team_id)
+    assignees = (
+        list(
+            db.scalars(
+                select(User)
+                .where(User.id.in_(member_ids))
+                .order_by(func.lower(User.full_name), func.lower(User.email), User.id)
+            )
+        )
+        if member_ids
+        else []
+    )
+    return {
+        "resource_ids": [task_list.id],
+        "task_list": {
+            "id": task_list.id,
+            "name": task_list.name,
+            "space_id": task_list.team_id,
+            "role": role,
+            "can_edit": team_role_allows(role, "member") and not task_list.archived,
+            "archived": task_list.archived,
+        },
+        "statuses": [
+            {
+                "slug": item.slug,
+                "name": item.name,
+                "color": item.color,
+                "category": _normalize_status_category(item.category),
+            }
+            for item in _status_definitions(task_list)
+        ],
+        "labels": [{"id": label.id, "name": label.name, "color": label.color} for label in labels],
+        "assignees": [
+            {"id": assignee.id, "full_name": assignee.full_name, "email": assignee.email}
+            for assignee in assignees
+        ],
+    }
+
+
 def create_task_list(
     db: Session,
     *,
@@ -1599,7 +1668,7 @@ def create_task(
     _validate_milestone(task_list, milestone_id)
     _validate_parent_task(db, task_list, parent_id)
     _lock_task_list_order(db, task_list.id)
-    status = _normalize_task_status(status)
+    status = _validate_task_status(task_list, status)
     if completed_date is None and is_completion_status(status, task_list):
         completed_date = _utcnow().date()
     next_position = _next_task_board_position(db, list_id, parent_id)
@@ -1720,7 +1789,7 @@ def update_task(
     if "parent_id" in effective_provided_fields:
         _validate_parent_task(db, task_list, parent_id, task_id=task.id)
     if "status" in effective_provided_fields and status is not None:
-        status = _normalize_task_status(status)
+        status = _validate_task_status(task_list, status)
     old_status = task.status
     proposed_scalar_values = {
         "title": title,
@@ -2022,9 +2091,11 @@ def delete_task(
     task_id: str,
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
-    del approved_call_id
     _require_user_write_principal(principal)
     _require_actor(db, principal=principal, user=user)
+
+    if approved_call_id is not None and db.get(Task, task_id) is None:
+        return {"id": task_id, "deleted": True}
 
     task, _task_list = _get_task_for_user(db, user, task_id, require_editor=True)
     deleted_task_id = task.id

@@ -18,7 +18,7 @@ Default AI behavior is read/search/summarize. Source-changing tools execute only
 | --- | --- | --- |
 | Mail | search/summary/translation/task extraction | none |
 | Meeting | lookup/summary/action extraction | flag-gated create |
-| PMS | lookup/summary/task candidates | flag-gated create/update/comment/delete |
+| PMS | lookup/summary/task candidates/edit options | flag-gated create/update/comment/archive/restore/permanent delete |
 | Files | lookup/summary candidates | none |
 | Docs | search/summary/draft | none |
 | Planner | lookup/summary/event candidates | flag-gated create/update/delete |
@@ -30,3 +30,5 @@ Default AI behavior is read/search/summarize. Source-changing tools execute only
 - Registry derives `approval_policy="required"`.
 - Approval preview emits `approval_required`; mutation does not run.
 - New write capability must include flag/discoverability, preview, approval, ACL, audit, failure, and idempotency tests.
+- PMS task removal is archive-first. Permanent deletion is reserved for an explicit request and
+  uses a distinct irreversible-action preview before approval.
