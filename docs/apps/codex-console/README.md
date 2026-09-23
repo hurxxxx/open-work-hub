@@ -34,15 +34,15 @@ worker가 콘솔에 생성 요청을 위임하는 경로는 없다. 콘솔은 �
 입력한 개발 작업을 기존 ChatGPT 구독 세션에 전달한다. 제품 도메인 서비스의 workload와
 공통 실행 계약은 [ADR 0005](../../../adr/0005-registered-llm-workload.md)를 따른다.
 
-모델 목록은 공식 `model/list`에서 현재 구독 계정이 제공하는 항목을 읽는다. 선택한 모델과
-추론 강도를 공식 `turn/start`·`collaborationMode.settings`에 전달한다. 선택을 생략하면
-native thread의 모델을 이어받는다. 공급자·인증·fallback 설정은 제공하지 않으며 API key 인증과
-다른 공급자는 계속 거부한다. 제품 앱의 모델 라우팅과 연결하지 않는다.
-
-새 메시지의 화면 기본값은 `gpt-5.6-sol`과 `medium`이다. 현재 계정의 `model/list`에 해당
-모델이 없으면 공식 기본 모델, 공식 기본 모델도 없으면 목록의 첫 모델을 사용한다. 선택된
-모델이 `medium`을 지원하지 않으면 그 모델의 권장 추론 강도를 사용한다. 화면에는 실제로
-전송할 모델과 추론 강도를 표시하며 별도의 모호한 "기본값" 선택지는 제공하지 않는다.
+모델 목록은 공식 `model/list`에서 현재 구독 계정이 제공하는 항목을 읽는다. 새 작업의 화면
+선택값은 해당 작업 경로의 공식 `config/read`에 사용 가능한 모델이 설정되어 있으면 그 모델,
+그렇지 않으면 `model/list`의 `isDefault` 모델을 따른다. 둘 다 없으면 목록의 첫 모델을
+사용한다. 추론 강도는 허용 범위에 있는 Codex 설정값 또는 모델 권장 기본값을 표시한다.
+기존 작업은 마지막 native thread 모델과 추론 강도를 표시한다. 사용자가 모델·강도를
+변경하면 다음 턴에 공식 `turn/start`·
+`collaborationMode.settings`로 전달하고, 이후에는 native thread의 선택을 이어받는다.
+콘솔은 별도 모델 선호도를 저장하지 않는다. 공급자·인증·fallback 설정은 제공하지 않으며
+API key 인증과 다른 공급자는 계속 거부한다. 제품 앱의 모델 라우팅과 연결하지 않는다.
 
 추론 강도는 콘솔의 허용 목록과 해당 모델의 `supportedReasoningEfforts`가 겹치는 값만
 표시·허용한다. 기본 목록은 `none, minimal, low, medium, high, xhigh`이므로 `max`, `ultra`와

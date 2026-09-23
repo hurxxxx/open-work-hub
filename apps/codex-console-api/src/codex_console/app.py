@@ -233,8 +233,8 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
         return await app.state.runtime.account()
 
     @app.get("/api/codex/models", dependencies=secured, response_model=list[ModelOut])
-    async def models():
-        return await app.state.runtime.models()
+    async def models(task_id: str | None = Query(default=None, max_length=36)):
+        return await app.state.runtime.models(task_id=task_id)
 
     @app.post("/api/codex/login", dependencies=secured, response_model=DeviceLoginOut)
     async def codex_login():

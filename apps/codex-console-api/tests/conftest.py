@@ -33,6 +33,8 @@ class FakeRPC:
         self.auth_type = "chatgpt"
         self.fail_turn = False
         self.policies = {}
+        self.config_model = None
+        self.config_effort = None
 
     async def start(self):
         self.connected = True
@@ -69,16 +71,31 @@ class FakeRPC:
                 "nextCursor": None,
             }
         if method == "config/read":
-            return {"config": {"model_provider": None, "mcp_servers": {"example": {}}}}
+            return {
+                "config": {
+                    "model": self.config_model,
+                    "model_reasoning_effort": self.config_effort,
+                    "model_provider": None,
+                    "mcp_servers": {"example": {}},
+                }
+            }
         if method in ("thread/start", "thread/resume"):
             thread_id = params.get("threadId") or str(uuid4())
             self.threads.setdefault(
                 thread_id,
-                {"id": thread_id, "cwd": params["cwd"], "status": {"type": "idle"}, "turns": []},
+                {
+                    "id": thread_id,
+                    "cwd": params["cwd"],
+                    "status": {"type": "idle"},
+                    "turns": [],
+                    "model": self.config_model or "account-default",
+                    "reasoningEffort": self.config_effort or "medium",
+                },
             )
             return {
                 "thread": self.threads[thread_id],
-                "model": "account-default",
+                "model": self.threads[thread_id]["model"],
+                "reasoningEffort": self.threads[thread_id]["reasoningEffort"],
                 "modelProvider": "openai",
                 "cwd": self.threads[thread_id]["cwd"],
                 "sandbox": self.policies.get(thread_id, {"type": "readOnly"}),
@@ -86,6 +103,8 @@ class FakeRPC:
         if method == "turn/start":
             if self.fail_turn:
                 raise ConsoleError("codex_request_uncertain", 503)
+            self.threads[params["threadId"]]["model"] = params["model"]
+            self.threads[params["threadId"]]["reasoningEffort"] = params["effort"]
             self.policies[params["threadId"]] = {
                 **params["sandboxPolicy"],
                 **(

@@ -104,7 +104,7 @@ class Runtime:
             raise ConsoleError("login_required", 403)
         return rpc
 
-    async def models(self, rpc=None):
+    async def models(self, rpc=None, *, task_id=None):
         rpc = rpc or await self.authenticated_rpc()
         rows, cursor, seen = [], None, set()
         for _ in range(20):
@@ -133,7 +133,33 @@ class Runtime:
                 )
             cursor = page.get("nextCursor")
             if not cursor:
-                return rows
+                if task_id is None:
+                    return rows
+                with self.factory() as db:
+                    task = store.require_task(db, task_id)
+                    self.require_allowed_task(task)
+                    root = task.root
+                config = (await rpc.call("config/read", {"cwd": root, "includeLayers": False}))[
+                    "config"
+                ]
+                if (config.get("model_provider") or "openai") != "openai":
+                    raise ConsoleError("subscription_provider_required")
+                configured = config.get("model")
+                selected = configured if any(row["model"] == configured for row in rows) else None
+                selected = selected or next(
+                    (row["model"] for row in rows if row["is_default"]), None
+                )
+                preferred_effort = config.get("model_reasoning_effort")
+                return [
+                    {
+                        **row,
+                        "is_default": row["model"] == selected,
+                        "default_effort": preferred_effort
+                        if row["model"] == selected and preferred_effort in row["efforts"]
+                        else row["default_effort"],
+                    }
+                    for row in rows
+                ]
             if cursor in seen:
                 break
             seen.add(cursor)
@@ -409,10 +435,16 @@ class Runtime:
                     # Loaded thread/resume can also report the previous cwd.
                     root = store.require_task(db, task_id).root
                 chosen_model = model or session_model
+                catalog = await self.models(rpc)
                 available = next(
-                    (row for row in await self.models(rpc) if row["model"] == chosen_model),
+                    (row for row in catalog if row["model"] == chosen_model),
                     None,
                 )
+                if not available and model is None:
+                    available = next((row for row in catalog if row["is_default"]), None)
+                    available = available or next(iter(catalog), None)
+                    if available:
+                        chosen_model = available["model"]
                 if not available:
                     raise ConsoleError("model_unavailable", 422)
                 if effort is not None and effort not in available["efforts"]:
