@@ -980,7 +980,9 @@ export interface operations {
     };
     models_api_codex_models_get: {
         parameters: {
-            query?: never;
+            query?: {
+                task_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -994,6 +996,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

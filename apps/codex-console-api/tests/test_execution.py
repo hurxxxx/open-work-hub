@@ -36,6 +36,50 @@ def test_account_model_catalog_follows_native_pagination(client, monkeypatch):
     assert client.get("/api/codex/models").status_code == 401
 
 
+def test_task_model_catalog_uses_the_effective_codex_config(client):
+    task = new_task(client)
+    client.get("/api/codex/account")
+    rpc = client.app.state.runtime.rpc
+    rpc.config_model = "another-model"
+    rpc.config_effort = "high"
+    response = client.get(f"/api/codex/models?task_id={task['id']}")
+    assert response.status_code == 200
+    selected = [row for row in response.json() if row["is_default"]]
+    assert [(row["model"], row["default_effort"]) for row in selected] == [
+        ("another-model", "high")
+    ]
+    assert [
+        row["model"] for row in client.get("/api/codex/models").json() if row["is_default"]
+    ] == ["account-default"]
+
+
+def test_unselected_model_follows_the_native_thread_after_a_user_change(client):
+    task = new_task(client)
+    path = f"/api/tasks/{task['id']}/messages"
+    first = client.post(
+        path,
+        json={"operation_id": str(uuid4()), "text": "Inspect", "model": "another-model"},
+    )
+    assert first.status_code == 200
+    assert first.json()["model"] == "another-model"
+    complete(client, first.json())
+    second = client.post(path, json={"operation_id": str(uuid4()), "text": "Continue"})
+    assert second.status_code == 200
+    assert second.json()["model"] == "another-model"
+
+
+def test_retired_native_model_falls_back_to_the_available_catalog_default(client):
+    task = new_task(client)
+    client.get("/api/codex/account")
+    client.app.state.runtime.rpc.config_model = "retired-model"
+    result = client.post(
+        f"/api/tasks/{task['id']}/messages",
+        json={"operation_id": str(uuid4()), "text": "Inspect"},
+    )
+    assert result.status_code == 200
+    assert result.json()["model"] == "account-default"
+
+
 def test_selected_model_effort_and_yolo_are_scoped_to_approved_implementation(client):
     task = plan(client)
     body = {

@@ -113,11 +113,31 @@ export function App() {
     permissions: 'ask',
   });
   const selectedExecution = useMemo(
-    () => resolveExecution(execution, models),
-    [execution, models],
+    () =>
+      resolveExecution(
+        {
+          ...execution,
+          model: execution.model ?? task?.model ?? null,
+          effort:
+            execution.effort ??
+            (execution.model ? null : (task?.effort ?? null)),
+        },
+        models,
+      ),
+    [execution, models, task?.model, task?.effort],
   );
   const [approvalExecution, setApprovalExecution] =
     useState<Execution>(execution);
+  const approvalDisplay = resolveExecution(
+    {
+      ...approvalExecution,
+      model: approvalExecution.model ?? task?.model ?? null,
+      effort:
+        approvalExecution.effort ??
+        (approvalExecution.model ? null : (task?.effort ?? null)),
+    },
+    models,
+  );
   const [approvalText, setApprovalText] = useState('');
   const initializedTask = useRef<string | null>(null);
   const [planToApprove, setPlanToApprove] = useState<Revision | null>(null);
@@ -189,14 +209,23 @@ export function App() {
     setAccount(value);
     if (value.auth_type === 'chatgpt') setDevice(null);
   }, []);
-  const refreshModels = useCallback(async () => {
-    setModelsFailed(false);
-    try {
-      setModels(await api<Model[]>('/codex/models'));
-    } catch {
-      setModelsFailed(true);
-    }
-  }, []);
+  const refreshModels = useCallback(
+    async (taskId: string, signal?: AbortSignal) => {
+      setModelsFailed(false);
+      try {
+        const rows = await api<Model[]>(
+          `/codex/models?task_id=${encodeURIComponent(taskId)}`,
+          undefined,
+          undefined,
+          signal,
+        );
+        if (!signal?.aborted) setModels(rows);
+      } catch {
+        if (!signal?.aborted) setModelsFailed(true);
+      }
+    },
+    [],
+  );
   const refreshTask = useCallback(async (id: string, signal?: AbortSignal) => {
     const detail = await api<Detail>(
       `/tasks/${id}`,
@@ -283,7 +312,7 @@ export function App() {
     setApprovalFiles(
       task.attachments.filter((file) => attachmentIds.includes(file.id)),
     );
-    setApprovalExecution(selectedExecution);
+    setApprovalExecution(execution);
     setApprovalText(text);
     setPlanToApprove(revision);
   };
@@ -390,13 +419,19 @@ export function App() {
   useEffect(() => {
     if (!authenticated) return;
     void refreshAccount().catch(onError);
-    void refreshModels();
     const timer = window.setInterval(
       () => void refreshAccount().catch(onError),
       30000,
     );
     return () => window.clearInterval(timer);
-  }, [authenticated, refreshTasks, refreshAccount, refreshModels, onError]);
+  }, [authenticated, refreshTasks, refreshAccount, onError]);
+  useEffect(() => {
+    if (!authenticated || !selected) return;
+    const controller = new AbortController();
+    setModels([]);
+    void refreshModels(selected, controller.signal);
+    return () => controller.abort();
+  }, [authenticated, selected, refreshModels]);
   useEffect(() => {
     if (!authenticated) return;
     const timer = window.setTimeout(
@@ -467,8 +502,8 @@ export function App() {
         : 'plan',
     );
     setExecution({
-      model: task.model ?? null,
-      effort: task.effort ?? null,
+      model: null,
+      effort: null,
       permissions: task.permissions === 'yolo' ? 'yolo' : 'ask',
     });
   }, [task]);
@@ -959,15 +994,21 @@ export function App() {
                     ...(active(task)
                       ? {}
                       : {
-                          ...selectedExecution,
+                          ...execution,
                           ...(stage === 'plan' ? { stage } : {}),
                         }),
                   },
                 ).then((ok) => {
-                  if (ok && selectedRef.current === task.id)
+                  if (ok && selectedRef.current === task.id) {
+                    setExecution((current) => ({
+                      ...current,
+                      model: null,
+                      effort: null,
+                    }));
                     setMessage((current) =>
                       current === message ? '' : current,
                     );
+                  }
                 });
               }}
             >
@@ -1046,7 +1087,21 @@ export function App() {
                           }
                         : selectedExecution
                     }
-                    onChange={setExecution}
+                    onChange={(next) =>
+                      setExecution((current) => {
+                        const modelChanged =
+                          next.model !== selectedExecution.model;
+                        return {
+                          permissions: next.permissions,
+                          model: modelChanged ? next.model : current.model,
+                          effort: modelChanged
+                            ? next.effort
+                            : next.effort !== selectedExecution.effort
+                              ? next.effort
+                              : current.effort,
+                        };
+                      })
+                    }
                     disabled={busy || locked(task)}
                     implementation={
                       active(task)
@@ -1054,7 +1109,7 @@ export function App() {
                         : stage === 'implement'
                     }
                     failed={modelsFailed}
-                    onRetry={() => void refreshModels()}
+                    onRetry={() => selected && void refreshModels(selected)}
                     t={t}
                   />
                 </div>
@@ -1260,6 +1315,11 @@ export function App() {
             })().then((ok) => {
               if (ok) {
                 setPlanToApprove(null);
+                setExecution((current) => ({
+                  ...current,
+                  model: null,
+                  effort: null,
+                }));
                 setMessage((current) =>
                   current === approvalText ? '' : current,
                 );
@@ -1274,10 +1334,8 @@ export function App() {
           </p>
         )}
         <p>
-          {approvalExecution.model ?? t('Loading model catalog…')}
-          {approvalExecution.effort
-            ? ` · ${approvalExecution.effort}`
-            : ''} ·{' '}
+          {approvalDisplay.model ?? t('Loading model catalog…')}
+          {approvalDisplay.effort ? ` · ${approvalDisplay.effort}` : ''} ·{' '}
           {t(
             approvalExecution.permissions === 'yolo'
               ? 'YOLO · Full access'

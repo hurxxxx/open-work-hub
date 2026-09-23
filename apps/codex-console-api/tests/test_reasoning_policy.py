@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -6,6 +7,7 @@ from uuid import uuid4
 import pytest
 from conftest import new_task, send_message
 
+from codex_console import store
 from codex_console.config import Settings
 from codex_console.runtime import Runtime
 
@@ -43,6 +45,34 @@ def test_catalog_uses_configured_policy_not_native_order_or_blocked_names():
     result = asyncio.run(runtime.models(rpc))
     assert result[0]["efforts"] == ["low", "future-effort"]
     assert result[0]["default_effort"] == "future-effort"
+
+
+def test_task_catalog_marks_the_effective_native_config_default(monkeypatch):
+    async def call(method, params):
+        if method == "model/list":
+            return {
+                "data": [
+                    catalog_row(["low", "medium", "high"], model="catalog-default"),
+                    catalog_row(["low", "medium", "high"], model="configured-model"),
+                ],
+                "nextCursor": None,
+            }
+        assert method == "config/read"
+        assert params == {"cwd": "/repo", "includeLayers": False}
+        return {
+            "config": {
+                "model": "configured-model",
+                "model_reasoning_effort": "high",
+            }
+        }
+
+    monkeypatch.setattr(store, "require_task", lambda db, task_id: SimpleNamespace(root="/repo"))
+    runtime = Runtime(Settings.model_construct(), lambda: nullcontext(object()))
+    monkeypatch.setattr(runtime, "require_allowed_task", lambda task: None)
+    rows = asyncio.run(runtime.models(SimpleNamespace(call=call), task_id="task"))
+    assert [(row["model"], row["default_effort"]) for row in rows if row["is_default"]] == [
+        ("configured-model", "high")
+    ]
 
 
 def configure_catalog(client, monkeypatch, *, default="medium", inherited=None):

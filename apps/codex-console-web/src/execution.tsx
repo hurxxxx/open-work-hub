@@ -16,12 +16,7 @@ export type Execution = {
   permissions: 'ask' | 'yolo';
 };
 
-const preferredModel = 'gpt-5.6-sol';
-const preferredEffort = 'medium';
-
 function effortFor(model: Model) {
-  if (model.model === preferredModel && model.efforts.includes(preferredEffort))
-    return preferredEffort;
   if (model.efforts.includes(model.default_effort)) return model.default_effort;
   return model.efforts[0] ?? null;
 }
@@ -35,10 +30,7 @@ export function resolveExecution(value: Execution, models: Model[]): Execution {
         : effortFor(selected);
     return effort === value.effort ? value : { ...value, effort };
   }
-  const fallback =
-    models.find((row) => row.model === preferredModel) ??
-    models.find((row) => row.is_default) ??
-    models[0];
+  const fallback = models.find((row) => row.is_default) ?? models[0];
   return fallback
     ? { ...value, model: fallback.model, effort: effortFor(fallback) }
     : value;
@@ -105,10 +97,7 @@ export function ExecutionSettings({
           <ChevronDown size={14} aria-hidden="true" />
         </Button>
         {expanded && (
-          <div
-            className="execution-settings-popover"
-            id={controlsId}
-          >
+          <div className="execution-settings-popover" id={controlsId}>
             <div className="execution-settings-popover-heading">
               <strong>{t('Model and reasoning')}</strong>
               <small>{t('Next execution')}</small>

@@ -90,7 +90,7 @@ beforeEach(() => {
     if (path === '/session') return { authenticated: true };
     if (path === '/tasks') return [detail];
     if (path.startsWith('/tasks?search=')) return searchTasks(path);
-    if (path === '/codex/models')
+    if (path.startsWith('/codex/models?task_id='))
       return [
         {
           model: 'gpt-5.6-sol',
@@ -417,7 +417,7 @@ it('executes an explicit prompt with selected model and YOLO without requiring a
   fireEvent.click(await screen.findByRole('button', { name: '설정 변경' }));
   await screen.findByRole('option', { name: 'Alternate' });
   fireEvent.change(screen.getByLabelText('모델'), {
-    target: { value: 'alternate' },
+    target: { value: 'gpt-5.6-sol' },
   });
   fireEvent.change(screen.getByLabelText('추론 강도'), {
     target: { value: 'high' },
@@ -433,7 +433,7 @@ it('executes an explicit prompt with selected model and YOLO without requiring a
     expect(api).toHaveBeenCalledWith(
       `/tasks/${taskId}/implement`,
       expect.objectContaining({
-        model: 'alternate',
+        model: 'gpt-5.6-sol',
         effort: 'high',
         permissions: 'yolo',
         text: 'Same request',
@@ -446,7 +446,7 @@ it('executes an explicit prompt with selected model and YOLO without requiring a
   expect(body).not.toHaveProperty('revision_id');
 });
 
-it('resets a saved effort absent from the catalog before the next message', async () => {
+it('shows a supported effort when the saved native effort is unavailable', async () => {
   detail = { ...detail, model: 'alternate', effort: 'max' };
   await openAndCompose();
   fireEvent.click(await screen.findByRole('button', { name: '설정 변경' }));
@@ -459,14 +459,14 @@ it('resets a saved effort absent from the catalog before the next message', asyn
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith(
       `/tasks/${taskId}/messages`,
-      expect.objectContaining({ model: 'alternate', effort: 'medium' }),
+      expect.objectContaining({ model: null, effort: null }),
     ),
   );
 });
 
-it('uses GPT-5.6-Sol with medium reasoning instead of an ambiguous default', async () => {
+it('shows the Codex catalog default without overriding the native thread', async () => {
   await openAndCompose();
-  expect(await screen.findByText('GPT-5.6-Sol · medium')).toBeTruthy();
+  expect(await screen.findByText('Alternate · medium')).toBeTruthy();
   expect(screen.queryByText('Codex 기본 설정')).toBeNull();
   expect(screen.queryByText('기본값')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '보내기' }));
@@ -474,22 +474,39 @@ it('uses GPT-5.6-Sol with medium reasoning instead of an ambiguous default', asy
     expect(api).toHaveBeenCalledWith(
       `/tasks/${taskId}/messages`,
       expect.objectContaining({
-        model: 'gpt-5.6-sol',
-        effort: 'medium',
+        model: null,
+        effort: null,
       }),
     ),
   );
 });
 
-it('falls back to the catalog default when GPT-5.6-Sol is unavailable', async () => {
+it('does not override the native model when only permissions change', async () => {
+  await openAndCompose();
+  fireEvent.change(screen.getByLabelText('실행 모드'), {
+    target: { value: 'implement' },
+  });
+  fireEvent.change(screen.getByLabelText('실행 권한'), {
+    target: { value: 'yolo' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      `/tasks/${taskId}/implement`,
+      expect.objectContaining({ model: null, effort: null, permissions: 'yolo' }),
+    ),
+  );
+});
+
+it('uses the first available model when Codex marks no catalog default', async () => {
   const original = vi.mocked(api).getMockImplementation()!;
   vi.mocked(api).mockImplementation(async (path, ...args) =>
-    path === '/codex/models'
+    path.startsWith('/codex/models?task_id=')
       ? [
           {
             model: 'alternate',
             name: 'Alternate',
-            is_default: true,
+            is_default: false,
             default_effort: 'medium',
             efforts: ['low', 'medium', 'high'],
           },
@@ -498,6 +515,46 @@ it('falls back to the catalog default when GPT-5.6-Sol is unavailable', async ()
   );
   await openAndCompose();
   expect(await screen.findByText('Alternate · medium')).toBeTruthy();
+});
+
+it('lets Codex retain a user-selected model for later turns', async () => {
+  submit = async (body) => {
+    detail = {
+      ...detail,
+      model: (body.model as string | null) ?? detail.model ?? 'alternate',
+      effort: (body.effort as string | null) ?? detail.effort ?? 'medium',
+      event_id: detail.event_id + 1,
+    };
+    return detail;
+  };
+  await openAndCompose();
+  fireEvent.click(await screen.findByRole('button', { name: '설정 변경' }));
+  await screen.findByRole('option', { name: 'GPT-5.6-Sol' });
+  fireEvent.change(screen.getByLabelText('모델'), {
+    target: { value: 'gpt-5.6-sol' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      `/tasks/${taskId}/messages`,
+      expect.objectContaining({ model: 'gpt-5.6-sol', effort: 'high' }),
+    ),
+  );
+  await screen.findByText('GPT-5.6-Sol · high');
+  fireEvent.change(screen.getByLabelText('요청 내용 입력'), {
+    target: { value: 'Next request' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '보내기' }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      `/tasks/${taskId}/messages`,
+      expect.objectContaining({
+        text: 'Next request',
+        model: null,
+        effort: null,
+      }),
+    ),
+  );
 });
 
 it('allows an explicit continuation prompt after interruption without a dedicated resume button', async () => {

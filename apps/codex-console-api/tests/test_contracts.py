@@ -18,7 +18,7 @@ from codex_console.rpc import CONTRACT
 
 
 def test_generated_protocol_schemas_are_valid():
-    assert supports_contract_version("codex-cli 0.155.1", CONTRACT["codexVersion"])
+    assert supports_contract_version("codex-cli 0.156.0", CONTRACT["codexVersion"])
     for schema in CONTRACT["schemas"].values():
         Draft7Validator.check_schema(schema)
 
@@ -26,10 +26,10 @@ def test_generated_protocol_schemas_are_valid():
 @pytest.mark.parametrize(
     ("output", "expected"),
     [
-        ("codex-cli 0.155.1", True),
+        ("codex-cli 0.155.1", False),
         ("codex-cli 0.156.0", True),
+        ("codex-cli 0.157.0", True),
         ("codex-cli 1.0.0", True),
-        ("codex-cli 0.155.0", False),
         ("codex-cli 0.156.0-alpha.1", False),
         ("codex-cli latest", False),
     ],
@@ -42,7 +42,7 @@ def test_codex_contract_accepts_only_matching_selected_schemas(tmp_path):
     schema = {"type": "object", "properties": {"value": {"type": "string"}}}
     for name in COMPATIBILITY_SCHEMA_NAMES:
         (tmp_path / f"{name}.json").write_text(json.dumps(schema))
-    contract = build_contract("0.155.1", tmp_path)
+    contract = build_contract(CONTRACT["codexVersion"], tmp_path)
     assert schemas_are_compatible(contract, tmp_path)
 
     changed = json.loads((tmp_path / "ModelListParams.json").read_text())

@@ -1,5 +1,5 @@
 {
-  "codexVersion": "0.155.1",
+  "codexVersion": "0.156.0",
   "compatibilityHashes": {
     "AgentMessageDeltaNotification": "edeb843f11c658afcfaa4030f800157b72709f19e91a573aeeed325d920a90c2",
     "CommandExecutionOutputDeltaNotification": "84589759accba5fc0fc8615d0eedd804e566120af9364333339090a6a2755165",
@@ -11,35 +11,35 @@
     "FileChangeRequestApprovalResponse": "f522e127a6160afd094932f6b0a58b736a171ebfb767d58b3d70c0bd7ff7ab97",
     "GetAccountParams": "841b99a3c238770911c119d7bb65db8a99080e3628c2850142d5c723752d65b9",
     "GetAccountRateLimitsResponse": "58c173d3f5da2a956ec6b6cb18bca84f3dacffdd3bc213ebf889196981ddfec5",
-    "GetAccountResponse": "9b33b15c390aa15fa4e1899e4609eb089ac9bb419836cd9e4caa20f2929c96df",
+    "GetAccountResponse": "2b483dc7e945b2347c489473b69273767d2ad66e6fa35e67073901676666623d",
     "InitializeParams": "df2c8126d3d1d95c8b7914c8f157eefd9b3c56d64e04ef12f6c941e1915d4331",
     "InitializeResponse": "747401b5d7d395b71e4023d3d13aaaaefb0f6ae044d611675f59838672720c3d",
-    "ItemCompletedNotification": "7c032b758292d57617e131c523b3ad399c39c5a8d918f02d414d1d684821b1cf",
-    "ItemStartedNotification": "9561b63200971e2b0e8884defef29328c410fb4d42fb973a167693f599badf1a",
-    "McpServerElicitationRequestParams": "aea5a2617e9a5db3d8b77f652cda450b65b96c429e4136eadee136406c16ab01",
+    "ItemCompletedNotification": "0106e0ed8d9a771d8db681946f6e627b1bdabff0df14887f78e8ff0d6a9fac59",
+    "ItemStartedNotification": "7072b099a0689ed30f7922fd5691d151fbb8913c68182774354a732f6a41582d",
+    "McpServerElicitationRequestParams": "f68dfe5551e48dd9519bc4e6b002051109bcdb2ee6a7befb59e76178b941189e",
     "McpServerElicitationRequestResponse": "628ee89b301b9ad59a83172bdeebb36dcd2b021f63b99bf26a33b77255b90e70",
     "ModelListParams": "87171b174b108d3af36225d70d5ff57ce38522ee34087f78c8a0754c3ba6b276",
-    "ModelListResponse": "8016839b895a43fa9ebdeb1403edf4bb8399b069585d5ddefbc22e4997323ecc",
+    "ModelListResponse": "b41c8be6cceb533652c86a70c3b611d8c02de3cf461794043c50303313a8bfad",
     "NullableGetAccountRateLimitsParams": "cf5650e33dbec4078b589bed98ff924a7ee19497ad5f9b9a7f6853aabb48f4fe",
     "PermissionsRequestApprovalParams": "6cf0075b6061d3feb7086d7d59fccaa35001f8abdef68ccf73f7c2e3645c81be",
     "PermissionsRequestApprovalResponse": "08d82c17c27361f25763cb9fb117fe5779b3f38a092f4524afd5a73538d90af1",
     "PlanDeltaNotification": "5d291d7c92830d0d4c01b35abe3edfb96b124ed3c58761c662828786a255eccb",
     "ServerRequestResolvedNotification": "9bab6c9eda658824742162c9eaa3edbfa3b70fcc5348f20f5a190d7a794b3d53",
     "ThreadReadParams": "1c154f1db7bd63ad4514aba7ea35bf4723f6814b81e33e763f00aaa7f9f2b149",
-    "ThreadReadResponse": "e1bc98dc403deac51530e8d62d7b56812b13b9a0d3954c41a696495aef5f4b60",
-    "ThreadResumeParams": "c1e8c8075b3b5ecbfe309d3cf64dc8ea98b48e36e48a174fe59cc9c7a70982a8",
-    "ThreadResumeResponse": "4eae0f4343a57f40d4d9ab41c53c8a576b5d4df172c624c62f2520bd3851fc57",
-    "ThreadStartParams": "11c80b7f57cbc068fdcae2a7655cf4d9417f06e3004dd7bac3ea5a020b417e21",
-    "ThreadStartResponse": "3f2cac551b13597ce90846c34702a8b69fcf49b713f5bc6ca766ff3aeb4e0004",
+    "ThreadReadResponse": "df4eee3c8708d01fce5ea49cf466acb940a5cfdaf716af370389918ab450ca7c",
+    "ThreadResumeParams": "3065dfae69296ef81ed893330f19703aa5212726a75ab025e197bb8cf6d67663",
+    "ThreadResumeResponse": "1133ea3940f84502e3ec2872618edd03cc9bc57fd3f1efb4e3a3542be2e8b1d4",
+    "ThreadStartParams": "44a122637f6208314268b9d58c395b8fe7e9277f05af11f9d199b327db7d71e5",
+    "ThreadStartResponse": "2c78fb7266c0f02f232cf1ae3d2451ea509fa9ddd58b83c7fbc02106e9938e3c",
     "ToolRequestUserInputParams": "b99ace3211269f77083d8d86664393deb7992c3b53ef596582915b1256668682",
     "ToolRequestUserInputResponse": "18735c465696eda1d8da032be0ff06097656ef1d1bf2cedc86b8707164aa105c",
-    "TurnCompletedNotification": "1c8fe516708a2f94fa96624f1b5046f0d29b0ba95ad69e9a46fc9063ede174a0",
+    "TurnCompletedNotification": "b48f9cf49a39becf928f450b6b13c1bfe75e1ebb28e88a19ba2f99b5c0e56e1a",
     "TurnInterruptParams": "2fbfaacab66db0e15aa2f4870fd531531f2631c9047f90adc28dcb7567ab9bca",
     "TurnInterruptResponse": "9909145e97257ee08258cdbc192c6901d7b8e0ff1dad7b9bbf353199d8f035e0",
     "TurnPlanUpdatedNotification": "faf449e884d5750dec6310ee9a7bda606fc795d1d28258126eefac29d5a78cf0",
-    "TurnStartParams": "10e8641fa615a3ebf9c5277e2840b86272f4ecd7c5fae84c9a1bfd9ad389e052",
-    "TurnStartResponse": "964fac59b8e94f4139d9091b6495da2e82a6cc1939f91c5669c8320fd53234d3",
-    "TurnSteerParams": "029f58de8334f6eff599781b61af8334640651a7aaf5018f01eb4185b1083559",
+    "TurnStartParams": "cfd7b3291e0e3506612117887884c7debc1e994c0aeee1fc26cc1554c928df0e",
+    "TurnStartResponse": "4128d607092eb3efbfd7b6843211792d5f099bdb1f93531e50e23e6b6fa0d43f",
+    "TurnSteerParams": "2d6e67e4b275594e5ab63f10041cf9c877cd6f8e7bf394b8738c74ad8faf1a34",
     "TurnSteerResponse": "944b951b011ca2829643b0ce703d2e3cc118eef149233a4beeed480e88523591"
   },
   "schemas": {
@@ -703,6 +703,32 @@
               "type": "object"
             },
             {
+              "anyOf": [
+                {
+                  "properties": {
+                    "image_url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "image_url"
+                  ],
+                  "title": "ImageUrlContentItem",
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "file_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "file_id"
+                  ],
+                  "title": "FileIdContentItem",
+                  "type": "object"
+                }
+              ],
               "properties": {
                 "detail": {
                   "anyOf": [
@@ -714,9 +740,6 @@
                     }
                   ]
                 },
-                "image_url": {
-                  "type": "string"
-                },
                 "type": {
                   "enum": [
                     "input_image"
@@ -726,7 +749,6 @@
                 }
               },
               "required": [
-                "image_url",
                 "type"
               ],
               "title": "InputImageContentItem",
@@ -811,6 +833,32 @@
               "type": "object"
             },
             {
+              "anyOf": [
+                {
+                  "properties": {
+                    "image_url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "image_url"
+                  ],
+                  "title": "ImageUrlFunctionCallOutputContentItem",
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "file_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "file_id"
+                  ],
+                  "title": "FileIdFunctionCallOutputContentItem",
+                  "type": "object"
+                }
+              ],
               "properties": {
                 "detail": {
                   "anyOf": [
@@ -822,9 +870,6 @@
                     }
                   ]
                 },
-                "image_url": {
-                  "type": "string"
-                },
                 "type": {
                   "enum": [
                     "input_image"
@@ -834,7 +879,6 @@
                 }
               },
               "required": [
-                "image_url",
                 "type"
               ],
               "title": "InputImageFunctionCallOutputContentItem",
@@ -987,6 +1031,7 @@
           ]
         },
         "Personality": {
+          "description": "Deprecated: `friendly` and `pragmatic` no longer select a style.",
           "enum": [
             "none",
             "friendly",
@@ -2098,7 +2143,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "@deprecated `friendly` and `pragmatic` no longer select a style. Changing this does not rewrite the thread's existing instructions."
         },
         "runtimeWorkspaceRoots": {
           "description": "Replace the thread's runtime workspace roots. Paths must be absolute.",
@@ -2358,6 +2404,7 @@
           ]
         },
         "Personality": {
+          "description": "Deprecated: `friendly` and `pragmatic` no longer select a style.",
           "enum": [
             "none",
             "friendly",
@@ -2483,6 +2530,13 @@
             "null"
           ]
         },
+        "daybreakEnabled": {
+          "description": "Initial Daybreak choice for this persistent thread. Omitted or null leaves it unset. This does not select a turn's `cyberAccessProgram` or grant access. Not supported for ephemeral threads.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "developerInstructions": {
           "type": [
             "string",
@@ -2575,7 +2629,8 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "@deprecated `friendly` and `pragmatic` no longer select a style."
         },
         "projectId": {
           "description": "Optional project identity for this new thread. Durable threads persist the assignment; ephemeral threads expose it only in live responses.",
@@ -2871,6 +2926,32 @@
               "type": "object"
             },
             {
+              "anyOf": [
+                {
+                  "properties": {
+                    "image_url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "image_url"
+                  ],
+                  "title": "ImageUrlFunctionCallOutputContentItem",
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "file_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "file_id"
+                  ],
+                  "title": "FileIdFunctionCallOutputContentItem",
+                  "type": "object"
+                }
+              ],
               "properties": {
                 "detail": {
                   "anyOf": [
@@ -2882,9 +2963,6 @@
                     }
                   ]
                 },
-                "image_url": {
-                  "type": "string"
-                },
                 "type": {
                   "enum": [
                     "input_image"
@@ -2894,7 +2972,6 @@
                 }
               },
               "required": [
-                "image_url",
                 "type"
               ],
               "title": "InputImageFunctionCallOutputContentItem",
@@ -2995,6 +3072,7 @@
           "type": "string"
         },
         "Personality": {
+          "description": "Deprecated: `friendly` and `pragmatic` no longer select a style.",
           "enum": [
             "none",
             "friendly",
@@ -3254,6 +3332,32 @@
               "type": "object"
             },
             {
+              "anyOf": [
+                {
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ],
+                  "title": "UrlUserInput",
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "fileId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "fileId"
+                  ],
+                  "title": "FileIdUserInput",
+                  "type": "object"
+                }
+              ],
               "properties": {
                 "detail": {
                   "anyOf": [
@@ -3272,14 +3376,10 @@
                   ],
                   "title": "ImageUserInputType",
                   "type": "string"
-                },
-                "url": {
-                  "type": "string"
                 }
               },
               "required": [
-                "type",
-                "url"
+                "type"
               ],
               "title": "ImageUserInput",
               "type": "object"
@@ -3474,6 +3574,16 @@
           ],
           "description": "EXPERIMENTAL - Request a workspace-authorized cyber program for this turn. Omission preserves automatic behavior. This does not grant access."
         },
+        "disabledPluginIds": {
+          "description": "Replace this thread's disabled plugin IDs. Omitted/null preserves the list; [] clears it.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "effort": {
           "anyOf": [
             {
@@ -3538,7 +3648,7 @@
               "type": "null"
             }
           ],
-          "description": "Override the personality for this turn and subsequent turns."
+          "description": "@deprecated `friendly` and `pragmatic` no longer select a style. Changing this does not rewrite the thread's existing instructions."
         },
         "responsesapiClientMetadata": {
           "additionalProperties": {
@@ -3731,6 +3841,32 @@
               "type": "object"
             },
             {
+              "anyOf": [
+                {
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "url"
+                  ],
+                  "title": "UrlUserInput",
+                  "type": "object"
+                },
+                {
+                  "properties": {
+                    "fileId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "fileId"
+                  ],
+                  "title": "FileIdUserInput",
+                  "type": "object"
+                }
+              ],
               "properties": {
                 "detail": {
                   "anyOf": [
@@ -3749,14 +3885,10 @@
                   ],
                   "title": "ImageUserInputType",
                   "type": "string"
-                },
-                "url": {
-                  "type": "string"
                 }
               },
               "required": [
-                "type",
-                "url"
+                "type"
               ],
               "title": "ImageUserInput",
               "type": "object"
