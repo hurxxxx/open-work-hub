@@ -128,6 +128,65 @@ def test_runtime_metadata_has_no_duplicate_index_declarations() -> None:
 
 
 @pytest.mark.migration
+def test_group_downgrade_reserves_legacy_ids_before_mapping_new_groups(postgres_dsn: str) -> None:
+    config = _migration_config(postgres_dsn)
+    command.upgrade(config, "group_sources_20260912")
+    engine = sa.create_engine(postgres_dsn)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text("""
+                INSERT INTO groups (id, source, name, description, active, slug, unit_type,
+                    source_reference, created_at, updated_at)
+                VALUES ('group-a', 'hr', 'Root', '', true, 'root', 'division', 'group-b', now(), now()),
+                       ('group-b', 'hr', 'Child', '', true, 'child', 'department', NULL, now(), now()),
+                       ('group-c', 'hr', 'Long reference', '', true, 'long', 'department',
+                        'external-reference-longer-than-36-characters', now(), now())
+            """)
+            )
+            conn.execute(sa.text("UPDATE groups SET parent_id='group-a' WHERE id='group-b'"))
+            conn.execute(
+                sa.text("""
+                INSERT INTO users (id, login_id, email, full_name, password_hash, status,
+                    login_blocked, must_change_password, theme_preference, locale,
+                    time_zone, date_format, primary_organization_unit_id, created_at, updated_at)
+                VALUES ('collision-user', 'collision-user', 'collision@example.test', 'User',
+                    'fixture', 'active', false, false, 'system', 'ko-KR', 'Asia/Seoul', 'korean',
+                    'group-b', now(), now())
+            """)
+            )
+        command.downgrade(config, "company_20260908")
+        with engine.connect() as conn:
+            mapping = dict(
+                conn.execute(sa.text("SELECT id, organization_unit_id FROM groups")).all()
+            )
+            assert mapping["group-a"] == "group-b"
+            assert mapping["group-c"] == "group-c"
+            assert len(set(mapping.values())) == 3
+            assert (
+                conn.scalar(sa.text("SELECT primary_organization_unit_id FROM users"))
+                == mapping["group-b"]
+            )
+            assert (
+                conn.scalar(
+                    sa.text("SELECT parent_id FROM organization_units WHERE id = :id"),
+                    {"id": mapping["group-b"]},
+                )
+                == mapping["group-a"]
+            )
+        command.upgrade(config, "group_sources_20260912")
+        with engine.connect() as conn:
+            assert (
+                conn.scalar(sa.text("SELECT primary_organization_unit_id FROM users")) == "group-b"
+            )
+            assert (
+                conn.scalar(sa.text("SELECT parent_id FROM groups WHERE id='group-b'")) == "group-a"
+            )
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.migration
 def test_group_unification_preserves_ids_assignments_grants_and_rollback(postgres_dsn: str) -> None:
     config = _migration_config(postgres_dsn)
     command.upgrade(config, "company_20260908")
