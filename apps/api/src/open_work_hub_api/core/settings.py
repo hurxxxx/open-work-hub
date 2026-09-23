@@ -36,6 +36,53 @@ PREVIEW_ENVIRONMENT = "preview"
 PRODUCTION_LIKE_ENVIRONMENTS = frozenset({PREVIEW_ENVIRONMENT, PRODUCTION_ENVIRONMENT})
 
 
+def _validate_codex_console_launch_url(value: str) -> str:
+    value = value.strip()
+    if not value:
+        return value
+    parsed = urlsplit(value)
+    if any(c.isspace() or ord(c) < 32 for c in value) or "\\" in value:
+        raise ValueError("Invalid console launch URL")
+    relative = value.startswith("/") and not value.startswith("//")
+    secure = parsed.scheme == "https" and bool(parsed.hostname)
+    local = parsed.scheme == "http" and parsed.hostname in (
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    )
+    if (
+        not (relative or secure or local)
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("Use HTTPS, a loopback URL or an absolute same-origin path")
+    return value
+
+
+def _normalize_codex_console_launch_host(value: str) -> str:
+    value = value.strip().lower()
+    if not value or any(c.isspace() or ord(c) < 32 for c in value) or "\\" in value or "/" in value:
+        raise ValueError("Invalid console launch host")
+    parsed = urlsplit(f"//{value}")
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise ValueError("Invalid console launch host") from exc
+    if (
+        not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+        or parsed.netloc != value
+    ):
+        raise ValueError("Use an exact browser host with an optional port")
+    return value
+
+
 def normalize_runtime_environment(value: str) -> str:
     return (value or "development").strip().lower() or "development"
 
@@ -253,26 +300,39 @@ class Settings(BaseSettings):
     codex_console_launch_url: str = Field(
         default="", validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_LAUNCH_URL"
     )
+    codex_console_launch_url_by_host: dict[str, str] = Field(
+        default_factory=dict,
+        validation_alias="OPEN_WORK_HUB_CODEX_CONSOLE_LAUNCH_URL_BY_HOST",
+    )
 
     @field_validator("codex_console_launch_url")
     @classmethod
     def _console_launch_url(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            return value
-        parsed = urlsplit(value)
-        if any(c.isspace() or ord(c) < 32 for c in value) or "\\" in value:
-            raise ValueError("Invalid console launch URL")
-        relative = value.startswith("/") and not value.startswith("//")
-        secure = parsed.scheme == "https" and bool(parsed.hostname)
-        local = parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1", "::1")
-        if not (relative or secure or local) or parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise ValueError("Use HTTPS, a loopback URL or an absolute same-origin path")
-        return value
+        return _validate_codex_console_launch_url(value)
+
+    @field_validator("codex_console_launch_url_by_host")
+    @classmethod
+    def _console_launch_url_by_host(cls, value: dict[str, str]) -> dict[str, str]:
+        return {
+            _normalize_codex_console_launch_host(host): _validate_codex_console_launch_url(url)
+            for host, url in value.items()
+        }
 
     @property
     def codex_console_enabled(self) -> bool:
-        return bool(self.codex_console_launch_url)
+        return bool(self.codex_console_launch_url or self.codex_console_launch_url_by_host)
+
+    def codex_console_launch_url_for_host(self, host: str | None) -> str:
+        if not host:
+            return self.codex_console_launch_url
+        try:
+            normalized_host = _normalize_codex_console_launch_host(host)
+        except ValueError:
+            return self.codex_console_launch_url
+        return self.codex_console_launch_url_by_host.get(
+            normalized_host,
+            self.codex_console_launch_url,
+        )
 
     agent_terminal_enabled: bool = Field(
         default=False,

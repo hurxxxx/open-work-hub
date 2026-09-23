@@ -13,7 +13,12 @@ from open_work_hub_api.domains.auth.models import User
 
 
 def build_launch_catalog(
-    db: Session, *, user: User, source: str, session_id: str | None = None
+    db: Session,
+    *,
+    user: User,
+    source: str,
+    session_id: str | None = None,
+    request_host: str | None = None,
 ) -> dict[str, Any]:
     from open_work_hub_api.domains.ai.chat_context_policy import (
         filter_business_chat_context_app_ids,
@@ -26,7 +31,14 @@ def build_launch_catalog(
     catalog = iter_app_catalog()
     enabled = allowed_app_ids(db, user_id=user.id)
     settings = get_settings()
-    projection = project_bootstrap_apps(catalog, enabled_app_ids=enabled, settings=settings)
+    projection = project_bootstrap_apps(
+        catalog,
+        enabled_app_ids=enabled,
+        settings=settings,
+        launch_url_overrides={
+            "codex_console_launch_url": settings.codex_console_launch_url_for_host(request_host)
+        },
+    )
     app_by_id = {app.app_id: app for app in catalog}
     for app in projection.apps:
         contract = app_by_id[app["app_id"]]

@@ -186,8 +186,20 @@ uv run --frozen codex-console serve
 OWH 루트 `.env`의 `OPEN_WORK_HUB_CODEX_CONSOLE_LAUNCH_URL`은 브라우저가 열 주소다.
 빈 값은 미설치 상태이며 앱을 숨긴다. HTTPS 절대 URL 또는 `/codex-console/` 같은 같은 origin
 경로를 사용한다. 로컬 단독 개발에는 loopback HTTP URL도 허용한다. URL에 사용자 정보나
-토큰을 넣지 않는다. 설정 변경 후 **개발** API·Web 서비스를 해당 호스트의 감독 서비스로
-재시작한다. 운영 OWH에 적용하는 작업은 별도 릴리스·배포 절차를 따른다.
+토큰을 넣지 않는다. 같은 개발 서버를 loopback과 원격 주소로 함께 사용하는 경우
+`OPEN_WORK_HUB_CODEX_CONSOLE_LAUNCH_URL_BY_HOST`에 브라우저가 OWH에 접속한 정확한
+`host:port`와 해당 Console HTTPS 주소를 JSON 객체로 등록한다. 일치하는 항목이 없으면
+기본 launch URL을 사용한다. 설정 변경 후 **개발** API·Web 서비스를 해당 호스트의 감독
+서비스로 재시작한다. 운영 OWH에 적용하는 작업은 별도 릴리스·배포 절차를 따른다.
+
+```dotenv
+OPEN_WORK_HUB_CODEX_CONSOLE_LAUNCH_URL=http://127.0.0.1:19365
+OPEN_WORK_HUB_CODEX_CONSOLE_LAUNCH_URL_BY_HOST='{"100.64.0.10:4200":"https://100.64.0.10:19443"}'
+```
+
+위 주소는 예시다. loopback OWH에서 열면 기본 주소를, 지정한 원격 OWH host에서 열면
+매핑한 HTTPS 주소를 사용한다. 매핑 목적지도 기본 URL과 같은 검증을 거치며 원격 HTTP,
+사용자 정보, query, fragment는 허용하지 않는다.
 
 콘솔 `.env`의 `OPEN_WORK_HUB_CODEX_CONSOLE_SSO_SUBJECTS`에는 자동 로그인을 허용할 OWH의
 정확한 origin과 그 환경에서 콘솔을 소유한 OWH 사용자 UUID를 JSON 객체로 등록한다. OWH 앱
