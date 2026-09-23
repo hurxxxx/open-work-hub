@@ -59,6 +59,13 @@ def project_bootstrap_apps(
             settings,
         ):
             continue
+        launch_url = _launch_url_setting(
+            settings,
+            app.launch_url_setting,
+            launch_url_overrides,
+        )
+        if app.launch_url_setting and not launch_url:
+            continue
         nav_items = _project_bootstrap_nav_items(
             app,
             settings=settings,
@@ -72,11 +79,7 @@ def project_bootstrap_apps(
                 "enabled": True,
                 "coming_soon": app.coming_soon,
                 "nav_items": nav_items,
-                "launch_url": _launch_url_setting(
-                    settings,
-                    app.launch_url_setting,
-                    launch_url_overrides,
-                ),
+                "launch_url": launch_url,
             }
         )
         nav.extend(nav_items)

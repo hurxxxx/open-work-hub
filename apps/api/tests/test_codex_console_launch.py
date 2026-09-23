@@ -100,6 +100,23 @@ def test_console_launch_url_for_host_falls_back_to_local_default():
     assert settings.codex_console_launch_url_for_host("bad/host") == "http://127.0.0.1:19365"
 
 
+def test_console_launch_with_host_mapping_only_hides_unmapped_hosts(client, monkeypatch):
+    admin = dev_login(client, "administrator")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "codex_console_launch_url", "")
+    monkeypatch.setattr(
+        settings,
+        "codex_console_launch_url_by_host",
+        {"demo.example.test:4200": "https://console.example.test/"},
+    )
+
+    assert (
+        _catalog(client, admin, host="demo.example.test:4200")["codex-console"]["launch_url"]
+        == "https://console.example.test/"
+    )
+    assert "codex-console" not in _catalog(client, admin, host="unmapped.example.test:4200")
+
+
 @pytest.mark.parametrize(
     "mapping",
     [
@@ -108,6 +125,12 @@ def test_console_launch_url_for_host_falls_back_to_local_default():
         {"user@owh.example.test": "https://console.example.test/"},
         {"owh.example.test": "http://console.example.test/"},
         {"owh.example.test": "https://u:p@console.example.test/"},
+        {"owh.example.test": ""},
+        {"owh.example.test": "https://console.example.test:99999/"},
+        {
+            "OWH.EXAMPLE.TEST": "https://first.example.test/",
+            "owh.example.test": "https://second.example.test/",
+        },
     ],
 )
 def test_console_launch_url_by_host_rejects_unsafe_mapping(mapping):

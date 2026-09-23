@@ -43,6 +43,10 @@ def _validate_codex_console_launch_url(value: str) -> str:
     parsed = urlsplit(value)
     if any(c.isspace() or ord(c) < 32 for c in value) or "\\" in value:
         raise ValueError("Invalid console launch URL")
+    try:
+        _ = parsed.port
+    except ValueError as exc:
+        raise ValueError("Invalid console launch URL") from exc
     relative = value.startswith("/") and not value.startswith("//")
     secure = parsed.scheme == "https" and bool(parsed.hostname)
     local = parsed.scheme == "http" and parsed.hostname in (
@@ -313,10 +317,16 @@ class Settings(BaseSettings):
     @field_validator("codex_console_launch_url_by_host")
     @classmethod
     def _console_launch_url_by_host(cls, value: dict[str, str]) -> dict[str, str]:
-        return {
-            _normalize_codex_console_launch_host(host): _validate_codex_console_launch_url(url)
-            for host, url in value.items()
-        }
+        normalized: dict[str, str] = {}
+        for host, url in value.items():
+            normalized_host = _normalize_codex_console_launch_host(host)
+            normalized_url = _validate_codex_console_launch_url(url)
+            if not normalized_url:
+                raise ValueError("Console launch URL by host must be non-empty")
+            if normalized_host in normalized:
+                raise ValueError("Duplicate console launch host")
+            normalized[normalized_host] = normalized_url
+        return normalized
 
     @property
     def codex_console_enabled(self) -> bool:
