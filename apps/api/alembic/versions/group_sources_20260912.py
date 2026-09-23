@@ -6,6 +6,7 @@ Revises: company_20260908
 
 from alembic import op
 import sqlalchemy as sa
+from uuid import uuid4
 
 revision = "group_sources_20260912"
 down_revision = "company_20260908"
@@ -113,15 +114,43 @@ def downgrade() -> None:
     )
     op.add_column("groups", sa.Column("organization_unit_id", sa.String(36), nullable=True))
     op.add_column("groups", sa.Column("kind", sa.String(24), nullable=True))
-    # Imported reference keys are arbitrary; only restore the original UUID-sized IDs.
+    # Reserve all legacy IDs before choosing fallbacks for newly imported groups.
+    # An external reference may equal another group's ID without violating the
+    # current schema, so blindly using that group ID would break the old PK.
+    connection = op.get_bind()
+    hr_groups = (
+        connection.execute(sa.text("SELECT id, source_reference FROM groups WHERE source = 'hr'"))
+        .mappings()
+        .all()
+    )
+    legacy_ids = {
+        group["source_reference"]
+        for group in hr_groups
+        if group["source_reference"] is not None and len(group["source_reference"]) <= 36
+    }
+    reserved_ids = legacy_ids | {group["id"] for group in hr_groups}
+    assignments = []
+    for group in hr_groups:
+        reference = group["source_reference"]
+        organization_id = reference if reference in legacy_ids else group["id"]
+        if reference not in legacy_ids and organization_id in legacy_ids:
+            organization_id = str(uuid4())
+            while organization_id in reserved_ids:
+                organization_id = str(uuid4())
+            reserved_ids.add(organization_id)
+        assignments.append({"group_id": group["id"], "organization_id": organization_id})
     op.execute(
         sa.text("""
-        UPDATE groups SET kind = CASE WHEN source = 'hr' THEN 'organization' ELSE 'manual' END,
-            organization_unit_id = CASE WHEN source = 'hr' THEN
-                CASE WHEN source_reference IS NOT NULL AND length(source_reference) <= 36
-                     THEN source_reference ELSE id END ELSE NULL END
+        UPDATE groups SET kind = CASE WHEN source = 'hr' THEN 'organization' ELSE 'manual' END
     """)
     )
+    if assignments:
+        connection.execute(
+            sa.text(
+                "UPDATE groups SET organization_unit_id = :organization_id WHERE id = :group_id"
+            ),
+            assignments,
+        )
     op.execute(
         sa.text("""
         INSERT INTO organization_units (id, name, slug, unit_type, parent_id, head_user_id, active, created_at, updated_at)
