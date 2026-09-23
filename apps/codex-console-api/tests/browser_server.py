@@ -126,7 +126,10 @@ def main():
                 db.add(Owner(password_hash=password_hash(PASSWORD)))
             engine.dispose()
             with tempfile.TemporaryDirectory(prefix="codex-console-browser-") as directory:
-                root = Path(directory) / "dev"
+                # macOS temporary paths can contain the /var -> /private/var symlink.
+                # Use the canonical fixture directory for the protected attachment cache.
+                directory = Path(directory).resolve()
+                root = directory / "dev"
                 root.mkdir()
                 for args in (
                     ("init", "-b", "dev"),
@@ -151,7 +154,7 @@ def main():
                     origin=f"http://127.0.0.1:{port}",
                     base_path=os.environ.get("OPEN_WORK_HUB_CODEX_CONSOLE_BASE_PATH", ""),
                     workspace=root,
-                    attachment_cache=Path(directory) / "attachments",
+                    attachment_cache=directory / "attachments",
                     web_dist=Path(__file__).resolve().parents[2] / "codex-console-web/dist",
                     _env_file=None,
                 )

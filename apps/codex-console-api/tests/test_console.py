@@ -6,7 +6,8 @@ import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from conftest import complete, new_task, notify, plan, planning_text, send_message
+from conftest import PASSWORD, complete, new_task, notify, plan, planning_text, send_message
+from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
 from codex_console import auth, store
@@ -119,6 +120,57 @@ def test_authentication_csrf_origin_and_logout(client):
     assert client.get("/api/tasks").status_code == 401
     client.cookies.set(auth.COOKIE, session)
     assert client.get("/api/tasks").status_code == 401
+
+
+def test_public_and_bound_loopback_login_have_separate_cookie_security(client):
+    settings = client.app.state.settings
+    settings.origin = "https://console.example.test"
+    settings.port = 19365
+    public = TestClient(client.app, base_url=settings.origin)
+    local = TestClient(client.app, base_url=settings.local_origin)
+    public.headers["origin"] = settings.origin
+    local.headers["origin"] = settings.local_origin
+    try:
+        for browser, secure in ((public, True), (local, False)):
+            response = browser.post("/api/session", json={"password": PASSWORD})
+            assert response.status_code == 200
+            session_cookie = next(
+                value
+                for value in response.headers.get_list("set-cookie")
+                if value.startswith(auth.COOKIE + "=")
+            )
+            assert ("secure" in session_cookie.lower().split("; ")) is secure
+            assert browser.get("/api/session").json() == {"authenticated": True}
+            browser.headers["x-csrf-token"] = browser.cookies[auth.CSRF_COOKIE]
+            assert browser.post("/api/tasks", json={"title": "Allowed"}).status_code == 200
+            assert browser.delete("/api/session").status_code == 200
+            assert browser.get("/api/session").json() == {"authenticated": False}
+
+        assert (
+            local.post(
+                "/api/session", json={"password": PASSWORD}, headers={"origin": settings.origin}
+            ).status_code
+            == 403
+        )
+        assert (
+            public.post(
+                "/api/session",
+                json={"password": PASSWORD},
+                headers={"origin": settings.local_origin},
+            ).status_code
+            == 403
+        )
+        assert (
+            local.post(
+                "/api/session",
+                json={"password": PASSWORD},
+                headers={"origin": "http://localhost:19365"},
+            ).status_code
+            == 403
+        )
+    finally:
+        public.close()
+        local.close()
 
 
 def test_open_work_hub_handoff_creates_console_session(client, monkeypatch):

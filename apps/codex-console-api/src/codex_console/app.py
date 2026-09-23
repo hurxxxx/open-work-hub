@@ -48,7 +48,7 @@ from .schemas import (
 )
 
 
-def _authenticated_response(settings, token: str, csrf: str) -> JSONResponse:
+def _authenticated_response(settings, request: Request, token: str, csrf: str) -> JSONResponse:
     response = JSONResponse({"authenticated": True})
     if settings.base_path:
         # Clear cookies left by a previous root-path installation. Browsers send both
@@ -61,7 +61,7 @@ def _authenticated_response(settings, token: str, csrf: str) -> JSONResponse:
             value,
             max_age=settings.session_hours * 3600,
             httponly=httponly,
-            secure=settings.secure_cookies,
+            secure=urlsplit(request.headers["origin"]).scheme == "https",
             samesite="strict",
             path=settings.base_path or "/",
         )
@@ -135,7 +135,10 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
         if not host or host not in (allowed_host, "127.0.0.1", "localhost", "::1"):
             return JSONResponse({"code": "host_denied"}, status_code=403)
         if request.method not in ("GET", "HEAD", "OPTIONS"):
-            if request.headers.get("origin") != cfg.origin:
+            origin = request.headers.get("origin", "")
+            if origin not in (cfg.origin, cfg.local_origin) or (
+                request.headers.get("host", "").lower() != urlsplit(origin).netloc.lower()
+            ):
                 return JSONResponse({"code": "origin_denied"}, status_code=403)
             upload = request.method == "PUT" and re.fullmatch(
                 r"/api/tasks/[0-9a-f-]{36}/attachments/[0-9a-f-]{36}",
@@ -195,16 +198,16 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
         }
 
     @app.post("/api/session", response_model=SessionOut)
-    def login(body: LoginInput):
+    def login(body: LoginInput, request: Request):
         cfg = app.state.settings
         result = auth.login(app.state.factory, body.password, cfg.session_hours)
         if result is None:
             raise ConsoleError("login_failed", 401)
         token, csrf = result
-        return _authenticated_response(cfg, token, csrf)
+        return _authenticated_response(cfg, request, token, csrf)
 
     @app.post("/api/session/owh", response_model=SessionOut)
-    def login_from_open_work_hub(body: OwhSessionInput):
+    def login_from_open_work_hub(body: OwhSessionInput, request: Request):
         cfg = app.state.settings
         expected_subject = cfg.sso_subjects.get(body.issuer)
         if expected_subject is None:
@@ -213,7 +216,7 @@ def create_app(settings=None, *, rpc_factory=CodexRPC):
         if subject != str(expected_subject):
             raise ConsoleError("login_failed", 401)
         token, csrf = auth.create_session(app.state.factory, cfg.session_hours)
-        return _authenticated_response(cfg, token, csrf)
+        return _authenticated_response(cfg, request, token, csrf)
 
     @app.delete("/api/session", dependencies=secured, response_model=Ok)
     def logout(request: Request):
