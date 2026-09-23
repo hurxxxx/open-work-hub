@@ -93,6 +93,7 @@ def execute_tool(
     conversation_id: str | None = None,
     approved_call_id: str | None = None,
     externally_approved_call_id: str | None = None,
+    strict_tool_arguments: bool = False,
 ) -> dict[str, Any]:
     started = perf_counter()
     registry = get_ai_capability_registry()
@@ -196,6 +197,7 @@ def execute_tool(
         argument_validation = validate_tool_arguments(
             args_model=args_model,
             arguments=arguments,
+            strict_tool_arguments=strict_tool_arguments,
         )
     except ToolArgumentValidationFailure as error:
         _log_tool_call(

@@ -20,6 +20,7 @@ export const pmsManifest: AppModuleManifest = {
       'pms.get_task',
       'pms.list_spaces',
       'pms.list_task_lists',
+      'pms.get_task_list_options',
       'pms.create_task',
       'pms.update_task',
       'pms.add_comment',

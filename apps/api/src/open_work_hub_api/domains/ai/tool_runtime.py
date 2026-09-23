@@ -67,6 +67,7 @@ def execute_tool_call(
     agent_run_id: str | None = None,
     conversation_id: str | None = None,
     approved_call_id: str | None = None,
+    strict_tool_arguments: bool = False,
 ) -> ToolCallExecution:
     resolved_call_id = call_id or new_id()
     arguments_json = json.dumps(dict(arguments), ensure_ascii=False, sort_keys=True)
@@ -82,6 +83,7 @@ def execute_tool_call(
             agent_run_id=agent_run_id,
             conversation_id=conversation_id,
             approved_call_id=approved_call_id,
+            strict_tool_arguments=strict_tool_arguments,
         )
     except ToolRequiresApproval as approval_required:
         return ToolCallExecution(

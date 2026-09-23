@@ -59,6 +59,7 @@ def test_capability_manifest_returns_filtered_tool_inventory(client: TestClient)
         "meeting.list_meetings",
         "planner.list_events",
         "pms.get_task",
+        "pms.get_task_list_options",
         "pms.list_spaces",
         "pms.list_task_lists",
         "pms.search_tasks",
@@ -140,6 +141,23 @@ def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
             "planner.delete_event",
         } <= tool_names
         assert "docs.create_page" not in tool_names
+        tools_by_name = {item["name"]: item for item in manifest_payload["tools"]}
+        assert "status" in tools_by_name["pms.create_task"]["inputSchema"]["required"]
+        assert {
+            "task_id",
+            "title",
+            "body",
+            "status",
+            "priority",
+            "assignee_ids",
+            "labels",
+            "parent_id",
+            "start_date",
+            "due_date",
+            "archived",
+            "clear_fields",
+        } <= set(tools_by_name["pms.update_task"]["inputSchema"]["properties"])
+        assert "Permanently and irreversibly" in tools_by_name["pms.delete_task"]["description"]
 
         openapi_response = client.get(
             _ai_path("/capabilities/openapi.json"),

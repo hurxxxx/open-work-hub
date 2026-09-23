@@ -334,6 +334,7 @@ async def _run_agent_loop_stream(
                 agent_run_id=agent_run_id,
                 conversation_id=bound_conversation.id if bound_conversation is not None else None,
                 approved_call_id=replay_approval.id,
+                strict_tool_arguments=True,
             )
             replay_tool_executed = True
             if replay_execution.tool_name in write_tool_names:
@@ -604,6 +605,7 @@ async def _run_agent_loop_stream(
                     conversation_id=bound_conversation.id
                     if bound_conversation is not None
                     else None,
+                    strict_tool_arguments=True,
                 )
 
                 if tool_execution.status == "blocked":

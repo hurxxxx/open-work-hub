@@ -343,6 +343,7 @@ def test_registry_drives_llm_task_seed_and_tool_metadata(client: TestClient) -> 
     } <= task_kinds
     assert {
         "pms.search_tasks",
+        "pms.get_task_list_options",
         "docs.list_hub",
         "meeting.find_availability",
         "meeting.extract_actions",
