@@ -38,6 +38,7 @@ def test_account_model_catalog_follows_native_pagination(client, monkeypatch):
 
 def test_task_model_catalog_uses_the_effective_codex_config(client):
     task = new_task(client)
+    client.get("/api/codex/account")
     rpc = client.app.state.runtime.rpc
     rpc.config_model = "another-model"
     rpc.config_effort = "high"
@@ -69,6 +70,7 @@ def test_unselected_model_follows_the_native_thread_after_a_user_change(client):
 
 def test_retired_native_model_falls_back_to_the_available_catalog_default(client):
     task = new_task(client)
+    client.get("/api/codex/account")
     client.app.state.runtime.rpc.config_model = "retired-model"
     result = client.post(
         f"/api/tasks/{task['id']}/messages",
