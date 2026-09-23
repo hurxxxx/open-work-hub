@@ -939,7 +939,8 @@ AI 보호 정책을 끄지 않는다. 추가 키·서버가 필요한 기능은 
 
 [Codex Console 소유 문서](docs/apps/codex-console/README.md)의 설치·서비스 실행·개인 앱 연결
 절차를 수행한다. OWH 업무 DB와 별개의 전용 PostgreSQL 역할·DB를 만들고, Codex를 구독으로
-로그인한 OS 사용자로 서비스를 실행한다. 콘솔은 고정 버전의 공식 app-server를 사용하며
+로그인한 OS 사용자로 서비스를 실행한다. 콘솔은 기준 버전 이상의 공식 app-server를 사용하고
+시작 시 RPC 스키마 호환성을 검사하며
 Platform API 키나 OWH AI 공급자 설정을 요구하지 않는다.
 
 - 콘솔의 `.env`와 웹 비밀번호를 준비하고 migration·정적 UI 빌드·systemd 자동 시작을 완료한다.
