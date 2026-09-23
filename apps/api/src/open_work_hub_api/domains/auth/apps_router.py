@@ -52,5 +52,6 @@ def get_apps_bootstrap(
             user=current_user,
             source="api.apps_bootstrap",
             session_id=getattr(session, "id", None),
+            request_host=request.headers.get("host"),
         )
     )

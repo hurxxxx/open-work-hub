@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import Mapping, TypedDict
 
 from open_work_hub_api.domains.auth.app_catalog import (
     AppCatalogItem,
@@ -47,6 +47,7 @@ def project_bootstrap_apps(
     *,
     enabled_app_ids: Iterable[str],
     settings: object,
+    launch_url_overrides: Mapping[str, str | None] | None = None,
 ) -> BootstrapProjection:
     enabled_app_id_set = set(enabled_app_ids)
     apps: list[BootstrapAppProjection] = []
@@ -57,6 +58,13 @@ def project_bootstrap_apps(
             app,
             settings,
         ):
+            continue
+        launch_url = _launch_url_setting(
+            settings,
+            app.launch_url_setting,
+            launch_url_overrides,
+        )
+        if app.launch_url_setting and not launch_url:
             continue
         nav_items = _project_bootstrap_nav_items(
             app,
@@ -71,8 +79,7 @@ def project_bootstrap_apps(
                 "enabled": True,
                 "coming_soon": app.coming_soon,
                 "nav_items": nav_items,
-                "launch_url": getattr(settings, app.launch_url_setting, None)
-                if app.launch_url_setting else None,
+                "launch_url": launch_url,
             }
         )
         nav.extend(nav_items)
@@ -81,6 +88,18 @@ def project_bootstrap_apps(
         apps=apps,
         nav=nav,
     )
+
+
+def _launch_url_setting(
+    settings: object,
+    key: str | None,
+    overrides: Mapping[str, str | None] | None,
+) -> str | None:
+    if key is None:
+        return None
+    if overrides is not None and key in overrides:
+        return overrides[key]
+    return getattr(settings, key, None)
 
 
 def _app_feature_enabled(
