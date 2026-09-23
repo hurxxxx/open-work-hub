@@ -185,6 +185,8 @@ test('late status, guidance, and recovery surfaces do not reflow the workspace',
     .click();
   await page.getByLabel('작업 제목').fill('레이아웃 안정성 확인');
   await page.getByRole('button', { name: '작업 만들기' }).click();
+  // Measure the loaded workspace, after the initial Git summary occupies its row.
+  await expect(page.locator('.task-header .git-summary')).toBeVisible();
 
   const closedSettings = await layout();
   const promptBefore = await box('.composer textarea');
