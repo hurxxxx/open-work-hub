@@ -944,6 +944,8 @@ AI 보호 정책을 끄지 않는다. 추가 키·서버가 필요한 기능은 
 Platform API 키나 OWH AI 공급자 설정을 요구하지 않는다.
 
 - 콘솔의 `.env`와 웹 비밀번호를 준비하고 migration·정적 UI 빌드·systemd 자동 시작을 완료한다.
+- 설치 호스트의 loopback 주소와 공개 HTTPS 주소에서 각각 작업실 로그인을 확인한다.
+  접속 범위와 쿠키 계약은 [Codex Console 접속](docs/apps/codex-console/README.md#개인-앱과-https-접속-연결)을 따른다.
 - [추론 강도 허용 목록](docs/apps/codex-console/README.md#개인-cli-클라이언트와-제품-ai의-연결-경계)을
   확인한다. 기본값은 `xhigh`까지이며 새 강도는 명시적으로 허용할 때까지 표시하지 않는다.
 - [파일 첨부 설정](docs/apps/codex-console/README.md#파일-보관과-메시지별-첨부)에 따라 원본 DB

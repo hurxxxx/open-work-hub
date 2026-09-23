@@ -182,5 +182,6 @@ class Settings(BaseSettings):
         return value
 
     @property
-    def secure_cookies(self) -> bool:
-        return self.origin.startswith("https://")
+    def local_origin(self) -> str:
+        host = f"[{self.bind_host}]" if ":" in self.bind_host else self.bind_host
+        return f"http://{host}:{self.port}"
