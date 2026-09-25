@@ -2,6 +2,7 @@
 
 Owners:
 
+- [App Tools and MCP](capabilities.md): explicit app opt-in, common tool registration, scope and extension guide
 - [AI Gateway](gateway.md): runtime/model/workload routing
 - [AI Write Policy](write-policy.md): write-tool exposure/approval/audit
 - [AI Execution](execution.md): approval snapshots, durable graphs, leases/checkpoints, artifacts

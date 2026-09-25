@@ -114,15 +114,10 @@ export function useChatbotViewController(
     experience.title,
     t,
   ]);
-  const scopeOptions: [] = [];
-  const sanitizedAllowedAppIds: [] = [];
-  const setAllowedAppIds = useCallback(
-    (_nextAllowedAppIds: string[] | null) => {
-      // Business context selection is hidden until the RAG/SQL/fulltext context
-      // architecture is redesigned. Keep the action shape stable for callers.
-    },
-    [],
-  );
+  // No app filter is selected in this experience. Let the server resolve
+  // explicitly registered tools using current app admission and source ACL.
+  // [] means no app tools and must not stand in for a hidden scope picker.
+  const allowedAppIds = null;
   const {
     state: viewState,
     setTurns,
@@ -272,7 +267,7 @@ export function useChatbotViewController(
     resumePendingApproval,
     syncLivePendingApproval,
   } = useChatbotApprovals({
-    allowedAppIds: sanitizedAllowedAppIds,
+    allowedAppIds,
     currentConversationId,
     isConversationReady,
     isSending,
@@ -509,7 +504,7 @@ export function useChatbotViewController(
     void chat.send(
       buildAiChatStreamRequest({
         activeConversationId,
-        allowedAppIds: sanitizedAllowedAppIds,
+        allowedAppIds,
         backendMode,
         conversationScope: resolvedExperience.conversationScope,
         options,
@@ -679,7 +674,6 @@ export function useChatbotViewController(
       recoveredRunIsActive,
       resumableApproval,
       routeArtifactId,
-      sanitizedAllowedAppIds,
       scopeInfo,
       showInsightHint,
       turns,
@@ -696,7 +690,6 @@ export function useChatbotViewController(
       handleStartEditTurn,
       handleSubmit,
       resumePendingApproval,
-      setAllowedAppIds,
       setEditingText,
       setEditingTurnId,
       setFailedPromptRecovery,
@@ -710,7 +703,6 @@ export function useChatbotViewController(
       confirmDialog,
       durableRun: durableRunRecovery.run,
       experience: resolvedExperience,
-      scopeOptions,
       slashCommandItems,
       t,
     },

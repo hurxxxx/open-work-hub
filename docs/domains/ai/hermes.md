@@ -21,18 +21,18 @@ This is the single owner for Hermes installation, image/configuration, profiles,
 
 ## Configuration ownership map
 
-| Contract                                                     | Owner                                                                                    |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| Admin policy translation and immutable per-run snapshot      | `domains/hermes/model_policy.py`, `service.py`, AI model settings                        |
-| Common registered execution/results                          | `domains/ai/gateway.py`, `domains/hermes/workloads.py`                                   |
+| Contract                                                      | Owner                                                                                                                        |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Admin policy translation and immutable per-run snapshot       | `domains/hermes/model_policy.py`, `service.py`, AI model settings                                                            |
+| Common registered execution/results                           | `domains/ai/gateway.py`, `domains/hermes/workloads.py`                                                                       |
 | PostgreSQL dispatch, reconciliation, approvals, file metadata | `domains/hermes/models.py`, `repository.py`, `execution.py`, `maintenance.py`, `mcp_router.py`, `files.py`, `file_router.py` |
-| Native config/bootstrap and compression policy               | `ops/hermes/bootstrap.py`, `domains/hermes/client.py`, `domains/hermes/model_policy.py` |
-| Multiplex discovery and native admission cancellation       | `ops/hermes/gateway_entry.py`, `domains/hermes/client.py`                                 |
-| Run-bound tool transport and isolated execution              | `ops/hermes/plugins/owh_runtime/`                                                        |
-| Controlled public egress                                     | `ops/hermes/terminal_egress.py`                                                          |
-| Retired PTY drain/archive/recovery                           | `domains/hermes_terminal/`                                                               |
-| Runtime settings, limits and topology                        | API/worker settings, `.env.example`, both Compose files, `scripts/prod-app-config.mjs`   |
-| Chat controls/files/reconnection                             | `apps/web/src/app-modules/chatbot/`                                                      |
+| Native config/bootstrap and compression policy                | `ops/hermes/bootstrap.py`, `domains/hermes/client.py`, `domains/hermes/model_policy.py`                                      |
+| Multiplex discovery and native admission cancellation         | `ops/hermes/gateway_entry.py`, `domains/hermes/client.py`                                                                    |
+| Run-bound tool transport and isolated execution               | `ops/hermes/plugins/owh_runtime/`                                                                                            |
+| Controlled public egress                                      | `ops/hermes/terminal_egress.py`                                                                                              |
+| Retired PTY drain/archive/recovery                            | `domains/hermes_terminal/`                                                                                                   |
+| Runtime settings, limits and topology                         | API/worker settings, `.env.example`, both Compose files, `scripts/prod-app-config.mjs`                                       |
+| Chat controls/files/reconnection                              | `apps/web/src/app-modules/chatbot/`                                                                                          |
 
 Paths under `domains/` are relative to `apps/api/src/open_work_hub_api/`. Keep the pin in API constants, Compose, bootstrap and legacy broker aligned. Generate API/app contracts through repository commands.
 
@@ -205,6 +205,15 @@ Internal MCP requires a profile-derived HMAC bearer plus `X-Hermes-Run-Id` from 
 
 Write consent is bound to the exact server, tool and canonical argument SHA-256 before the approval is shown. Only one-time approve/deny is exposed. Consumption is atomic, expires after five minutes and cannot be replayed for different arguments or another run. Stopping/revoked runs cannot invoke tools. Provider errors, absent context and transport failures before submission block tool dispatch. The middleware-owned HTTPX transport keeps connection/write/control waits at 30 seconds and permits 3,900 seconds for `tools/call` response reads, covering the bounded one-hour application workload and dispatch/cleanup overhead. Native MCP SDK timeout settings do not govern this separate HTTP request. Calls are never automatically retried; an unconfirmed response after submission is reported as an unknown outcome requiring result verification, rather than claiming that execution was blocked.
 
+For internal writes on the pinned API runtime, the middleware routes consent to
+the exact native run's registered notifier and native approval queue. Missing
+notifiers, notification errors, timeouts and non-once choices deny the call.
+Structured arguments accompany the approval event for the existing review UI;
+the normal event redaction and retention bounds apply.
+Argument fingerprints also separate native coalescing keys so different writes
+cannot share a denial/approval wait. The adapter does not alter unattended
+terminal/code approval policy; see [the pinned gap](#pinned-upstream-gaps).
+
 Globally unique physical MCP names prevent Hermes' process-global connection registry from mixing profiles. Research source enablement remains an audited platform policy at `/admin/ai-tools`; profile reconciliation applies it. General browser, image, voice, cron tools and other integrations without an OWH execution policy are not exposed in interactive API toolsets. The separately registered `owh_preview` only renders saved conversation HTML in an offline container under the current authenticated interactive run; it cannot navigate public URLs or invoke app writes. Interactive tools advertise terminal/file/code execution, web, skills, memory, todo, delegation and entitled MCP tools, subject to native approval and file guards. Unattended `api_server` calls can use `execute_code` only after authenticated OWH admission and verification of the actual isolated OWH environment. Global unattended approval remains denied; the exception changes only the whole-script guard for that call. Native `session_search` is excluded from official API toolsets and denied by middleware, including direct session reads and stale profile configurations. The pinned history search reads shared profile workload transcripts without a trusted OWH app/resource ACL filter; source labels or model-supplied filters cannot provide authorization. Re-enable it only through a source-authorized OWH contract or an upstream trusted filtering capability. Optional web services still need their official credentials.
 
 Structured application workloads use `owh_submit_result`. JSON Schema and registered semantic validators return bounded errors to the same Hermes loop; an invalid result never becomes successful text fallback. Terminal completion without a required accepted object becomes `invalid_output`. Common results carry text, structured output and usage; app code consumes that contract rather than raw SDK tool calls. Authoritative text and structured results are bounded to 2 MB separately from the smaller retained event payloads; oversize text fails explicitly. Bento plan/document/edit and RAG/query rewrite use schemas. Mail/meeting/recording and graph LLM nodes use the same registered gateway. Execution owner is explicit for system tasks while the original audit actor is retained.
@@ -213,9 +222,76 @@ Retained application tool/approval steps (including `/chatbot/chat/stream` and g
 
 Session pagination orders local activity by accepted user run admission, with a stable ID tie-breaker. Listing sessions and replaying an idempotent request do not advance activity timestamps.
 
-Native tools are denied for application workloads unless the registered descriptor explicitly permits a read-only tool. Interactive chatbot runs provide Hermes `web_search` and `web_extract` (page extraction/crawling) through the same authenticated tool middleware. The standalone Web Search app and its API/workload are retired; existing conversation and audit rows are retained, without registering the retired app or its routes. Each native call needs a durable, run-locked admission, bounded by the request budget (maximum 20 calls across search and extraction). The snapshot is intersected with the current registry before execution. Native `tool_search`/`tool_describe` inspect the current native tool assembly after authenticated interactive admission; they do not authorize execution. For application workloads, middleware uses the pinned public registry/catalog operations with only `owh_submit_result` and server-admitted native tools. The pinned Tool Search defers plugin tools, so denying all discovery also prevents schema-driven result submission. Other profile tools remain undiscoverable to these workloads. Native `tool_call` unwraps its target and still executes through the same middleware, schema validation and admission checks.
+Native tools are denied for application workloads unless the registered descriptor explicitly permits a read-only tool. Interactive chatbot runs provide Hermes `web_search` and `web_extract` (page extraction/crawling) through the same authenticated tool middleware. The standalone Web Search app and its API/workload are retired; existing conversation and audit rows are retained, without registering the retired app or its routes. Each native call needs a durable, run-locked admission, bounded by the request budget (maximum 20 calls across search and extraction). The snapshot is intersected with the current registry before execution.
+
+Native `tool_search`/`tool_describe` intersect the current API-platform assembly
+with authenticated, run-bound `tools/list`. An empty app scope exposes no app
+tools; restricted scopes and current app admission narrow discovery. Native
+tools retain their execution policy and external MCP tools must belong to a
+configured, enabled server in the current profile. No shared registry is changed
+for an individual run. Every execution still rechecks admission and source ACL.
+For application workloads, discovery contains only `owh_submit_result` and
+server-admitted native tools. The pinned Tool Search defers plugin tools, so
+denying all discovery would also prevent schema-driven result submission.
+Native `tool_call` unwraps its target and executes through middleware, schema
+validation and admission checks. The native agent executor wraps bridge lookups
+in middleware; directly calling `model_tools.handle_function_call` alone does
+not exercise that outer boundary. Verify both layers when testing discovery.
+
+When native `tool_call` rejects malformed or incomplete arguments before
+unwrapping, the middleware preserves the public parser/validator's correction
+feedback. A target's schema is returned only after scoped discovery admits it;
+hidden tools receive no schema. This rejected bridge never dispatches a tool.
+Valid calls must enter under their native-unwrapped target name and retain the
+normal approval and execution checks.
+
+Discovery compares admitted tool **names**, not counts, against the current
+native assembly. Missing names return `owh.tools.catalog_refresh_required` with
+only admitted missing names/count; transport/import/policy failures return
+`owh.tools.discovery_unavailable`. Neither falls back to unscoped discovery.
+Revoked or out-of-scope cached tools are filtered rather than treated as refresh
+requirements. These checks do not claim to compare input-schema contents under
+unchanged names; schema updates require the standard restart and contract/call
+verification. Discovery remains diagnostic, not an authorization cache.
 
 Native cron controls remain available through a separate `-jobs` profile with all MCP servers removed. They use administrator policy at profile reconciliation. Jobs do not receive an OWH interactive run or sandbox identity; the managed middleware denies tool execution without that identity. Native cron scheduling is separate from the OWH run queue and is not a route to app writes.
+
+### App tool enablement and verification
+
+App tools opt in through the [common capability registration](capabilities.md).
+The ordinary chatbot leaves `allowed_app_ids` unset; an explicit empty array
+disables app tools. Code installation alone does not enable writes.
+
+For a development installation that should support approved app writes:
+
+1. Preserve the existing development `.env` and set only
+   `OPEN_WORK_HUB_AI_WRITE_TOOLS_ENABLED=true`. This enables **all explicitly
+   registered write tools** whose app policies admit the user, not only PMS.
+   The shipped default remains `false`; every write still requires its existing
+   approval and resource authorization.
+2. Finish or stop active development chatbot runs. Restart API and worker to
+   rebuild their cached registries with `./dev.sh --restart --with-worker --no-infra`.
+   After app-tool registration, schema or write-flag changes, recreate the gateway
+   using the [existing-installation procedure](#updating-an-existing-development-installation).
+   Native discovery is idempotent for connected servers and does not refresh
+   their catalog; OWH advertises `listChanged: false`. Do not interpret a healthy
+   connection as proof of an updated catalog or reconnect during pending writes.
+   Keep traffic paused until the matching processes are ready, then start a new
+   run. Existing runs retain their recorded scope.
+3. Use an owned development PMS space/list. Request its space list, then create
+   a task using a short ordinary prompt. Check that the approval appears before
+   the resource exists. Reject one call and verify no mutation; approve another
+   and verify the actual task in PMS. Verify update/comment and archive as needed.
+   Platform administrator status alone does not grant PMS write membership.
+4. Confirm the actual run performs `tool_search`/`tool_describe` successfully with
+   the newly available app tools; `owh.tools.catalog_refresh_required` is a failed
+   update check. Apply step 2 and verify again instead of bypassing tools with
+   terminal/API calls. Run the native app-tool check below after gateway updates.
+   Check persisted run scope, tool audit outcome and resource IDs. A final model
+   message, successful API unit test or gateway health response is insufficient
+   evidence that the real tool executed.
+
+Production activation follows separately authorized production operations.
 
 ## Durability and concurrency
 
@@ -292,6 +368,8 @@ Use official public surfaces first. The remaining adapters are version-bound to 
 - `gateway_entry.py`: multiplex API startup discovers only the launch profile's MCP servers. It invokes native idempotent discovery for the authenticated profile and rejects admission when discovery or the required plugin fails. Remove it when an official profile-discovery lifecycle hook covers this requirement.
 - `gateway_entry.py` cancellation route: native `/v1/runs` can resolve an idempotency key only by creating on a miss. The adapter reuses `RunIdempotencyStore.reserve`, native auth/profile scope and the pinned body/session-header fingerprint to atomically cancel missing admissions without an agent task. It requires durable storage and rejects unsupported request shapes. Pinned-image checks must cover both orderings of admission/cancellation, later native replay, conflicting inputs, profile isolation and unauthenticated requests. Remove this adapter when the public native API supports atomic cancellation by idempotency key. Deploy the updated gateway entry before API/worker changes; an older gateway returns 404 and leaves the OWH run stopping for recovery.
 - `owh_runtime` tool middleware: native HTTP MCP headers are profile-static. A separate request adds native run identity without mutating shared connections. Native middleware exceptions fall through, so this callback catches policy/import/transport failures and returns an error. Remove the forwarding adapter when official per-call authenticated headers support trusted run context.
+- `owh_runtime._interactive_definitions`: the pinned API server uses private `_get_platform_tools` to resolve enabled/composite/default toolsets and has no public equivalent. Reuse that exact resolver and public `get_tool_definitions` before applying run scope; do not duplicate its selection rules. `check_app_tools.py` exercises the real native executor and assembly. Remove the private import when Hermes publishes the platform resolver.
+- `owh_runtime._request_write_consent`: in the pinned image, public `request_elicitation_consent` excludes `api_server` even though `/v1/runs` registers an approval notifier. The same failure is documented in [upstream issue 111526](https://github.com/NousResearch/hermes-agent/issues/111526). Neither the public helper nor configuration can route that consent. After authenticated internal-tool admission, the adapter reads the exact run notifier under the native lock and calls native `_await_gateway_decision`, preserving its queue, cancellation, timeout, hooks and cleanup. No process-global guard is patched and no approval lifecycle is copied. Only `once` succeeds. Verify these pinned private seams with `check_mcp_approvals.py`; remove the adapter when the adopted public helper supports API run notifiers.
 - `owh_runtime/native_execution.py`: the pinned whole-script guard ignores the documented custom-provider guard capability. A source-fingerprinted adapter shares a per-call ContextVar across plugin loads and admits only a verified OWH sandbox, retaining native dispatch. It does not alter the shared terminal guard or `approvals.unattended_mode`. Unknown source versions fail plugin startup/admission. Remove it when the official whole-script guard supports custom sandbox providers.
 - `owh_runtime/file_write_boundary.py`: native safe-root canonicalization runs on the gateway, while native shell file mutations resolve symlinks in the remote environment. The public environment transport applies a Linux Landlock restriction to file-tool subprocesses without copying the patch engine. Remove this boundary adapter when native remote file guards enforce final filesystem operations within the configured root.
 - `owh_runtime/sandbox.py`: native `DockerEnvironment` unconditionally mounts host credentials/skills/cache and has no supported off switch. The adapter implements the public `BaseEnvironment` transport/provider contract and `EnvironmentConnectionError` failure contract with safe Docker arguments; Hermes retains wrapping, timeout/interrupt and environment lifecycle. Compose supplies its physical resources independently of database namespaces. Deploy/recreate the updated gateway with both resource values before deploying the API context change that removes inferred network/volume names; the updated provider ignores those obsolete fields from older APIs. Replace it when native Docker configuration can guarantee no host mounts plus file snapshot hooks.
@@ -346,6 +424,19 @@ docker exec -i open-work-hub-dev-hermes-gateway python - < ops/hermes/check_work
 
 Require exit `0` and the PASS line for scoped discovery, native result submission/correction, and denial of unrelated tools and missing run context.
 
+Check interactive app discovery through the actual native agent executor, with
+synthetic RPC and network access forbidden (no model call or business writes):
+
+```bash
+docker exec -i open-work-hub-dev-hermes-gateway python - < ops/hermes/check_app_tools.py
+```
+
+Require exit `0` and the PASS line for empty/restricted/full scope, live revocation,
+argument correction without dispatch/schema disclosure to unauthorized callers,
+admitted/denied dispatch, equal-size catalog replacement and refresh recovery.
+This isolated fixture check complements the live chatbot/catalog verification
+above; it does not inspect another process's registry or refresh a live gateway.
+
 Run the offline preview check as well; it needs neither Playwright installation nor inference:
 
 ```bash
@@ -358,21 +449,31 @@ Require all PASS lines for local module rendering with verified browser isolatio
 
 Then open a new chatbot conversation, request `execute_code` to create a small file under `/workspace`, and request native `patch` to modify it. Verify successful native tool results and the saved file revision/content. Also request a single terminal invocation of `printf OWH_SANDBOX_OK`. Verify that the actual tool result contains `OWH_SANDBOX_OK` and `exit_code: 0`. The assistant's explanation and the conversation's `completed` state are not sufficient acceptance evidence. This final check uses the configured chatbot workload and its normal model usage.
 
+Verify the API MCP approval queue without inference or business mutations:
+
+```bash
+docker exec -i open-work-hub-dev-hermes-gateway python - < ops/hermes/check_mcp_approvals.py
+```
+
+Require the PASS line for consent/denial, timeout, one-time choice, replay and
+concurrent run isolation. Then complete [actual app-tool verification](#app-tool-enablement-and-verification)
+through the chatbot and PMS UI; synthetic callbacks do not prove SSE/UI delivery.
+
 ### Sandbox startup recovery
 
 Use the structured tool error code to select the recovery step. Older gateways may expose only a long `docker run` command and exit status `127`; follow the [existing-installation update](#updating-an-existing-development-installation) before retrying.
 
-| Error code | Check and recovery |
-| --- | --- |
-| `sandbox.configuration_invalid` | The gateway resource values are missing or invalid. Recreate it from the matching Compose definition using the update procedure above; verify custom deployment wiring against [prerequisites](#prerequisites). |
-| `sandbox.network_unavailable`, `sandbox.volume_unavailable` | The gateway could not inspect the declared resource. Check gateway Docker access and that the Compose-declared network and CA volume exist; restore missing infrastructure through the normal development startup procedure. |
-| `sandbox.egress_ca_missing` | The client volume lacks `ca.crt`. Recover the egress service's certificate publication and verify its health before rerunning the sandbox check. |
-| `sandbox.docker_unavailable` | Check the pinned gateway image's Docker client, socket mount and supplemental Docker group described in [prerequisites](#prerequisites). |
-| `sandbox.start_timeout`, `sandbox.start_failed` | Check Docker daemon health, host capacity and the pinned image. The safe error identifies a startup failure; inspect only relevant, sanitized diagnostics before retrying. |
-| `sandbox.cleanup_failed` | Removal of the exact owned sandbox was not confirmed. Restore Docker connectivity and retry cleanup; the closed instance cannot execute more commands. The one-hour container deadline remains an orphan limit. |
-| `preview.browser_unavailable`, `preview.browser_start_failed`, `preview.browser_sandbox_unverified` | Verify the pinned Chromium assets and read-only plugin/seccomp files, Docker user-namespace support and applicable AppArmor policy. Run `check_preview.py`; preserve both container and Chromium sandboxes. |
-| `preview.timeout` | Inspect the saved HTML for blocking JavaScript or excessive rendering work. The disposable browser is removed; do not start another installer or disable isolation. |
-| `sandbox.file_boundary_unavailable` | Enable Landlock ABI 3+ on the Docker host/VM and permit the Landlock syscalls in its security profile. Re-run the native-tool check; never bypass the file guard. |
+| Error code                                                                                          | Check and recovery                                                                                                                                                                                                           |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sandbox.configuration_invalid`                                                                     | The gateway resource values are missing or invalid. Recreate it from the matching Compose definition using the update procedure above; verify custom deployment wiring against [prerequisites](#prerequisites).              |
+| `sandbox.network_unavailable`, `sandbox.volume_unavailable`                                         | The gateway could not inspect the declared resource. Check gateway Docker access and that the Compose-declared network and CA volume exist; restore missing infrastructure through the normal development startup procedure. |
+| `sandbox.egress_ca_missing`                                                                         | The client volume lacks `ca.crt`. Recover the egress service's certificate publication and verify its health before rerunning the sandbox check.                                                                             |
+| `sandbox.docker_unavailable`                                                                        | Check the pinned gateway image's Docker client, socket mount and supplemental Docker group described in [prerequisites](#prerequisites).                                                                                     |
+| `sandbox.start_timeout`, `sandbox.start_failed`                                                     | Check Docker daemon health, host capacity and the pinned image. The safe error identifies a startup failure; inspect only relevant, sanitized diagnostics before retrying.                                                   |
+| `sandbox.cleanup_failed`                                                                            | Removal of the exact owned sandbox was not confirmed. Restore Docker connectivity and retry cleanup; the closed instance cannot execute more commands. The one-hour container deadline remains an orphan limit.              |
+| `preview.browser_unavailable`, `preview.browser_start_failed`, `preview.browser_sandbox_unverified` | Verify the pinned Chromium assets and read-only plugin/seccomp files, Docker user-namespace support and applicable AppArmor policy. Run `check_preview.py`; preserve both container and Chromium sandboxes.                  |
+| `preview.timeout`                                                                                   | Inspect the saved HTML for blocking JavaScript or excessive rendering work. The disposable browser is removed; do not start another installer or disable isolation.                                                          |
+| `sandbox.file_boundary_unavailable`                                                                 | Enable Landlock ABI 3+ on the Docker host/VM and permit the Landlock syscalls in its security profile. Re-run the native-tool check; never bypass the file guard.                                                            |
 
 Retain the existing database/runner namespace and profile/workspace volumes during this recovery. Do not rename resources to match a database namespace, manufacture an empty certificate volume, or use a global Docker prune. Once infrastructure is restored, retry the command; Hermes creates a fresh backend after the failed attempt.
 

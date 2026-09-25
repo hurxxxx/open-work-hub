@@ -16,8 +16,124 @@ from uuid import uuid4
 import httpx
 
 
-def _error(message: str) -> str:
-    return json.dumps({"error": message})
+_INTERACTIVE_TOOLS = frozenset({
+    "web_search", "web_extract", "tool_search", "tool_describe", "terminal",
+    "process", "read_file", "write_file", "patch", "search_files", "skills_list",
+    "skill_view", "skill_manage", "todo", "memory", "execute_code", "delegate_task",
+    "owh_preview",
+})
+
+
+def _error(message: str, *, code: str | None = None) -> str:
+    return json.dumps({"error": message, **({"code": code} if code else {})})
+
+
+def _interactive_definitions(config: dict) -> list[dict]:
+    # Use the same resolver as the pinned api_server agent construction. There
+    # is no public platform resolver; do not duplicate its composite/default/
+    # disabled-toolset rules. This reads the native registry without changing it.
+    from hermes_cli.tools_config import _get_platform_tools
+    from model_tools import get_tool_definitions
+
+    return get_tool_definitions(
+        enabled_toolsets=sorted(_get_platform_tools(config, "api_server")),
+        quiet_mode=True,
+        skip_tool_search_assembly=True,
+    )
+
+
+def _scoped_discovery(tool_name, args, *, config, server_name, server, run_id, execution):
+    from tools.mcp_tool import mcp_prefixed_tool_name
+    from tools.registry import registry
+    from tools.tool_search import dispatch_tool_describe, dispatch_tool_search
+
+    if not execution.get("allow_native_tools"):
+        definitions = registry.get_definitions(
+            {"owh_submit_result", *execution.get("native_tools", [])}, quiet=True
+        )
+    else:
+        listed = _rpc(server, run_id, "tools/list", {})
+        expected = {
+            mcp_prefixed_tool_name(server_name, tool["name"])
+            for tool in listed["tools"]
+        }
+        if len(expected) != len(listed["tools"]):
+            return _error("App tool names are ambiguous; execution was blocked",
+                          code="owh.tools.catalog_invalid")
+        native = _interactive_definitions(config)
+        actual = {item["function"]["name"] for item in native}
+        missing = sorted(expected - actual)
+        if missing:
+            # Counts alone miss an equal-size tool replacement. Report only
+            # names the server currently admits; never silently return no tools.
+            return json.dumps({
+                "error": "App tools require a runtime catalog refresh. Contact the administrator; do not use an alternative execution path.",
+                "code": "owh.tools.catalog_refresh_required",
+                "missing_tools": missing,
+                "missing_count": len(missing),
+            })
+        internal_prefix = mcp_prefixed_tool_name(server_name, "")
+        external_prefixes = tuple(
+            mcp_prefixed_tool_name(name, "")
+            for name in config.get("mcp_servers", {})
+            if name != server_name and name.startswith(server_name.removesuffix("internal"))
+        )
+        definitions = []
+        for item in native:
+            name = item["function"]["name"]
+            if name.startswith(internal_prefix):
+                allowed = name in expected
+            else:
+                allowed = name in _INTERACTIVE_TOOLS or name.startswith(external_prefixes)
+            if allowed:
+                definitions.append(item)
+    dispatch = dispatch_tool_search if tool_name == "tool_search" else dispatch_tool_describe
+    return dispatch(args, current_tool_defs=definitions)
+
+
+def _request_write_consent(
+    message: str, description: str, *, run_id: str, surface: str, arguments: dict,
+) -> str:
+    """Bridge the pinned API elicitation gap without changing unattended guards.
+
+    v2026.8.31 registers an API run notifier but its public elicitation helper
+    excludes api_server. Reuse its queue/wait/interrupt lifecycle for that exact
+    run only. Remove this adapter when the public helper routes API notifiers.
+    """
+    from gateway.session_context import get_session_env
+    from tools import approval
+
+    if get_session_env("HERMES_SESSION_PLATFORM", "") != "api_server":
+        return approval.request_elicitation_consent(message, description, surface=surface)
+    if not run_id.startswith("run_") or approval.get_current_session_key(default="") != run_id:
+        return "decline"
+    with approval._lock:
+        notify = approval._gateway_notify_cbs.get(run_id)
+    if not callable(notify):
+        return "decline"
+    decision = approval._await_gateway_decision(
+        run_id,
+        notify,
+        {
+            "command": message,
+            "description": description,
+            "arguments": arguments,
+            "pattern_key": "mcp_elicitation",
+            # Native coalescing compares command and pattern_keys, not description.
+            "pattern_keys": [
+                "mcp_elicitation", hashlib.sha256(description.encode()).hexdigest(),
+            ],
+            "allow_session": False,
+            "allow_permanent": False,
+        },
+        surface=surface,
+    )
+    accepted = (
+        decision.get("resolved")
+        and decision.get("choice") == "once"
+        and not decision.get("notify_failed")
+    )
+    return "accept" if accepted else "decline"
 
 
 def runtime_transport():
@@ -94,7 +210,7 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
     try:
         from hermes_cli.config import load_config
         from hermes_constants import get_hermes_home
-        from tools.approval import get_current_session_key, request_elicitation_consent
+        from tools.approval import get_current_session_key
         from tools.mcp_tool import mcp_prefixed_tool_name
 
         profile = get_hermes_home().name
@@ -105,25 +221,41 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
         run_id = get_current_session_key(default="")
         if not run_id.startswith("run_"):
             return _error("Trusted Hermes run context is required")
-        server = load_config().get("mcp_servers", {}).get(server_name)
+        config = load_config()
+        server = config.get("mcp_servers", {}).get(server_name)
         if not isinstance(server, dict) or not server.get("headers", {}).get("Authorization"):
             return _error("Authenticated Open Work Hub transport is unavailable")
         execution = _rpc(server, run_id, "owh/context", {})
         if tool_name == "owh_submit_result":
             return json.dumps(_rpc(server, run_id, "owh/submit", args), ensure_ascii=False)
-        if tool_name in {"tool_search", "tool_describe"} and not execution.get("allow_native_tools"):
-            # The pinned native Tool Search defers plugin tools, including
-            # result submission. Use its public catalog operations with only
-            # server-admitted tools; discovery must not expose the interactive
-            # profile's other capabilities to an application workload.
-            from tools.registry import registry
-            from tools.tool_search import dispatch_tool_describe, dispatch_tool_search
+        if tool_name == "tool_call":
+            # The native executor keeps the bridge name when parsing, scope or
+            # required-argument validation rejects unwrapping. Preserve useful
+            # native validation feedback only for currently admitted tools.
+            # Never dispatch here: valid calls arrive under the underlying name.
+            from tools.tool_search import resolve_underlying_call, validate_deferred_call_args
 
-            definitions = registry.get_definitions(
-                {"owh_submit_result", *execution.get("native_tools", [])}, quiet=True
+            target, arguments, parse_error = resolve_underlying_call(args)
+            if parse_error:
+                return _error(parse_error, code="owh.tools.invalid_tool_call")
+            described = json.loads(_scoped_discovery(
+                "tool_describe", {"names": [target]}, config=config,
+                server_name=server_name, server=server, run_id=run_id, execution=execution,
+            ))
+            if described.get("error"):
+                return json.dumps(described)
+            if target not in described.get("tools", {}):
+                return _error("Tool is not available for this run", code="owh.tools.tool_unavailable")
+            invalid = validate_deferred_call_args(target, arguments)
+            if invalid:
+                return invalid
+            return _error("The native executor did not admit this call. Use tool_search to check available tools.",
+                          code="owh.tools.tool_unavailable")
+        if tool_name in {"tool_search", "tool_describe"}:
+            return _scoped_discovery(
+                tool_name, args, config=config, server_name=server_name,
+                server=server, run_id=run_id, execution=execution,
             )
-            dispatch = dispatch_tool_search if tool_name == "tool_search" else dispatch_tool_describe
-            return dispatch(args, current_tool_defs=definitions)
         # Profile history includes app workloads. Native search has no trusted
         # OWH app/resource ACL filter, including its direct session-read mode.
         if tool_name == "session_search":
@@ -143,26 +275,12 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
                 f"mcp__owh_mcp_{namespace}_"
             ):
                 return _error("Tool is not available in this execution profile")
-            if not tool_name.startswith(f"mcp__owh_mcp_{namespace}_") and tool_name not in {
-                "web_search",
-                "web_extract",
-                "tool_search",
-                "tool_describe",
-                "terminal",
-                "process",
-                "read_file",
-                "write_file",
-                "patch",
-                "search_files",
-                "skills_list",
-                "skill_view",
-                "skill_manage",
-                "todo",
-                "memory",
-                "execute_code",
-                "delegate_task",
-            }:
+            if not tool_name.startswith(f"mcp__owh_mcp_{namespace}_") and tool_name not in _INTERACTIVE_TOOLS:
                 return _error("Tool has no configured Open Work Hub execution policy")
+            if tool_name.startswith(f"mcp__owh_mcp_{namespace}_") and tool_name not in {
+                item["function"]["name"] for item in _interactive_definitions(config)
+            }:
+                return _error("Tool is not enabled in this execution profile")
             if tool_name in {
                 "execute_code", "terminal", "process", "read_file",
                 "write_file", "patch", "search_files",
@@ -195,9 +313,11 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
                     separators=(",", ":"),
                 ).encode()
             ).hexdigest()
-            consent = request_elicitation_consent(
+            consent = _request_write_consent(
                 f"MCP tool '{tool['name']}' on UNTRUSTED server '{server_name}' wants to run.",
                 f"Approve this call once. Arguments SHA-256: {digest}",
+                run_id=run_id,
+                arguments=args,
                 surface=f"mcp-trust/{server_name}",
             )
             if consent != "accept":
@@ -212,7 +332,8 @@ def execute_tool(*, tool_name: str, args: dict, next_call, **context):
                 "complete the call; do not repeat it. Verify the result before continuing."
             )
         return _error(
-            f"Open Work Hub tool transport failed ({type(error).__name__}); execution was blocked"
+            f"Open Work Hub tool transport failed ({type(error).__name__}); execution was blocked",
+            code="owh.tools.discovery_unavailable" if tool_name in {"tool_search", "tool_describe", "tool_call"} else None,
         )
 
 
