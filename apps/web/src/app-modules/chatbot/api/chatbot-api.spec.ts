@@ -109,6 +109,28 @@ describe('Hermes chat session creation', () => {
     expect(frames.at(-1).data.content).toBe('complete streamed answer');
   });
 
+  it.each([undefined, [], ['pms']])(
+    'preserves the caller app scope when creating a native run: %j',
+    async (allowedAppIds) => {
+      hermesMocks.createHermesSession.mockResolvedValue({
+        id: 'owh-session-1',
+      });
+      await sendAiChat(
+        {
+          messages: [{ role: 'user', content: 'Show my tasks' }],
+          allowed_app_ids: allowedAppIds,
+        },
+        'token',
+      );
+      expect(hermesMocks.createHermesRun).toHaveBeenCalledWith(
+        'token',
+        'owh-session-1',
+        expect.objectContaining({ allowed_app_ids: allowedAppIds ?? null }),
+        expect.anything(),
+      );
+    },
+  );
+
   it('leaves first-turn titles to the official Hermes auto-title flow', async () => {
     hermesMocks.createHermesSession
       .mockResolvedValueOnce({ id: 'owh-session-1' })

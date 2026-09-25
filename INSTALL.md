@@ -630,6 +630,14 @@ bash .agents/skills/owh-env-contracts/scripts/local-env-files.sh install --sourc
 템플릿으로 덮어쓸 이유가 아니다. 필요한 키만 기존 값을 보존하여 맞춘다.
 환경 파일 취급은 [환경설정 절차](.agents/skills/owh-env-contracts/references/env-files.md)를 따른다.
 
+챗봇에서 PMS 등 앱의 승인 기반 쓰기를 사용하려면 [앱 도구 활성화와 실제 동작 검증](docs/domains/ai/hermes.md#app-tool-enablement-and-verification)을 따른다. 기본 설치는 읽기 전용이며, 코드 갱신만으로 쓰기 도구가 켜지지는 않는다. 기능 플래그, 프로세스의 도구 목록 갱신, PMS 편집 권한, 건별 승인을 함께 확인한다.
+
+앱 도구 등록·입력 스키마·쓰기 플래그를 변경했다면 진행 중인 개발 작업을 정리하고,
+위 절차에 따라 API·Worker와 gateway의 목록을 갱신한다. 연결 상태가 정상이어도 이전
+목록이 남을 수 있다. 새 챗봇 실행에서 도구 검색과 실제 PMS 호출을 확인하고,
+`owh.tools.catalog_refresh_required`가 나오면 갱신 완료로 처리하지 않는다.
+[고정 Hermes 이미지의 앱 도구 검사](docs/domains/ai/hermes.md#sandbox-execution-check)도 실행한다.
+
 DB 풀·시간제한·재시도·임베딩/리랭커 모델의 공통 권장값은 Git 추적 대상인
 [`config/runtime.json`](config/runtime.json)에서 관리한다. `defaults` 위에
 `OPEN_WORK_HUB_ENV_PROFILE`에 해당하는 `profiles` 설정이 적용되며, `.env`와 프로세스 환경변수는

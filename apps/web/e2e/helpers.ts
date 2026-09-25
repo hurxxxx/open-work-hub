@@ -762,6 +762,30 @@ export async function stubConversationsApi(
 ): Promise<void> {
   const list = stubs.list ?? [];
   const detail = stubs.detail ?? {};
+  // The Hermes sidebar loads sessions; keep shell smoke tests independent
+  // of the live API while retaining the conversation fixtures below.
+  await page.route(/\/api\/v1\/agent\/sessions(?:\?.*)?$/, (route: Route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const query = new URL(route.request().url()).searchParams;
+    const limit = Number(query.get('limit') ?? 50);
+    const offset = Number(query.get('offset') ?? 0);
+    return route.fulfill({
+      json: {
+        data: list.slice(offset, offset + limit).map((item) => ({
+          id: item.id,
+          title: item.title,
+          created_at: item.createdAt,
+          updated_at: item.updatedAt,
+          message_count: 0,
+          pinned: false,
+          archived: false,
+        })),
+        limit,
+        offset,
+        has_more: offset + limit < list.length,
+      },
+    });
+  });
   const createResponse = stubs.createResponse ?? {
     id: 'new-conversation',
     title: '',

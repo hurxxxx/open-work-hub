@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+from threading import RLock
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -19,6 +20,7 @@ def plugin(monkeypatch):
     transport = {"url": "http://api.test/internal", "headers": {"Authorization": "Bearer fixture"}}
     consent = []
     modules = {
+        "gateway.session_context": {"get_session_env": lambda *args: "cli"},
         "hermes_cli.config": {"load_config": lambda: {"mcp_servers": {server: transport}}},
         "hermes_constants": {"get_hermes_home": lambda: Path(profile)},
         "tools.approval": {
@@ -36,6 +38,9 @@ def plugin(monkeypatch):
         module = ModuleType(name)
         module.__dict__.update(members)
         monkeypatch.setitem(sys.modules, name, module)
+    tools_package = ModuleType("tools")
+    tools_package.approval = sys.modules["tools.approval"]
+    monkeypatch.setitem(sys.modules, "tools", tools_package)
     source = Path(__file__).resolve().parents[3] / "ops/hermes/plugins/owh_runtime/__init__.py"
     spec = importlib.util.spec_from_file_location("owh_plugin_test", source)
     module = importlib.util.module_from_spec(spec)
@@ -103,6 +108,80 @@ def test_policy_import_transport_and_missing_run_fail_closed(plugin, monkeypatch
     assert "error" in invoke()
 
 
+@pytest.mark.parametrize(
+    "choice,accepted",
+    [("once", True), ("deny", False), ("session", False), ("always", False), (None, False)],
+)
+def test_api_write_consent_uses_exact_run_notifier_once(plugin, monkeypatch, choice, accepted):
+    approval = sys.modules["tools.approval"]
+    monkeypatch.setattr(
+        sys.modules["gateway.session_context"], "get_session_env", lambda *args: "api_server"
+    )
+    approval._lock = RLock()
+
+    def notify(payload):
+        pass
+
+    approval._gateway_notify_cbs = {"run_test": notify}
+    captured = []
+
+    def wait(run_id, callback, data, *, surface):
+        assert run_id == "run_test" and callback is notify
+        assert surface == "mcp-trust/internal"
+        captured.append(data)
+        return {"resolved": choice is not None, "choice": choice}
+
+    approval._await_gateway_decision = wait
+    for digest in ("a" * 64, "b" * 64):
+        result = plugin.module._request_write_consent(
+            "write",
+            f"Arguments SHA-256: {digest}",
+            run_id="run_test",
+            surface="mcp-trust/internal",
+            arguments={"title": digest},
+        )
+        assert (result == "accept") is accepted
+    assert captured[0]["pattern_keys"] != captured[1]["pattern_keys"]
+    assert captured[0]["arguments"] == {"title": "a" * 64}
+    assert all(
+        data["allow_session"] is False and data["allow_permanent"] is False for data in captured
+    )
+    assert plugin.consent == []  # The pinned CLI fallback must not receive API consent.
+
+
+@pytest.mark.parametrize("notifier", [None, "another_run", "broken"])
+def test_api_write_consent_failure_never_dispatches_write(plugin, monkeypatch, notifier):
+    approval = sys.modules["tools.approval"]
+    monkeypatch.setattr(
+        sys.modules["gateway.session_context"], "get_session_env", lambda *args: "api_server"
+    )
+    approval._lock = RLock()
+    approval._gateway_notify_cbs = {
+        "run_other" if notifier == "another_run" else "run_test": (
+            None if notifier is None else lambda data: None
+        ),
+    }
+
+    def failed_wait(*args, **kwargs):
+        raise RuntimeError("notification failed")
+
+    approval._await_gateway_decision = failed_wait
+
+    def rpc(server, run_id, method, params):
+        if method == "owh/context":
+            return {"allow_native_tools": True}
+        assert method == "tools/list", "Unapproved mutation dispatched"
+        return {"tools": [{"name": "tasks.create", "annotations": {"readOnlyHint": False}}]}
+
+    monkeypatch.setattr(plugin.module, "_rpc", rpc)
+    result = plugin.module.execute_tool(
+        tool_name=f"mcp__{plugin.server.replace('-', '_')}__tasks.create",
+        args={"title": "test"},
+        next_call=lambda: pytest.fail("Must not fall through"),
+    )
+    assert "error" in json.loads(result)
+
+
 def test_workload_blocks_native_tools_but_can_correct_and_submit(plugin, monkeypatch):
     attempts = []
 
@@ -150,23 +229,30 @@ def test_workload_discovery_only_receives_server_admitted_definitions(plugin, mo
         module = ModuleType(name)
         module.__dict__.update(members)
         monkeypatch.setitem(sys.modules, name, module)
-    monkeypatch.setattr(plugin.module, "_rpc", lambda *args: {
-        "allow_native_tools": False, "native_tools": ["web_search"]
-    })
+    monkeypatch.setattr(
+        plugin.module,
+        "_rpc",
+        lambda *args: {"allow_native_tools": False, "native_tools": ["web_search"]},
+    )
     args = {"names": ["terminal", "owh_submit_result"], "queries": ["tools"]}
-    assert json.loads(plugin.module.execute_tool(
-        tool_name=tool, args=args, next_call=lambda: pytest.fail("Unscoped discovery denied")
-    )) == {"tools": {}}
+    assert json.loads(
+        plugin.module.execute_tool(
+            tool_name=tool, args=args, next_call=lambda: pytest.fail("Unscoped discovery denied")
+        )
+    ) == {"tools": {}}
     assert calls == [args]
 
 
 def test_workload_discovery_failure_does_not_fall_through(plugin, monkeypatch):
     monkeypatch.setattr(plugin.module, "_rpc", lambda *args: {"allow_native_tools": False})
     monkeypatch.setitem(sys.modules, "tools.registry", None)
-    assert "error" in json.loads(plugin.module.execute_tool(
-        tool_name="tool_describe", args={"names": ["owh_submit_result"]},
-        next_call=lambda: pytest.fail("Import failure must fail closed"),
-    ))
+    assert "error" in json.loads(
+        plugin.module.execute_tool(
+            tool_name="tool_describe",
+            args={"names": ["owh_submit_result"]},
+            next_call=lambda: pytest.fail("Import failure must fail closed"),
+        )
+    )
 
 
 @pytest.mark.parametrize("native_run_id", ["", "cron_job_fixture", "run_forged"])
@@ -227,22 +313,188 @@ def test_registered_native_tool_requires_admission_for_every_call(plugin, monkey
     assert executions == ["web_search"] and admissions == ["run_test", "run_test"]
 
 
-@pytest.mark.parametrize("tool", ["tool_search", "tool_describe"])
-def test_interactive_tool_metadata_uses_authenticated_current_assembly(plugin, monkeypatch, tool):
-    calls = []
+@pytest.fixture
+def interactive_catalog(plugin, monkeypatch):
+    prefix = sys.modules["tools.mcp_tool"].mcp_prefixed_tool_name
+
+    def internal(name):
+        return prefix(plugin.server, name)
+
+    external_server = plugin.server.removesuffix("internal") + "research"
+    external = prefix(external_server, "search")
+    names = [
+        internal("tasks.list"),
+        internal("tasks.create"),
+        "terminal",
+        "owh_preview",
+        "session_search",
+        "owh_submit_result",
+        "unregistered_policy_tool",
+        external,
+        prefix("owh-mcp-other-internal", "tasks.list"),
+    ]
+    definitions = [{"type": "function", "function": {"name": name}} for name in names]
+    scopes = {"run_test": ["tasks.list", "tasks.create"]}
+    transport_calls = []
 
     def rpc(server, run_id, method, params):
-        calls.append((run_id, method))
-        return {"allow_native_tools": True}
+        assert server is plugin.transport
+        transport_calls.append((run_id, method))
+        if method == "owh/context":
+            return {"allow_native_tools": True}
+        assert method == "tools/list", "Discovery must never mutate"
+        return {"tools": [{"name": name} for name in scopes[run_id]]}
 
+    def dispatch(args, *, current_tool_defs):
+        return json.dumps({"tools": [item["function"]["name"] for item in current_tool_defs]})
+
+    config = {
+        "mcp_servers": {plugin.server: plugin.transport, external_server: {"url": "synthetic"}}
+    }
+    monkeypatch.setattr(sys.modules["hermes_cli.config"], "load_config", lambda: config)
     monkeypatch.setattr(plugin.module, "_rpc", rpc)
-    assert (
-        plugin.module.execute_tool(
-            tool_name=tool, args={}, next_call=lambda: "current tool metadata"
+    monkeypatch.setattr(plugin.module, "_interactive_definitions", lambda config: list(definitions))
+    for name, members in {
+        "tools.registry": {"registry": SimpleNamespace()},
+        "tools.tool_search": {"dispatch_tool_search": dispatch, "dispatch_tool_describe": dispatch},
+    }.items():
+        module = ModuleType(name)
+        module.__dict__.update(members)
+        monkeypatch.setitem(sys.modules, name, module)
+
+    def invoke(tool="tool_search"):
+        return json.loads(
+            plugin.module.execute_tool(
+                tool_name=tool,
+                args={"queries": ["tools"]},
+                next_call=lambda: pytest.fail("Unscoped discovery must never run"),
+            )
         )
-        == "current tool metadata"
+
+    return SimpleNamespace(
+        invoke=invoke,
+        scopes=scopes,
+        definitions=definitions,
+        internal=internal,
+        external=external,
+        config=config,
+        calls=transport_calls,
     )
-    assert calls == [("run_test", "owh/context")]
+
+
+@pytest.mark.parametrize("tool", ["tool_search", "tool_describe"])
+@pytest.mark.parametrize("scope", [[], ["tasks.list"], ["tasks.list", "tasks.create"]])
+def test_interactive_discovery_intersects_live_scope_and_execution_policy(
+    interactive_catalog, scope, tool
+):
+    catalog = interactive_catalog
+    original = list(catalog.definitions)
+    catalog.scopes["run_test"] = scope
+    result = catalog.invoke(tool)
+    assert set(result["tools"]) == {
+        *(catalog.internal(name) for name in scope),
+        "terminal",
+        "owh_preview",
+        catalog.external,
+    }
+    assert catalog.calls == [("run_test", "owh/context"), ("run_test", "tools/list")]
+    assert catalog.definitions == original
+
+
+def test_parallel_discovery_and_revocation_do_not_change_shared_catalog(
+    plugin, interactive_catalog
+):
+    catalog = interactive_catalog
+    catalog.scopes.update(run_read=["tasks.list"], run_write=["tasks.create"])
+
+    def invoke(run):
+        plugin.run.set(run)
+        return set(catalog.invoke()["tools"])
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        read, write = list(pool.map(invoke, ["run_read", "run_write"]))
+    assert catalog.internal("tasks.create") not in read
+    assert catalog.internal("tasks.list") not in write
+    catalog.scopes["run_test"] = []
+    assert not any(name.startswith(catalog.internal("")) for name in catalog.invoke()["tools"])
+
+
+def test_same_count_catalog_replacement_requires_refresh_then_recovers(interactive_catalog):
+    catalog = interactive_catalog
+    catalog.scopes["run_test"] = ["tasks.list", "tasks.archive"]
+    result = catalog.invoke()
+    assert result["code"] == "owh.tools.catalog_refresh_required"
+    assert result["missing_tools"] == [catalog.internal("tasks.archive")]
+    assert result["missing_count"] == 1
+    # Simulate the native registry after the standard restart, keeping its size.
+    catalog.definitions[1] = {
+        "type": "function",
+        "function": {"name": catalog.internal("tasks.archive")},
+    }
+    assert catalog.internal("tasks.archive") in catalog.invoke()["tools"]
+
+
+def test_discovery_transport_failure_returns_stable_error(plugin, interactive_catalog, monkeypatch):
+    monkeypatch.setattr(plugin.module, "_rpc", lambda *args: (_ for _ in ()).throw(OSError()))
+    assert interactive_catalog.invoke()["code"] == "owh.tools.discovery_unavailable"
+
+
+def test_removed_external_server_is_hidden(interactive_catalog):
+    catalog = interactive_catalog
+    catalog.config["mcp_servers"] = {
+        key: value
+        for key, value in catalog.config["mcp_servers"].items()
+        if key.endswith("-internal")
+    }
+    assert catalog.external not in catalog.invoke()["tools"]
+
+
+@pytest.mark.parametrize("admitted", [True, False])
+def test_rejected_bridge_preserves_validation_only_for_admitted_tools(
+    plugin, interactive_catalog, monkeypatch, admitted
+):
+    catalog = interactive_catalog
+    target = catalog.internal("tasks.create")
+    if not admitted:
+        catalog.scopes["run_test"] = []
+    search = sys.modules["tools.tool_search"]
+    search.resolve_underlying_call = lambda args: (target, {}, None)
+    validated = []
+
+    def validate(name, args):
+        validated.append(name)
+        return json.dumps(
+            {"error": "Missing required field", "parameters": {"required": ["title"]}}
+        )
+
+    search.validate_deferred_call_args = validate
+    result = json.loads(
+        plugin.module.execute_tool(
+            tool_name="tool_call",
+            args={"name": target},
+            next_call=lambda: pytest.fail("Rejected bridge must never execute"),
+        )
+    )
+    if admitted:
+        assert result["parameters"] == {"required": ["title"]}
+        assert validated == [target]
+    else:
+        assert result["code"] == "owh.tools.tool_unavailable"
+        assert "parameters" not in result and validated == []
+
+
+def test_parse_rejected_bridge_cannot_dispatch(plugin, interactive_catalog):
+    search = sys.modules["tools.tool_search"]
+    search.resolve_underlying_call = lambda args: (None, {}, "tool_call requires a name")
+    search.validate_deferred_call_args = lambda *args: pytest.fail("No target to validate")
+    result = json.loads(
+        plugin.module.execute_tool(
+            tool_name="tool_call",
+            args={},
+            next_call=lambda: pytest.fail("Malformed bridge cannot run"),
+        )
+    )
+    assert result["code"] == "owh.tools.invalid_tool_call"
 
 
 def test_rpc_resolves_native_profile_secret_references_and_rejects_unresolved(plugin, monkeypatch):
